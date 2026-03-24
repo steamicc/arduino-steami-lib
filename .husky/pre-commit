@@ -1,0 +1,2 @@
+#!/usr/bin/env sh
+npx --no-install validate-branch-name && npx --no-install git-precommit-checks && npx --no-install lint-staged
