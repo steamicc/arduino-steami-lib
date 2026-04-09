@@ -1,0 +1,41 @@
+{
+  "build": {
+    "cpu": "cortex-m4",
+    "extra_flags": "-DSTM32WB55xx",
+    "f_cpu": "64000000L",
+    "mcu": "stm32wb55rg",
+    "variant": "STEAMI",
+    "ldscript": "ldscript.ld"
+  },
+  "connectivity": [
+    "bluetooth"
+  ],
+  "debug": {
+    "default_tools": [
+      "cmsis-dap"
+    ],
+    "openocd_target": "stm32wbx",
+    "jlink_device": "STM32WB55RG",
+    "onboard_tools": [
+      "cmsis-dap"
+    ]
+  },
+  "frameworks": [
+    "arduino"
+  ],
+  "name": "STeaMi",
+  "upload": {
+    "maximum_ram_size": 262144,
+    "maximum_size": 1048576,
+    "protocol": "custom",
+    "protocols": [
+      "custom",
+      "cmsis-dap",
+      "jlink",
+      "stlink",
+      "blackmagic"
+    ]
+  },
+  "url": "https://www.steami.cc/",
+  "vendor": "STeaMi"
+}

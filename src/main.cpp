@@ -30,15 +30,16 @@ void setup() {
   Serial.setRx(PIN_SERIAL_RX);
   Serial.setTx(PIN_SERIAL_TX);
   Serial.begin(115200);
+  while (!Serial) {
+    delay(10); // attendre USB
+  }
+  Serial.println("STeaMi alive");
 }
 
 void loop() {
   setRgb(true, false, false);
-  delay(200);
-  setRgb(false, true, false);
-  delay(200);
-  setRgb(false, false, true);
-  delay(200);
 
   Serial.println("STeaMi alive");
 }
+
+
