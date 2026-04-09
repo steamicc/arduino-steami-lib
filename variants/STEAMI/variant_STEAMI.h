@@ -111,12 +111,12 @@ extern "C" {
 #define TIMER_SERVO             TIM17
 
 // UART Definitions
-#define SERIAL_UART_INSTANCE    1 //Connected to ST-Link
+#define SERIAL_UART_INSTANCE    0 //Connected to ST-Link
 
 // Default pin used for 'Serial' instance (ex: ST-Link)
 // Mandatory for Firmata
-#define PIN_SERIAL_RX           PB7
-#define PIN_SERIAL_TX           PB6
+#define PIN_SERIAL_RX           PB10
+#define PIN_SERIAL_TX           PB11
 
 // Only 512k provided for cpu1, so defined the FLASH_PAGE_NUMBER
 // for EEPROM emulation to the last 512k pages.
