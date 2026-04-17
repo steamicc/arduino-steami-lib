@@ -1,0 +1,23 @@
+name: Clang Format
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  clang-format:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install clang-format and make
+        run: sudo apt-get update && sudo apt-get install -y clang-format make
+
+      - name: Run formatting check
+        run: make lint
