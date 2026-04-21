@@ -22,6 +22,12 @@ constexpr float MAGNUS_B = 243.12f;
 constexpr float CONDENSATION_MARGIN_C = 2.0f;
 
 float dewPoint(float temperatureC, float humidityPct) {
+    // log(0) is -infinity and the Magnus inverse below would propagate
+    // NaN / inf into the caller. Humidity reaches 0 at the driver's
+    // clamp boundary, so guard explicitly.
+    if (humidityPct <= 0.0f) {
+        return NAN;
+    }
     float gamma = (MAGNUS_A * temperatureC) / (MAGNUS_B + temperatureC) + log(humidityPct / 100.0f);
     return (MAGNUS_B * gamma) / (MAGNUS_A - gamma);
 }
