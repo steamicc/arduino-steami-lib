@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <map>
 
 #define HIGH 1
@@ -33,16 +34,21 @@ inline int digitalRead(int pin) {
 
 // Simulated monotonic clock in milliseconds. delay() advances it so code that
 // polls until millis() - start >= timeout terminates on the host the same way
-// it would on hardware. Tests can set() directly to control absolute time.
-inline unsigned long& millisClock() {
-    static unsigned long clock = 0;
+// it would on hardware. Tests can assign `millisClock() = <value>` directly
+// to jump the clock (useful for exercising overflow paths).
+//
+// Width is pinned to uint32_t to match the Arduino core's millis() return
+// type — on Linux `unsigned long` is 64-bit and would silently mask any
+// 32-bit overflow bug the code under test might have on the target.
+inline uint32_t& millisClock() {
+    static uint32_t clock = 0;
     return clock;
 }
 
-inline unsigned long millis() {
+inline uint32_t millis() {
     return millisClock();
 }
 
-inline void delay(unsigned long ms) {
+inline void delay(uint32_t ms) {
     millisClock() += ms;
 }
