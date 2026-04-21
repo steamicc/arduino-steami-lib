@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.4](https://github.com/steamicc/arduino-steami-lib/compare/v0.0.3...v0.0.4) (2026-04-21)
+
+
+### Bug Fixes
+
+* Inline mock Wire instance to guarantee it links into native tests. ([393d22b](https://github.com/steamicc/arduino-steami-lib/commit/393d22b12d16352fb46b332ba37623fd54ebe837))
+* Use test-native in make ci to keep it board-less. ([fb6444c](https://github.com/steamicc/arduino-steami-lib/commit/fb6444cc0099fa2c6b0ea8c2ae99378947232f25))
+
 ## [0.0.3](https://github.com/steamicc/arduino-steami-lib/compare/v0.0.2...v0.0.3) (2026-04-21)
 
 ## [0.0.2](https://github.com/steamicc/arduino-steami-lib/compare/v0.0.1...v0.0.2) (2026-04-21)
