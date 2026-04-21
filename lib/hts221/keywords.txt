@@ -1,0 +1,43 @@
+#######################################
+# Syntax Coloring Map For HTS221
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+HTS221	KEYWORD1
+ReadResult	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin	KEYWORD2
+deviceId	KEYWORD2
+reboot	KEYWORD2
+softReset	KEYWORD2
+powerOn	KEYWORD2
+powerOff	KEYWORD2
+dataReady	KEYWORD2
+temperatureReady	KEYWORD2
+humidityReady	KEYWORD2
+temperature	KEYWORD2
+humidity	KEYWORD2
+read	KEYWORD2
+setContinuous	KEYWORD2
+triggerOneShot	KEYWORD2
+readOneShot	KEYWORD2
+setTemperatureOffset	KEYWORD2
+calibrateTemperature	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+HTS221_DEFAULT_ADDRESS	LITERAL1
+HTS221_WHO_AM_I_VALUE	LITERAL1
+HTS221_ODR_ONE_SHOT	LITERAL1
+HTS221_ODR_1_HZ	LITERAL1
+HTS221_ODR_7_HZ	LITERAL1
+HTS221_ODR_12_5_HZ	LITERAL1

@@ -1,5 +1,112 @@
-# hts221
+# HTS221
 
-Arduino driver for the hts221 component of the STeaMi board.
+Arduino/C++ driver for the ST HTS221 capacitive digital humidity and
+temperature sensor on the STeaMi board.
 
-> **Status**: not yet implemented
+## Hardware
+
+* I2C sensor, default 7-bit address `0x5F` (SA0 pulled low on the STeaMi
+  board).
+* Factory-calibrated — the driver loads the calibration block from the
+  part itself and applies it on every reading.
+
+## Quick start
+
+```cpp
+#include <Wire.h>
+#include <HTS221.h>
+
+HTS221 sensor;
+
+void setup() {
+    Serial.begin(115200);
+    Wire.begin();
+
+    if (!sensor.begin()) {
+        Serial.println("HTS221 not detected");
+        while (true) delay(1000);
+    }
+
+    sensor.setContinuous(HTS221_ODR_1_HZ);
+}
+
+void loop() {
+    if (sensor.dataReady()) {
+        auto r = sensor.read();
+        Serial.print(r.temperature);
+        Serial.print(" C / ");
+        Serial.print(r.humidity);
+        Serial.println(" %");
+    }
+    delay(100);
+}
+```
+
+See [examples/read_temperature_humidity/](examples/read_temperature_humidity/)
+for the full sketch.
+
+## API
+
+All methods follow the conventions from [`CLAUDE.md`](../../CLAUDE.md)
+(`camelCase`, unit in method names only when necessary, no `read`/`get`
+prefix).
+
+### Lifecycle
+
+| Method | Description |
+|--------|-------------|
+| `HTS221(TwoWire& wire = Wire, uint8_t address = HTS221_DEFAULT_ADDRESS)` | Construct. Defaults to the global `Wire` and address `0x5F`. |
+| `bool begin()` | Probe `WHO_AM_I`, load factory calibration, leave the part powered down. Returns `false` if the sensor is not detected. |
+| `uint8_t deviceId()` | Reads `WHO_AM_I` (always `0xBC`). |
+| `void softReset()` / `void reboot()` | Reload factory trimming via `CTRL2.BOOT`. |
+| `void powerOn()` / `void powerOff()` | Toggle `CTRL1.PD`. |
+
+### Reading
+
+If the part is powered down when a read is requested, the driver auto-
+triggers a one-shot measurement, polls `dataReady()` with a timeout, and
+returns the result. The caller doesn't have to manage modes manually.
+
+| Method | Description |
+|--------|-------------|
+| `float temperature()` | Celsius. |
+| `float humidity()` | %RH, clamped to `[0, 100]`. |
+| `ReadResult read()` | Both channels — `{temperature, humidity}`. |
+| `bool dataReady()` | Both `H_DA` and `T_DA` set in `STATUS_REG`. |
+| `bool temperatureReady()` / `bool humidityReady()` | Per-channel readiness. |
+
+### Modes
+
+| Method | Description |
+|--------|-------------|
+| `void setContinuous(uint8_t odr)` | Continuous mode. Pass `HTS221_ODR_1_HZ`, `_7_HZ`, or `_12_5_HZ`. |
+| `void triggerOneShot()` | Non-blocking: start a single conversion. |
+| `ReadResult readOneShot()` | Trigger + wait + return. |
+
+### Calibration
+
+| Method | Description |
+|--------|-------------|
+| `void setTemperatureOffset(float offset)` | Additive Celsius offset on top of the factory calibration. |
+| `void calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point user calibration. Applied after the factory curve. |
+
+## Register constants
+
+`HTS221_const.h` exports register addresses (`HTS221_REG_*`), bit masks
+(`HTS221_CTRL1_*`, `HTS221_STATUS_*`), and ODR values (`HTS221_ODR_*`) so
+applications can poke the part directly if they need something outside
+the driver's API surface.
+
+## Testing
+
+Host-side unit tests under [`tests/native/test_hts221/`](../../tests/native/test_hts221/)
+exercise the driver against the `TwoWire` mock from
+`tests/native/helpers/Wire.h`. Run them without hardware with:
+
+```bash
+make test-native
+```
+
+## License
+
+GPL-3.0-or-later — see [LICENSE](../../LICENSE).
