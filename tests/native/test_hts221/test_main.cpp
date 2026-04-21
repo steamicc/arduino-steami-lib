@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <math.h>
 #include <unity.h>
 
 #include "HTS221.h"
@@ -210,6 +211,20 @@ void test_calibrate_temperature_applies_two_point_correction(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 22.0f, sensor.temperature());
 }
 
+void test_read_returns_nan_on_timeout(void) {
+    // begin() succeeds (WHO_AM_I preloaded in setUp) but leaves the device
+    // powered down, and STATUS is not preloaded with any DA bit. The
+    // auto-trigger path in read() will therefore hit the waitForDataReady
+    // timeout and must surface it as NaN rather than decoding whatever
+    // happened to be left on the stack.
+    sensor.begin();
+
+    auto r = sensor.read();
+
+    TEST_ASSERT_TRUE_MESSAGE(isnan(r.temperature), "temperature should be NaN on timeout");
+    TEST_ASSERT_TRUE_MESSAGE(isnan(r.humidity), "humidity should be NaN on timeout");
+}
+
 void test_reboot_writes_ctrl2_boot(void) {
     sensor.begin();
     Wire.clearWrites();
@@ -244,6 +259,7 @@ int main(void) {
     RUN_TEST(test_read_auto_triggers_when_powered_down);
     RUN_TEST(test_set_temperature_offset_shifts_reading);
     RUN_TEST(test_calibrate_temperature_applies_two_point_correction);
+    RUN_TEST(test_read_returns_nan_on_timeout);
     RUN_TEST(test_reboot_writes_ctrl2_boot);
     return UNITY_END();
 }

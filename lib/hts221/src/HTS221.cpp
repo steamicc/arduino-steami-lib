@@ -2,6 +2,8 @@
 
 #include "HTS221.h"
 
+#include <math.h>
+
 HTS221::HTS221(TwoWire& wire, uint8_t address) : _wire(&wire), _address(address) {}
 
 bool HTS221::begin() {
@@ -69,7 +71,13 @@ float HTS221::humidity() {
 HTS221::ReadResult HTS221::read() {
     if (!isPoweredOn()) {
         triggerOneShot();
-        waitForDataReady();
+        if (!waitForDataReady()) {
+            // Device never reported fresh data — bus issue, missing sensor,
+            // or the caller disabled ODR and didn't trigger a conversion.
+            // Surface the failure as NaN so silent stale readings can't
+            // propagate; callers can check with isnan().
+            return {NAN, NAN};
+        }
     }
 
     uint8_t humBytes[2];
@@ -96,7 +104,9 @@ void HTS221::triggerOneShot() {
 
 HTS221::ReadResult HTS221::readOneShot() {
     triggerOneShot();
-    waitForDataReady();
+    if (!waitForDataReady()) {
+        return {NAN, NAN};
+    }
     return read();
 }
 
@@ -138,6 +148,13 @@ void HTS221::writeReg(uint8_t reg, uint8_t value) {
 }
 
 void HTS221::readRegs(uint8_t reg, uint8_t* buf, size_t len) {
+    // Zero-init up front so a short bus read leaves defined bytes in buf
+    // rather than whatever was on the stack — callers assume every slot
+    // was written.
+    for (size_t i = 0; i < len; ++i) {
+        buf[i] = 0;
+    }
+
     _wire->beginTransmission(_address);
     _wire->write(reg | HTS221_AUTO_INCREMENT);
     _wire->endTransmission(false);
