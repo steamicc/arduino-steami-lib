@@ -23,8 +23,8 @@
   "url": "https://www.steami.cc/",
   "vendor": "STeaMi",
   "upload": {
-    "maximum_ram_size": 262144,
-    "maximum_size": 1048576,
+    "maximum_ram_size": 196608,
+    "maximum_size": 524288,
     "protocol": "cmsis-dap",
     "protocols": ["blackmagic", "cmsis-dap", "jlink", "stlink"]
   }
