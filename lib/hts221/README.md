@@ -52,9 +52,9 @@ for the full sketch.
 
 ## API
 
-All methods follow the conventions from [`CLAUDE.md`](../../CLAUDE.md)
-(`camelCase`, unit in method names only when necessary, no `read`/`get`
-prefix).
+All methods follow the collection conventions: `camelCase`, include
+units in method names only when they carry ambiguity, and skip
+redundant `read` / `get` prefixes.
 
 ### Lifecycle
 
