@@ -6,7 +6,7 @@
 #include <Arduino.h>
 
 void setup() {
-    // Serial initialized by the variant
+    // Serial instance and pins are defined by the variant
     Serial.begin(115200);
     delay(2000);
 
