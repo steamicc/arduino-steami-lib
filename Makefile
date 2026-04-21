@@ -43,13 +43,20 @@ install: node_modules/.package-lock.json ## Install dev tools (npm)
 
 # --- Formatting ---
 
-.PHONY: lint
-lint: .venv/bin/clang-format ## Check formatting with clang-format
+.PHONY: format-check
+format-check: .venv/bin/clang-format ## Check formatting with clang-format
 	find lib/ src/ tests/ -name '*.h' -o -name '*.cpp' -o -name '*.ino' | xargs clang-format --dry-run --Werror
 
-.PHONY: lint-fix
-lint-fix: .venv/bin/clang-format ## Auto-fix formatting
+.PHONY: format-fix
+format-fix: .venv/bin/clang-format ## Auto-fix formatting in place
 	find lib/ src/ tests/ -name '*.h' -o -name '*.cpp' -o -name '*.ino' | xargs clang-format -i
+
+# --- Linting ---
+# lint is a meta-target — it aggregates every static check we run on the
+# source tree. Today that's just format-check; tidy lands via issue #107.
+
+.PHONY: lint
+lint: format-check ## Run all static checks (format + future static analysis)
 
 # --- Build ---
 
