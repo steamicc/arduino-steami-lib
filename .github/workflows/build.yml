@@ -27,7 +27,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.platformio
-          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini', 'boards/steami.json') }}
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini', 'boards/steami.json', 'requirements.txt') }}
           restore-keys: |
             pio-${{ runner.os }}-
 
