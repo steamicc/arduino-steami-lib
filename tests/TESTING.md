@@ -123,19 +123,72 @@ Example:
 
 ## Mocking Approach
 
-Native tests use lightweight mocks to simulate Arduino behavior.
+Native tests use lightweight mocks to simulate Arduino behavior. Mocks live
+in `tests/native/helpers/` and are automatically available to every native
+test via the `[env:native]` build flag `-I tests/native/helpers`.
 
-Example for GPIO:
+### GPIO mock
 
-* `digitalWrite(pin, value)` stores state in memory
-* Tests assert expected pin values
+`tests/native/helpers/Arduino.h` provides:
 
-Example for I2C (future):
+* `pinMode(pin, mode)` records the mode into `gpioPinMode()`
+* `digitalWrite(pin, value)` records the state into `gpioPinState()`
+* `digitalRead(pin)` returns the last recorded state
+* `delay(ms)` is a no-op
 
-* Fake `Wire` implementation
-* Simulated register map
+Tests assert expected pin state by querying the two maps directly.
 
-This allows testing driver logic without hardware.
+### I2C mock (`TwoWire`)
+
+`tests/native/helpers/Wire.h` provides a minimal host-side implementation
+of the Arduino `TwoWire` class, plus a single `inline TwoWire Wire;` global
+so drivers typed as `TwoWire&` can be passed either `Wire` or a locally
+constructed instance.
+
+Features:
+
+* Preload a register value on a specific address:
+
+  ```cpp
+  wire.setRegister(address, reg, value);
+  ```
+
+* Simulate a register read (`beginTransmission` / `write` / `endTransmission(false)` / `requestFrom` / `read`) — backed by the preloaded values.
+* Capture every `endTransmission` that carries a register write:
+
+  ```cpp
+  const auto& writes = wire.getWrites();  // vector<WriteOp{address, reg, value}>
+  wire.clearWrites();
+  ```
+
+* Multi-byte reads via `requestFrom(address, quantity)` then repeated `read()`.
+* Registers are keyed by `(address, reg)`, so a single `TwoWire` instance can simulate several I2C peripherals on the same bus.
+
+The contract is pinned by the `tests/native/test_wire/` suite; see it for the expected invocation sequence.
+
+---
+
+## Example: driver test using the Wire mock
+
+```cpp
+#include <unity.h>
+
+#include "Wire.h"
+#include "MyDriver.h"  // accepts TwoWire& in its constructor
+
+TwoWire wire;
+MyDriver drv(wire);
+
+void setUp(void) {
+    wire = TwoWire();
+    drv = MyDriver(wire);
+}
+
+void test_begin_checks_who_am_i(void) {
+    wire.setRegister(MyDriver::ADDRESS, MyDriver::REG_WHO_AM_I, 0xBC);
+    TEST_ASSERT_TRUE(drv.begin());
+}
+```
 
 ---
 
@@ -143,12 +196,13 @@ This allows testing driver logic without hardware.
 
 * Basic hardware test infrastructure is working
 * Native test environment with mocks is functional
-* LED mock test provides a minimal working example
+* LED mock test covers GPIO recording
+* Wire mock test pins the I2C mock contract (register preload, write capture, multi-byte reads, per-address isolation)
 
 Future work:
 
 * Add driver-specific tests (e.g. HTS221, WSEN-HIDS)
-* Extend I2C mock (`Wire`)
+* Extend mocks as new peripheral types need host-side coverage (SPI, PDM, etc.)
 * Increase coverage of driver APIs
 
 ---
