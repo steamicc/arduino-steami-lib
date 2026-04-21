@@ -3,6 +3,21 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.1.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.0.6...v0.1.0) (2026-04-21)
+
+
+### Bug Fixes
+
+* **hts221:** Surface waitForDataReady timeouts and short I2C reads. ([b6d983f](https://github.com/steamicc/arduino-steami-lib/commit/b6d983fd0f03cee95f71c7df5b16d12e25618b01))
+* **hts221:** Use the STeaMi internal I2C bus in the smoke-test and example. ([874421d](https://github.com/steamicc/arduino-steami-lib/commit/874421dbbc6a2534ebc5f57a8b8dcac252a21f0d))
+* **tooling:** Pin mock millis() to uint32_t and correct the comment. ([727f45f](https://github.com/steamicc/arduino-steami-lib/commit/727f45fb5553c3836ba2901644a1f6a048267050))
+
+
+### Features
+
+* Exercise HTS221 in the smoke-test sketch. ([8294d53](https://github.com/steamicc/arduino-steami-lib/commit/8294d53b4ce254572693ccf3adab1f1262c6d31e)), closes [#102](https://github.com/steamicc/arduino-steami-lib/issues/102)
+* **hts221:** Add driver implementing the STeaMi convention API. ([7516e54](https://github.com/steamicc/arduino-steami-lib/commit/7516e54a70bee385a87e1480ad619b6734c85c76))
+
 ## [0.0.6](https://github.com/steamicc/arduino-steami-lib/compare/v0.0.5...v0.0.6) (2026-04-21)
 
 ## [0.0.5](https://github.com/steamicc/arduino-steami-lib/compare/v0.0.4...v0.0.5) (2026-04-21)
