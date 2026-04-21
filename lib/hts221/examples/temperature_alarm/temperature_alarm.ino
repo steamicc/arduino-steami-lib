@@ -26,6 +26,10 @@ constexpr uint32_t BEEP_OFF_MS = 100;
 
 void setup() {
     Serial.begin(115200);
+    while (!Serial && millis() < 2000) {
+        // Wait up to 2 s for the host USB CDC to enumerate so the
+        // "not detected" diagnostic below isn't silently dropped.
+    }
     internalI2C.begin();
     pinMode(BUZZER_PIN, OUTPUT);
 
