@@ -10,7 +10,11 @@
 #include <HTS221.h>
 #include <Wire.h>
 
-HTS221 sensor;
+// The HTS221 hangs off the STeaMi internal I2C bus (PB8 / PB9), not the
+// default global Wire. Spin up a dedicated TwoWire pointed at the variant
+// pin macros and hand it to the driver.
+TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
+HTS221 sensor(internalI2C);
 
 void setup() {
     Serial.begin(115200);
@@ -19,7 +23,7 @@ void setup() {
         // !Serial stays true until the host enumerates.
     }
 
-    Wire.begin();
+    internalI2C.begin();
 
     if (!sensor.begin()) {
         Serial.println("HTS221 not detected — check wiring and I2C address.");
