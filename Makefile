@@ -44,17 +44,17 @@ lint-fix: ## Auto-fix formatting
 # --- Build ---
 
 .PHONY: build
-build: ## Build with PlatformIO
+build: .venv/bin/pio ## Build with PlatformIO
 	pio run
 
 .PHONY: upload
-upload: ## Upload to board
+upload: .venv/bin/pio ## Upload to board
 	pio run --target upload --upload-port $(PORT)
 
 # --- Testing ---
 
 .PHONY: test
-test: ## Run unit tests (no-op when tests/ directory is empty)
+test: .venv/bin/pio ## Run unit tests (no-op when tests/ directory is empty)
 	@if [ -n "$$(find tests -mindepth 1 -not -name .gitkeep 2>/dev/null)" ]; then pio test; else echo "tests/ has no suites yet — skipping (will auto-enable when tests land)"; fi
 
 # --- CI ---
