@@ -25,11 +25,14 @@ node_modules/.package-lock.json: package.json package-lock.json
 .venv/bin/clang-format: | .venv
 	.venv/bin/pip install clang-format
 
+.venv/bin/clang-tidy: | .venv
+	.venv/bin/pip install clang-tidy
+
 .PHONY: install-pio
 install-pio: .venv/bin/pio ## Install PlatformIO in the local venv
 
 .PHONY: install-lint
-install-lint: .venv/bin/clang-format ## Install clang-format in the local venv
+install-lint: .venv/bin/clang-format .venv/bin/clang-tidy ## Install lint tools in the local venv
 
 .PHONY: prepare
 prepare: node_modules/.package-lock.json ## Install git hooks
@@ -53,10 +56,15 @@ format-fix: .venv/bin/clang-format ## Auto-fix formatting in place
 
 # --- Linting ---
 # lint is a meta-target — it aggregates every static check we run on the
-# source tree. Today that's just format-check; tidy lands via issue #107.
+# source tree. Each sub-target is runnable on its own.
+
+.PHONY: tidy
+tidy: .venv/bin/clang-tidy ## Run clang-tidy static analysis (scaffold — see #107)
+	@echo "clang-tidy scaffold: full integration tracked in issue #107"
+	@echo "  (needs compile_commands.json via 'pio run -t compiledb' + rule preset)"
 
 .PHONY: lint
-lint: format-check ## Run all static checks (format + future static analysis)
+lint: format-check tidy ## Run all static checks (format + static analysis)
 
 # --- Build ---
 
