@@ -43,26 +43,53 @@ void setup() {
     sensor.setContinuous(HTS221_ODR_1_HZ);
 }
 
-void loop() {
-    if (!sensor.dataReady()) {
-        delay(10);
+// Alarm state, updated whenever a fresh reading lands.
+bool alarmActive = false;
+
+// Non-blocking beep state — the buzzer toggles independently of the
+// sensor polling so the 100/100 ms pattern stays audible even though
+// the sensor only delivers one sample per second.
+bool beepOn = false;
+uint32_t beepChangedAt = 0;
+
+void updateBuzzer() {
+    uint32_t now = millis();
+
+    if (!alarmActive) {
+        if (beepOn) {
+            noTone(BUZZER_PIN);
+            beepOn = false;
+        }
         return;
     }
 
-    float temperatureC = sensor.temperature();
-
-    Serial.print("Temperature: ");
-    Serial.print(temperatureC, 2);
-    Serial.println(" C");
-
-    if (temperatureC > ALARM_THRESHOLD_C) {
-        Serial.println("ALARM");
+    uint32_t elapsed = now - beepChangedAt;
+    if (beepOn && elapsed >= BEEP_ON_MS) {
+        noTone(BUZZER_PIN);
+        beepOn = false;
+        beepChangedAt = now;
+    } else if (!beepOn && elapsed >= BEEP_OFF_MS) {
         tone(BUZZER_PIN, BEEP_FREQUENCY_HZ);
-        delay(BEEP_ON_MS);
-        noTone(BUZZER_PIN);
-        delay(BEEP_OFF_MS);
-    } else {
-        noTone(BUZZER_PIN);
-        delay(500);
+        beepOn = true;
+        beepChangedAt = now;
     }
+}
+
+void loop() {
+    if (sensor.dataReady()) {
+        float temperatureC = sensor.temperature();
+
+        Serial.print("Temperature: ");
+        Serial.print(temperatureC, 2);
+        Serial.println(" C");
+
+        bool aboveThreshold = temperatureC > ALARM_THRESHOLD_C;
+        if (aboveThreshold && !alarmActive) {
+            Serial.println("ALARM");
+        }
+        alarmActive = aboveThreshold;
+    }
+
+    updateBuzzer();
+    delay(10);
 }
