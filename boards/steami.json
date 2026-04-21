@@ -17,7 +17,7 @@
     "onboard_tools": ["cmsis-dap"],
     "jlink_device": "STM32WB55xx",
     "openocd_target": "stm32wbx",
-    "svd_path": "STM32WB55.svd"
+    "svd_path": "STM32WB55_CM4.svd"
   },
   "frameworks": ["arduino"],
   "name": "STeaMi",
