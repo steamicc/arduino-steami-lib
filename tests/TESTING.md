@@ -74,10 +74,12 @@ pio test -e native -f native/test_led
 ### Using Makefile
 
 ```bash
-make test
+make test-native      # Host-side tests, no board required
+make test-hardware    # On-board tests, STeaMi required
 ```
 
-This runs all configured tests via PlatformIO. 
+Each target is a thin wrapper around `pio test -e <env>`, pinned to
+the venv pio installed by `make setup`.
 
 ---
 
