@@ -54,8 +54,8 @@ upload: ## Upload to board
 # --- Testing ---
 
 .PHONY: test
-test: ## Run unit tests
-	pio test
+test: ## Run unit tests (no-op when no test/ directory exists)
+	@if [ -d test ]; then pio test; else echo "No test/ directory yet — skipping (will auto-enable when tests land)"; fi
 
 # --- CI ---
 
