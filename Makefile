@@ -54,8 +54,8 @@ upload: ## Upload to board
 # --- Testing ---
 
 .PHONY: test
-test: ## Run unit tests (no-op when no test/ directory exists)
-	@if [ -d test ]; then pio test; else echo "No test/ directory yet — skipping (will auto-enable when tests land)"; fi
+test: ## Run unit tests (no-op when tests/ directory is empty)
+	@if [ -n "$$(find tests -mindepth 1 -not -name .gitkeep 2>/dev/null)" ]; then pio test; else echo "tests/ has no suites yet — skipping (will auto-enable when tests land)"; fi
 
 # --- CI ---
 
