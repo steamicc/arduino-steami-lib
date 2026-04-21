@@ -100,14 +100,14 @@ the most common failure mode is `Error: unable to find CMSIS-DAP device`
 
 The rules shipped with [pyocd](https://github.com/pyocd/pyOCD) only grant
 access to the CMSIS-DAP v1 HID interface. OpenOCD prefers the CMSIS-DAP v2
-WinUSB backend (libusb bulk transfers), which needs a separate rule on the
-USB subsystem. Install both, and tell ModemManager to stop probing the
-virtual serial port:
+bulk interface (accessed via libusb on Linux), which needs a separate rule
+on the USB subsystem. Install both, and tell ModemManager to stop probing
+the virtual serial port:
 
 ```bash
 sudo tee /etc/udev/rules.d/60-steami.rules > /dev/null <<'EOF'
 # STeaMi / ARM mbed DAPLink
-# CMSIS-DAP v2 (WinUSB bulk — used by OpenOCD by default)
+# CMSIS-DAP v2 (bulk interface — used by OpenOCD by default)
 SUBSYSTEM=="usb", ATTRS{idVendor}=="0d28", ATTRS{idProduct}=="0204", \
     TAG+="uaccess", ENV{ID_MM_DEVICE_IGNORE}="1"
 # CMSIS-DAP v1 (HID fallback — used by pyocd and older OpenOCD)
