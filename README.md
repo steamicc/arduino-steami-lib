@@ -78,7 +78,8 @@ Run `make help` to see all available targets:
 | `make lint` | Run clang-format check |
 | `make lint-fix` | Auto-fix formatting |
 | `make build` | Build with PlatformIO |
-| `make test` | Run unit tests |
+| `make test-native` | Run host-side unit tests (no board required) |
+| `make test-hardware` | Run on-board unit tests (STeaMi required) |
 | `make upload` | Upload to board |
 | `make clean` | Remove build artifacts |
 | `make deepclean` | Remove everything including node_modules |
