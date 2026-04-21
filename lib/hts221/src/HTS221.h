@@ -82,7 +82,8 @@ class HTS221 {
    private:
     // Stored as a pointer (not a reference) so the class is default-assignable
     // — useful for tests that reconstruct the sensor between fixtures. The
-    // public constructor still takes a TwoWire& per CLAUDE.md convention.
+    // public constructor still takes a TwoWire& to keep the usual Arduino
+    // I2C interface at the call site.
     TwoWire* _wire;
     uint8_t _address;
 
