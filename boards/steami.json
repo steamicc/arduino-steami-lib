@@ -13,6 +13,8 @@
     }
   },
   "debug": {
+    "default_tools": ["cmsis-dap"],
+    "onboard_tools": ["cmsis-dap"],
     "jlink_device": "STM32WB55xx",
     "openocd_target": "stm32wbx",
     "svd_path": "STM32WB55.svd"
@@ -26,6 +28,6 @@
     "maximum_ram_size": 196608,
     "maximum_size": 524288,
     "protocol": "cmsis-dap",
-    "protocols": ["blackmagic", "cmsis-dap", "jlink", "stlink"]
+    "protocols": ["cmsis-dap", "blackmagic", "jlink", "stlink"]
   }
 }
