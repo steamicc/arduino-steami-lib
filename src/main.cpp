@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
 // Build smoke-test sketch: validates the board definition + STM32duino variant
 // compile. Not an example — see lib/<component>/examples/ for driver usage.
 // TODO(#102): once a driver is implemented under lib/, exercise it here so CI
