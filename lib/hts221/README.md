@@ -12,15 +12,20 @@ temperature sensor on the STeaMi board.
 
 ## Quick start
 
+On the STeaMi board, the HTS221 is routed to the **internal** I2C bus
+(pins `I2C_INT_SDA` / `I2C_INT_SCL` from the variant, not the default
+global `Wire`). Spin up a dedicated `TwoWire` and hand it to the driver:
+
 ```cpp
 #include <Wire.h>
 #include <HTS221.h>
 
-HTS221 sensor;
+TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
+HTS221 sensor(internalI2C);
 
 void setup() {
     Serial.begin(115200);
-    Wire.begin();
+    internalI2C.begin();
 
     if (!sensor.begin()) {
         Serial.println("HTS221 not detected");
