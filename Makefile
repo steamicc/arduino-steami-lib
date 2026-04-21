@@ -57,6 +57,14 @@ upload: .venv/bin/pio ## Upload to board
 test: .venv/bin/pio ## Run unit tests (no-op when tests/ directory is empty)
 	@if [ -n "$$(find tests -mindepth 1 -not -name .gitkeep 2>/dev/null)" ]; then pio test; else echo "tests/ has no suites yet — skipping (will auto-enable when tests land)"; fi
 
+.PHONY: test-native
+test-native: .venv/bin/pio ## Run host-side native tests (no board required)
+	pio test -e native
+
+.PHONY: test-hardware
+test-hardware: .venv/bin/pio ## Run on-board hardware tests (STeaMi required)
+	pio test -e steami
+
 # --- CI ---
 
 .PHONY: ci

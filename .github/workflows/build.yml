@@ -36,3 +36,6 @@ jobs:
 
       - name: Build project
         run: make build
+
+      - name: Run native tests
+        run: make test-native
