@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.0.5](https://github.com/steamicc/arduino-steami-lib/compare/v0.0.4...v0.0.5) (2026-04-21)
+
+
+### Bug Fixes
+
+* Capture every byte of a multi-byte I2C write in the Wire mock. ([dd4dac7](https://github.com/steamicc/arduino-steami-lib/commit/dd4dac70c7bcf2b6feca79bd4f873804181774fb))
+* Track current register pointer per I2C address in Wire mock. ([a6fab3d](https://github.com/steamicc/arduino-steami-lib/commit/a6fab3d241540abae01317eedf0906c2b97a11fd))
+
 ## [0.0.4](https://github.com/steamicc/arduino-steami-lib/compare/v0.0.3...v0.0.4) (2026-04-21)
 
 
