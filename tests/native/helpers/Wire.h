@@ -62,4 +62,4 @@ class TwoWire {
     std::map<uint8_t, uint8_t> registers_;
 };
 
-extern TwoWire Wire;
+inline TwoWire Wire;
