@@ -109,10 +109,10 @@ sudo tee /etc/udev/rules.d/60-steami.rules > /dev/null <<'EOF'
 # STeaMi / ARM mbed DAPLink
 # CMSIS-DAP v2 (WinUSB bulk — used by OpenOCD by default)
 SUBSYSTEM=="usb", ATTRS{idVendor}=="0d28", ATTRS{idProduct}=="0204", \
-    MODE="0666", TAG+="uaccess", ENV{ID_MM_DEVICE_IGNORE}="1"
+    TAG+="uaccess", ENV{ID_MM_DEVICE_IGNORE}="1"
 # CMSIS-DAP v1 (HID fallback — used by pyocd and older OpenOCD)
 KERNEL=="hidraw*", ATTRS{idVendor}=="0d28", ATTRS{idProduct}=="0204", \
-    MODE="0666", TAG+="uaccess"
+    TAG+="uaccess"
 EOF
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
