@@ -23,10 +23,16 @@ class TwoWire {
 
     uint8_t endTransmission(bool = true) {
         if (txBuffer_.size() >= 2) {
+            // [reg, val0, val1, ...] — I2C auto-increment: each value lands at
+            // reg + offset, one WriteOp per byte so tests can assert the full
+            // write sequence.
             uint8_t reg = txBuffer_[0];
-            uint8_t val = txBuffer_[1];
-            registers_[makeKey(currentAddress_, reg)] = val;
-            writes_.push_back({currentAddress_, reg, val});
+            for (size_t i = 1; i < txBuffer_.size(); ++i) {
+                uint8_t targetReg = static_cast<uint8_t>(reg + (i - 1));
+                uint8_t val = txBuffer_[i];
+                registers_[makeKey(currentAddress_, targetReg)] = val;
+                writes_.push_back({currentAddress_, targetReg, val});
+            }
             currentRegisterByAddr_[currentAddress_] = reg;
         } else if (txBuffer_.size() == 1) {
             currentRegisterByAddr_[currentAddress_] = txBuffer_[0];
