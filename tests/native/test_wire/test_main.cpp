@@ -72,6 +72,31 @@ void test_addresses_are_isolated(void) {
     TEST_ASSERT_EQUAL_HEX8(0xBB, wire.getRegister(0x6B, 0x0F));
 }
 
+void test_multi_byte_write_fills_consecutive_registers(void) {
+    // Auto-increment semantics: one beginTransmission + write(reg) + write(v0)
+    // + write(v1) + write(v2) + endTransmission fills reg, reg+1, reg+2 and
+    // records one WriteOp per byte.
+    wire.beginTransmission(0x5F);
+    wire.write(0x10);
+    wire.write(0xA0);
+    wire.write(0xA1);
+    wire.write(0xA2);
+    wire.endTransmission();
+
+    TEST_ASSERT_EQUAL_HEX8(0xA0, wire.getRegister(0x5F, 0x10));
+    TEST_ASSERT_EQUAL_HEX8(0xA1, wire.getRegister(0x5F, 0x11));
+    TEST_ASSERT_EQUAL_HEX8(0xA2, wire.getRegister(0x5F, 0x12));
+
+    const auto& writes = wire.getWrites();
+    TEST_ASSERT_EQUAL(3, writes.size());
+    TEST_ASSERT_EQUAL_HEX8(0x10, writes[0].reg);
+    TEST_ASSERT_EQUAL_HEX8(0xA0, writes[0].value);
+    TEST_ASSERT_EQUAL_HEX8(0x11, writes[1].reg);
+    TEST_ASSERT_EQUAL_HEX8(0xA1, writes[1].value);
+    TEST_ASSERT_EQUAL_HEX8(0x12, writes[2].reg);
+    TEST_ASSERT_EQUAL_HEX8(0xA2, writes[2].value);
+}
+
 void test_interleaved_register_pointers_are_isolated(void) {
     // Driver A on 0x5F preloads register 0x10; driver B on 0x6B preloads
     // register 0x20. Selecting B's pointer must not clobber A's.
@@ -101,6 +126,7 @@ int main(void) {
     RUN_TEST(test_capture_write_operation);
     RUN_TEST(test_read_multiple_bytes);
     RUN_TEST(test_addresses_are_isolated);
+    RUN_TEST(test_multi_byte_write_fills_consecutive_registers);
     RUN_TEST(test_interleaved_register_pointers_are_isolated);
 
     return UNITY_END();
