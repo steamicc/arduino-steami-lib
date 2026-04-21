@@ -16,8 +16,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install clang-format and make
-        run: sudo apt-get update && sudo apt-get install -y clang-format make
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
 
       - name: Run formatting check
         run: make lint
