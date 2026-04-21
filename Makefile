@@ -68,7 +68,7 @@ test-hardware: .venv/bin/pio ## Run on-board hardware tests (STeaMi required)
 # --- CI ---
 
 .PHONY: ci
-ci: lint build test ## Run all CI checks (lint + build + test)
+ci: lint build test-native ## Run all CI checks (lint + build + native tests, no board required)
 
 # --- Utilities ---
 
