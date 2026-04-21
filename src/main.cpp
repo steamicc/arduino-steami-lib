@@ -8,7 +8,12 @@
 #include <HTS221.h>
 #include <Wire.h>
 
-HTS221 hts221;
+// The STeaMi routes the HTS221 to its internal I2C bus (pins PB8/PB9,
+// exported as I2C_INT_SCL / I2C_INT_SDA by the variant). The default
+// global Wire sits on a different pair, so spin up a dedicated TwoWire
+// for the on-board peripherals and hand it to the driver.
+TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
+HTS221 hts221(internalI2C);
 
 void setup() {
     Serial.begin(115200);
@@ -20,7 +25,7 @@ void setup() {
     pinMode(LED_GREEN, OUTPUT);
     pinMode(LED_BLUE, OUTPUT);
 
-    Wire.begin();
+    internalI2C.begin();
     if (hts221.begin()) {
         Serial.print("HTS221 detected, WHO_AM_I = 0x");
         Serial.println(hts221.deviceId(), HEX);
