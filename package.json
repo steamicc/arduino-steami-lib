@@ -39,6 +39,6 @@
     }
   },
   "lint-staged": {
-    "*.{h,cpp,ino}": "clang-format --dry-run --Werror"
+    "*.{h,cpp,ino}": ".venv/bin/clang-format --dry-run --Werror"
   }
 }
