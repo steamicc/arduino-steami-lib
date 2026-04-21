@@ -51,8 +51,22 @@ pio run --target upload
 
 ### Setup
 
+Requires **Python 3** (with `venv` — on Debian/Ubuntu: `sudo apt install python3-venv`)
+and **Node.js** (for the git hooks tooling).
+
 ```bash
-make setup    # Install npm dependencies (git hooks) and dev tools
+make setup    # Install npm tooling, git hooks, and PlatformIO (in a local .venv/)
+```
+
+`make setup` creates a local Python virtualenv in `.venv/` and installs
+PlatformIO there, so no global `pip install` is required. All `make` targets
+(`build`, `upload`, `test`) transparently use this local `pio`.
+
+To use `pio` directly outside of `make`, activate the venv first:
+
+```bash
+source .venv/bin/activate
+pio device monitor -b 115200
 ```
 
 ### Available commands
@@ -75,6 +89,67 @@ Git hooks are managed by [husky](https://typicode.github.io/husky/) and run auto
 
 - **commit-msg** — validates commit message format via [commitlint](https://commitlint.js.org/)
 - **pre-commit** — branch name validation, content checks, clang-format on staged files
+
+## Troubleshooting uploads
+
+PlatformIO's default uploader on STeaMi is OpenOCD over CMSIS-DAP. On Linux,
+the most common failure mode is `Error: unable to find CMSIS-DAP device`
+(or similar) caused by incomplete udev rules.
+
+### Install udev rules
+
+The rules shipped with [pyocd](https://github.com/pyocd/pyOCD) only grant
+access to the CMSIS-DAP v1 HID interface. OpenOCD prefers the CMSIS-DAP v2
+bulk interface (accessed via libusb on Linux), which needs a separate rule
+on the USB subsystem. Install both, and tell ModemManager to stop probing
+the virtual serial port:
+
+```bash
+sudo tee /etc/udev/rules.d/60-steami.rules > /dev/null <<'EOF'
+# STeaMi / ARM mbed DAPLink
+# CMSIS-DAP v2 (bulk interface — used by OpenOCD by default)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0d28", ATTRS{idProduct}=="0204", \
+    TAG+="uaccess", ENV{ID_MM_DEVICE_IGNORE}="1"
+# CMSIS-DAP v1 (HID fallback — used by pyocd and older OpenOCD)
+KERNEL=="hidraw*", ATTRS{idVendor}=="0d28", ATTRS{idProduct}=="0204", \
+    TAG+="uaccess"
+EOF
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+Then unplug and replug the board.
+
+### Fallback: use pyocd instead of OpenOCD
+
+If OpenOCD still fails after the udev rules, pyocd is a drop-in alternative
+with broader DAPLink firmware compatibility and bundled target definitions:
+
+```bash
+source .venv/bin/activate
+pip install pyocd
+```
+
+Then edit [`platformio.ini`](platformio.ini):
+
+```ini
+upload_protocol = custom
+upload_command = pyocd flash --target stm32wb55rgvx $SOURCE
+```
+
+The exact pyocd target name may vary by pack version — run
+`pyocd list --targets | grep -i wb55` to confirm. You may need to install
+the CMSIS pack first: `pyocd pack install stm32wb55`.
+
+### Check OpenOCD version
+
+PlatformIO bundles its own OpenOCD at
+`~/.platformio/packages/tool-openocd/bin/openocd`. STM32WB55 support has
+improved across versions — if both remedies above fail, verify the bundled
+OpenOCD is recent:
+
+```bash
+~/.platformio/packages/tool-openocd/bin/openocd --version
+```
 
 ## Contributing
 

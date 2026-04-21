@@ -8,6 +8,9 @@
 # Node (tooling)
 node_modules/
 
+# Python venv (PlatformIO toolchain)
+.venv/
+
 # IDE
 *.swp
 *.swo

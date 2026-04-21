@@ -11,12 +11,22 @@ node_modules/.package-lock.json: package.json package-lock.json
 	npm install
 	@touch $@
 
+# PlatformIO is installed in a local Python virtualenv so the toolchain
+# is reproducible and doesn't pollute the system Python.
+.venv/bin/pio:
+	python3 -m venv .venv
+	.venv/bin/pip install --upgrade pip
+	.venv/bin/pip install platformio
+
+.PHONY: install-pio
+install-pio: .venv/bin/pio ## Install PlatformIO in a local Python venv
+
 .PHONY: prepare
 prepare: node_modules/.package-lock.json ## Install git hooks
 	husky
 
 .PHONY: setup
-setup: install prepare ## Full dev environment setup
+setup: install install-pio prepare ## Full dev environment setup
 
 .PHONY: install
 install: node_modules/.package-lock.json ## Install dev tools (npm)
@@ -34,18 +44,18 @@ lint-fix: ## Auto-fix formatting
 # --- Build ---
 
 .PHONY: build
-build: ## Build with PlatformIO
+build: .venv/bin/pio ## Build with PlatformIO
 	pio run
 
 .PHONY: upload
-upload: ## Upload to board
+upload: .venv/bin/pio ## Upload to board
 	pio run --target upload --upload-port $(PORT)
 
 # --- Testing ---
 
 .PHONY: test
-test: ## Run unit tests
-	pio test
+test: .venv/bin/pio ## Run unit tests (no-op when tests/ directory is empty)
+	@if [ -n "$$(find tests -mindepth 1 -not -name .gitkeep 2>/dev/null)" ]; then pio test; else echo "tests/ has no suites yet — skipping (will auto-enable when tests land)"; fi
 
 # --- CI ---
 
@@ -59,8 +69,9 @@ clean: ## Remove build artifacts
 	rm -rf .pio
 
 .PHONY: deepclean
-deepclean: clean ## Remove everything including node_modules
+deepclean: clean ## Remove everything including node_modules and venv
 	@if [ -d node_modules ]; then rm -rf node_modules && echo "node_modules removed"; else echo "node_modules not found, skipping"; fi
+	@if [ -d .venv ]; then rm -rf .venv && echo ".venv removed"; else echo ".venv not found, skipping"; fi
 
 .PHONY: help
 help: ## Show this help
