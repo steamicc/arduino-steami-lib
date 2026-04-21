@@ -23,6 +23,14 @@ jobs:
         with:
           node-version: 22
 
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini', 'boards/steami.json') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+
       - name: Setup dev environment
         run: make setup
 
