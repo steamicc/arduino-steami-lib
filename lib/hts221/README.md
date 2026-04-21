@@ -50,6 +50,29 @@ void loop() {
 See [examples/read_temperature_humidity/](examples/read_temperature_humidity/)
 for the full sketch.
 
+## Examples
+
+| Example | What it does |
+|---------|--------------|
+| [`read_temperature_humidity`](examples/read_temperature_humidity/) | Baseline sketch: print temperature and humidity every second. |
+| [`comfort_index`](examples/comfort_index/) | Classify ambient conditions as *comfortable*, *too dry*, *too humid*, *cold*, or *hot* using simple thresholds. |
+| [`dew_point`](examples/dew_point/) | Compute the dew point from T + %RH via the Magnus formula, and warn when the current temperature comes within 2 °C of it (condensation risk). |
+| [`temperature_alarm`](examples/temperature_alarm/) | Monitor temperature continuously and buzz the on-board `SPEAKER` whenever it crosses a configurable high threshold. |
+
+### Building an example
+
+PlatformIO builds the directory pointed at by `src_dir`. To flash an
+example instead of the default smoke-test under `src/`, override
+`src_dir` via the `PLATFORMIO_SRC_DIR` environment variable for a
+single invocation:
+
+```bash
+PLATFORMIO_SRC_DIR=lib/hts221/examples/dew_point pio run -e steami -t upload
+pio device monitor -b 115200
+```
+
+(`pio run` without the override keeps building the project's smoke-test.)
+
 ## API
 
 All methods follow the collection conventions: `camelCase`, include
