@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.2.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.1.0...v0.2.0) (2026-04-21)
+
+
+### Bug Fixes
+
+* **hts221:** Make temperature_alarm beep non-blocking for true 100/100 ms. ([8c670b0](https://github.com/steamicc/arduino-steami-lib/commit/8c670b0d4ce9bea7ced201154645574e800354e4))
+* **hts221:** Return NaN from dewPoint() when humidity is zero. ([6b2efaa](https://github.com/steamicc/arduino-steami-lib/commit/6b2efaa369e8f32ff21a2a0643fc2e15bf618a94))
+* **hts221:** Wait for USB CDC enumeration in example setup(). ([0a3942d](https://github.com/steamicc/arduino-steami-lib/commit/0a3942d9cbc1f0291a7713e19f3b26ba264aefb8))
+
+
+### Features
+
+* **hts221:** Add three practical example sketches. ([75d6205](https://github.com/steamicc/arduino-steami-lib/commit/75d620530430056de64201b659905bb467aa62a7))
+
 # [0.1.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.0.6...v0.1.0) (2026-04-21)
 
 
