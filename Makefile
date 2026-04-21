@@ -44,12 +44,12 @@ install: node_modules/.package-lock.json ## Install dev tools (npm)
 # --- Formatting ---
 
 .PHONY: lint
-lint: ## Check formatting with clang-format
-	find lib/ -name '*.h' -o -name '*.cpp' -o -name '*.ino' | xargs clang-format --dry-run --Werror
+lint: .venv/bin/clang-format ## Check formatting with clang-format
+	find lib/ src/ tests/ -name '*.h' -o -name '*.cpp' -o -name '*.ino' | xargs clang-format --dry-run --Werror
 
 .PHONY: lint-fix
-lint-fix: ## Auto-fix formatting
-	find lib/ -name '*.h' -o -name '*.cpp' -o -name '*.ino' | xargs clang-format -i
+lint-fix: .venv/bin/clang-format ## Auto-fix formatting
+	find lib/ src/ tests/ -name '*.h' -o -name '*.cpp' -o -name '*.ino' | xargs clang-format -i
 
 # --- Build ---
 
