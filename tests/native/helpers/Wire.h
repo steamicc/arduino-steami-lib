@@ -27,17 +27,18 @@ class TwoWire {
             uint8_t val = txBuffer_[1];
             registers_[makeKey(currentAddress_, reg)] = val;
             writes_.push_back({currentAddress_, reg, val});
-            currentRegister_ = reg;
+            currentRegisterByAddr_[currentAddress_] = reg;
         } else if (txBuffer_.size() == 1) {
-            currentRegister_ = txBuffer_[0];
+            currentRegisterByAddr_[currentAddress_] = txBuffer_[0];
         }
         return 0;
     }
 
     uint8_t requestFrom(uint8_t address, uint8_t quantity) {
         rxBuffer_.clear();
+        uint8_t reg = currentRegisterByAddr_[address];
         for (uint8_t i = 0; i < quantity; ++i) {
-            rxBuffer_.push_back(registers_[makeKey(address, currentRegister_ + i)]);
+            rxBuffer_.push_back(registers_[makeKey(address, reg + i)]);
         }
         rxIndex_ = 0;
         return quantity;
@@ -79,7 +80,7 @@ class TwoWire {
     }
 
     uint8_t currentAddress_ = 0;
-    uint8_t currentRegister_ = 0;
+    std::map<uint8_t, uint8_t> currentRegisterByAddr_;
     std::vector<uint8_t> txBuffer_;
     std::vector<uint8_t> rxBuffer_;
     size_t rxIndex_ = 0;

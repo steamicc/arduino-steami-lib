@@ -72,6 +72,27 @@ void test_addresses_are_isolated(void) {
     TEST_ASSERT_EQUAL_HEX8(0xBB, wire.getRegister(0x6B, 0x0F));
 }
 
+void test_interleaved_register_pointers_are_isolated(void) {
+    // Driver A on 0x5F preloads register 0x10; driver B on 0x6B preloads
+    // register 0x20. Selecting B's pointer must not clobber A's.
+    wire.setRegister(0x5F, 0x10, 0xA1);
+    wire.setRegister(0x6B, 0x20, 0xB2);
+
+    wire.beginTransmission(0x5F);
+    wire.write(0x10);
+    wire.endTransmission(false);
+
+    wire.beginTransmission(0x6B);
+    wire.write(0x20);
+    wire.endTransmission(false);
+
+    wire.requestFrom(0x5F, 1);
+    TEST_ASSERT_EQUAL_HEX8(0xA1, wire.read());
+
+    wire.requestFrom(0x6B, 1);
+    TEST_ASSERT_EQUAL_HEX8(0xB2, wire.read());
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -80,6 +101,7 @@ int main(void) {
     RUN_TEST(test_capture_write_operation);
     RUN_TEST(test_read_multiple_bytes);
     RUN_TEST(test_addresses_are_isolated);
+    RUN_TEST(test_interleaved_register_pointers_are_isolated);
 
     return UNITY_END();
 }
