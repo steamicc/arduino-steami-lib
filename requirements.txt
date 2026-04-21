@@ -1,0 +1,8 @@
+# Python-based development tooling, installed into the local .venv/ by
+# `make setup` (see Makefile). Versions are pinned so every contributor
+# and the CI runner resolve to the exact same binaries — bump with care
+# and verify make ci still passes.
+
+platformio==6.1.19
+clang-format==22.1.3
+clang-tidy==22.1.0.1

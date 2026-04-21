@@ -11,22 +11,22 @@ node_modules/.package-lock.json: package.json package-lock.json
 	npm install
 	@touch $@
 
-# Python-based tooling (PlatformIO, clang-format) is installed in a local
-# virtualenv so versions are pinned per-repo and nothing pollutes the system
-# Python. Tools take the venv as an order-only prerequisite so its creation
-# happens once even when multiple tools depend on it.
+# Python-based tooling (PlatformIO, clang-format, clang-tidy) is installed
+# in a local virtualenv so nothing pollutes the system Python. Versions are
+# pinned in requirements.txt; each tool target depends on that file so a
+# version bump re-triggers pip install on the next make invocation.
 .venv:
 	python3 -m venv .venv
 	.venv/bin/pip install --upgrade pip
 
-.venv/bin/pio: | .venv
-	.venv/bin/pip install platformio
+.venv/bin/pio: requirements.txt | .venv
+	.venv/bin/pip install -c requirements.txt platformio
 
-.venv/bin/clang-format: | .venv
-	.venv/bin/pip install clang-format
+.venv/bin/clang-format: requirements.txt | .venv
+	.venv/bin/pip install -c requirements.txt clang-format
 
-.venv/bin/clang-tidy: | .venv
-	.venv/bin/pip install clang-tidy
+.venv/bin/clang-tidy: requirements.txt | .venv
+	.venv/bin/pip install -c requirements.txt clang-tidy
 
 .PHONY: install-pio
 install-pio: .venv/bin/pio ## Install PlatformIO in the local venv
