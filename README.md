@@ -51,8 +51,22 @@ pio run --target upload
 
 ### Setup
 
+Requires **Python 3** (with `venv` — on Debian/Ubuntu: `sudo apt install python3-venv`)
+and **Node.js** (for the git hooks tooling).
+
 ```bash
-make setup    # Install npm dependencies (git hooks) and dev tools
+make setup    # Install npm tooling, git hooks, and PlatformIO (in a local .venv/)
+```
+
+`make setup` creates a local Python virtualenv in `.venv/` and installs
+PlatformIO there, so no global `pip install` is required. All `make` targets
+(`build`, `upload`, `test`) transparently use this local `pio`.
+
+To use `pio` directly outside of `make`, activate the venv first:
+
+```bash
+source .venv/bin/activate
+pio device monitor -b 115200
 ```
 
 ### Available commands
