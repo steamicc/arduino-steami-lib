@@ -29,6 +29,13 @@ void setup() {
     if (hts221.begin()) {
         Serial.print("HTS221 detected, WHO_AM_I = 0x");
         Serial.println(hts221.deviceId(), HEX);
+
+        auto r = hts221.read();
+        Serial.print("HTS221 first read: T = ");
+        Serial.print(r.temperature, 2);
+        Serial.print(" C, H = ");
+        Serial.print(r.humidity, 1);
+        Serial.println(" %");
     } else {
         Serial.println("HTS221 not detected");
     }
