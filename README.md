@@ -60,7 +60,8 @@ make setup    # Install npm tooling, git hooks, and PlatformIO (in a local .venv
 
 `make setup` creates a local Python virtualenv in `.venv/` and installs
 PlatformIO there, so no global `pip install` is required. All `make` targets
-(`build`, `upload`, `test`) transparently use this local `pio`.
+(`build`, `upload`, `test-native`, `test-hardware`) transparently use this
+local `pio`.
 
 To use `pio` directly outside of `make`, activate the venv first:
 
