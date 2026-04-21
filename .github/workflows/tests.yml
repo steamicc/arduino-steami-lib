@@ -1,12 +1,18 @@
-name: Build
+name: Tests
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
 
 jobs:
-  build:
+  native:
     runs-on: ubuntu-latest
 
     steps:
@@ -18,11 +24,6 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
       - name: Cache PlatformIO packages
         uses: actions/cache@v4
         with:
@@ -31,8 +32,5 @@ jobs:
           restore-keys: |
             pio-${{ runner.os }}-
 
-      - name: Setup dev environment
-        run: make setup
-
-      - name: Build project
-        run: make build
+      - name: Run native tests
+        run: make test-native
