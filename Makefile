@@ -11,22 +11,32 @@ node_modules/.package-lock.json: package.json package-lock.json
 	npm install
 	@touch $@
 
-# PlatformIO is installed in a local Python virtualenv so the toolchain
-# is reproducible and doesn't pollute the system Python.
-.venv/bin/pio:
+# Python-based tooling (PlatformIO, clang-format) is installed in a local
+# virtualenv so versions are pinned per-repo and nothing pollutes the system
+# Python. Tools take the venv as an order-only prerequisite so its creation
+# happens once even when multiple tools depend on it.
+.venv:
 	python3 -m venv .venv
 	.venv/bin/pip install --upgrade pip
+
+.venv/bin/pio: | .venv
 	.venv/bin/pip install platformio
 
+.venv/bin/clang-format: | .venv
+	.venv/bin/pip install clang-format
+
 .PHONY: install-pio
-install-pio: .venv/bin/pio ## Install PlatformIO in a local Python venv
+install-pio: .venv/bin/pio ## Install PlatformIO in the local venv
+
+.PHONY: install-lint
+install-lint: .venv/bin/clang-format ## Install clang-format in the local venv
 
 .PHONY: prepare
 prepare: node_modules/.package-lock.json ## Install git hooks
 	husky
 
 .PHONY: setup
-setup: install install-pio prepare ## Full dev environment setup
+setup: install install-pio install-lint prepare ## Full dev environment setup
 
 .PHONY: install
 install: node_modules/.package-lock.json ## Install dev tools (npm)
