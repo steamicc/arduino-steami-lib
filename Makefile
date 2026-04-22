@@ -19,14 +19,22 @@ node_modules/.package-lock.json: package.json package-lock.json
 	python3 -m venv .venv
 	.venv/bin/pip install --upgrade pip
 
+# Touch the target after pip install so make's mtime comparison stops
+# re-firing — pip install of an already-satisfied package is a no-op
+# that doesn't refresh the installed binary's timestamp, and without
+# the touch the "requirements.txt newer than target" check stays true
+# forever and pip runs on every make invocation.
 .venv/bin/pio: requirements.txt | .venv
 	.venv/bin/pip install -c requirements.txt platformio
+	@touch .venv/bin/pio
 
 .venv/bin/clang-format: requirements.txt | .venv
 	.venv/bin/pip install -c requirements.txt clang-format
+	@touch .venv/bin/clang-format
 
 .venv/bin/clang-tidy: requirements.txt | .venv
 	.venv/bin/pip install -c requirements.txt clang-tidy
+	@touch .venv/bin/clang-tidy
 
 .PHONY: install-pio
 install-pio: .venv/bin/pio ## Install PlatformIO in the local venv
