@@ -35,16 +35,21 @@ jobs:
 
             const type = match[1].toLowerCase();
 
-            // Map conventional-commit types to existing repository labels.
-            // Types not listed here (style, refactor, build, chore, perf, revert)
-            // have no repo label yet — add the labels in repo settings and extend
-            // this map if the team wants complete coverage.
+            // Map conventional-commit types to repository labels. Every
+            // type allowed by commitlint.config.js's type-enum has a
+            // corresponding label.
             const typeToLabel = {
               feat: 'enhancement',
               fix: 'bug',
               docs: 'docs',
+              style: 'style',
+              refactor: 'refactor',
               test: 'test',
               ci: 'ci',
+              build: 'build',
+              chore: 'chore',
+              perf: 'perf',
+              revert: 'revert',
               tooling: 'tooling',
             };
 
