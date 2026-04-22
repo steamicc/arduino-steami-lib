@@ -58,16 +58,22 @@ format-fix: .venv/bin/clang-format ## Auto-fix formatting in place
 # lint is a meta-target — it aggregates every static check we run on the
 # source tree. Each sub-target is runnable on its own.
 
-# compile_commands.json is regenerated whenever platformio.ini or the
-# board JSON change — clang-tidy needs the exact compile flags PIO used.
+# Driver sources analysed by clang-tidy. Listed via $(shell) so the set
+# is current each time make runs.
+DRIVER_SOURCES := $(shell find lib -type f -path '*/src/*.cpp')
+
+# compile_commands.json is regenerated whenever platformio.ini, the board
+# JSON, or the driver source list changes — clang-tidy needs the exact
+# compile flags PIO used for every file it analyses. Adding a new driver
+# forces a DB refresh so tidy doesn't fall back to guessed flags.
 # Generated from the native env because host compile handles the STL /
 # headers cleanly (the ARM cross-compile toolchain trips clang-tidy up).
-compile_commands.json: .venv/bin/pio platformio.ini boards/steami.json
+compile_commands.json: .venv/bin/pio platformio.ini boards/steami.json $(DRIVER_SOURCES)
 	pio run -t compiledb -e native
 
 .PHONY: tidy
 tidy: .venv/bin/clang-tidy compile_commands.json ## Run clang-tidy on every driver source under lib/*/src/
-	@find lib -type f -path '*/src/*.cpp' | xargs .venv/bin/clang-tidy -p . --quiet
+	@find lib -type f -path '*/src/*.cpp' -exec .venv/bin/clang-tidy -p . --quiet {} +
 
 .PHONY: check-spdx
 check-spdx: ## Verify every C++ source carries the SPDX license header
