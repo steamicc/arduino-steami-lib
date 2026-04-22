@@ -26,15 +26,15 @@ node_modules/.package-lock.json: package.json package-lock.json
 # forever and pip runs on every make invocation.
 .venv/bin/pio: requirements.txt | .venv
 	.venv/bin/pip install -c requirements.txt platformio
-	@touch .venv/bin/pio
+	@test -x $@ && touch $@
 
 .venv/bin/clang-format: requirements.txt | .venv
 	.venv/bin/pip install -c requirements.txt clang-format
-	@touch .venv/bin/clang-format
+	@test -x $@ && touch $@
 
 .venv/bin/clang-tidy: requirements.txt | .venv
 	.venv/bin/pip install -c requirements.txt clang-tidy
-	@touch .venv/bin/clang-tidy
+	@test -x $@ && touch $@
 
 .PHONY: install-pio
 install-pio: .venv/bin/pio ## Install PlatformIO in the local venv
