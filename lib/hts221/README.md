@@ -61,17 +61,19 @@ for the full sketch.
 
 ### Building an example
 
-PlatformIO builds the directory pointed at by `src_dir`. To flash an
-example instead of the default smoke-test under `src/`, override
-`src_dir` via the `PLATFORMIO_SRC_DIR` environment variable for a
-single invocation:
+List available examples:
 
 ```bash
-PLATFORMIO_SRC_DIR=lib/hts221/examples/dew_point pio run -e steami -t upload
-pio device monitor -b 115200
+make list-examples
 ```
 
-(`pio run` without the override keeps building the project's smoke-test.)
+Then flash one:
+
+```bash
+make flash EXAMPLE=hts221/dew_point
+```
+
+This builds, uploads, and opens the serial monitor at 115200 baud.
 
 ## API
 
