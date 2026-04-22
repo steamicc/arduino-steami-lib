@@ -6,11 +6,11 @@ module.exports = {
     },
   },
   rules: {
-    'subject-case': [0],
-    'subject-full-stop': [0],
+    'subject-case': [2, 'always', 'sentence-case'],
+    'subject-full-stop': [2, 'always', '.'],
     'header-max-length': [2, 'always', 78],
     'scope-enum': [
-      1,
+      2,
       'always',
       [
         'apds9960',
