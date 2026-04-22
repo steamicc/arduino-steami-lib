@@ -31,9 +31,10 @@ Run `make help` for the full list of targets. The ones you'll use most:
 | `make upload` | Flash the firmware to a connected STeaMi. |
 
 Running `make setup` also installs the husky git hooks: they validate the
-branch name, commit message, and clang-format every staged `.h`/`.cpp`/`.ino`
-before each commit. Run `make setup` on a fresh clone so you don't get
-surprised by CI enforcing things your local commit let through.
+branch name, the commit message, and run `clang-format` plus the SPDX
+header check on every staged `.h`/`.cpp`/`.ino` before each commit. Run
+`make setup` on a fresh clone so you don't get surprised by CI enforcing
+things your local commit let through.
 
 ## Driver structure
 
