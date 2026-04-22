@@ -22,7 +22,8 @@ Run `make help` for the full list of targets. The ones you'll use most:
 |--------|--------------|
 | `make format-check` | Run `clang-format --dry-run` on `lib/ src/ tests/`. |
 | `make format-fix` | Apply `clang-format -i` in place. |
-| `make lint` | Meta-target: `format-check` + `clang-tidy` (tidy is scaffolded, see issue #107). |
+| `make lint` | Meta-target: `format-check` + `check-spdx` + `clang-tidy` (tidy is scaffolded, see issue #107). |
+| `make check-spdx` | Verify every `.h`/`.cpp`/`.ino` carries the SPDX-License-Identifier header. |
 | `make build` | Build the STeaMi firmware (`pio run`; `steami` is the default env). |
 | `make test-native` | Run host-side unit tests (no board required). |
 | `make test-hardware` | Run on-board unit tests (STeaMi required). |

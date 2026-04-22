@@ -63,8 +63,12 @@ tidy: .venv/bin/clang-tidy ## Run clang-tidy static analysis (scaffold — see #
 	@echo "clang-tidy scaffold: full integration tracked in issue #107"
 	@echo "  (needs compile_commands.json via 'pio run -t compiledb' + rule preset)"
 
+.PHONY: check-spdx
+check-spdx: ## Verify every C++ source carries the SPDX license header
+	@scripts/check-spdx.sh
+
 .PHONY: lint
-lint: format-check tidy ## Run all static checks (format + static analysis)
+lint: format-check check-spdx tidy ## Run all static checks (format + SPDX + static analysis)
 
 # --- Build ---
 
