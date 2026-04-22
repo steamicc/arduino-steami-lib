@@ -1,7 +1,13 @@
 name: "🏷 Auto-label PR"
 
+# pull_request_target (and not pull_request) is used so the workflow can
+# write labels on PRs opened from forks — the GITHUB_TOKEN would be
+# read-only under plain pull_request. This is only safe as long as the
+# job never checks out or executes PR code: we only inspect the title
+# from the event payload and call the issues API. Do not add checkout
+# steps here without switching back to pull_request.
 on:
-  pull_request:
+  pull_request_target:
     types:
       - opened
       - edited
@@ -17,7 +23,7 @@ jobs:
   label:
     runs-on: ubuntu-latest
     steps:
-      - name: "🏷 Apply label matching the PR title type"
+      - name: "🏷 Sync label with the PR title type"
         uses: actions/github-script@v7
         with:
           script: |
@@ -27,13 +33,6 @@ jobs:
             const match = title.match(
               /^(feat|fix|docs|style|refactor|test|ci|build|chore|perf|revert|tooling)(\([^)]+\))?!?:/i
             );
-
-            if (!match) {
-              core.info(`Title "${title}" doesn't match the conventional-commit pattern; no label applied.`);
-              return;
-            }
-
-            const type = match[1].toLowerCase();
 
             // Map conventional-commit types to repository labels. Every
             // type allowed by commitlint.config.js's type-enum has a
@@ -52,23 +51,41 @@ jobs:
               revert: 'revert',
               tooling: 'tooling',
             };
+            const managedLabels = new Set(Object.values(typeToLabel));
 
-            const label = typeToLabel[type];
-            if (!label) {
-              core.info(`Type "${type}" has no mapped label in this repo; skipping.`);
-              return;
+            const target = match ? typeToLabel[match[1].toLowerCase()] : null;
+            if (!match) {
+              core.info(`Title "${title}" doesn't match the conventional-commit pattern; not touching labels.`);
             }
 
-            // Check whether the label is already applied to keep the operation
-            // idempotent — editing a PR title shouldn't spam label events.
+            // Pull the current labels so we can both remove stale managed
+            // ones (if the title type changed) and skip re-adding when the
+            // target is already there.
             const { data: existing } = await github.rest.issues.listLabelsOnIssue({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
             });
 
-            if (existing.some((l) => l.name === label)) {
-              core.info(`Label "${label}" already present on PR #${context.issue.number}.`);
+            // Remove any managed label that doesn't match the current target.
+            // Editing a title from `docs:` to `fix:` should end with the PR
+            // carrying `bug` only, not both `docs` and `bug`.
+            for (const lbl of existing) {
+              if (managedLabels.has(lbl.name) && lbl.name !== target) {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  name: lbl.name,
+                });
+                core.info(`Removed stale label "${lbl.name}" from PR #${context.issue.number}.`);
+              }
+            }
+
+            if (!target) return;
+
+            if (existing.some((l) => l.name === target)) {
+              core.info(`Label "${target}" already present on PR #${context.issue.number}.`);
               return;
             }
 
@@ -76,6 +93,6 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              labels: [label],
+              labels: [target],
             });
-            core.info(`Applied label "${label}" to PR #${context.issue.number} (type "${type}").`);
+            core.info(`Applied label "${target}" to PR #${context.issue.number} (type "${match[1].toLowerCase()}").`);
