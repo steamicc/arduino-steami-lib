@@ -23,7 +23,7 @@ Run `make help` for the full list of targets. The ones you'll use most:
 | `make format-check` | Run `clang-format --dry-run` on `lib/ src/ tests/`. |
 | `make format-fix` | Apply `clang-format -i` in place. |
 | `make lint` | Meta-target: `format-check` + `clang-tidy` (tidy is scaffolded, see issue #107). |
-| `make build` | Build the STeaMi firmware (`pio run -e steami`). |
+| `make build` | Build the STeaMi firmware (`pio run`; `steami` is the default env). |
 | `make test-native` | Run host-side unit tests (no board required). |
 | `make test-hardware` | Run on-board unit tests (STeaMi required). |
 | `make ci` | `lint + build + test-native` — the quick pre-push check. |
@@ -54,8 +54,12 @@ lib/<component>/
 
 ### Requirements
 
-- The directory name is lower snake-case matching the component
-  (`hts221`, `wsen-hids`, `mcp23009e`, …).
+- The directory name is lowercase, using either hyphens or underscores
+  as separators, and should match how the part is referred to in the
+  datasheet. Current drivers mix both for historical reasons
+  (`wsen-hids`, `wsen-pads` vs `daplink_flash`, `steami_config`) — pick
+  whichever reads most naturally for the new driver and stay consistent
+  within its own tree.
 - The class name is `PascalCase` (`HTS221`, `Mcp23009e`) and lives in
   `src/<DriverName>.h`.
 - Each driver is self-contained — no cross-driver dependencies.
@@ -83,8 +87,10 @@ lib/<component>/
 ## Coding conventions
 
 - **Naming**: `camelCase` for methods and variables, `UPPER_SNAKE_CASE`
-  for constants, `PascalCase` for class names, lower snake-case for
-  file and directory names except the driver header/source.
+  for constants, `PascalCase` for class names (and the driver's
+  header/source files that match the class, e.g. `HTS221.h`), lower
+  snake-case for example and test folders, and lowercase (with either
+  hyphens or underscores) for driver folders.
 - **Constants**: `constexpr uint8_t` (preferred) or `#define` in
   `*_const.h`, never inside the public header file body.
 - **Formatting**: enforced by `clang-format` (config in `.clang-format`).
@@ -232,7 +238,7 @@ restricted to the subset allowed for working branches:
 
 ```
 main
-feat|fix|docs|tooling|ci|test|style|chore|refactor / <lowercase-with-hyphens>
+feat|fix|docs|tooling|ci|test|style|chore|refactor/<lowercase-with-hyphens>
 release/vX.Y.Z
 ```
 
