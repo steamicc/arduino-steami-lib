@@ -1,4 +1,4 @@
-name: "📜 Check Commit Messages"
+name: "📜 Check PR Conventions"
 
 on:
   pull_request:
@@ -9,6 +9,9 @@ on:
       - synchronize
     branches:
       - "main"
+
+permissions:
+  contents: read
 
 jobs:
   check-commit-messages:
@@ -27,6 +30,23 @@ jobs:
 
       - name: "🛠 Install commitlint"
         run: npm ci --ignore-scripts
+
+      - name: "🌿 Validate branch name"
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          node -e "
+            const config = require('./.validate-branch-namerc.js');
+            const branch = process.env.BRANCH;
+            const regex = new RegExp(config.pattern);
+            if (!regex.test(branch)) {
+              console.error('✗ Branch name not allowed: ' + branch);
+              console.error('Pattern: ' + config.pattern);
+              console.error(config.errorMsg);
+              process.exit(1);
+            }
+            console.log('✓ Branch name OK: ' + branch);
+          "
 
       - name: "📜 Validate commit messages"
         run: npx --no-install commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
