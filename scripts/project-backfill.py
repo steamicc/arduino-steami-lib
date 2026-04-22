@@ -65,13 +65,35 @@ CLOSING_PATTERN = re.compile(
 
 
 def run_gh(args: list[str]) -> str:
-    """Run `gh <args>` and return stdout, raising on non-zero exit."""
-    result = subprocess.run(
-        ["gh", *args],
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    """Run `gh <args>` and return stdout.
+
+    On failure, prints a human-readable diagnosis (command, stderr, a hint
+    about common auth/scope issues) and exits. Raw Python tracebacks are
+    useless to somebody running the script for the first time.
+    """
+    try:
+        result = subprocess.run(
+            ["gh", *args],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except FileNotFoundError:
+        print("error: `gh` CLI not found in PATH.", file=sys.stderr)
+        print("       Install it: https://cli.github.com/", file=sys.stderr)
+        sys.exit(127)
+    except subprocess.CalledProcessError as exc:
+        print(f"error: gh command failed (exit {exc.returncode})", file=sys.stderr)
+        print(f"  command: gh {' '.join(args)}", file=sys.stderr)
+        stderr = (exc.stderr or "").strip()
+        if stderr:
+            print(f"  stderr: {stderr}", file=sys.stderr)
+        print(
+            "  hint:   run `gh auth status` and make sure your token has\n"
+            "          repo write + org \"Projects: Read and write\" scopes.",
+            file=sys.stderr,
+        )
+        sys.exit(exc.returncode or 1)
     return result.stdout
 
 
@@ -115,8 +137,39 @@ class Item:
 # ---------- repo fetch ----------
 
 
+def _fetch_merged_map() -> dict[int, bool]:
+    """Build pr_number → merged flag via the paginated pulls endpoint.
+
+    The issues listing doesn't expose `merged_at`, so we need another
+    source for the "merged vs just closed" bit. Walking /pulls once with
+    pagination is O(pages), which beats the N+1 shape of hitting
+    /pulls/{n} per closed PR on a repo with hundreds of entries.
+    """
+    per_page = 100
+    page = 1
+    merged: dict[int, bool] = {}
+    while True:
+        batch = json.loads(
+            run_gh(
+                [
+                    "api",
+                    f"repos/{REPO}/pulls?state=closed&per_page={per_page}&page={page}",
+                ]
+            )
+        )
+        if not batch:
+            break
+        for pr in batch:
+            merged[pr["number"]] = pr.get("merged_at") is not None
+        if len(batch) < per_page:
+            break
+        page += 1
+    return merged
+
+
 def fetch_all_items(limit: int | None) -> list[Item]:
     """Pull every issue and PR (state=all) via REST, newest first."""
+    merged_map = _fetch_merged_map()
     per_page = 100
     page = 1
     items: list[Item] = []
@@ -132,14 +185,7 @@ def fetch_all_items(limit: int | None) -> list[Item]:
             break
         for entry in batch:
             is_pr = "pull_request" in entry
-            merged = False
-            if is_pr and entry["state"] == "closed":
-                # The cheap REST listing doesn't include merged_at on
-                # the issue-view of a PR, so hit the PR endpoint.
-                pr_data = json.loads(
-                    run_gh(["api", f"repos/{REPO}/pulls/{entry['number']}"])
-                )
-                merged = pr_data.get("merged_at") is not None
+            merged = merged_map.get(entry["number"], False) if is_pr else False
             milestone = entry.get("milestone") or {}
             items.append(
                 Item(
@@ -238,13 +284,56 @@ def extract_issue_refs(body: str) -> list[int]:
     return refs
 
 
+_issue_milestone_cache: dict[int, tuple[int, str] | None] = {}
+
+
+def _issue_milestone(n: int, by_number: dict[int, Item]) -> tuple[int, str] | None:
+    """Return (milestone_number, milestone_title) for issue #n, or None.
+
+    Looks in the pre-fetched local map first, then falls back to a REST
+    lookup. The fallback matters when --limit truncates the in-memory
+    view but a PR within the limit references an older issue outside it;
+    without it, inheritance would silently fail to plan updates.
+    """
+    item = by_number.get(n)
+    if item is not None:
+        return (
+            (item.milestone_number, item.milestone_title or "?")
+            if item.milestone_number
+            else None
+        )
+    if n in _issue_milestone_cache:
+        return _issue_milestone_cache[n]
+    # Direct subprocess call (not run_gh) so a 404 on a deleted/unknown
+    # issue doesn't abort the whole backfill. Auth / network failures
+    # will still blow up loudly on the next run_gh call downstream.
+    probe = subprocess.run(
+        ["gh", "api", f"repos/{REPO}/issues/{n}"],
+        capture_output=True,
+        text=True,
+    )
+    if probe.returncode != 0:
+        _issue_milestone_cache[n] = None
+        return None
+    data = json.loads(probe.stdout)
+    milestone = data.get("milestone") or {}
+    result = (
+        (milestone["number"], milestone.get("title") or "?")
+        if milestone.get("number") is not None
+        else None
+    )
+    _issue_milestone_cache[n] = result
+    return result
+
+
 def find_inheritable_milestone(
     pr: Item, by_number: dict[int, Item]
 ) -> tuple[int, int, str] | None:
     for n in extract_issue_refs(pr.body):
-        candidate = by_number.get(n)
-        if candidate and candidate.milestone_number:
-            return n, candidate.milestone_number, candidate.milestone_title or "?"
+        hit = _issue_milestone(n, by_number)
+        if hit:
+            ms_number, ms_title = hit
+            return n, ms_number, ms_title
     return None
 
 
