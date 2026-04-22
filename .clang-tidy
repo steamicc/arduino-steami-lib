@@ -1,0 +1,31 @@
+# Static-analysis ruleset for the STeaMi driver library.
+#
+# Philosophy: catch real bugs over enforcing style. clang-format already
+# covers whitespace; clang-tidy focuses on correctness, portability, and
+# straightforward readability wins.
+
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  clang-analyzer-*,
+  performance-*,
+  portability-*,
+  -portability-avoid-pragma-once,
+  readability-else-after-return,
+  readability-simplify-boolean-expr,
+  modernize-use-nullptr,
+  modernize-use-override,
+  modernize-use-default-member-init
+
+# Fail on any flagged rule so CI actually bites rather than emitting
+# noise everyone learns to ignore.
+WarningsAsErrors: '*'
+
+# Inspect our own headers, skip the vendor / system ones that pull in
+# most of the false positives.
+HeaderFilterRegex: '^(lib|src|tests)/'
+
+# Delegate formatting suggestions to clang-format.
+FormatStyle: file
