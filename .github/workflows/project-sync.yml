@@ -1,0 +1,158 @@
+name: "📋 Sync with STeaMi project"
+
+# Keeps the org-level STeaMi project (steamicc/projects/1) in sync with
+# issues and PRs in this repo: adds items when they're created and moves
+# their Status as they progress. GITHUB_TOKEN cannot write to org-level
+# projects, so this workflow reads from secrets.PROJECT_PAT — a
+# fine-grained PAT with "Projects: Read and write" on the steamicc org.
+# If the secret is missing, the job fails fast with a clear message.
+#
+# pull_request_target (not pull_request) is used so fork PRs also get
+# added to the project. The workflow never checks out PR code.
+on:
+  issues:
+    types:
+      - opened
+      - reopened
+      - closed
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - ready_for_review
+      - converted_to_draft
+      - closed
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "📋 Add to project + set status"
+        uses: actions/github-script@v7
+        env:
+          PROJECT_PAT: ${{ secrets.PROJECT_PAT }}
+        with:
+          # Intentionally do not set github-token here. We pass the PAT
+          # explicitly to a fetch-based GraphQL helper below; that way
+          # a missing secret lands on the core.setFailed guard instead
+          # of blowing up inside the action's Octokit initialisation.
+          script: |
+            if (!process.env.PROJECT_PAT) {
+              core.setFailed(
+                'PROJECT_PAT secret is not set. Create a fine-grained PAT ' +
+                'with "Projects: Read and write" on the steamicc org and ' +
+                'add it as a repo secret named PROJECT_PAT.'
+              );
+              return;
+            }
+
+            // IDs harvested from the STeaMi org project (steamicc/projects/1).
+            // If the project is ever recreated or the Status field reshuffled,
+            // re-run the discovery GraphQL query and update the constants below.
+            const PROJECT_ID = 'PVT_kwDOCmCNJs4ApueY';
+            const STATUS_FIELD_ID = 'PVTSSF_lADOCmCNJs4ApueYzghFrGs';
+            const STATUS = {
+              backlog:    'f75ad846',
+              inProgress: '47fc9ee4',
+              inReview:   '4cc61d42',
+              done:       '98236657',
+            };
+
+            // Thin GraphQL client authenticated with PROJECT_PAT. Node 20
+            // (the default on ubuntu-latest runners) ships native fetch,
+            // so no dependency to load.
+            async function graphql(query, variables) {
+              const response = await fetch('https://api.github.com/graphql', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${process.env.PROJECT_PAT}`,
+                  'Content-Type': 'application/json',
+                  'X-GitHub-Api-Version': '2022-11-28',
+                },
+                body: JSON.stringify({ query, variables }),
+              });
+              if (!response.ok) {
+                throw new Error(`GraphQL HTTP ${response.status}: ${await response.text()}`);
+              }
+              const payload = await response.json();
+              if (payload.errors) {
+                throw new Error(`GraphQL error: ${JSON.stringify(payload.errors)}`);
+              }
+              return payload.data;
+            }
+
+            const eventName = context.eventName;
+            const action = context.payload.action;
+
+            // Pick the right subject — issue or PR — and read the bits
+            // we need to decide the target status.
+            let contentNodeId, isClosed, isPR, isDraft, number;
+            if (eventName === 'issues') {
+              const issue = context.payload.issue;
+              contentNodeId = issue.node_id;
+              isClosed = issue.state === 'closed';
+              isPR = false;
+              isDraft = false;
+              number = issue.number;
+            } else if (eventName === 'pull_request_target') {
+              const pr = context.payload.pull_request;
+              contentNodeId = pr.node_id;
+              isClosed = pr.state === 'closed';
+              isPR = true;
+              isDraft = pr.draft === true;
+              number = pr.number;
+            } else {
+              core.info(`Unsupported event "${eventName}"; skipping.`);
+              return;
+            }
+
+            // Step 1 — ensure the item is on the project. addProjectV2ItemById
+            // is idempotent: calling it for an item already on the board
+            // simply returns the existing item ID.
+            const addData = await graphql(
+              `mutation($project: ID!, $content: ID!) {
+                 addProjectV2ItemById(input: { projectId: $project, contentId: $content }) {
+                   item { id }
+                 }
+               }`,
+              { project: PROJECT_ID, content: contentNodeId }
+            );
+            const itemId = addData.addProjectV2ItemById.item.id;
+            core.info(`${isPR ? 'PR' : 'Issue'} #${number} is on the project as item ${itemId}.`);
+
+            // Step 2 — decide the Status transition for this event.
+            // "closed" always wins: a PR closed without merging is still
+            // done from a board-tracking perspective.
+            let target = null;
+            if (isClosed) {
+              target = 'done';
+            } else if (action === 'opened' || action === 'reopened') {
+              target = isPR ? (isDraft ? 'inProgress' : 'inReview') : 'backlog';
+            } else if (action === 'ready_for_review') {
+              target = 'inReview';
+            } else if (action === 'converted_to_draft') {
+              target = 'inProgress';
+            }
+
+            if (!target) {
+              core.info(`No status transition for action "${action}"; board membership is enough.`);
+              return;
+            }
+
+            await graphql(
+              `mutation($project: ID!, $item: ID!, $field: ID!, $value: String!) {
+                 updateProjectV2ItemFieldValue(input: {
+                   projectId: $project
+                   itemId: $item
+                   fieldId: $field
+                   value: { singleSelectOptionId: $value }
+                 }) { projectV2Item { id } }
+               }`,
+              { project: PROJECT_ID, item: itemId, field: STATUS_FIELD_ID, value: STATUS[target] }
+            );
+            core.info(`Set Status="${target}" on item ${itemId}.`);
