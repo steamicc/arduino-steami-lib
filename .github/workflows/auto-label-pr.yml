@@ -1,0 +1,76 @@
+name: "🏷 Auto-label PR"
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+      - synchronize
+    branches:
+      - main
+
+permissions:
+  pull-requests: write
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "🏷 Apply label matching the PR title type"
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = context.payload.pull_request.title || '';
+
+            // Extract the conventional-commit type prefix (optionally with scope).
+            const match = title.match(
+              /^(feat|fix|docs|style|refactor|test|ci|build|chore|perf|revert|tooling)(\([^)]+\))?!?:/i
+            );
+
+            if (!match) {
+              core.info(`Title "${title}" doesn't match the conventional-commit pattern; no label applied.`);
+              return;
+            }
+
+            const type = match[1].toLowerCase();
+
+            // Map conventional-commit types to existing repository labels.
+            // Types not listed here (style, refactor, build, chore, perf, revert)
+            // have no repo label yet — add the labels in repo settings and extend
+            // this map if the team wants complete coverage.
+            const typeToLabel = {
+              feat: 'enhancement',
+              fix: 'bug',
+              docs: 'docs',
+              test: 'test',
+              ci: 'ci',
+              tooling: 'tooling',
+            };
+
+            const label = typeToLabel[type];
+            if (!label) {
+              core.info(`Type "${type}" has no mapped label in this repo; skipping.`);
+              return;
+            }
+
+            // Check whether the label is already applied to keep the operation
+            // idempotent — editing a PR title shouldn't spam label events.
+            const { data: existing } = await github.rest.issues.listLabelsOnIssue({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            if (existing.some((l) => l.name === label)) {
+              core.info(`Label "${label}" already present on PR #${context.issue.number}.`);
+              return;
+            }
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: [label],
+            });
+            core.info(`Applied label "${label}" to PR #${context.issue.number} (type "${type}").`);
