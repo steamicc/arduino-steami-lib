@@ -4,6 +4,9 @@
 
 include env.mk
 
+PIO := .venv/bin/pio
+EXAMPLES_ROOT := lib
+
 # --- Setup ---
 
 # npm install is re-run only when package.json changes
@@ -77,7 +80,7 @@ DRIVER_SOURCES := $(shell find lib -type f -path '*/src/*.cpp')
 # Generated from the native env because host compile handles the STL /
 # headers cleanly (the ARM cross-compile toolchain trips clang-tidy up).
 compile_commands.json: .venv/bin/pio platformio.ini boards/steami.json $(DRIVER_SOURCES)
-	pio run -t compiledb -e native
+	$(PIO) run -t compiledb -e native
 
 .PHONY: tidy
 tidy: .venv/bin/clang-tidy compile_commands.json ## Run clang-tidy on every driver source under lib/*/src/
@@ -94,11 +97,44 @@ lint: format-check check-spdx tidy ## Run all static checks (format + SPDX + sta
 
 .PHONY: build
 build: .venv/bin/pio ## Build with PlatformIO
-	pio run
+	$(PIO) run
 
 .PHONY: upload
 upload: .venv/bin/pio ## Upload to board
-	pio run --target upload --upload-port $(PORT)
+	$(PIO) run --target upload --upload-port $(PORT)
+
+.PHONY: list-examples
+list-examples: ## List examples, optionally filtered with DRIVER=<driver>
+	@if [ -n "$(DRIVER)" ]; then \
+		driver_dir="$(EXAMPLES_ROOT)/$(DRIVER)/examples"; \
+		if [ ! -d "$$driver_dir" ]; then \
+			echo "Error: driver '$(DRIVER)' was not found." >&2; \
+			echo "Run 'make list-examples' to see all available examples." >&2; \
+			exit 1; \
+		fi; \
+		find "$$driver_dir" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort; \
+	else \
+		find $(EXAMPLES_ROOT) -mindepth 3 -maxdepth 3 -type d -path '$(EXAMPLES_ROOT)/*/examples/*' | LC_ALL=C sort; \
+	fi
+
+.PHONY: flash
+flash: .venv/bin/pio ## Flash an example (make flash EXAMPLE=<driver>/<example>) and open serial monitor
+	@example='$(EXAMPLE)'
+	if [ -z "$$example" ] || ! printf '%s\n' "$$example" | grep -Eq '^[^/]+/[^/]+$$'; then
+		echo "Error: EXAMPLE must be set as <driver>/<example>." >&2
+		echo "Run 'make list-examples' or 'make list-examples DRIVER=<driver>' to see valid values." >&2
+		exit 1
+	fi
+
+	src_dir="$(EXAMPLES_ROOT)/$${example%/*}/examples/$${example#*/}"
+	if [ ! -d "$$src_dir" ]; then
+		echo "Error: example '$$example' was not found." >&2
+		echo "Run 'make list-examples' or 'make list-examples DRIVER=<driver>' to see valid values." >&2
+		exit 1
+	fi
+
+	PLATFORMIO_SRC_DIR="$$src_dir" $(PIO) run -e steami -t upload
+	$(PIO) device monitor -b 115200
 
 # --- Testing ---
 
@@ -128,7 +164,7 @@ deepclean: clean ## Remove everything including node_modules and venv
 
 .PHONY: help
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 # A useful debug Make Target
 .PHONY: printvars
