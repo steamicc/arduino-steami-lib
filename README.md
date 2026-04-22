@@ -47,6 +47,41 @@ pio run
 pio run --target upload
 ```
 
+## Examples
+
+### List available examples
+
+List all examples:
+
+```bash
+make list-examples
+```
+
+List examples for a specific driver:
+
+```bash
+make list-examples DRIVER=hts221
+```
+
+This prints all available examples under `lib/*/examples/*`, or only those under a specific driver when `DRIVER` is provided.
+
+### Flash an example
+
+```bash
+make flash EXAMPLE=hts221/dew_point
+```
+
+This will:
+
+* build and upload the example to the STeaMi board
+* open the serial monitor at 115200 baud after a successful upload
+
+The `EXAMPLE` argument must follow the format:
+
+```
+<driver>/<example>
+```
+
 ## Development
 
 ### Setup
