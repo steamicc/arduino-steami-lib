@@ -101,7 +101,7 @@ int32_t WSEN_PADS::toSigned16(uint16_t value) {
 // Internal device helpers
 // ---------------------------------------------------------------------
 
-bool WSEN_PADS::waitBoot(uint32_t timeoutMs = 20) {
+bool WSEN_PADS::waitBoot(uint32_t timeoutMs) {
     /*Wait until the BOOT_ON flag is cleared.
     The sensor sets BOOT_ON while internal trimming parameters are loaded.*/
     uint32_t start = millis();
@@ -115,12 +115,7 @@ bool WSEN_PADS::waitBoot(uint32_t timeoutMs = 20) {
 }
 
 bool WSEN_PADS::checkDevice() {
-    // Raise an exception if the device ID does not match.
-    uint8_t id = deviceId();
-    if (id != WSEN_PADS_DEVICE_ID) {
-        return false;
-    }
-    return true;
+    return deviceId() == WSEN_PADS_DEVICE_ID;
 }
 
 void WSEN_PADS::configureDefault() {
@@ -180,7 +175,7 @@ void WSEN_PADS::powerOff() {
     updateReg(REG_CTRL_1, CTRL1_ODR_MASK, ODR_POWER_DOWN << CTRL1_ODR_SHIFT);
 }
 
-void WSEN_PADS::powerOn(uint8_t odr = ODR_1_HZ) {
+void WSEN_PADS::powerOn(uint8_t odr) {
     // Resume continuous measurement at the given ODR.
     setContinuous(odr);
 }
@@ -293,7 +288,7 @@ WSEN_PADS::ReadResult WSEN_PADS::read() {
 // One-shot mode
 // ---------------------------------------------------------------------
 
-void WSEN_PADS::triggerOneShot(bool lowNoise = false) {
+void WSEN_PADS::triggerOneShot(bool lowNoise) {
     /*Trigger a single conversion.
     The device must be in power-down mode before setting ONE_SHOT.
     The function blocks until the typical conversion time has elapsed.
@@ -319,7 +314,7 @@ void WSEN_PADS::triggerOneShot(bool lowNoise = false) {
     }
 }
 
-WSEN_PADS::ReadResult WSEN_PADS::readOneShot(bool lowNoise = false) {
+WSEN_PADS::ReadResult WSEN_PADS::readOneShot(bool lowNoise) {
     /*Trigger one conversion and return converted pressure and temperature.
     Returns:
     tuple: (pressure_hpa, temperature_c)*/
@@ -330,8 +325,7 @@ WSEN_PADS::ReadResult WSEN_PADS::readOneShot(bool lowNoise = false) {
 // Continuous mode
 //---------------------------------------------------------------------
 
-bool WSEN_PADS::setContinuous(uint8_t odr = ODR_1_HZ, bool lowNoise = false, bool lowPass = false,
-                              bool lowPassStrong = false) {
+bool WSEN_PADS::setContinuous(uint8_t odr, bool lowNoise, bool lowPass, bool lowPassStrong) {
     /* Configure continuous measurement mode.
         Parameters:
             odr: one of the ODR_* constants
@@ -377,7 +371,7 @@ bool WSEN_PADS::setContinuous(uint8_t odr = ODR_1_HZ, bool lowNoise = false, boo
 // Optional helper methods
 // ---------------------------------------------------------------------
 
-void WSEN_PADS::enableLowPass(bool strong = false) {
+void WSEN_PADS::enableLowPass(bool strong) {
     /*Enable the optional LPF2 pressure filter.
     This helper preserves the current ODR and only updates filter bits.*/
 
