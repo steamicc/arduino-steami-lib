@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.3.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.2.5...v0.3.0) (2026-04-23)
+
+
+### Features
+
+* Add ble scope. ([#146](https://github.com/steamicc/arduino-steami-lib/issues/146)) ([63b1734](https://github.com/steamicc/arduino-steami-lib/commit/63b17341dc9f82f396ba00ff4b9fc3777c1f3a58)), closes [#145](https://github.com/steamicc/arduino-steami-lib/issues/145) [#Changes](https://github.com/steamicc/arduino-steami-lib/issues/Changes)
+
 ## [0.2.5](https://github.com/steamicc/arduino-steami-lib/compare/v0.2.4...v0.2.5) (2026-04-22)
 
 ## [0.2.4](https://github.com/steamicc/arduino-steami-lib/compare/v0.2.3...v0.2.4) (2026-04-22)
