@@ -5,6 +5,7 @@
 
 #include "HTS221.h"
 #include "Wire.h"
+#include "driver_checks.h"
 
 // The driver uses bit 7 of the sub-address as the ST auto-increment flag for
 // multi-byte reads (see HTS221_AUTO_INCREMENT). The Wire mock is a straight
@@ -81,7 +82,7 @@ void setUp(void) {
 void tearDown(void) {}
 
 void test_begin_detects_device(void) {
-    TEST_ASSERT_TRUE(sensor.begin());
+    check_begin(sensor);
 }
 
 void test_begin_rejects_wrong_who_am_i(void) {
@@ -90,7 +91,7 @@ void test_begin_rejects_wrong_who_am_i(void) {
 }
 
 void test_device_id_returns_who_am_i(void) {
-    TEST_ASSERT_EQUAL_HEX8(HTS221_WHO_AM_I_VALUE, sensor.deviceId());
+    check_who_am_i(sensor, HTS221_WHO_AM_I_VALUE);
 }
 
 void test_power_on_sets_ctrl1_pd(void) {
@@ -137,6 +138,22 @@ void test_data_ready_reflects_status_register(void) {
     TEST_ASSERT_TRUE(sensor.humidityReady());
 }
 
+void test_temperature_is_plausible(void) {
+    sensor.begin();
+    sensor.setContinuous(HTS221_ODR_1_HZ);
+    preloadMeasurement(21.5f, 42.0f);
+
+    check_read_plausible(sensor, &HTS221::temperature, -40.0f, 120.0f);
+}
+
+void test_humidity_is_plausible(void) {
+    sensor.begin();
+    sensor.setContinuous(HTS221_ODR_1_HZ);
+    preloadMeasurement(21.5f, 42.0f);
+
+    check_read_plausible(sensor, &HTS221::humidity, 0.0f, 100.0f);
+}
+
 void test_read_returns_calibrated_values(void) {
     sensor.begin();
     sensor.setContinuous(HTS221_ODR_1_HZ);
@@ -174,6 +191,8 @@ void test_read_auto_triggers_when_powered_down(void) {
     auto r = sensor.read();
 
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 10.0f, r.temperature);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 30.0f, r.humidity);
+
     // The read() flow should have emitted a CTRL1 power-up and a CTRL2
     // ONE_SHOT write before reading the OUT registers.
     bool sawCtrl1PowerUp = false;
@@ -254,6 +273,8 @@ int main(void) {
     RUN_TEST(test_set_continuous_writes_expected_ctrl1);
     RUN_TEST(test_trigger_one_shot_sets_ctrl2_one_shot);
     RUN_TEST(test_data_ready_reflects_status_register);
+    RUN_TEST(test_temperature_is_plausible);
+    RUN_TEST(test_humidity_is_plausible);
     RUN_TEST(test_read_returns_calibrated_values);
     RUN_TEST(test_humidity_is_clamped_to_0_100);
     RUN_TEST(test_read_auto_triggers_when_powered_down);

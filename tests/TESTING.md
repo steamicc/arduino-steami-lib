@@ -137,6 +137,27 @@ Example:
 
 ---
 
+## Shared checks
+
+Common driver assertions that should hold in both native and hardware tests
+are defined in `tests/shared/driver_checks.h`.
+
+These helpers provide a small, shared contract for drivers:
+
+* `check_begin()` — verifies that the device initializes correctly
+* `check_who_am_i()` — verifies device identity via the WHO_AM_I register
+* `check_read_plausible()` — verifies that sensor readings fall within a valid range
+
+Usage pattern:
+
+* **Native tests** use these checks with exact, mock-controlled values
+* **Hardware tests** use the same checks with realistic plausibility ranges
+
+This ensures both test suites exercise the same core driver behavior, while
+keeping native tests precise and hardware tests robust to real-world variation.
+
+See `tests/native/test_hts221/` for a reference implementation.
+
 ## Mocking Approach
 
 Native tests use lightweight mocks to simulate Arduino behavior. Mocks live
