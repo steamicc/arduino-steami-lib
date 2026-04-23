@@ -13,8 +13,13 @@ bool WSEN_PADS::begin() {
         return false;
     }
 
-    waitBoot();
-    checkDevice();
+    if (!waitBoot) {
+        return false;
+    }
+
+    if (!checkDevice) {
+        return false;
+    }
     configureDefault();
 
     powerOff();
@@ -357,7 +362,7 @@ bool WSEN_PADS::setContinuous(uint8_t odr, bool lowNoise, bool lowPass, bool low
 
     // Build CTRL_1 configuration.
     uint8_t ctrl1Value = CTRL1_BDU | (odr << CTRL1_ODR_SHIFT);
-    if (lowNoise) {
+    if (lowPass) {
         ctrl1Value |= CTRL1_EN_LPFP;
         if (lowPassStrong) {
             ctrl1Value |= CTRL1_LPFP_CFG;
