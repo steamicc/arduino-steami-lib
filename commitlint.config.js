@@ -28,6 +28,7 @@ module.exports = {
         'vl53l1x',
         'wsen-hids',
         'wsen-pads',
+        'ble',
         'ci',
         'docs',
         'style',
