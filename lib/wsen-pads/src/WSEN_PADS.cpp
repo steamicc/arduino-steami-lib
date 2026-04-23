@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 WSEN_PADS::WSEN_PADS(TwoWire& wire, uint8_t address, float temp_gain, float temp_offset)
-    : _wire(&wire), _address(address), _temp_gain(1.0f), _temp_offset(0.0f) {}
+    : _wire(&wire), _address(address), _temp_gain(temp_gain), _temp_offset(temp_offset) {}
 
 bool WSEN_PADS::begin() {
     delay(BOOT_DELAY_MS);
@@ -13,11 +13,11 @@ bool WSEN_PADS::begin() {
         return false;
     }
 
-    if (!waitBoot) {
+    if (!waitBoot()) {
         return false;
     }
 
-    if (!checkDevice) {
+    if (!checkDevice()) {
         return false;
     }
     configureDefault();
@@ -245,7 +245,9 @@ int32_t WSEN_PADS::temperatureRaw() {
     /*Read and return raw temperature as a signed 16-bit integer.
     If the sensor is in power-down mode, a one-shot conversion is
     triggered automatically before reading.*/
-    ensureData();
+    if (!ensureData()) {
+        return INT32_MIN;
+    }
     uint8_t data[2];
     readBlock(REG_DATA_T_L, data, 2);
     uint16_t raw = (data[1] << 8) | data[0];
@@ -277,8 +279,8 @@ float WSEN_PADS::temperature() {
     return _temp_gain * factory + _temp_offset;
 }
 
-WSEN_PADS::ReadResult WSEN_PADS::read() {
-    triggerOneShot();
+WSEN_PADS::ReadResult WSEN_PADS::read(bool lowNoise) {
+    triggerOneShot(lowNoise);
     uint8_t pData[3];
     readBlock(REG_DATA_P_XL, pData, 3);
     int32_t pRaw = toSigned24((pData[2] << 16) | (pData[1] << 8) | pData[0]);
@@ -323,7 +325,7 @@ WSEN_PADS::ReadResult WSEN_PADS::readOneShot(bool lowNoise) {
     /*Trigger one conversion and return converted pressure and temperature.
     Returns:
     tuple: (pressure_hpa, temperature_c)*/
-    return read();
+    return read(lowNoise);
 }
 
 // ---------------------------------------------------------------------
@@ -381,7 +383,7 @@ void WSEN_PADS::enableLowPass(bool strong) {
     This helper preserves the current ODR and only updates filter bits.*/
 
     uint8_t current = readReg(REG_CTRL_1);
-    current != CTRL1_EN_LPFP;
+    current |= CTRL1_EN_LPFP;
     if (strong) {
         current |= CTRL1_LPFP_CFG;
     } else {

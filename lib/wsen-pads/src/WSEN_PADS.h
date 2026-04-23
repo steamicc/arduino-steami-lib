@@ -29,7 +29,7 @@ class WSEN_PADS {
     float pressurePa();
     float pressureKpa();
     float temperature();
-    ReadResult read();
+    ReadResult read(bool lowNoise);
 
     bool setContinuous(uint8_t odr = ODR_1_HZ, bool low_noise = false, bool low_pass = false,
                        bool low_pass_strong = false);
