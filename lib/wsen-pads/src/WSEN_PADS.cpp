@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include "WSEN_PADS.h"
 
+#include <math.h>
 #include <stdint.h>
 
 WSEN_PADS::WSEN_PADS(TwoWire& wire, uint8_t address, float temp_gain, float temp_offset)
@@ -234,7 +235,9 @@ int32_t WSEN_PADS::pressureRaw() {
     /*Read and return raw pressure as a signed 24-bit integer.
     If the sensor is in power-down mode, a one-shot conversion is
     triggered automatically before reading.*/
-    ensureData();
+    if (!ensureData()) {
+        return false;
+    }
     uint8_t data[3];
     readBlock(REG_DATA_P_XL, data, 3);
     uint32_t raw = (data[2] << 16) | (data[1] << 8) | data[0];
@@ -275,7 +278,11 @@ float WSEN_PADS::pressureKpa() {
 
 float WSEN_PADS::temperature() {
     // Read and return temperature in degrees Celsius.
-    float factory = temperatureRaw() * TEMPERATURE_C_PER_DIGIT;
+    int32_t raw = temperatureRaw();
+    if (raw == INT32_MIN) {
+        return NAN;
+    }
+    float factory = raw * TEMPERATURE_C_PER_DIGIT;
     return _temp_gain * factory + _temp_offset;
 }
 
