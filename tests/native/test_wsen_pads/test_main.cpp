@@ -43,7 +43,7 @@ void test_begin_detects_device(void) {
     TEST_ASSERT_TRUE(sensor.begin());
 }
 
-void test_begin_rejects_wrong_device_i(void) {
+void test_begin_rejects_wrong_device_id(void) {
     preloadDeviceId(false);
     TEST_ASSERT_FALSE(sensor.begin());
 }
@@ -129,7 +129,7 @@ void test_reboot_writes_ctrl2_boot(void) {
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_begin_detects_device);
-    RUN_TEST(test_begin_rejects_wrong_device_i);
+    RUN_TEST(test_begin_rejects_wrong_device_id);
     RUN_TEST(test_device_id_returns_correct_value);
     RUN_TEST(test_power_on_sets_ctrl1);
     RUN_TEST(test_power_off_clears_ctrl1);

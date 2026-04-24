@@ -287,7 +287,9 @@ float WSEN_PADS::temperature() {
 }
 
 WSEN_PADS::ReadResult WSEN_PADS::read(bool lowNoise) {
-    triggerOneShot(lowNoise);
+    if (isPowerDown()) {
+        triggerOneShot(lowNoise);
+    }
     uint8_t pData[3];
     readBlock(REG_DATA_P_XL, pData, 3);
     int32_t pRaw = toSigned24((pData[2] << 16) | (pData[1] << 8) | pData[0]);
