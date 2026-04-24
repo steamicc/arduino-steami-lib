@@ -33,12 +33,8 @@ bool WSEN_PADS::begin() {
 
 bool WSEN_PADS::isPresent() {
     // Return True if the device address is visible on the I2C bus.
-    try {
-        _wire->beginTransmission(_address);
-        return (_wire->endTransmission() == 0);
-    } catch (const std::exception& e) {
-        return false;
-    }
+    _wire->beginTransmission(_address);
+    return (_wire->endTransmission() == 0);
 }
 
 uint8_t WSEN_PADS::readReg(uint8_t reg) {

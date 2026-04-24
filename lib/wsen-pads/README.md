@@ -70,7 +70,7 @@ auto-triggers a one-shot conversion before reading.
 | Method | Description |
 |--------|-------------|
 | `bool setContinuous(uint8_t odr, bool lowNoise, bool lowPass, bool lowPassStrong)` | Continuous mode. Pass one of the `ODR_*` constants. |
-| `void triggerOneShot(bool lowNoise = false)` | Non-blocking: start a single conversion. |
+| `void triggerOneShot(bool lowNoise = false)` | Start a single conversion and wait for the typical conversion time before returning. |
 | `ReadResult readOneShot(bool lowNoise = false)` | Trigger + return result. |
 
 ### Filters

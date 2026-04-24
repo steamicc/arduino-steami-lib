@@ -14,14 +14,14 @@ static void preloadDeviceId(bool valid = true) {
 
 static void preloadMeasurement(float tempC, float pressureHpa) {
     auto rawFromTemp = [](float t) -> int16_t { return static_cast<int16_t>(t / 0.01f); };
-    auto rawPressur = [](float p) -> int32_t { return static_cast<int32_t>(p * 4096); };
+    auto rawPressure = [](float p) -> int32_t { return static_cast<int32_t>(p * 4096); };
 
     int16_t tempRaw = rawFromTemp(tempC);
-    int32_t pressurRaw = rawPressur(pressureHpa);
+    int32_t pressureRaw = rawPressure(pressureHpa);
 
-    Wire.setRegister(ADDR, REG_DATA_P_XL, pressurRaw & 0xFF);
-    Wire.setRegister(ADDR, REG_DATA_P_L, (pressurRaw >> 8) & 0xFF);
-    Wire.setRegister(ADDR, REG_DATA_P_H, (pressurRaw >> 16) & 0xFF);
+    Wire.setRegister(ADDR, REG_DATA_P_XL, pressureRaw & 0xFF);
+    Wire.setRegister(ADDR, REG_DATA_P_L, (pressureRaw >> 8) & 0xFF);
+    Wire.setRegister(ADDR, REG_DATA_P_H, (pressureRaw >> 16) & 0xFF);
 
     Wire.setRegister(ADDR, REG_DATA_T_L, tempRaw & 0xFF);
     Wire.setRegister(ADDR, REG_DATA_T_H, (tempRaw >> 8) & 0xFF);
