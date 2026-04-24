@@ -43,6 +43,8 @@ class WSEN_PADS {
     void enableLowPass(bool strong = false);
     void disableLowPass();
 
+    bool dataReady();
+
    private:
     TwoWire* _wire;
     uint8_t _address;
@@ -65,7 +67,6 @@ class WSEN_PADS {
     uint8_t status();
     bool pressureReady();
     bool temperatureReady();
-    bool dataReady();
 
     bool isPowerDown();
     bool ensureData();
