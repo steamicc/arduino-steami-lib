@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
 // WSEN-PADS — detect floor changes using calibrated altitude reference and
 // step-based thresholding. Designed as a simple elevator-like level counter
 // based on pressure variations.

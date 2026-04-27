@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
 // WSEN-PADS — monitor temperature trends (rise, drop, stable) using repeated
 // sampling and basic averaging. Useful for simple thermal behavior detection
 // and debugging sensor drift.
@@ -10,20 +11,20 @@
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 WSEN_PADS sensor(internalI2C);
 
-float temperatureAverage = 0;
 float currentTemperature = 0;
 
 float initialization() {
+    float avg = 0;
     float temperatureAverage = 0;
     for (int i = 0; i < 10; i++) {
         while (!sensor.dataReady()) {
             delay(10);
         }
         auto reading = sensor.read(false);
-        temperatureAverage += reading.temperature;
+        avg += reading.temperature;
         delay(20);
     }
-    return temperatureAverage / 10.0f;
+    return avg / 10.0f;
 }
 
 void setup() {
@@ -43,7 +44,7 @@ void setup() {
 
     sensor.setContinuous(ODR_1_HZ);
 
-    temperatureAverage = initialization();
+    float temperatureAverage = initialization();
     currentTemperature = temperatureAverage;
 }
 

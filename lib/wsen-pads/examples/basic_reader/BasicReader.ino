@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
 // WSEN-PADS — read barometric pressure and temperature once per second and
 // print both values to the serial monitor. Useful as a starting point for
 // weather station or altitude-sensing applications.

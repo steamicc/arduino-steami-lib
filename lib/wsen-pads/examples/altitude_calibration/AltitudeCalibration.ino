@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+
 // WSEN-PADS — estimate sea-level pressure and corrected altitude using
 // barometric inversion formulas. Intended for calibration and environmental
 // pressure compensation experiments.
@@ -21,8 +22,8 @@ float altitude(float pressureHpa) {
            (1 - powf(pressureHpa / seaLevelPressure, dryAirGasConst * lapseRate / gravity));
 }
 
-float seaLevelPressureCalculation(float pressureHpa, float temperatureC, float altitudeM) {
-    return pressureHpa * powf(1 + (lapseRate * altitudeM) / temperatureC, 5.257f);
+float seaLevelPressureCalculation(float pressureHpa, float temperatureK, float altitudeM) {
+    return pressureHpa * powf(1 + (lapseRate * altitudeM) / temperatureK, 5.257f);
 }
 
 void setup() {
@@ -52,10 +53,10 @@ void loop() {
     auto reading = sensor.read(false);
     float p = reading.pressure;
     float t = reading.temperature;
-    float conversion = t + 273.15f;
+    float temperatureK = t + 273.15f;
 
     float altitudeResult = altitude(p);
-    float PressureSea = seaLevelPressureCalculation(p, conversion, altitudeResult);
+    float PressureSea = seaLevelPressureCalculation(p, temperatureK, altitudeResult);
 
     float altitudeCorrection = seaLevelTemp / lapseRate * (1 - powf(p / PressureSea, 0.1903));
 
