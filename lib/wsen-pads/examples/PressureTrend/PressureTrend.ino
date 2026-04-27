@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// WSEN-PADS — monitor temperature trends (rise, drop, stable) using repeated
+// sampling and basic averaging. Useful for simple thermal behavior detection
+// and debugging sensor drift.
 
 #include <Arduino.h>
 #include <WSEN_PADS.h>

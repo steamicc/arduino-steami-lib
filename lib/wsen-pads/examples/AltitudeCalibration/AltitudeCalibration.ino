@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+// WSEN-PADS — estimate sea-level pressure and corrected altitude using
+// barometric inversion formulas. Intended for calibration and environmental
+// pressure compensation experiments.
 
 #include <Arduino.h>
 #include <WSEN_PADS.h>
