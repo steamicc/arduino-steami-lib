@@ -46,7 +46,7 @@ void loop() {
 
 | Method | Description |
 |--------|-------------|
-| | `WSEN_PADS(TwoWire& wire = Wire, uint8_t address = WSEN_PADS_I2C_DEFAULT_ADDR, float temp_gain = 1.0, float temp_offset = 0.0)` | Construct. Defaults to the global `Wire`, address `0x5D`, gain `1.0` and offset `0.0`. | Construct. Defaults to the global `Wire` and address `0x5D`. |
+| `WSEN_PADS(TwoWire& wire = Wire, uint8_t address = WSEN_PADS_I2C_DEFAULT_ADDR, float temp_gain = 1.0, float temp_offset = 0.0)` | Construct. Defaults to the global `Wire`, address `0x5D`, gain `1.0` and offset `0.0`. |
 | `bool begin()` | Probe device ID, wait for boot, apply default configuration. Returns `false` if the sensor is not detected. |
 | `uint8_t deviceId()` | Reads `DEVICE_ID` (always `0xB3`). |
 | `void softReset()` / `void reboot()` | Soft reset or full reboot of internal memory. |
@@ -62,8 +62,9 @@ auto-triggers a one-shot conversion before reading.
 | `float pressureHpa()` | Pressure in hPa. |
 | `float pressurePa()` | Pressure in Pa. |
 | `float pressureKpa()` | Pressure in kPa. |
-| `float temperature()` | Temperature in °C. |
-| `ReadResult read(bool lowNoise = false)` | Both channels — `{pressure, temperature}`. |
+| `float temperature()` | Temperature in °C. Returns `NAN` on read failure. |
+| `ReadResult read(bool lowNoise)` | Both channels — `{pressure, temperature}`. |
+| `bool dataReady()` | Returns `true` when both pressure and temperature data are available. |
 
 ### Modes
 

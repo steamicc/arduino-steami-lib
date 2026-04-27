@@ -245,7 +245,7 @@ int32_t WSEN_PADS::temperatureRaw() {
     If the sensor is in power-down mode, a one-shot conversion is
     triggered automatically before reading.*/
     if (!ensureData()) {
-        return INT32_MIN;
+        return false;
     }
     uint8_t data[2];
     readBlock(REG_DATA_T_L, data, 2);
