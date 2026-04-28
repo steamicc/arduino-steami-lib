@@ -110,7 +110,7 @@ upload: .venv/bin/pio ## Upload to board
 EXAMPLE_KEYS := $(shell find $(EXAMPLES_ROOT) -mindepth 3 -maxdepth 3 -type d -path '$(EXAMPLES_ROOT)/*/examples/*' 2>/dev/null | sed 's|$(EXAMPLES_ROOT)/\([^/]*\)/examples/\([^/]*\)|\1/\2|' | LC_ALL=C sort)
 
 .PHONY: list-examples
-list-examples: ## List ready-to-run flash- targets, optionally filtered with DRIVER=<driver>
+list-examples: ## List ready-to-run flash-/capture- targets, optionally filtered with DRIVER=<driver>
 	@if [ -n "$(DRIVER)" ]; then \
 		matches="$$(printf '%s\n' $(EXAMPLE_KEYS) | grep -E '^$(DRIVER)/' || true)"; \
 		if [ -z "$$matches" ]; then \
@@ -119,8 +119,10 @@ list-examples: ## List ready-to-run flash- targets, optionally filtered with DRI
 			exit 1; \
 		fi; \
 		printf '%s\n' "$$matches" | sed 's|^|flash-|'; \
+		printf '%s\n' "$$matches" | sed 's|^|capture-|'; \
 	else \
 		printf '%s\n' $(EXAMPLE_KEYS) | sed 's|^|flash-|'; \
+		printf '%s\n' $(EXAMPLE_KEYS) | sed 's|^|capture-|'; \
 	fi
 
 # Per-example flash targets. Pattern rules with `%` don't span `/` in
@@ -153,23 +155,25 @@ endef
 $(foreach k,$(EXAMPLE_KEYS),$(eval $(call CAPTURE_RULE,$(k))))
 
 # --- Testing ---
+#
+# Naming convention: hierarchical actions use `verb/path` so the verb
+# stays readable when sub-paths are involved. Same shape as the flash-
+# and capture- families on the examples side. Drivers contain hyphens
+# (`wsen-pads`, `wsen-hids`) so a flat `verb-driver-suite` form would be
+# visually ambiguous; `/` is the unambiguous separator.
 
-# Discovered once at parse time. Each entry is the suite name (without
-# the test_ prefix) and becomes a `test-native-<name>` phony target via
-# the foreach+eval block below — same shape as the flash- and capture-
-# families. Adding a new tests/native/test_<name>/ directory picks up
-# automatically.
 NATIVE_TEST_KEYS := $(patsubst tests/native/test_%,%,$(wildcard tests/native/test_*))
 
 .PHONY: test-native
 test-native: .venv/bin/pio ## Run all host-side native tests (no board required)
 	$(PIO) test -e native
 
-# Per-suite native test targets — `make test-native-<name>` runs only
-# that suite via PlatformIO's --filter flag.
+# Per-suite native test targets — `make test-native/<name>` runs only
+# that suite via PlatformIO's --filter flag. Adding a new
+# tests/native/test_<name>/ directory picks up automatically.
 define NATIVE_TEST_RULE
-.PHONY: test-native-$(1)
-test-native-$(1): .venv/bin/pio
+.PHONY: test-native/$(1)
+test-native/$(1): .venv/bin/pio
 	$$(PIO) test -e native --filter native/test_$(1)
 endef
 $(foreach k,$(NATIVE_TEST_KEYS),$(eval $(call NATIVE_TEST_RULE,$(k))))
@@ -184,14 +188,14 @@ test-hardware: .venv/bin/pio ## Run all on-board hardware-unit tests (skipped if
 	fi
 	$(PIO) test -e steami --filter hardware/test_*
 
-# Per-suite hardware test targets — `make test-hardware-<name>` runs
-# only that suite. Same shape as test-native-<name>, with the added
+# Per-suite hardware test targets — `make test-hardware/<name>` runs
+# only that suite. Same shape as test-native/<name>, with the added
 # board-detection guard: if no STeaMi is attached, the recipe prints a
 # message and exits 0 so a CI script that pessimistically calls these
 # without a board doesn't fail.
 define HARDWARE_TEST_RULE
-.PHONY: test-hardware-$(1)
-test-hardware-$(1): .venv/bin/pio
+.PHONY: test-hardware/$(1)
+test-hardware/$(1): .venv/bin/pio
 	@if ! $$(PIO) device list | grep -qiE 'steami|cmsis-dap'; then
 		echo "STeaMi not detected — skipping hardware tests."
 		exit 0
@@ -210,13 +214,13 @@ test-integration: .venv/bin/pio ## Run all on-board integration tests (skipped i
 	fi
 	$(PIO) test -e steami --filter integration/test_*
 
-# Per-suite integration test targets — same shape as test-hardware-<name>.
+# Per-suite integration test targets — same shape as test-hardware/<name>.
 # Integration suites validate runtime behaviour over time (acquisition
 # cadence, repeated-sample plausibility, no frozen output) on real
 # silicon, so the same board-detection guard applies.
 define INTEGRATION_TEST_RULE
-.PHONY: test-integration-$(1)
-test-integration-$(1): .venv/bin/pio
+.PHONY: test-integration/$(1)
+test-integration/$(1): .venv/bin/pio
 	@if ! $$(PIO) device list | grep -qiE 'steami|cmsis-dap'; then
 		echo "STeaMi not detected — skipping integration tests."
 		exit 0
@@ -225,21 +229,28 @@ test-integration-$(1): .venv/bin/pio
 endef
 $(foreach k,$(INTEGRATION_TEST_KEYS),$(eval $(call INTEGRATION_TEST_RULE,$(k))))
 
-# Composite per-driver targets — `make test-<driver>` runs whichever
+# Composite per-driver targets — `make test/<driver>` runs whichever
 # tiers exist for that driver (native, hardware-unit, integration). A
-# driver with only native coverage gets a shortcut to test-native-<name>;
+# driver with only native coverage gets a shortcut to test-native/<name>;
 # a driver with all three tiers chains them in dependency order. The
 # board-detection guard on the hardware/integration recipes still
 # applies, so a host-only run skips the on-board tiers cleanly.
 ALL_TEST_KEYS := $(sort $(NATIVE_TEST_KEYS) $(HARDWARE_TEST_KEYS) $(INTEGRATION_TEST_KEYS))
 define COMPOSITE_TEST_RULE
-.PHONY: test-$(1)
-test-$(1): \
-  $(if $(filter $(1),$(NATIVE_TEST_KEYS)),test-native-$(1)) \
-  $(if $(filter $(1),$(HARDWARE_TEST_KEYS)),test-hardware-$(1)) \
-  $(if $(filter $(1),$(INTEGRATION_TEST_KEYS)),test-integration-$(1))
+.PHONY: test/$(1)
+test/$(1): \
+  $(if $(filter $(1),$(NATIVE_TEST_KEYS)),test-native/$(1)) \
+  $(if $(filter $(1),$(HARDWARE_TEST_KEYS)),test-hardware/$(1)) \
+  $(if $(filter $(1),$(INTEGRATION_TEST_KEYS)),test-integration/$(1))
 endef
 $(foreach k,$(ALL_TEST_KEYS),$(eval $(call COMPOSITE_TEST_RULE,$(k))))
+
+.PHONY: list-tests
+list-tests: ## List ready-to-run test- targets across all tiers
+	@printf 'test-native/%s\n' $(NATIVE_TEST_KEYS)
+	@printf 'test-hardware/%s\n' $(HARDWARE_TEST_KEYS)
+	@printf 'test-integration/%s\n' $(INTEGRATION_TEST_KEYS)
+	@printf 'test/%s\n' $(ALL_TEST_KEYS)
 
 # --- CI ---
 
