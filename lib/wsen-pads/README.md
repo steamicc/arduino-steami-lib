@@ -105,6 +105,20 @@ does not reset the other.
 | `void disableLowPass()` | Disable the LPF2 pressure filter. |
 | `void enableLowNoise()` / `void disableLowNoise()` | Toggle `CTRL2.LOW_NOISE_EN`. Per the datasheet, must only be modified while in power-down (call `powerOff()` first if continuous mode is running). Not allowed at 100 Hz / 200 Hz. |
 
+## Examples
+
+| Example | What it does |
+|---------|--------------|
+| [`read_pressure_temperature`](examples/read_pressure_temperature/) | Baseline sketch: print pressure (hPa) and temperature (°C) every second. |
+| [`altitude`](examples/altitude/) | Estimate altitude from pressure using the international standard atmosphere model. Tunable sea-level reference for local QNH calibration. |
+| [`floor_detector`](examples/floor_detector/) | Calibrate a reference altitude over 10 samples, then report floor changes as the carrier moves. Hysteresis margin avoids oscillating on a boundary. |
+
+Flash one with:
+
+```bash
+make flash-wsen-pads/altitude
+```
+
 ## Register constants
 
 `WSEN_PADS_const.h` exports register addresses (`REG_*`), bit masks
