@@ -75,6 +75,13 @@ make flash-hts221/dew_point
 
 This builds, uploads, and opens the serial monitor at 115200 baud.
 
+To reliably capture the first lines printed at boot (which the interactive monitor often misses), swap `flash-` for `capture-`:
+
+```bash
+make capture-hts221/dew_point             # 10 seconds, OpenOCD reset, stdout
+make capture-hts221/dew_point DURATION=30 # longer window
+```
+
 ## API
 
 All methods follow the collection conventions: `camelCase`, include

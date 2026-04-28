@@ -6,3 +6,4 @@
 platformio==6.1.19
 clang-format==22.1.3
 clang-tidy==22.1.0.1
+pyserial==3.5
