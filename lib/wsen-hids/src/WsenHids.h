@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 #ifndef WSEN_HIDS_H
 #define WSEN_HIDS_H
 
