@@ -45,8 +45,8 @@ Two shapes are in use, and they reflect the underlying directory structure:
 * **Hierarchical targets** use `verb/<path>` whenever the action drills into one specific item:
   * `flash-<driver>/<example>` — flash one example (e.g. `flash-hts221/dew_point`).
   * `capture-<driver>/<example>` — same, but route serial through `scripts/capture-serial.py` instead of opening miniterm.
-  * `test-native/<driver>` / `test-hardware/<driver>` / `test-integration/<driver>` — run one suite from a single tier.
-  * `test/<driver>` — composite: chains every tier that exists for that driver.
+  * `test-native/<suite>` / `test-hardware/<suite>` / `test-integration/<suite>` — run one test suite from a single tier. The suite is the directory name under `tests/<tier>/test_*` and isn't always a driver — `wire` and `led` cover mocks and board features rather than lib drivers.
+  * `test/<suite>` — composite: chains every tier that exists for that suite.
 
 The `/` separator (rather than another `-`) avoids visual ambiguity: drivers can themselves contain hyphens (`wsen-pads`, `wsen-hids`), and `flash-wsen-pads-altitude` would force the reader to guess where the boundary is. `flash-wsen-pads/altitude` is unambiguous and gives zsh's tab-completion a natural drill-down (`make flash-wsen-pads/<TAB>` lists only that driver's examples).
 

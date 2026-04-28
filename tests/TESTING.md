@@ -96,15 +96,19 @@ Requires a board (same skip behaviour as hardware unit tests). Integration
 suites are intentionally slower than hardware unit tests because they observe
 repeated measurements over time — typically tens of seconds per suite.
 
-### Composite per-driver target
+### Composite per-suite target
 
-`make test/<driver>` chains whichever tiers exist for that driver:
+`make test/<suite>` chains whichever tiers exist for that suite:
 
 ```bash
 make test/hts221              # native + hardware-unit + integration
 make test/led                 # native + hardware-unit
 make test/wire                # native only
 ```
+
+The placeholder is `<suite>` rather than `<driver>` because some suites
+cover board features or test infrastructure (e.g. `wire`, `led`) that
+don't have a corresponding driver under `lib/`.
 
 ### Direct PlatformIO invocations
 

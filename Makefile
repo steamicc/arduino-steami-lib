@@ -229,12 +229,14 @@ test-integration/$(1): .venv/bin/pio
 endef
 $(foreach k,$(INTEGRATION_TEST_KEYS),$(eval $(call INTEGRATION_TEST_RULE,$(k))))
 
-# Composite per-driver targets — `make test/<driver>` runs whichever
-# tiers exist for that driver (native, hardware-unit, integration). A
-# driver with only native coverage gets a shortcut to test-native/<name>;
-# a driver with all three tiers chains them in dependency order. The
+# Composite per-suite targets — `make test/<suite>` runs whichever
+# tiers exist for that suite (native, hardware-unit, integration).
+# A suite with only native coverage gets a shortcut to test-native/<suite>;
+# one with all three tiers chains them in dependency order. The
 # board-detection guard on the hardware/integration recipes still
 # applies, so a host-only run skips the on-board tiers cleanly.
+# "Suite" rather than "driver": some suites (e.g. wire, led) cover
+# board features or test infrastructure that don't sit under lib/.
 ALL_TEST_KEYS := $(sort $(NATIVE_TEST_KEYS) $(HARDWARE_TEST_KEYS) $(INTEGRATION_TEST_KEYS))
 define COMPOSITE_TEST_RULE
 .PHONY: test/$(1)
@@ -247,10 +249,10 @@ $(foreach k,$(ALL_TEST_KEYS),$(eval $(call COMPOSITE_TEST_RULE,$(k))))
 
 .PHONY: list-tests
 list-tests: ## List ready-to-run test- targets across all tiers
-	@printf 'test-native/%s\n' $(NATIVE_TEST_KEYS)
-	@printf 'test-hardware/%s\n' $(HARDWARE_TEST_KEYS)
-	@printf 'test-integration/%s\n' $(INTEGRATION_TEST_KEYS)
-	@printf 'test/%s\n' $(ALL_TEST_KEYS)
+	@for k in $(NATIVE_TEST_KEYS); do printf 'test-native/%s\n' "$$k"; done
+	@for k in $(HARDWARE_TEST_KEYS); do printf 'test-hardware/%s\n' "$$k"; done
+	@for k in $(INTEGRATION_TEST_KEYS); do printf 'test-integration/%s\n' "$$k"; done
+	@for k in $(ALL_TEST_KEYS); do printf 'test/%s\n' "$$k"; done
 
 # --- CI ---
 
