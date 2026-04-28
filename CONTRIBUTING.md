@@ -37,12 +37,32 @@ header check on every staged `.h`/`.cpp`/`.ino` before each commit. Run
 `make setup` on a fresh clone so you don't get surprised by CI enforcing
 things your local commit let through.
 
+### Make target naming convention
+
+Two shapes are in use, and they reflect the underlying directory structure:
+
+* **Flat targets** (`build`, `lint`, `test-native`, `test-hardware`, `test-integration`, `setup`, …) are top-level actions that operate on the whole tree. The verb may be compound (`test-native`), but there's no sub-path.
+* **Hierarchical targets** use `verb/<path>` whenever the action drills into one specific item:
+  * `flash-<driver>/<example>` — flash one example (e.g. `flash-hts221/dew_point`).
+  * `capture-<driver>/<example>` — same, but route serial through `scripts/capture-serial.py` instead of opening miniterm.
+  * `test-native/<suite>` / `test-hardware/<suite>` / `test-integration/<suite>` — run one test suite from a single tier. The suite is the directory name under `tests/<tier>/test_*` and isn't always a driver — `wire` and `led` cover mocks and board features rather than lib drivers.
+  * `test/<suite>` — composite: chains every tier that exists for that suite.
+
+The `/` separator (rather than another `-`) avoids visual ambiguity: drivers can themselves contain hyphens (`wsen-pads`, `wsen-hids`), and `flash-wsen-pads-altitude` would force the reader to guess where the boundary is. `flash-wsen-pads/altitude` is unambiguous and gives zsh's tab-completion a natural drill-down (`make flash-wsen-pads/<TAB>` lists only that driver's examples).
+
+To discover the targets:
+
+```bash
+make list-examples         # all flash-* and capture-* targets
+make list-tests            # all test-*/* and composite test/* targets
+```
+
+`list-examples` honors an optional `DRIVER=<name>` filter.
+
 ### Shell completion for `make` (zsh)
 
-Many of the most useful targets are generated dynamically via
-`foreach + eval` — `flash-<driver>/<example>`, `capture-<driver>/<example>`,
-`test-native-<driver>`, `test-hardware-<driver>`, `test-integration-<driver>`,
-`test-<driver>`. zsh's stock `_make` completion can resolve these for you,
+The hierarchical and per-suite targets above are generated dynamically via
+`foreach + eval`. zsh's stock `_make` completion can resolve them for you,
 but the relevant `zstyle` is off by default. Add to your `~/.zshrc`:
 
 ```zsh
@@ -68,8 +88,8 @@ applied **per project** rather than globally if you also work on
 untrusted repos. Scope it with a directory-specific `zstyle`, or set it
 inside a per-project `.zshrc.local` sourced by your dotfiles.
 
-If you don't want to touch your zshrc, `make list` and `make list-examples`
-print the same information on stdout.
+If you don't want to touch your zshrc, `make list-examples` and
+`make list-tests` print the same information on stdout.
 
 ## Driver structure
 

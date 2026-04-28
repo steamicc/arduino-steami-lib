@@ -56,17 +56,19 @@ Rules:
 ## Running Tests
 
 The Makefile generates one phony target per suite under each tier (via
-`foreach + eval`, same shape as `flash-<driver>/<example>`). Tab-completion on
-zsh/bash works for `make test-<tier>-<TAB>` and adding a new suite directory
-picks up automatically — no Makefile edits.
+`foreach + eval`, same shape as `flash-<driver>/<example>`). The convention
+is `verb/<target>` whenever there's a sub-path: tab-completion on zsh/bash
+works for `make test-<tier>/<TAB>` and adding a new suite directory picks
+up automatically — no Makefile edits. `make list-tests` prints every
+discoverable test target across the three tiers plus the composite.
 
 ### Native tests (desktop, mock-based)
 
 ```bash
 make test-native              # all native suites
-make test-native-hts221       # one suite — auto-discovered from tests/native/test_hts221/
-make test-native-led
-make test-native-wire
+make test-native/hts221       # one suite — auto-discovered from tests/native/test_hts221/
+make test-native/led
+make test-native/wire
 ```
 
 No hardware required. CI-friendly.
@@ -75,8 +77,8 @@ No hardware required. CI-friendly.
 
 ```bash
 make test-hardware            # all hardware suites
-make test-hardware-hts221     # one suite — auto-discovered from tests/hardware/test_hts221/
-make test-hardware-led
+make test-hardware/hts221     # one suite — auto-discovered from tests/hardware/test_hts221/
+make test-hardware/led
 ```
 
 Requires a connected STeaMi over CMSIS-DAP. If no board is detected the recipe
@@ -87,12 +89,26 @@ script that calls these without a board attached doesn't fail.
 
 ```bash
 make test-integration         # all integration suites
-make test-integration-hts221  # one suite — auto-discovered from tests/integration/test_hts221/
+make test-integration/hts221  # one suite — auto-discovered from tests/integration/test_hts221/
 ```
 
 Requires a board (same skip behaviour as hardware unit tests). Integration
 suites are intentionally slower than hardware unit tests because they observe
 repeated measurements over time — typically tens of seconds per suite.
+
+### Composite per-suite target
+
+`make test/<suite>` chains whichever tiers exist for that suite:
+
+```bash
+make test/hts221              # native + hardware-unit + integration
+make test/led                 # native + hardware-unit
+make test/wire                # native only
+```
+
+The placeholder is `<suite>` rather than `<driver>` because some suites
+cover board features or test infrastructure (e.g. `wire`, `led`) that
+don't have a corresponding driver under `lib/`.
 
 ### Direct PlatformIO invocations
 

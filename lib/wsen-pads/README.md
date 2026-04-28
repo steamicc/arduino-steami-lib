@@ -136,7 +136,7 @@ the driver against the `TwoWire` mock and the shared
 without hardware with:
 
 ```bash
-make test-native-wsen_pads
+make test-native/wsen_pads
 ```
 
 ## License
