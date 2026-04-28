@@ -61,16 +61,16 @@ for the full sketch.
 
 ### Building an example
 
-List available examples:
+List available examples (each line is a runnable Make target):
 
 ```bash
 make list-examples
 ```
 
-Then flash one:
+Then flash one — copy a line from the listing:
 
 ```bash
-make flash EXAMPLE=hts221/dew_point
+make flash-hts221/dew_point
 ```
 
 This builds, uploads, and opens the serial monitor at 115200 baud.

@@ -103,39 +103,38 @@ build: .venv/bin/pio ## Build with PlatformIO
 upload: .venv/bin/pio ## Upload to board
 	$(PIO) run --target upload --upload-port $(PORT)
 
+# Discovered once at parse time. Each entry is "<driver>/<example>" and
+# becomes a `flash-<driver>/<example>` phony target via the foreach+eval
+# block below. Listed via $(shell) so adding an example only requires a
+# new directory under lib/<driver>/examples/.
+EXAMPLE_KEYS := $(shell find $(EXAMPLES_ROOT) -mindepth 3 -maxdepth 3 -type d -path '$(EXAMPLES_ROOT)/*/examples/*' 2>/dev/null | sed 's|$(EXAMPLES_ROOT)/\([^/]*\)/examples/\([^/]*\)|\1/\2|' | LC_ALL=C sort)
+
 .PHONY: list-examples
-list-examples: ## List examples, optionally filtered with DRIVER=<driver>
+list-examples: ## List ready-to-run flash- targets, optionally filtered with DRIVER=<driver>
 	@if [ -n "$(DRIVER)" ]; then \
-		driver_dir="$(EXAMPLES_ROOT)/$(DRIVER)/examples"; \
-		if [ ! -d "$$driver_dir" ]; then \
-			echo "Error: driver '$(DRIVER)' was not found." >&2; \
+		matches="$$(printf '%s\n' $(EXAMPLE_KEYS) | grep -E '^$(DRIVER)/' || true)"; \
+		if [ -z "$$matches" ]; then \
+			echo "Error: driver '$(DRIVER)' has no examples." >&2; \
 			echo "Run 'make list-examples' to see all available examples." >&2; \
 			exit 1; \
 		fi; \
-		find "$$driver_dir" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort; \
+		printf '%s\n' "$$matches" | sed 's|^|flash-|'; \
 	else \
-		find $(EXAMPLES_ROOT) -mindepth 3 -maxdepth 3 -type d -path '$(EXAMPLES_ROOT)/*/examples/*' | LC_ALL=C sort; \
+		printf '%s\n' $(EXAMPLE_KEYS) | sed 's|^|flash-|'; \
 	fi
 
-.PHONY: flash
-flash: .venv/bin/pio ## Flash an example (make flash EXAMPLE=<driver>/<example>) and open serial monitor
+# Per-example flash targets. Pattern rules with `%` don't span `/` in
+# GNU Make, so we generate one explicit phony target per example via
+# foreach+eval — same shape as test-<scenario> in micropython-steami-lib.
+# Usage: `make flash-hts221/dew_point` (the value listed by list-examples).
+define FLASH_RULE
+.PHONY: flash-$(1)
+flash-$(1): .venv/bin/pio
 	@set -e
-	example='$(EXAMPLE)'
-	if [ -z "$$example" ] || ! printf '%s\n' "$$example" | grep -Eq '^[^/]+/[^/]+$$'; then
-		echo "Error: EXAMPLE must be set as <driver>/<example>." >&2
-		echo "Run 'make list-examples' or 'make list-examples DRIVER=<driver>' to see valid values." >&2
-		exit 1
-	fi
-
-	src_dir="$(EXAMPLES_ROOT)/$${example%/*}/examples/$${example#*/}"
-	if [ ! -d "$$src_dir" ]; then
-		echo "Error: example '$$example' was not found." >&2
-		echo "Run 'make list-examples' or 'make list-examples DRIVER=<driver>' to see valid values." >&2
-		exit 1
-	fi
-
-	PLATFORMIO_SRC_DIR="$$src_dir" $(PIO) run -e steami -t upload
-	$(PIO) device monitor -b 115200
+	PLATFORMIO_SRC_DIR="$(EXAMPLES_ROOT)/$(subst /,/examples/,$(1))" $$(PIO) run -e steami -t upload
+	$$(PIO) device monitor -b 115200
+endef
+$(foreach k,$(EXAMPLE_KEYS),$(eval $(call FLASH_RULE,$(k))))
 
 # --- Testing ---
 
