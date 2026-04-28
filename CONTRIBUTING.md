@@ -37,6 +37,31 @@ header check on every staged `.h`/`.cpp`/`.ino` before each commit. Run
 `make setup` on a fresh clone so you don't get surprised by CI enforcing
 things your local commit let through.
 
+### Shell completion for `make` (zsh)
+
+Many of the most useful targets are generated dynamically via
+`foreach + eval` — `flash-<driver>/<example>`, `capture-<driver>/<example>`,
+`test-native-<driver>`, `test-hardware-<driver>`, `test-integration-<driver>`,
+`test-<driver>`. zsh's stock `_make` completion can resolve these for you,
+but the relevant `zstyle` is off by default. Add to your `~/.zshrc`:
+
+```zsh
+zstyle ':completion:*:*:make:*:targets' call-command true
+zstyle ':completion:*:*:make:*' tag-order 'targets'
+```
+
+The first line tells zsh to invoke `make -nsp` to get the resolved
+target database (instead of parsing the Makefile textually, which misses
+generated targets). The second line filters out variables and files from
+the completion output so `make <TAB>` only shows actual targets.
+
+`exec zsh` to reload, then `make flash-<TAB>` will list every example
+across every driver, and `make test-<TAB>` every test target across the
+three tiers.
+
+If you don't want to touch your zshrc, `make list` and `make list-examples`
+print the same information on stdout.
+
 ## Driver structure
 
 Each driver lives in its own directory under `lib/`:
