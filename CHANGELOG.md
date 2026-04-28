@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.4.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.3.0...v0.4.0) (2026-04-28)
+
+
+### Features
+
+* **tooling:** Add per-example flash- targets and list-examples ([#133](https://github.com/steamicc/arduino-steami-lib/issues/133)) ([df21d26](https://github.com/steamicc/arduino-steami-lib/commit/df21d26ceb0241e1dd441231eba9f6b83643a6c3))
+
 # [0.3.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.2.5...v0.3.0) (2026-04-23)
 
 
