@@ -56,7 +56,10 @@ See [examples/BasicRead/](examples/BasicRead/) for the full sketch.
 
 | Example                            | What it does                                                  |
 | ---------------------------------- | ------------------------------------------------------------- |
-| [`BasicRead`](examples/BasicRead/) | Baseline sketch: print temperature and humidity every second. |
+| `BasicReader` | Baseline sketch: print temperature and humidity every second. |
+| `HumidityAlert/HumidityAlert.ino` | Trigger buzzer when humidity exceeds a threshold (mold prevention) |
+| `DewPointMonitor/DewPointMonitor.ino` | Calculate and display dew point, warn when condensation risk is high |
+| `ComfortZone/ComfortZone.ino` | Classify environment as comfortable/dry/humid using temperature-humidity chart |
 
 ### Building an example
 
