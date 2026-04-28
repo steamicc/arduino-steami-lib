@@ -225,6 +225,22 @@ test-integration-$(1): .venv/bin/pio
 endef
 $(foreach k,$(INTEGRATION_TEST_KEYS),$(eval $(call INTEGRATION_TEST_RULE,$(k))))
 
+# Composite per-driver targets — `make test-<driver>` runs whichever
+# tiers exist for that driver (native, hardware-unit, integration). A
+# driver with only native coverage gets a shortcut to test-native-<name>;
+# a driver with all three tiers chains them in dependency order. The
+# board-detection guard on the hardware/integration recipes still
+# applies, so a host-only run skips the on-board tiers cleanly.
+ALL_TEST_KEYS := $(sort $(NATIVE_TEST_KEYS) $(HARDWARE_TEST_KEYS) $(INTEGRATION_TEST_KEYS))
+define COMPOSITE_TEST_RULE
+.PHONY: test-$(1)
+test-$(1): \
+  $(if $(filter $(1),$(NATIVE_TEST_KEYS)),test-native-$(1)) \
+  $(if $(filter $(1),$(HARDWARE_TEST_KEYS)),test-hardware-$(1)) \
+  $(if $(filter $(1),$(INTEGRATION_TEST_KEYS)),test-integration-$(1))
+endef
+$(foreach k,$(ALL_TEST_KEYS),$(eval $(call COMPOSITE_TEST_RULE,$(k))))
+
 # --- CI ---
 
 .PHONY: ci

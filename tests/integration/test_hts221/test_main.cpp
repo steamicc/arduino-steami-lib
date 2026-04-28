@@ -53,8 +53,12 @@ void test_hts221_continuous_runtime_behavior() {
         wait_for_data_ready();
 
         timestamps[i] = millis();
-        temperatures[i] = sensor.temperature();
-        humidities[i] = sensor.humidity();
+        // Single read() call: cheaper (one I2C transaction instead of two)
+        // and guarantees both channels come from the same conversion under
+        // BDU.
+        auto reading = sensor.read();
+        temperatures[i] = reading.temperature;
+        humidities[i] = reading.humidity;
 
         TEST_ASSERT_GREATER_OR_EQUAL_FLOAT(MIN_TEMP, temperatures[i]);
         TEST_ASSERT_LESS_OR_EQUAL_FLOAT(MAX_TEMP, temperatures[i]);
@@ -78,8 +82,8 @@ void test_hts221_continuous_runtime_behavior() {
     bool all_frozen = true;
 
     for (int i = 1; i < SAMPLE_COUNT; i++) {
-        bool temp_same = fabs(temperatures[i] - temperatures[0]) < CHANGE_EPSILON;
-        bool hum_same = fabs(humidities[i] - humidities[0]) < CHANGE_EPSILON;
+        bool temp_same = fabsf(temperatures[i] - temperatures[0]) < CHANGE_EPSILON;
+        bool hum_same = fabsf(humidities[i] - humidities[0]) < CHANGE_EPSILON;
 
         if (!(temp_same && hum_same)) {
             all_frozen = false;
