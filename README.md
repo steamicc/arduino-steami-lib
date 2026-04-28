@@ -80,6 +80,26 @@ make flash-hts221/dew_point
 
 This builds the example, uploads it to the STeaMi board, and opens the serial monitor at 115200 baud on success.
 
+### Capture early serial output
+
+`make flash-…` opens an interactive monitor, which often misses the first lines printed at boot (the monitor finishes its handshake while the board has already moved past `setup()`). When you need those lines — e.g. to see whether `begin()` returned `false` — swap `flash-` for `capture-`:
+
+```bash
+make capture-hts221/dew_point
+```
+
+This builds and uploads the example like `flash-…`, but instead of opening miniterm it opens the serial port first, asks OpenOCD to reset the board over CMSIS-DAP, and prints whatever the board sends on stdout for 10 seconds. The output is unbuffered and pipeable:
+
+```bash
+make capture-hts221/dew_point | grep -i "HTS221"
+```
+
+Override the duration with `DURATION=N` (in seconds):
+
+```bash
+make capture-hts221/dew_point DURATION=30
+```
+
 ## Development
 
 ### Setup

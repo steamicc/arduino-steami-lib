@@ -136,6 +136,22 @@ flash-$(1): .venv/bin/pio
 endef
 $(foreach k,$(EXAMPLE_KEYS),$(eval $(call FLASH_RULE,$(k))))
 
+# Per-example capture targets — same shape as the flash- family but
+# routes serial through scripts/capture-serial.py: the script opens the
+# port, flushes, asks OpenOCD to reset, and reads for DURATION seconds.
+# Useful for boot-time logs that the interactive monitor misses (the
+# board prints before pio device monitor finishes its handshake).
+# DURATION defaults to 10; override with DURATION=N.
+DURATION ?= 10
+define CAPTURE_RULE
+.PHONY: capture-$(1)
+capture-$(1): .venv/bin/pio
+	@set -e
+	PLATFORMIO_SRC_DIR="$(EXAMPLES_ROOT)/$(subst /,/examples/,$(1))" $$(PIO) run -e steami -t upload
+	.venv/bin/python scripts/capture-serial.py --duration $$(DURATION)
+endef
+$(foreach k,$(EXAMPLE_KEYS),$(eval $(call CAPTURE_RULE,$(k))))
+
 # --- Testing ---
 
 .PHONY: test-native
