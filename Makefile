@@ -174,9 +174,31 @@ test-native-$(1): .venv/bin/pio
 endef
 $(foreach k,$(NATIVE_TEST_KEYS),$(eval $(call NATIVE_TEST_RULE,$(k))))
 
+HARDWARE_TEST_KEYS := $(patsubst tests/hardware/test_%,%,$(wildcard tests/hardware/test_*))
+
 .PHONY: test-hardware
-test-hardware: .venv/bin/pio ## Run on-board hardware tests (STeaMi required)
+test-hardware: .venv/bin/pio ## Run all on-board hardware tests (skipped if no STeaMi attached)
+	@if ! $(PIO) device list | grep -qiE 'steami|cmsis-dap'; then
+		echo "STeaMi not detected — skipping hardware tests."
+		exit 0
+	fi
 	$(PIO) test -e steami
+
+# Per-suite hardware test targets — `make test-hardware-<name>` runs
+# only that suite. Same shape as test-native-<name>, with the added
+# board-detection guard: if no STeaMi is attached, the recipe prints a
+# message and exits 0 so a CI script that pessimistically calls these
+# without a board doesn't fail.
+define HARDWARE_TEST_RULE
+.PHONY: test-hardware-$(1)
+test-hardware-$(1): .venv/bin/pio
+	@if ! $$(PIO) device list | grep -qiE 'steami|cmsis-dap'; then
+		echo "STeaMi not detected — skipping hardware tests."
+		exit 0
+	fi
+	$$(PIO) test -e steami --filter hardware/test_$(1)
+endef
+$(foreach k,$(HARDWARE_TEST_KEYS),$(eval $(call HARDWARE_TEST_RULE,$(k))))
 
 # --- CI ---
 
