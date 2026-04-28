@@ -1,5 +1,10 @@
-#include <WsenHids.h>
-#include <WsenHids_const.h>
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#include "WsenHids.h"
+
+#include <cmath>
+
+#include "WsenHids_const.h"
 
 using namespace WsenHidsConst;
 
@@ -27,11 +32,7 @@ bool WsenHids::begin() {
     powerOn();
     setContinuous(1);
 
-    if (!readCalibration()) {
-        return false;
-    }
-
-    return true;
+    return readCalibration();
 }
 
 uint8_t WsenHids::deviceId() {
