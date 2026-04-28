@@ -20,6 +20,24 @@
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 HTS221 sensor(internalI2C);
 
+// Unity invokes setUp() before every RUN_TEST. Re-initialising here keeps
+// each test independent — otherwise reads following a skipped/failing
+// test_hts221_begin would compute against uninitialised calibration.
+//
+// We don't stop at begin(): on real silicon, calling humidity() right
+// after begin() routes through the driver's one-shot auto-trigger path.
+// At default oversampling, the very first one-shot occasionally produces
+// a slightly negative raw humidity (clamped to 0 by computeHumidity), so
+// the plausibility window flags it. setContinuous(1 Hz) leaves the part
+// in steady-state ODR sampling so reads return real values immediately —
+// same recipe as the native plausibility tests in test_hts221.
+void setUp(void) {
+    sensor.begin();
+    sensor.setContinuous(HTS221_ODR_1_HZ);
+}
+
+void tearDown(void) {}
+
 void test_hts221_begin() {
     check_begin(sensor);
 }
