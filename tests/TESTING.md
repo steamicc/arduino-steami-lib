@@ -74,20 +74,28 @@ pio test -e native --filter native/test_led
 ### Using Makefile
 
 The `make` wrappers route through the venv `pio` installed by `make setup`,
-and one phony target is generated per suite under `tests/native/test_*`
-(via `foreach + eval`, same shape as `flash-<driver>/<example>`):
+and one phony target is generated per suite under `tests/native/test_*` and
+`tests/hardware/test_*` (via `foreach + eval`, same shape as
+`flash-<driver>/<example>`):
 
 ```bash
 make test-native              # all native suites
 make test-native-hts221       # one suite — auto-discovered from tests/native/test_hts221/
 make test-native-led
 make test-native-wire
-make test-hardware            # all hardware suites (board required)
+
+make test-hardware            # all hardware suites
+make test-hardware-led        # one suite — auto-discovered from tests/hardware/test_led/
 ```
 
-Tab-completion on zsh/bash works for `make test-native-<TAB>`. Adding a new
-suite directory under `tests/native/test_<name>/` picks up automatically on
-the next `make` invocation — no Makefile edits.
+Tab-completion on zsh/bash works for `make test-native-<TAB>` and
+`make test-hardware-<TAB>`. Adding a new suite directory picks up
+automatically on the next `make` invocation — no Makefile edits.
+
+The hardware targets check for an attached STeaMi via `pio device list`
+before they run; if no board is detected they print
+`STeaMi not detected — skipping hardware tests.` and exit 0, so a CI script
+that calls them without a board attached doesn't fail.
 
 ---
 
