@@ -65,21 +65,29 @@ pio test -e native
 ### Run a specific test suite
 
 ```bash
-pio test -e steami -f hardware/test_led
-pio test -e native -f native/test_led
+pio test -e steami --filter hardware/test_led
+pio test -e native --filter native/test_led
 ```
 
 ---
 
 ### Using Makefile
 
+The `make` wrappers route through the venv `pio` installed by `make setup`,
+and one phony target is generated per suite under `tests/native/test_*`
+(via `foreach + eval`, same shape as `flash-<driver>/<example>`):
+
 ```bash
-make test-native      # Host-side tests, no board required
-make test-hardware    # On-board tests, STeaMi required
+make test-native              # all native suites
+make test-native-hts221       # one suite — auto-discovered from tests/native/test_hts221/
+make test-native-led
+make test-native-wire
+make test-hardware            # all hardware suites (board required)
 ```
 
-Each target is a thin wrapper around `pio test -e <env>`, pinned to
-the venv pio installed by `make setup`.
+Tab-completion on zsh/bash works for `make test-native-<TAB>`. Adding a new
+suite directory under `tests/native/test_<name>/` picks up automatically on
+the next `make` invocation — no Makefile edits.
 
 ---
 
