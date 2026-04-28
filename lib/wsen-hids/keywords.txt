@@ -1,0 +1,39 @@
+#######################################
+# Syntax Coloring Map For WSEN-HIDS
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+WsenHids	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin	KEYWORD2
+deviceId	KEYWORD2
+softReset	KEYWORD2
+powerOn	KEYWORD2
+powerOff	KEYWORD2
+status	KEYWORD2
+dataReady	KEYWORD2
+temperatureReady	KEYWORD2
+humidityReady	KEYWORD2
+temperature	KEYWORD2
+humidity	KEYWORD2
+setContinuous	KEYWORD2
+triggerOneShot	KEYWORD2
+readOneShot	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+WSEN_HIDS_DEFAULT_ADDRESS	LITERAL1
+WSEN_HIDS_WHO_AM_I_VALUE	LITERAL1
+WSEN_HIDS_ODR_ONE_SHOT	LITERAL1
+WSEN_HIDS_ODR_1_HZ	LITERAL1
+WSEN_HIDS_ODR_7_HZ	LITERAL1
+WSEN_HIDS_ODR_12_5_HZ	LITERAL1
