@@ -27,5 +27,5 @@ constexpr uint8_t ERROR_CMD_FAILED = 0x80;
 
 // Protocol limits
 constexpr uint8_t MAX_WRITE_CHUNK = 30;
-constexpr uint8_t SECTOR_SIZE = 256;
-constexpr uint8_t CONFIG_SIZE = 1024;
+constexpr uint16_t SECTOR_SIZE = 256;
+constexpr uint16_t CONFIG_SIZE = 1024;

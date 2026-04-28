@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <cstdio>
 
 daplink_bridge::daplink_bridge(TwoWire& wire, uint8_t address)
     : _wire(&wire), _address(address), _buffer1(0) {}
@@ -24,14 +25,12 @@ uint8_t daplink_bridge::readReg(uint8_t reg) {
     return _buffer1;
 }
 
-void daplink_bridge::readBlock(uint8_t reg, uint8_t* buf, uint8_t n) {
-    for (size_t i = 0; i < n; ++i) {
-        buf[i] = 0;
-    }
+void daplink_bridge::readBlock(uint8_t reg, uint8_t* buf, uint16_t n) {
     _wire->beginTransmission(_address);
     _wire->write(reg);
     _wire->endTransmission(false);
-    _wire->requestFrom(_address, (uint8_t)n);
+    _wire->requestFrom(_address, (uint16_t)n);
+    _wire->requestFrom(_address, static_cast<uint8_t>(n < 256 ? n : 255));
 
     for (size_t i = 0; i < n && _wire->available(); ++i) {
         buf[i] = static_cast<uint8_t>(_wire->read());
@@ -182,15 +181,16 @@ size_t daplink_bridge::readConfig(uint8_t* result, size_t maxLen) {
     size_t resultLen = 0;
     for (uint16_t pageOffset = 0; pageOffset < CONFIG_SIZE; pageOffset += SECTOR_SIZE) {
         waitBusy();
-        uint8_t hi = (pageOffset >> 8) & 0xff;
-        uint8_t lo = pageOffset & 0xff;
-        uint8_t payload[3] = {CMD_READ_CONFIG, hi, lo};
-        writeTo(payload, 3);
         delay(100);
         uint8_t data[SECTOR_SIZE];
-        readFrom(data, SECTOR_SIZE);
+        memset(data, 0xFF, SECTOR_SIZE);
+        readBlock(CMD_READ_CONFIG, data, (uint16_t)255);
+        printf("data[0]=0x%02X data[1]=0x%02X data[2]=0x%02X\n", data[0], data[1], data[2]);
         for (int i = 0; i < SECTOR_SIZE; i++) {
             if (data[i] == 0xff) {
+                return resultLen;
+            }
+            if (resultLen >= maxLen) {
                 return resultLen;
             }
             result[resultLen++] = data[i];

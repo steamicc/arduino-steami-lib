@@ -29,7 +29,7 @@ class daplink_bridge {
 
     // Low level I2C
     uint8_t readReg(uint8_t reg);
-    void readBlock(uint8_t reg, uint8_t* buf, uint8_t n);
+    void readBlock(uint8_t reg, uint8_t* buf, uint16_t n);
     void writeReg(uint8_t reg, uint8_t data);
     void writeCmd(uint8_t cmd);
     void writeTo(uint8_t* data, size_t len);
