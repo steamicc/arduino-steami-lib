@@ -4,6 +4,9 @@
 
 include env.mk
 
+PIO := .venv/bin/pio
+EXAMPLES_ROOT := lib
+
 # --- Setup ---
 
 # npm install is re-run only when package.json changes
@@ -77,7 +80,7 @@ DRIVER_SOURCES := $(shell find lib -type f -path '*/src/*.cpp')
 # Generated from the native env because host compile handles the STL /
 # headers cleanly (the ARM cross-compile toolchain trips clang-tidy up).
 compile_commands.json: .venv/bin/pio platformio.ini boards/steami.json $(DRIVER_SOURCES)
-	pio run -t compiledb -e native
+	$(PIO) run -t compiledb -e native
 
 .PHONY: tidy
 tidy: .venv/bin/clang-tidy compile_commands.json ## Run clang-tidy on every driver source under lib/*/src/
@@ -94,21 +97,54 @@ lint: format-check check-spdx tidy ## Run all static checks (format + SPDX + sta
 
 .PHONY: build
 build: .venv/bin/pio ## Build with PlatformIO
-	pio run
+	$(PIO) run
 
 .PHONY: upload
 upload: .venv/bin/pio ## Upload to board
-	pio run --target upload --upload-port $(PORT)
+	$(PIO) run --target upload --upload-port $(PORT)
+
+# Discovered once at parse time. Each entry is "<driver>/<example>" and
+# becomes a `flash-<driver>/<example>` phony target via the foreach+eval
+# block below. Listed via $(shell) so adding an example only requires a
+# new directory under lib/<driver>/examples/.
+EXAMPLE_KEYS := $(shell find $(EXAMPLES_ROOT) -mindepth 3 -maxdepth 3 -type d -path '$(EXAMPLES_ROOT)/*/examples/*' 2>/dev/null | sed 's|$(EXAMPLES_ROOT)/\([^/]*\)/examples/\([^/]*\)|\1/\2|' | LC_ALL=C sort)
+
+.PHONY: list-examples
+list-examples: ## List ready-to-run flash- targets, optionally filtered with DRIVER=<driver>
+	@if [ -n "$(DRIVER)" ]; then \
+		matches="$$(printf '%s\n' $(EXAMPLE_KEYS) | grep -E '^$(DRIVER)/' || true)"; \
+		if [ -z "$$matches" ]; then \
+			echo "Error: driver '$(DRIVER)' has no examples." >&2; \
+			echo "Run 'make list-examples' to see all available examples." >&2; \
+			exit 1; \
+		fi; \
+		printf '%s\n' "$$matches" | sed 's|^|flash-|'; \
+	else \
+		printf '%s\n' $(EXAMPLE_KEYS) | sed 's|^|flash-|'; \
+	fi
+
+# Per-example flash targets. Pattern rules with `%` don't span `/` in
+# GNU Make, so we generate one explicit phony target per example via
+# foreach+eval — same shape as test-<scenario> in micropython-steami-lib.
+# Usage: `make flash-hts221/dew_point` (the value listed by list-examples).
+define FLASH_RULE
+.PHONY: flash-$(1)
+flash-$(1): .venv/bin/pio
+	@set -e
+	PLATFORMIO_SRC_DIR="$(EXAMPLES_ROOT)/$(subst /,/examples/,$(1))" $$(PIO) run -e steami -t upload
+	$$(PIO) device monitor -b 115200
+endef
+$(foreach k,$(EXAMPLE_KEYS),$(eval $(call FLASH_RULE,$(k))))
 
 # --- Testing ---
 
 .PHONY: test-native
 test-native: .venv/bin/pio ## Run host-side native tests (no board required)
-	pio test -e native
+	$(PIO) test -e native
 
 .PHONY: test-hardware
 test-hardware: .venv/bin/pio ## Run on-board hardware tests (STeaMi required)
-	pio test -e steami
+	$(PIO) test -e steami
 
 # --- CI ---
 
@@ -128,7 +164,7 @@ deepclean: clean ## Remove everything including node_modules and venv
 
 .PHONY: help
 help: ## Show this help
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' Makefile | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 # A useful debug Make Target
 .PHONY: printvars

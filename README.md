@@ -47,6 +47,39 @@ pio run
 pio run --target upload
 ```
 
+## Examples
+
+### List available examples
+
+```bash
+make list-examples
+```
+
+This prints one ready-to-run target per example, e.g.:
+
+```
+flash-hts221/comfort_index
+flash-hts221/dew_point
+flash-hts221/read_temperature_humidity
+flash-hts221/temperature_alarm
+```
+
+Filter by driver:
+
+```bash
+make list-examples DRIVER=hts221
+```
+
+### Flash an example
+
+Copy any line from `make list-examples` and run it:
+
+```bash
+make flash-hts221/dew_point
+```
+
+This builds the example, uploads it to the STeaMi board, and opens the serial monitor at 115200 baud on success.
+
 ## Development
 
 ### Setup
