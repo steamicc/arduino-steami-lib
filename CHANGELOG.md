@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.7.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.6.0...v0.7.0) (2026-04-28)
+
+
+### Features
+
+* **wsen-pads:** Add three practical example sketches. ([#152](https://github.com/steamicc/arduino-steami-lib/issues/152)) ([f6bc295](https://github.com/steamicc/arduino-steami-lib/commit/f6bc2950d9d307a1a985ed3d637d68ef12d9beae)), closes [#69](https://github.com/steamicc/arduino-steami-lib/issues/69)
+
 # [0.6.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.5.0...v0.6.0) (2026-04-28)
 
 
