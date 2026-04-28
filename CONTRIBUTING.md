@@ -50,14 +50,23 @@ zstyle ':completion:*:*:make:*:targets' call-command true
 zstyle ':completion:*:*:make:*' tag-order 'targets'
 ```
 
-The first line tells zsh to invoke `make -nsp` to get the resolved
-target database (instead of parsing the Makefile textually, which misses
-generated targets). The second line filters out variables and files from
-the completion output so `make <TAB>` only shows actual targets.
+The first line tells zsh to invoke `make` in dry-run / print-database
+mode to query the resolved target list (instead of parsing the Makefile
+textually, which misses generated targets). The second line filters out
+variables and files from the completion output so `make <TAB>` only
+shows actual targets.
 
 `exec zsh` to reload, then `make flash-<TAB>` will list every example
 across every driver, and `make test-<TAB>` every test target across the
 three tiers.
+
+A side effect of `call-command true`: every `make <TAB>` runs `make`
+under the hood, which evaluates the Makefile — including any
+`$(shell ...)` calls made at parse time. In this repo those are cheap
+(`find` over `lib/` and `tests/`), but it means the zstyle should be
+applied **per project** rather than globally if you also work on
+untrusted repos. Scope it with a directory-specific `zstyle`, or set it
+inside a per-project `.zshrc.local` sourced by your dotfiles.
 
 If you don't want to touch your zshrc, `make list` and `make list-examples`
 print the same information on stdout.
