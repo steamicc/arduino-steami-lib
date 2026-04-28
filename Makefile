@@ -119,7 +119,8 @@ list-examples: ## List examples, optionally filtered with DRIVER=<driver>
 
 .PHONY: flash
 flash: .venv/bin/pio ## Flash an example (make flash EXAMPLE=<driver>/<example>) and open serial monitor
-	@example='$(EXAMPLE)'
+	@set -e
+	example='$(EXAMPLE)'
 	if [ -z "$$example" ] || ! printf '%s\n' "$$example" | grep -Eq '^[^/]+/[^/]+$$'; then
 		echo "Error: EXAMPLE must be set as <driver>/<example>." >&2
 		echo "Run 'make list-examples' or 'make list-examples DRIVER=<driver>' to see valid values." >&2
@@ -140,11 +141,11 @@ flash: .venv/bin/pio ## Flash an example (make flash EXAMPLE=<driver>/<example>)
 
 .PHONY: test-native
 test-native: .venv/bin/pio ## Run host-side native tests (no board required)
-	pio test -e native
+	$(PIO) test -e native
 
 .PHONY: test-hardware
 test-hardware: .venv/bin/pio ## Run on-board hardware tests (STeaMi required)
-	pio test -e steami
+	$(PIO) test -e steami
 
 # --- CI ---
 
