@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.5.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.4.0...v0.5.0) (2026-04-28)
+
+
+### Features
+
+* **tooling:** Add capture-<driver>/<example> for boot serial capture. ([#138](https://github.com/steamicc/arduino-steami-lib/issues/138)) ([6e23015](https://github.com/steamicc/arduino-steami-lib/commit/6e23015cfbd46ffdcc8af1cb1fea561d02e570b6))
+
 # [0.4.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.3.0...v0.4.0) (2026-04-28)
 
 
