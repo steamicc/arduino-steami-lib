@@ -154,9 +154,25 @@ $(foreach k,$(EXAMPLE_KEYS),$(eval $(call CAPTURE_RULE,$(k))))
 
 # --- Testing ---
 
+# Discovered once at parse time. Each entry is the suite name (without
+# the test_ prefix) and becomes a `test-native-<name>` phony target via
+# the foreach+eval block below — same shape as the flash- and capture-
+# families. Adding a new tests/native/test_<name>/ directory picks up
+# automatically.
+NATIVE_TEST_KEYS := $(patsubst tests/native/test_%,%,$(wildcard tests/native/test_*))
+
 .PHONY: test-native
-test-native: .venv/bin/pio ## Run host-side native tests (no board required)
+test-native: .venv/bin/pio ## Run all host-side native tests (no board required)
 	$(PIO) test -e native
+
+# Per-suite native test targets — `make test-native-<name>` runs only
+# that suite via PlatformIO's --filter flag.
+define NATIVE_TEST_RULE
+.PHONY: test-native-$(1)
+test-native-$(1): .venv/bin/pio
+	$$(PIO) test -e native --filter native/test_$(1)
+endef
+$(foreach k,$(NATIVE_TEST_KEYS),$(eval $(call NATIVE_TEST_RULE,$(k))))
 
 .PHONY: test-hardware
 test-hardware: .venv/bin/pio ## Run on-board hardware tests (STeaMi required)
