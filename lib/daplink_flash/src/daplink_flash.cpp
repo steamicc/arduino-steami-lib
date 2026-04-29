@@ -10,7 +10,7 @@
 #include <cstdio>
 #include <cstring>
 
-DaplinkFlash::DaplinkFlash(daplink_bridge& bridge) : _bridge(&bridge) {}
+DaplinkFlash::DaplinkFlash(DaplinkBridge& bridge) : _bridge(&bridge) {}
 
 // --------------------------------------------------
 // Filename management
@@ -18,7 +18,6 @@ DaplinkFlash::DaplinkFlash(daplink_bridge& bridge) : _bridge(&bridge) {}
 
 void DaplinkFlash::setFilename(const char* name, const char* ext) {
     // Set 8.3 filename. name: max 8 chars, ext: max 3 chars.
-    _bridge->waitBusy();
     char n[FILENAME_LEN];
     size_t nameLen = std::min(strlen(name), (size_t(FILENAME_LEN)));
     for (int i = 0; i < nameLen; i++) {
@@ -36,16 +35,12 @@ void DaplinkFlash::setFilename(const char* name, const char* ext) {
     memcpy(padded, n, nameLen);
     memcpy(padded + FILENAME_LEN, e, extLen);
 
-    uint8_t buf[1 + FILENAME_LEN + EXT_LEN];
-    buf[0] = CMD_SET_FILENAME;
-    memcpy(buf + 1, padded, sizeof(padded));
-    _bridge->writeTo(buf, sizeof(buf));
+    _bridge->sendCommand(CMD_SET_FILENAME, padded, sizeof(padded));
 }
 
 DaplinkFlash::FilenameResult DaplinkFlash::getFilename() {
-    _bridge->waitBusy();
     uint8_t raw[FILENAME_LEN + EXT_LEN];
-    _bridge->readBlock(CMD_GET_FILENAME, raw, FILENAME_LEN + EXT_LEN);
+    _bridge->readResponse(CMD_GET_FILENAME, raw, FILENAME_LEN + EXT_LEN);
     FilenameResult result;
 
     memcpy(result.name, raw, FILENAME_LEN);
@@ -71,33 +66,25 @@ DaplinkFlash::FilenameResult DaplinkFlash::getFilename() {
 
 void DaplinkFlash::clearFlash() {
     // Erase entire flash memory.
-    _bridge->waitBusy();
-    _bridge->writeCmd(CMD_CLEAR_FLASH);
+    _bridge->sendCommand(CMD_CLEAR_FLASH);
 }
 
 size_t DaplinkFlash::write(const uint8_t* data, size_t length) {
-    /*Append data to current file. data: bytes or str.
+    // Append data to the current file. Returns the number of bytes
+    // written, or 0 if any chunk fails (busy timeout or device error).
 
-        Returns the number of bytes written.*/
-
+    uint8_t payload[1 + MAX_WRITE_CHUNK];
     size_t offset = 0;
-    uint8_t buf[MAX_WRITE_CHUNK + 2];
-    buf[0] = CMD_WRITE_DATA;
 
     while (offset < length) {
-        _bridge->waitBusy();
         uint8_t chunkLen = (uint8_t)std::min((size_t)MAX_WRITE_CHUNK, length - offset);
-        buf[1] = chunkLen;
-        memcpy(&buf[2], &data[offset], chunkLen);
-        for (size_t i = 2 + chunkLen; i < sizeof(buf); i++) {
-            buf[i] = 0;
+        payload[0] = chunkLen;
+        memcpy(&payload[1], &data[offset], chunkLen);
+
+        if (!_bridge->sendCommand(CMD_WRITE_DATA, payload, 1 + chunkLen)) {
+            return 0;
         }
-        _bridge->writeTo(buf, sizeof(buf));
         offset += chunkLen;
-    }
-    _bridge->waitBusy();
-    if (_bridge->error()) {
-        return 0;
     }
     return length;
 }
@@ -119,9 +106,12 @@ size_t DaplinkFlash::writeLine(const char* text) {
 // --------------------------------------------------
 
 void DaplinkFlash::readSector(uint16_t sector, uint8_t* buf) {
-    _bridge->waitBusy();
-    delay(200);
-    _bridge->readBlock(CMD_READ_SECTOR, buf, SECTOR_SIZE);  // ✅ au lieu de readFrom
+    (void)sector;  // FIXME: the bridge protocol probably needs the
+                   // sector index in the request payload, but the
+                   // original implementation never wired it. Keeping
+                   // the same behaviour here so this PR stays focused
+                   // on the API migration.
+    _bridge->readResponse(CMD_READ_SECTOR, buf, SECTOR_SIZE);
 }
 
 size_t DaplinkFlash::read(uint8_t* result, size_t maxLen, bool limitLen) {
