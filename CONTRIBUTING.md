@@ -146,6 +146,14 @@ lib/<component>/
   the API, and an `includes=` line listing the public header. Stub
   drivers ship a `library.properties` with `version=0.0.0` to mark them
   as not yet implemented; bump to `1.0.0` on first release.
+- When a driver becomes implemented (no longer a stub), add a section
+  to `src/main.cpp` that `#include`s its header, instantiates it on
+  the right bus, and calls `begin()` + a quick identity probe. The
+  sketch is the build smoke test: it links every implemented driver
+  in the steami env and lists every driver `.cpp` in
+  `compile_commands.json` so `make tidy` runs them with the proper
+  compile flags. New drivers that aren't wired in here will lint with
+  default flags only (and miss e.g. a cross-driver include resolution).
 
 ### Example folders
 

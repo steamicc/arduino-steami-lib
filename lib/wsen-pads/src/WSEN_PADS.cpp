@@ -4,12 +4,7 @@
 #include <math.h>
 #include <stdint.h>
 
-WSEN_PADS::WSEN_PADS(TwoWire& wire, uint8_t address)
-    : _wire(&wire),
-      _address(address),
-      _tempUserSlope(1.0f),
-      _tempUserOffset(0.0f),
-      _tempOffset(0.0f) {}
+WSEN_PADS::WSEN_PADS(TwoWire& wire, uint8_t address) : _wire(&wire), _address(address) {}
 
 // ---------------------------------------------------------------------
 // Lifecycle
