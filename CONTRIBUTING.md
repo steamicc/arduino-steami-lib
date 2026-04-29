@@ -119,15 +119,30 @@ lib/<component>/
   within its own tree.
 - The class name is `PascalCase` (`HTS221`, `Mcp23009e`) and lives in
   `src/<DriverName>.h`.
-- Each driver is self-contained — no cross-driver dependencies.
+- Drivers are self-contained by default. When one driver does need to
+  call into another's public API (e.g. the DAPLink family, where
+  `daplink_flash` and `daplink_config` both speak through
+  `daplink_bridge`), declare the dependency explicitly via the
+  `depends=` field of the consumer's `library.properties`. This is
+  what PlatformIO's library finder uses to resolve `-I` paths across
+  libs and what the Arduino Library Manager surfaces to end users.
+  Avoid implicit cross-driver `#include`s without a matching
+  `depends=` — the build will work locally but break for downstream
+  consumers.
 - Every new C/C++ source (`.h`, `.cpp`, `.ino`) carries the SPDX license
   header on the very first line (see issue #104):
   ```
   // SPDX-License-Identifier: GPL-3.0-or-later
   ```
 - Include guards use `#pragma once`, not `#ifndef`/`#define` wrappers.
-- `library.properties` declares `architectures=*` so host-side tests can
-  pull the library in (the native platform has no "framework").
+- Every driver ships a `library.properties` (Arduino Library Manager
+  metadata). Required fields: `name`, `version`, `sentence`, `category`,
+  `architectures=*` (so host-side tests can pull the library in — the
+  native platform has no "framework"). Optional but recommended: a
+  longer `paragraph` and an `includes=` line listing the public
+  header. Stub drivers ship a `library.properties` with `version=0.0.0`
+  to mark them as not yet implemented; bump to `1.0.0` on first
+  release.
 
 ### Example folders
 

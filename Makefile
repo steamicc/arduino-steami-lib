@@ -69,17 +69,26 @@ format-fix: .venv/bin/clang-format ## Auto-fix formatting in place
 # lint is a meta-target — it aggregates every static check we run on the
 # source tree. Each sub-target is runnable on its own.
 
-# Driver sources analysed by clang-tidy. Listed via $(shell) so the set
-# is current each time make runs.
+# Driver sources and headers analysed by clang-tidy. Listed via
+# $(shell) so the set is current each time make runs. Headers are
+# tracked too because PlatformIO's library dependency finder follows
+# `#include` directives — a new include in a header (e.g. one driver
+# pulling in another's public API) changes the resolved include paths
+# but wouldn't otherwise trigger a compile_commands.json refresh.
 DRIVER_SOURCES := $(shell find lib -type f -path '*/src/*.cpp')
+DRIVER_HEADERS := $(shell find lib -type f -path '*/src/*.h')
+DRIVER_LIBPROPS := $(shell find lib -type f -name 'library.properties')
 
-# compile_commands.json is regenerated whenever platformio.ini, the board
-# JSON, or the driver source list changes — clang-tidy needs the exact
-# compile flags PIO used for every file it analyses. Adding a new driver
-# forces a DB refresh so tidy doesn't fall back to guessed flags.
-# Generated from the native env because host compile handles the STL /
-# headers cleanly (the ARM cross-compile toolchain trips clang-tidy up).
-compile_commands.json: .venv/bin/pio platformio.ini boards/steami.json $(DRIVER_SOURCES)
+# compile_commands.json is regenerated whenever platformio.ini, the
+# board JSON, the driver source/header set, or any library.properties
+# changes — clang-tidy needs the exact compile flags PIO used for
+# every file it analyses, including the resolved `-I` paths from LDF.
+# Adding a new driver, a new cross-driver include, or a new `depends=`
+# entry forces a DB refresh so tidy doesn't fall back to guessed flags.
+# Generated from the native env because host compile handles the STL
+# / headers cleanly (the ARM cross-compile toolchain trips clang-tidy
+# up).
+compile_commands.json: .venv/bin/pio platformio.ini boards/steami.json $(DRIVER_SOURCES) $(DRIVER_HEADERS) $(DRIVER_LIBPROPS)
 	$(PIO) run -t compiledb -e native
 
 .PHONY: tidy
