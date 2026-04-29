@@ -12,6 +12,7 @@
 // lib/<component>/examples/ for driver usage.
 
 #include <Arduino.h>
+#include <DaplinkBridge.h>
 #include <HTS221.h>
 #include <WSEN_PADS.h>
 #include <Wire.h>
@@ -24,6 +25,7 @@ TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 
 HTS221 hts221(internalI2C);
 WSEN_PADS wsen_pads(internalI2C);
+DaplinkBridge daplink_bridge(internalI2C);
 
 void setup() {
     Serial.begin(115200);
@@ -65,6 +67,14 @@ void setup() {
         Serial.println(" C");
     } else {
         Serial.println("WSEN-PADS not detected");
+    }
+
+    // --- DAPLink bridge (I2C-to-flash protocol on the on-board F103) ---
+    if (daplink_bridge.begin()) {
+        Serial.print("DAPLink bridge detected, WHO_AM_I = 0x");
+        Serial.println(daplink_bridge.deviceId(), HEX);
+    } else {
+        Serial.println("DAPLink bridge not detected");
     }
 }
 
