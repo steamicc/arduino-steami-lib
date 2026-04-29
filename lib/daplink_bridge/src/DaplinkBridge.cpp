@@ -123,6 +123,69 @@ size_t DaplinkBridge::readConfig(uint8_t* result, size_t maxLen) {
 }
 
 // ---------------------------------------------------------------------
+// Frame-level primitives (for sibling drivers)
+// ---------------------------------------------------------------------
+
+bool DaplinkBridge::sendCommand(uint8_t cmd, const uint8_t* payload, size_t payloadLen,
+                                uint32_t timeoutMs) {
+    if (!waitNotBusy(timeoutMs)) {
+        return false;
+    }
+
+    if (payload == nullptr || payloadLen == 0) {
+        writeFrame(&cmd, 1);
+    } else {
+        // Stack-allocated buffer: payload + 1 for the leading command
+        // byte. Callers are expected to keep payloads bounded (the
+        // protocol caps them anyway), so a small VLA-ish staging buffer
+        // is fine here. We size it to MAX_WRITE_CHUNK + a few bytes of
+        // header, which is enough for every framed command in the
+        // bridge protocol.
+        constexpr size_t kStagingMax = DAPLINK_BRIDGE_MAX_WRITE_CHUNK + 4;
+        uint8_t buf[kStagingMax];
+        if (payloadLen > kStagingMax - 1) {
+            // Don't truncate silently; the caller must chunk on its
+            // side if it wants to send a payload bigger than the
+            // protocol allows in a single frame.
+            return false;
+        }
+        buf[0] = cmd;
+        for (size_t i = 0; i < payloadLen; ++i) {
+            buf[1 + i] = payload[i];
+        }
+        writeFrame(buf, 1 + payloadLen);
+    }
+
+    if (!waitNotBusy(timeoutMs)) {
+        return false;
+    }
+    return error() == 0;
+}
+
+size_t DaplinkBridge::readResponse(uint8_t cmd, uint8_t* buf, size_t maxLen, uint32_t timeoutMs) {
+    if (buf == nullptr || maxLen == 0) {
+        return 0;
+    }
+
+    // Same chunking strategy as readConfig: re-emit the command on each
+    // chunk and rely on the F103 firmware to track its own cursor for
+    // streamed responses. Each Arduino Wire requestFrom is also bounded
+    // by the rx buffer (32 bytes by default), so we stay under
+    // MAX_READ_CHUNK to keep latency predictable.
+    size_t produced = 0;
+    while (produced < maxLen) {
+        if (!waitNotBusy(timeoutMs)) {
+            return produced;
+        }
+        const uint8_t want = static_cast<uint8_t>(
+            std::min<size_t>(DAPLINK_BRIDGE_MAX_READ_CHUNK, maxLen - produced));
+        readBlock(cmd, buf + produced, want);
+        produced += want;
+    }
+    return produced;
+}
+
+// ---------------------------------------------------------------------
 // I2C helpers
 // ---------------------------------------------------------------------
 
