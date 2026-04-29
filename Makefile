@@ -69,12 +69,15 @@ format-fix: .venv/bin/clang-format ## Auto-fix formatting in place
 # lint is a meta-target — it aggregates every static check we run on the
 # source tree. Each sub-target is runnable on its own.
 
-# Driver sources and headers analysed by clang-tidy. Listed via
-# $(shell) so the set is current each time make runs. Headers are
-# tracked too because PlatformIO's library dependency finder follows
-# `#include` directives — a new include in a header (e.g. one driver
-# pulling in another's public API) changes the resolved include paths
-# but wouldn't otherwise trigger a compile_commands.json refresh.
+# Driver source files analysed by clang-tidy. Listed via $(shell) so
+# the set is current each time make runs. Headers and library.properties
+# are tracked separately as Make-level dependencies of
+# compile_commands.json — clang-tidy itself only runs on the .cpp files
+# below — because PlatformIO's library dependency finder follows
+# `#include` directives and `depends=` entries. A new include in a
+# header (e.g. one driver pulling in another's public API) or a new
+# `depends=` line changes the resolved `-I` paths but wouldn't
+# otherwise trigger a compile_commands.json refresh.
 DRIVER_SOURCES := $(shell find lib -type f -path '*/src/*.cpp')
 DRIVER_HEADERS := $(shell find lib -type f -path '*/src/*.h')
 DRIVER_LIBPROPS := $(shell find lib -type f -name 'library.properties')

@@ -136,13 +136,16 @@ lib/<component>/
   ```
 - Include guards use `#pragma once`, not `#ifndef`/`#define` wrappers.
 - Every driver ships a `library.properties` (Arduino Library Manager
-  metadata). Required fields: `name`, `version`, `sentence`, `category`,
-  `architectures=*` (so host-side tests can pull the library in — the
-  native platform has no "framework"). Optional but recommended: a
-  longer `paragraph` and an `includes=` line listing the public
-  header. Stub drivers ship a `library.properties` with `version=0.0.0`
-  to mark them as not yet implemented; bump to `1.0.0` on first
-  release.
+  metadata). Per the Arduino library specification the required fields
+  are `name`, `version`, `author`, `maintainer`, `sentence`, `category`,
+  `url`, and `architectures` — set `architectures=*` so host-side tests
+  can pull the library in (the native platform has no "framework"). The
+  collection convention is `author=STeaMi contributors` and
+  `maintainer=STeaMi contributors`; the `url` points back to this
+  repository. Optional but recommended: a longer `paragraph` describing
+  the API, and an `includes=` line listing the public header. Stub
+  drivers ship a `library.properties` with `version=0.0.0` to mark them
+  as not yet implemented; bump to `1.0.0` on first release.
 
 ### Example folders
 
