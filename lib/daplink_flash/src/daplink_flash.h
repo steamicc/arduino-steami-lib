@@ -4,12 +4,12 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-#include "daplink_bridge.h"
+#include "DaplinkBridge.h"
 #include "daplink_flash_const.h"
 
 class DaplinkFlash {
    public:
-    DaplinkFlash(daplink_bridge& bridge);
+    DaplinkFlash(DaplinkBridge& bridge);
 
     struct FilenameResult {
         char name[FILENAME_LEN + 1];  // +1 pour le null terminator
@@ -31,5 +31,5 @@ class DaplinkFlash {
     size_t read(uint8_t* result, size_t maxLen, bool limitLen = false);
 
    private:
-    daplink_bridge* _bridge;
+    DaplinkBridge* _bridge;
 };
