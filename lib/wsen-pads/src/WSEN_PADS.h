@@ -56,9 +56,9 @@ class WSEN_PADS {
    private:
     TwoWire* _wire;
     uint8_t _address;
-    float _tempUserSlope;   // two-point user calibration slope
-    float _tempUserOffset;  // two-point user calibration intercept
-    float _tempOffset;      // additive offset on top of user calibration
+    float _tempUserSlope = 1.0f;   // two-point user calibration slope
+    float _tempUserOffset = 0.0f;  // two-point user calibration intercept
+    float _tempOffset = 0.0f;      // additive offset on top of user calibration
 
     // I2C helpers
     bool isPresent();
