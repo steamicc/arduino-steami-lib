@@ -94,9 +94,19 @@ DRIVER_LIBPROPS := $(shell find lib -type f -name 'library.properties')
 compile_commands.json: .venv/bin/pio platformio.ini boards/steami.json $(DRIVER_SOURCES) $(DRIVER_HEADERS) $(DRIVER_LIBPROPS)
 	$(PIO) run -t compiledb -e native
 
+# Every driver's src/ directory is added to clang-tidy's include path
+# so that cross-driver `#include`s (e.g. daplink_flash → daplink_bridge)
+# resolve regardless of whether the consumer is in compile_commands.json.
+# PlatformIO only compiles in the native env what the smoke-test sketch
+# pulls in (via LDF), so non-included drivers get default flags from
+# clang-tidy's compile_commands fallback — without these extras a header
+# that references another driver's API would fail with "file not found"
+# even though the include declaration is correct.
+LIB_INCLUDES := $(addprefix --extra-arg-before=-I,$(wildcard lib/*/src))
+
 .PHONY: tidy
 tidy: .venv/bin/clang-tidy compile_commands.json ## Run clang-tidy on every driver source under lib/*/src/
-	@find lib -type f -path '*/src/*.cpp' -exec .venv/bin/clang-tidy -p . --quiet {} +
+	@find lib -type f -path '*/src/*.cpp' -exec .venv/bin/clang-tidy -p . --quiet $(LIB_INCLUDES) {} +
 
 .PHONY: check-spdx
 check-spdx: ## Verify every C++ source carries the SPDX license header
