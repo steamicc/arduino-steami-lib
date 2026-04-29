@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.8.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.7.4...v0.8.0) (2026-04-29)
+
+
+### Features
+
+* **daplink_bridge:** Implement Arduino driver. ([#161](https://github.com/steamicc/arduino-steami-lib/issues/161)) ([4b7ab0b](https://github.com/steamicc/arduino-steami-lib/commit/4b7ab0b85a6316e6079d0654c789bec9992fefe4)), closes [#156](https://github.com/steamicc/arduino-steami-lib/issues/156)
+
 ## [0.7.4](https://github.com/steamicc/arduino-steami-lib/compare/v0.7.3...v0.7.4) (2026-04-29)
 
 ## [0.7.3](https://github.com/steamicc/arduino-steami-lib/compare/v0.7.2...v0.7.3) (2026-04-29)
