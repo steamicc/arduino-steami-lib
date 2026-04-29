@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 
@@ -119,10 +120,8 @@ size_t DaplinkFlash::writeLine(const char* text) {
 
 void DaplinkFlash::readSector(uint16_t sector, uint8_t* buf) {
     _bridge->waitBusy();
-    uint8_t payload[3] = {CMD_READ_SECTOR, (uint8_t)(sector >> 8), (uint8_t)(sector & 0xFF)};
-    _bridge->writeTo(payload, 3);
     delay(200);
-    _bridge->readFrom(buf, SECTOR_SIZE);
+    _bridge->readBlock(CMD_READ_SECTOR, buf, SECTOR_SIZE);  // ✅ au lieu de readFrom
 }
 
 size_t DaplinkFlash::read(uint8_t* result, size_t maxLen, bool limitLen) {
