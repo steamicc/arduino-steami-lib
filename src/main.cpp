@@ -18,6 +18,8 @@
 #include <Wire.h>
 #include <WsenHids.h>
 
+#include "daplink_flash.h"
+
 // The STeaMi routes its on-board I2C peripherals to an internal bus
 // (pins PB8/PB9, exported as I2C_INT_SCL / I2C_INT_SDA by the variant).
 // The default global Wire sits on a different pair, so spin up a
@@ -28,6 +30,7 @@ HTS221 hts221(internalI2C);
 WsenHids wsen_hids(internalI2C);
 WSEN_PADS wsen_pads(internalI2C);
 DaplinkBridge daplink_bridge(internalI2C);
+DaplinkFlash daplink_flash(daplink_bridge);
 
 void setup() {
     Serial.begin(115200);
@@ -104,6 +107,13 @@ void setup() {
         Serial.println(daplink_bridge.deviceId(), HEX);
     } else {
         Serial.println("DAPLink bridge not detected");
+    }
+
+    // --- DAPLink flash (flash operations via the bridge) ---
+    if (daplink_flash.begin()) {
+        Serial.println("DAPLink flash interface ready");
+    } else {
+        Serial.println("DAPLink flash interface not ready");
     }
 }
 
