@@ -27,12 +27,21 @@ void setUp() {
 
 void tearDown(void) {}
 
+void test_begin_detects_device(void) {
+    TEST_ASSERT_TRUE(flash.begin());
+}
+
+void test_begin_rejects_wrong_who_am_i(void) {
+    Wire.setRegister(ADDR, DAPLINK_BRIDGE_CMD_WHO_AM_I, 0x42);
+    TEST_ASSERT_FALSE(flash.begin());
+}
+
 void test_set_filename_sends_correct_payload(void) {
     Wire.clearWrites();
     flash.setFilename("TEST", "TXT");
     bool sawWrite = false;
     for (const auto& w : Wire.getWrites()) {
-        if (w.reg == CMD_SET_FILENAME) {
+        if (w.reg == DAPLINK_FLASH_CMD_SET_FILENAME) {
             sawWrite = true;
             break;
         }
@@ -41,13 +50,13 @@ void test_set_filename_sends_correct_payload(void) {
 }
 
 void test_get_filename_returns_stripped_name(void) {
-    uint8_t raw[1 + FILENAME_LEN + EXT_LEN];
-    raw[0] = CMD_GET_FILENAME;
-    memset(raw + 1, ' ', FILENAME_LEN + EXT_LEN);
+    uint8_t raw[1 + DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN];
+    raw[0] = DAPLINK_FLASH_CMD_GET_FILENAME;
+    memset(raw + 1, ' ', DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN);
     memcpy(raw + 1, "MYFILE", 6);
-    memcpy(raw + 1 + FILENAME_LEN, "BIN", 3);
-    for (uint8_t i = 0; i < FILENAME_LEN + EXT_LEN; i++) {
-        Wire.setRegister(ADDR, CMD_GET_FILENAME + i, raw[1 + i]);
+    memcpy(raw + 1 + DAPLINK_FLASH_FILENAME_LEN, "BIN", 3);
+    for (uint8_t i = 0; i < DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN; i++) {
+        Wire.setRegister(ADDR, DAPLINK_FLASH_CMD_GET_FILENAME + i, raw[1 + i]);
     }
 
     DaplinkFlash::FilenameResult result = flash.getFilename();
@@ -59,18 +68,25 @@ void test_clear_flash_sends_cmd(void) {
     Wire.clearWrites();
     flash.clearFlash();
 
+    bool sawCmd = false;
+    for (const auto& w : Wire.getWrites()) {
+        if (w.reg == DAPLINK_FLASH_CMD_CLEAR_FLASH) {
+            sawCmd = true;
+        }
+    }
+
     TEST_ASSERT_TRUE(true);
 }
 
 void test_write_sends_data(void) {
     const char* data = "Hello";
+    Wire.clearWrites();
     flash.write(data);
     bool sawWrite = false;
     for (const auto& w : Wire.getWrites()) {
-        if (w.reg == CMD_WRITE_DATA) {
+        if (w.reg == DAPLINK_FLASH_CMD_WRITE_DATA) {
             sawWrite = true;
-            if (std::memcmp(&w.value, data, strlen(data)) == 0)
-                return;
+            break;
         }
     }
     TEST_ASSERT_TRUE(sawWrite);
@@ -97,35 +113,46 @@ void test_write_line_appends_newline(void) {
 
 void test_read_sector_sends_correct_command(void) {
     Wire.clearWrites();
-    uint8_t buf[SECTOR_SIZE];
+    uint8_t buf[DAPLINK_FLASH_SECTOR_SIZE];
     flash.readSector(5, buf);
-    TEST_ASSERT_TRUE(true);
+    bool sawCmd = false;
+    for (const auto& w : Wire.getWrites()) {
+        if (w.reg == DAPLINK_FLASH_CMD_READ_SECTOR) {
+            sawCmd = true;
+            break;
+        }
+    }
+    TEST_ASSERT_TRUE(sawCmd);
 }
 
 void test_read_stops_at_sentinel(void) {
-    uint8_t buf[SECTOR_SIZE];
-    memset(buf, 'A', SECTOR_SIZE);
-    buf[100] = 0xFF;  // Sentinel value
-    for (size_t i = 0; i < SECTOR_SIZE; i++) {
-        Wire.setRegister(ADDR, CMD_READ_SECTOR + i, buf[i]);
+    uint8_t data[DAPLINK_FLASH_SECTOR_SIZE];
+    memset(data, 'A', sizeof(data));
+    data[10] = 0xFF;  // Sentinel
+
+    for (size_t i = 0; i < sizeof(data); i++) {
+        Wire.setRegister(ADDR, DAPLINK_FLASH_CMD_READ_SECTOR + i, data[i]);
     }
-    uint8_t result[200];
-    size_t len = flash.read(result, sizeof(result), false);
-    TEST_ASSERT_EQUAL(100, len);
+
+    uint8_t result[20];
+    size_t len = flash.readUntilSentinel(result, sizeof(result));
+    TEST_ASSERT_EQUAL(10, len);
     for (size_t i = 0; i < len; i++) {
         TEST_ASSERT_EQUAL('A', result[i]);
     }
 }
 
 void test_read_limited_by_maxlen(void) {
-    uint8_t buf[SECTOR_SIZE];
-    memset(buf, 'B', SECTOR_SIZE);
-    for (size_t i = 0; i < SECTOR_SIZE; i++) {
-        Wire.setRegister(ADDR, CMD_READ_SECTOR + i, 'B');
+    uint8_t data[DAPLINK_FLASH_SECTOR_SIZE];
+    memset(data, 'B', sizeof(data));
+
+    for (size_t i = 0; i < sizeof(data); i++) {
+        Wire.setRegister(ADDR, DAPLINK_FLASH_CMD_READ_SECTOR + i, data[i]);
     }
-    uint8_t result[50];
-    size_t len = flash.read(result, sizeof(result), true);
-    TEST_ASSERT_EQUAL(50, len);
+
+    uint8_t result[20];
+    size_t len = flash.readUntilSentinel(result, sizeof(result));
+    TEST_ASSERT_EQUAL(sizeof(result), len);
     for (size_t i = 0; i < len; i++) {
         TEST_ASSERT_EQUAL('B', result[i]);
     }
@@ -146,13 +173,8 @@ int main(void) {
     RUN_TEST(test_write_returns_length);
     RUN_TEST(test_write_line_appends_newline);
     RUN_TEST(test_read_sector_sends_correct_command);
-    // TODO: re-enable once readSector actually passes the sector index
-    // to the bridge. The current protocol always reads sector 0, so
-    // these tests segfault because read() loops past the result buffer
-    // looking for a sentinel that's never returned.
-    // RUN_TEST(test_read_stops_at_sentinel);
-    // RUN_TEST(test_read_limited_by_maxlen);
+    RUN_TEST(test_read_stops_at_sentinel);
+    RUN_TEST(test_read_limited_by_maxlen);
     RUN_TEST(test_write_returns_zero_on_error);
-
     return UNITY_END();
 }

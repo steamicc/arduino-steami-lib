@@ -9,11 +9,12 @@
 
 class DaplinkFlash {
    public:
+    bool begin();
     DaplinkFlash(DaplinkBridge& bridge);
 
     struct FilenameResult {
-        char name[FILENAME_LEN + 1];  // +1 pour le null terminator
-        char ext[EXT_LEN + 1];
+        char name[DAPLINK_FLASH_FILENAME_LEN + 1];  // +1 pour le null terminator
+        char ext[DAPLINK_FLASH_EXT_LEN + 1];
     };
 
     // Filename management
@@ -28,7 +29,8 @@ class DaplinkFlash {
 
     // Read operations
     void readSector(uint16_t sector, uint8_t* buf);
-    size_t read(uint8_t* result, size_t maxLen, bool limitLen = false);
+    size_t readN(uint8_t* result, size_t n);
+    size_t readUntilSentinel(uint8_t* result, size_t maxLen);
 
    private:
     DaplinkBridge* _bridge;

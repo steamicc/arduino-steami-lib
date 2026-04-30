@@ -12,11 +12,11 @@ I2C bridge on the STeaMi board.
 
 ```cpp
 #include <Wire.h>
-#include <daplink_bridge.h>
+#include <DaplinkBridge.h>
 #include <daplink_flash.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-daplink_bridge bridge(internalI2C);
+DaplinkBridge bridge(internalI2C);
 DaplinkFlash flash(bridge);
 
 void setup() {
@@ -36,7 +36,8 @@ void setup() {
 
 | Method | Description |
 |--------|-------------|
-| `DaplinkFlash(daplink_bridge& bridge)` | Construct. Requires an initialized `daplink_bridge` instance. |
+| `DaplinkFlash(DaplinkBridge& bridge)` | Construct. Requires an initialized `DaplinkBridge` instance. |
+| `void begin()` | Initialize the flash interface. Must be called after the bridge is ready. |
 
 ### Filename management
 
@@ -63,8 +64,8 @@ void setup() {
 
 ## Register constants
 
-`daplink_flash_const.h` exports command codes (`CMD_*`) and protocol
-limits (`MAX_SECTORS`, `FILENAME_LEN`, `EXT_LEN`).
+`daplink_flash_const.h` exports command codes (`DAPLINK_FLASH_CMD_*`) and protocol
+limits (`DAPLINK_FLASH_MAX_SECTORS`, `DAPLINK_FLASH_FILENAME_LEN`, `DAPLINK_FLASH_EXT_LEN`).
 
 ## Testing
 
