@@ -56,7 +56,7 @@ void test_get_filename_returns_stripped_name(void) {
     memcpy(raw + 1, "MYFILE", 6);
     memcpy(raw + 1 + DAPLINK_FLASH_FILENAME_LEN, "BIN", 3);
     for (uint8_t i = 0; i < DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN; i++) {
-        Wire.setRegister(ADDR, DAPLINK_FLASH_CMD_GET_FILENAME + i, raw[1 + i]);
+        Wire.setRegister(ADDR, DAPLINK_BRIDGE_REG_RESPONSE + i, raw[1 + i]);
     }
 
     DaplinkFlash::FilenameResult result = flash.getFilename();
@@ -131,7 +131,7 @@ void test_read_stops_at_sentinel(void) {
     data[10] = 0xFF;  // Sentinel
 
     for (size_t i = 0; i < sizeof(data); i++) {
-        Wire.setRegister(ADDR, DAPLINK_FLASH_CMD_READ_SECTOR + i, data[i]);
+        Wire.setRegister(ADDR, DAPLINK_BRIDGE_REG_RESPONSE + i, data[i]);
     }
 
     uint8_t result[20];
@@ -147,7 +147,7 @@ void test_read_limited_by_maxlen(void) {
     memset(data, 'B', sizeof(data));
 
     for (size_t i = 0; i < sizeof(data); i++) {
-        Wire.setRegister(ADDR, DAPLINK_FLASH_CMD_READ_SECTOR + i, data[i]);
+        Wire.setRegister(ADDR, DAPLINK_BRIDGE_REG_RESPONSE + i, data[i]);
     }
 
     uint8_t result[20];

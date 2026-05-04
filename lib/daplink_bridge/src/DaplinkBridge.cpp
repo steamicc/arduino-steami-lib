@@ -167,21 +167,30 @@ size_t DaplinkBridge::readResponse(uint8_t cmd, uint8_t* buf, size_t maxLen, uin
         return 0;
     }
 
-    // Same chunking strategy as readConfig: re-emit the command on each
-    // chunk and rely on the F103 firmware to track its own cursor for
-    // streamed responses. Each Arduino Wire requestFrom is also bounded
-    // by the rx buffer (32 bytes by default), so we stay under
-    // MAX_READ_CHUNK to keep latency predictable.
+    if (!waitNotBusy(timeoutMs)) {
+        return 0;
+    }
+
+    // Select the response stream associated with `cmd`.
+    _wire->beginTransmission(_address);
+    _wire->write(cmd);
+    _wire->endTransmission(false);
+
     size_t produced = 0;
     while (produced < maxLen) {
         if (!waitNotBusy(timeoutMs)) {
             return produced;
         }
+
         const uint8_t want = static_cast<uint8_t>(
             std::min<size_t>(DAPLINK_BRIDGE_MAX_READ_CHUNK, maxLen - produced));
-        readBlock(cmd, buf + produced, want);
+
+        readBlock(static_cast<uint8_t>(DAPLINK_BRIDGE_REG_RESPONSE + produced), buf + produced,
+                  want);
+
         produced += want;
     }
+
     return produced;
 }
 

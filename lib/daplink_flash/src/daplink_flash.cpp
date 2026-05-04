@@ -129,12 +129,7 @@ void DaplinkFlash::readSector(uint16_t sector, uint8_t* buf) {
     payload[1] = sector & 0xFF;
 
     _bridge->sendCommand(DAPLINK_FLASH_CMD_READ_SECTOR, payload, sizeof(payload));
-
-    for (size_t i = 0; i < DAPLINK_FLASH_SECTOR_SIZE; i++) {
-        uint8_t tmp[1];
-        _bridge->readResponse(DAPLINK_FLASH_CMD_READ_SECTOR + i, tmp, 1);
-        buf[i] = tmp[0];
-    }
+    _bridge->readResponse(DAPLINK_FLASH_CMD_READ_SECTOR, buf, DAPLINK_FLASH_SECTOR_SIZE);
 }
 
 size_t DaplinkFlash::readUntilSentinel(uint8_t* result, size_t maxLen) {
