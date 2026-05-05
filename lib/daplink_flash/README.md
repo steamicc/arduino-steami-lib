@@ -60,8 +60,9 @@ void setup() {
 | Method | Description |
 |--------|-------------|
 | `void readSector(uint16_t sector, uint8_t* buf)` | Read a 256-byte sector from flash into `buf`. |
-| `size_t read(uint8_t* result, size_t maxLen, bool limitLen = false)` | Read file content from flash. If `limitLen` is `false`, reads until the first `0xFF` sentinel. If `true`, reads up to `maxLen` bytes. Returns the number of bytes read. |
-
+| `size_t readN(uint8_t* result, size_t maxLen)` | Read up to `maxLen` bytes of file content into `result`. Returns the number of bytes read. |
+ | `size_t readUntilSentinel(uint8_t* result, size_t maxLen)` | Read file content into `result` until the first `0xFF` sentinel is encountered, or until `maxLen` bytes have been read. Returns the number of bytes read. |
+ 
 ## Register constants
 
 `daplink_flash_const.h` exports command codes (`DAPLINK_FLASH_CMD_*`) and protocol

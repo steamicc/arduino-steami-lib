@@ -81,7 +81,7 @@ void DaplinkFlash::clearFlash() {
 
 size_t DaplinkFlash::write(const uint8_t* data, size_t length) {
     // Append data to the current file. Returns the number of bytes
-    if (data == nullptr && length == 0) {
+    if (length == 0 || data == nullptr) {
         return 0;
     }
 
