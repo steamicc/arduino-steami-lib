@@ -22,6 +22,10 @@ DaplinkFlash flash(bridge);
 void setup() {
     Serial.begin(115200);
     internalI2C.begin();
+    if (!flash.begin()) {
+        Serial.println("DAPLink Flash not found!");
+        return;
+    }
 
     flash.clearFlash();
     flash.setFilename("DATA", "CSV");
@@ -62,7 +66,7 @@ void setup() {
 | `void readSector(uint16_t sector, uint8_t* buf)` | Read a 256-byte sector from flash into `buf`. |
 | `size_t readN(uint8_t* result, size_t maxLen)` | Read up to `maxLen` bytes of file content into `result`. Returns the number of bytes read. |
  | `size_t readUntilSentinel(uint8_t* result, size_t maxLen)` | Read file content into `result` until the first `0xFF` sentinel is encountered, or until `maxLen` bytes have been read. Returns the number of bytes read. |
- 
+
 ## Register constants
 
 `daplink_flash_const.h` exports command codes (`DAPLINK_FLASH_CMD_*`) and protocol

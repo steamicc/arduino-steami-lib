@@ -20,6 +20,7 @@ DaplinkFlash flash(bridge);
 
 void setUp() {
     Wire = TwoWire();
+    Wire.setRegister(ADDR, DAPLINK_BRIDGE_CMD_WHO_AM_I, DAPLINK_BRIDGE_WHO_AM_I);
     preloadBusy(false);
     bridge = DaplinkBridge();
     flash = DaplinkFlash(bridge);
@@ -166,6 +167,8 @@ void test_write_returns_zero_on_error(void) {
 
 int main(void) {
     UNITY_BEGIN();
+    RUN_TEST(test_begin_detects_device);
+    RUN_TEST(test_begin_rejects_wrong_who_am_i);
     RUN_TEST(test_set_filename_sends_correct_payload);
     RUN_TEST(test_get_filename_returns_stripped_name);
     RUN_TEST(test_clear_flash_sends_cmd);
