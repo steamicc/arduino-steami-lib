@@ -173,6 +173,34 @@ These tests answer:
 
 Integration tests complement hardware unit tests rather than replace them.
 
+### 4. Qualification tests (`tests/qualification/`)
+
+Qualification tests are YAML-driven human-in-the-loop physical coherence
+checks run on a real STeaMi board.
+
+They validate a higher-level question than hardware/integration suites:
+
+> "Does a real environmental perturbation cause the sensor reading to react
+> coherently?"
+
+Typical examples:
+
+* breathing on a humidity sensor should increase %RH,
+* warming the board should raise temperature,
+* covering a light sensor should reduce luminosity.
+
+Each qualification scenario consists of:
+
+* a `qualify.ino` sketch streaming machine-readable measurements,
+* a `qualify.yaml` file declaring interactive phases, prompts, capture
+  windows, and assertions.
+
+Run available scenarios with:
+
+```bash
+make list-qualification
+make qualify-hts221
+
 ---
 
 ## Shared Driver Checks
