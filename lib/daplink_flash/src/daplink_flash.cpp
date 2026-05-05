@@ -9,6 +9,7 @@
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <vector>
 
 DaplinkFlash::DaplinkFlash(DaplinkBridge& bridge) : _bridge(&bridge) {}
 
@@ -22,6 +23,9 @@ bool DaplinkFlash::begin() {
 
 void DaplinkFlash::setFilename(const char* name, const char* ext) {
     // Set 8.3 filename. name: max 8 chars, ext: max 3 chars.
+    if (name == nullptr || ext == nullptr) {
+        return;
+    }
     char n[DAPLINK_FLASH_FILENAME_LEN];
     size_t nameLen = std::min(strlen(name), (size_t(DAPLINK_FLASH_FILENAME_LEN)));
     for (int i = 0; i < nameLen; i++) {
@@ -44,6 +48,7 @@ void DaplinkFlash::setFilename(const char* name, const char* ext) {
 
 DaplinkFlash::FilenameResult DaplinkFlash::getFilename() {
     uint8_t raw[DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN];
+    memset(raw, ' ', sizeof(raw));
     _bridge->readResponse(DAPLINK_FLASH_CMD_GET_FILENAME, raw,
                           DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN);
     FilenameResult result;
