@@ -74,7 +74,7 @@ def reset_board() -> None:
         "init; reset; shutdown",
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
 
     if result.returncode != 0:
         if result.stdout:
@@ -90,8 +90,13 @@ def flash_qualification_sketch(driver: str) -> None:
     if not src_dir.exists():
         raise SystemExit(f"Error: qualification directory not found for '{driver}'.")
 
+    pio = ROOT / ".venv" / "bin" / "pio"
+    
+    if not pio.exists():
+        raise SystemExit("Error: .venv/bin/pio not found. Run 'make setup' first.")
+    
     cmd = [
-        ".venv/bin/pio",
+        str(pio),
         "run",
         "-e",
         "steami",
@@ -102,7 +107,11 @@ def flash_qualification_sketch(driver: str) -> None:
     env = dict(os.environ)
     env["PLATFORMIO_SRC_DIR"] = str(src_dir)
 
-    result = subprocess.run(cmd, env=env)
+    result = subprocess.run(
+        cmd,
+        env=env,
+        cwd=ROOT,
+    )
 
     if result.returncode != 0:
         raise SystemExit("Error: qualification sketch upload failed.")
@@ -215,10 +224,30 @@ def evaluate_assertions(
         actual = metrics[signal]
 
         if raw_key.endswith("_delta_min"):
-            ref_name = assertions.get(f"{signal}_delta_vs")
-            if ref_name not in prior_metrics or signal not in prior_metrics[ref_name]:
-                print(f"  FAIL: reference phase '{ref_name}' missing")
-                log.write(f"[{timestamp()}] ASSERT FAIL [{raw_key}] missing-reference\n")
+            ref_key = f"{signal}_delta_vs"
+            ref_name = assertions.get(ref_key)
+
+            if not isinstance(ref_name, str):
+                print(f"  FAIL: missing '{ref_key}' for assertion '{raw_key}'")
+                log.write(
+                    f"[{timestamp()}] ASSERT FAIL [{phase_name}] {raw_key} missing-{ref_key}\n"
+                )
+                passed = False
+                continue
+
+            if ref_name not in prior_metrics:
+                print(f"  FAIL: reference phase '{ref_name}' not found")
+                log.write(
+                    f"[{timestamp()}] ASSERT FAIL [{phase_name}] {raw_key} unknown-phase={ref_name}\n"
+                )
+                passed = False
+                continue
+
+            if signal not in prior_metrics[ref_name]:
+                print(f"  FAIL: reference phase '{ref_name}' has no '{signal}' data")
+                log.write(
+                    f"[{timestamp()}] ASSERT FAIL [{phase_name}] {raw_key} missing-signal={signal}\n"
+                )
                 passed = False
                 continue
 
