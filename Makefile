@@ -293,7 +293,7 @@ list-qualification: ## List all available qualification targets
 
 define QUALIFY_template
 .PHONY: qualify-$(1)
-qualify-$(1): ## Run YAML qualification scenario for $(1)
+qualify-$(1): setup ## Run YAML qualification scenario for $(1)
 	@$(PYTHON) scripts/qualify.py $(1)
 endef
 
