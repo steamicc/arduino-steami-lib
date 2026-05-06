@@ -165,7 +165,7 @@ def capture_phase(
 
         text = raw.decode("utf-8", errors="replace").strip()
         stamp = timestamp()
-        log.write(f"[{stamp}] SERIAL {phase_name} {text}\n")
+        log.write(f"[{stamp}] SERIAL [{phase_name}] {text}\n")
 
         values = parse_measurements(text)
 
@@ -208,7 +208,7 @@ def evaluate_assertions(
 
         if signal not in metrics:
             print(f"  FAIL: no captured values for '{signal}'")
-            log.write(f"[{timestamp()}] ASSERT FAIL {raw_key} missing-signal\n")
+            log.write(f"[{timestamp()}] ASSERT FAIL [{raw_key}] missing-signal\n")
             passed = False
             continue
 
@@ -218,7 +218,7 @@ def evaluate_assertions(
             ref_name = assertions.get(f"{signal}_delta_vs")
             if ref_name not in prior_metrics or signal not in prior_metrics[ref_name]:
                 print(f"  FAIL: reference phase '{ref_name}' missing")
-                log.write(f"[{timestamp()}] ASSERT FAIL {raw_key} missing-reference\n")
+                log.write(f"[{timestamp()}] ASSERT FAIL [{raw_key}] missing-reference\n")
                 passed = False
                 continue
 
@@ -227,7 +227,7 @@ def evaluate_assertions(
             verdict = "PASS" if ok else "FAIL"
             print(f"  {verdict}: {signal} delta >= {expected} (actual {delta:.2f})")
             log.write(
-                f"[{timestamp()}] ASSERT {verdict} {raw_key} expected={expected} actual={delta:.2f}\n"
+                f"[{timestamp()}] ASSERT {verdict} [{raw_key}] expected={expected} actual={delta:.2f}\n"
             )
             passed &= ok
 
@@ -235,7 +235,7 @@ def evaluate_assertions(
             ref_name = assertions.get(f"{signal}_delta_vs")
             if ref_name not in prior_metrics or signal not in prior_metrics[ref_name]:
                 print(f"  FAIL: reference phase '{ref_name}' missing")
-                log.write(f"[{timestamp()}] ASSERT FAIL {raw_key} missing-reference\n")
+                log.write(f"[{timestamp()}] ASSERT FAIL [{raw_key}] missing-reference\n")
                 passed = False
                 continue
 
@@ -244,7 +244,7 @@ def evaluate_assertions(
             verdict = "PASS" if ok else "FAIL"
             print(f"  {verdict}: {signal} delta <= {expected} (actual {delta:.2f})")
             log.write(
-                f"[{timestamp()}] ASSERT {verdict} {raw_key} expected={expected} actual={delta:.2f}\n"
+                f"[{timestamp()}] ASSERT {verdict} [{raw_key}] expected={expected} actual={delta:.2f}\n"
             )
             passed &= ok
 
@@ -253,7 +253,7 @@ def evaluate_assertions(
             verdict = "PASS" if ok else "FAIL"
             print(f"  {verdict}: {signal} avg >= {expected} (actual {actual:.2f})")
             log.write(
-                f"[{timestamp()}] ASSERT {verdict} {raw_key} expected={expected} actual={actual:.2f}\n"
+                f"[{timestamp()}] ASSERT {verdict} [{raw_key}] expected={expected} actual={actual:.2f}\n"
             )
             passed &= ok
 
@@ -262,7 +262,7 @@ def evaluate_assertions(
             verdict = "PASS" if ok else "FAIL"
             print(f"  {verdict}: {signal} avg <= {expected} (actual {actual:.2f})")
             log.write(
-                f"[{timestamp()}] ASSERT {verdict} {raw_key} expected={expected} actual={actual:.2f}\n"
+                f"[{timestamp()}] ASSERT {verdict} [{raw_key}] expected={expected} actual={actual:.2f}\n"
             )
             passed &= ok
 
@@ -333,8 +333,8 @@ def main() -> int:
                 print(prompt)
                 input()
 
-                log.write(f"[{timestamp()}] PHASE {name}\n")
-                log.write(f"[{timestamp()}] PROMPT {prompt}\n")
+                log.write(f"[{timestamp()}] PHASE [{name}]\n")
+                log.write(f"[{timestamp()}] PROMPT [{prompt}]\n")
 
                 samples = capture_phase(ser, duration, wanted, log, name)
                 metrics = average_metrics(samples)
@@ -342,14 +342,14 @@ def main() -> int:
 
                 for key, value in metrics.items():
                     print(f"  {key}: avg={value:.2f}")
-                    log.write(f"[{timestamp()}] METRIC {name} {key} avg={value:.2f}\n")
+                    log.write(f"[{timestamp()}] METRIC [{name}] [{key}] avg={value:.2f}\n")
 
                 phase_ok = evaluate_assertions(name, phase, metrics, phase_metrics, log)
 
                 if phase.get("wait_for_confirm", False):
                     answer = input("Reading coherent? [y/N] ").strip().lower()
                     human_ok = answer == "y"
-                    log.write(f"[{timestamp()}] HUMAN_CONFIRM {name} {answer}\n")
+                    log.write(f"[{timestamp()}] HUMAN_CONFIRM [{name}] [{answer}]\n")
                     phase_ok &= human_ok
 
                 overall_pass &= phase_ok
