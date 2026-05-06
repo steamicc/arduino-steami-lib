@@ -200,7 +200,7 @@ Run available scenarios with:
 ```bash
 make list-qualification
 make qualify-hts221
-
+```
 ---
 
 ## Shared Driver Checks
