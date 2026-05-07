@@ -1,0 +1,46 @@
+#######################################
+# Syntax Coloring Map For BQ27441
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+BQ27441	KEYWORD1
+CurrentMeasureType	KEYWORD1
+CapacityMeasureType KEYWORD1
+SocMeasureType KEYWORD1
+SohMeasureType KEYWORD1
+TempMeasureType KEYWORD1
+GpoutFunctionType KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin	KEYWORD2
+powerOn	KEYWORD2
+powerOff	KEYWORD2
+currentAverage	KEYWORD2
+stateOfCharge	KEYWORD2
+stateOfHealth	KEYWORD2
+voltageMv	KEYWORD2
+temperature	KEYWORD2
+capacityFull	KEYWORD2
+capacityRemaining	KEYWORD2
+power	KEYWORD2
+temperatureK	KEYWORD2
+temperatureDk	KEYWORD2
+setCapacity	KEYWORD2
+setGpoutPolarity	KEYWORD2
+gpoutPolarity	KEYWORD2
+gpoutFunction	KEYWORD2
+deviceId	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+BQ27441_I2C_ADDRESS	LITERAL1
+BQ27441_DEVICE_ID	LITERAL1
+LIPO_BATTERY_CAPACITY	LITERAL1
