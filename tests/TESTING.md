@@ -123,6 +123,58 @@ pio test -e steami --filter integration/test_<driver>
 
 ---
 
+## Debugging a failing hardware test
+
+By default, hardware test output is intentionally minimal: Unity captures the
+serial channel and only prints test names with a final PASS/FAIL status.
+
+This keeps output clean, but makes debugging harder.
+
+### Verbose mode
+
+To see the full Unity stream and debug messages:
+
+```bash
+make test-hardware/<suite> VERBOSE=1
+```
+
+This enables:
+
+* full Unity output (`-v`)
+* preservation of debug messages
+* raw (non-humanised) output
+
+
+### Safe debug prints (Unity-compatible)
+
+Do **not** use `Serial.println()` inside tests.
+
+Unity uses the serial channel for its protocol. Writing directly to it will
+corrupt the output and can break test parsing.
+
+Instead, use Unity-safe debug helpers:
+
+```cpp
+#include <unity.h>
+
+void test_example() {
+    int state = 42;
+
+    TEST_MESSAGE("Starting test");
+    TEST_MESSAGE("state: 42");
+
+    TEST_ASSERT_EQUAL(42, state);
+}
+```
+
+This will:
+
+* print safely without breaking Unity
+* are visible in `VERBOSE=1` mode
+* keep normal test runs clean
+
+---
+
 ## Test Tier Responsibilities
 
 ### 1. Native tests (`tests/native/`)
