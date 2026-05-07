@@ -184,6 +184,13 @@ $(foreach k,$(EXAMPLE_KEYS),$(eval $(call CAPTURE_RULE,$(k))))
 # (`wsen-pads`, `wsen-hids`) so a flat `verb-driver-suite` form would be
 # visually ambiguous; `/` is the unambiguous separator.
 
+# --- Test verbosity ---
+
+ifeq ($(VERBOSE),1)
+	PIO_TEST_FLAGS += -v
+	export PLATFORMIO_BUILD_FLAGS=-DTEST_VERBOSE=1
+endif
+
 NATIVE_TEST_KEYS := $(patsubst tests/native/test_%,%,$(wildcard tests/native/test_*))
 
 .PHONY: test-native
@@ -208,7 +215,7 @@ test-hardware: .venv/bin/pio ## Run all on-board hardware-unit tests (skipped if
 		echo "STeaMi not detected — skipping hardware tests."
 		exit 0
 	fi
-	$(PIO) test -e steami --filter hardware/test_*
+	$(PIO) test -e steami $(PIO_TEST_FLAGS) --filter hardware/test_* $(PIO_TEST_EXTRA_OPTS)
 
 # Per-suite hardware test targets — `make test-hardware/<name>` runs
 # only that suite. Same shape as test-native/<name>, with the added
@@ -222,7 +229,7 @@ test-hardware/$(1): .venv/bin/pio
 		echo "STeaMi not detected — skipping hardware tests."
 		exit 0
 	fi
-	$$(PIO) test -e steami --filter hardware/test_$(1)
+	$$(PIO) test -e steami $$(PIO_TEST_FLAGS) --filter hardware/test_$(1) $$(PIO_TEST_EXTRA_OPTS)
 endef
 $(foreach k,$(HARDWARE_TEST_KEYS),$(eval $(call HARDWARE_TEST_RULE,$(k))))
 
