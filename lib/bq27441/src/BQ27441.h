@@ -90,6 +90,9 @@ class BQ27441 {
     uint16_t gpoutFunction();
 
     uint16_t deviceId();
+    bool dataReady();
+
+    bool sealed();
 
    private:
     TwoWire& _wire;
@@ -126,7 +129,6 @@ class BQ27441 {
     bool exitConfig(bool resim = true);
     uint16_t flags();
     uint16_t controlStatus();
-    bool sealed();
     bool seal();
     bool unseal();
     uint16_t opConfig();
@@ -150,5 +152,4 @@ class BQ27441 {
     bool readReg(uint8_t sub_address, uint8_t* buf, uint16_t count);
     bool writeReg(uint8_t sub_address, const uint8_t* buf, uint16_t count);
     uint16_t status();
-    bool dataReady();
 };

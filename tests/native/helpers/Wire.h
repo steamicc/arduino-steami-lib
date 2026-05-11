@@ -43,12 +43,33 @@ class TwoWire {
     uint8_t requestFrom(uint8_t address, uint8_t quantity) {
         rxBuffer_.clear();
         uint8_t reg = currentRegisterByAddr_[address];
+
+        if (reg == 0 && quantity == 2) {
+            uint16_t subcommand = (static_cast<uint16_t>(registers_[makeKey(address, 1)]) << 8) |
+                                  registers_[makeKey(address, 0)];
+            for (const auto& resp : controlResponses_) {
+                if (resp.subcommand == subcommand) {
+                    rxBuffer_.push_back(resp.response & 0xFF);
+                    rxBuffer_.push_back((resp.response >> 8) & 0xFF);
+                    rxIndex_ = 0;
+                    return quantity;
+                }
+            }
+        }
+
         for (uint8_t i = 0; i < quantity; ++i) {
             rxBuffer_.push_back(registers_[makeKey(address, reg + i)]);
         }
         rxIndex_ = 0;
         return quantity;
     }
+
+    struct ControlWordResponse {
+        uint16_t subcommand;
+        uint16_t response;
+    };
+
+    std::vector<ControlWordResponse> controlResponses_;
 
     int available() { return static_cast<int>(rxBuffer_.size() - rxIndex_); }
 
@@ -79,6 +100,16 @@ class TwoWire {
     const std::vector<WriteOp>& getWrites() const { return writes_; }
 
     void clearWrites() { writes_.clear(); }
+
+    void setControlResponse(uint16_t subcommand, uint16_t response) {
+        for (auto& resp : controlResponses_) {
+            if (resp.subcommand == subcommand) {
+                resp.response = response;
+                return;
+            }
+        }
+        controlResponses_.push_back({subcommand, response});
+    }
 
    private:
     static uint16_t makeKey(uint8_t addr, uint8_t reg) {

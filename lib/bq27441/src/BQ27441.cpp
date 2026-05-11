@@ -9,7 +9,7 @@ BQ27441::BQ27441(TwoWire& wire, uint16_t capacity_mAh, uint8_t address, int gpou
     : _wire(wire), _capacity_mAh(capacity_mAh), _address(address), _gpout_pin(gpout_pin) {}
 
 bool BQ27441::begin() {
-    if (!deviceId()) {
+    if (deviceId() != BQ27441_DEVICE_ID) {
         return false;
     }
 
@@ -408,8 +408,8 @@ int16_t BQ27441::readWord(uint8_t sub_address) {
     uint8_t data[2];
     if (!readReg(sub_address, data, 2)) {
         return 0;
-        return (int16_t)(data[0] | (data[1] << 8));
     }
+    return (int16_t)(data[0] | (data[1] << 8));
 }
 
 uint16_t BQ27441::readControlWord(uint16_t function) {
