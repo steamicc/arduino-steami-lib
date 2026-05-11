@@ -35,7 +35,9 @@ class TwoWire {
             }
             currentRegisterByAddr_[currentAddress_] = reg;
         } else if (txBuffer_.size() == 1) {
-            currentRegisterByAddr_[currentAddress_] = txBuffer_[0];
+            uint8_t cmd = txBuffer_[0];
+            commands_.push_back({currentAddress_, cmd});
+            currentRegisterByAddr_[currentAddress_] = cmd;
         }
         return 0;
     }
@@ -76,9 +78,18 @@ class TwoWire {
         uint8_t value;
     };
 
+    struct CommandOp {
+        uint8_t address;
+        uint8_t cmd;
+    };
+
     const std::vector<WriteOp>& getWrites() const { return writes_; }
 
     void clearWrites() { writes_.clear(); }
+
+    const std::vector<CommandOp>& getCommands() const { return commands_; }
+
+    void clearCommands() { commands_.clear(); }
 
    private:
     static uint16_t makeKey(uint8_t addr, uint8_t reg) {
@@ -92,6 +103,7 @@ class TwoWire {
     size_t rxIndex_ = 0;
     std::map<uint16_t, uint8_t> registers_;
     std::vector<WriteOp> writes_;
+    std::vector<CommandOp> commands_;
 };
 
 inline TwoWire Wire;

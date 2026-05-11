@@ -49,9 +49,17 @@ void DaplinkFlash::setFilename(const char* name, const char* ext) {
 DaplinkFlash::FilenameResult DaplinkFlash::getFilename() {
     uint8_t raw[DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN];
     memset(raw, ' ', sizeof(raw));
-    _bridge->readResponse(DAPLINK_FLASH_CMD_GET_FILENAME, raw,
-                          DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN);
+
+    size_t bytesRead = _bridge->readResponse(DAPLINK_FLASH_CMD_GET_FILENAME, raw,
+                                             DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN);
+
     FilenameResult result;
+    memset(result.name, 0, sizeof(result.name));
+    memset(result.ext, 0, sizeof(result.ext));
+
+    if (bytesRead != DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN) {
+        return result;
+    }
 
     memcpy(result.name, raw, DAPLINK_FLASH_FILENAME_LEN);
     result.name[DAPLINK_FLASH_FILENAME_LEN] = '\0';
@@ -104,6 +112,9 @@ size_t DaplinkFlash::write(const uint8_t* data, size_t length) {
 }
 
 size_t DaplinkFlash::write(const char* data) {
+    if (data == nullptr) {
+        return 0;
+    }
     return write(reinterpret_cast<const uint8_t*>(data), strlen(data));
 }
 
@@ -127,14 +138,23 @@ size_t DaplinkFlash::writeLine(const char* text) {
 // --------------------------------------------------
 // Read operations
 // --------------------------------------------------
+bool DaplinkFlash::readSector(uint16_t sector, uint8_t* buf) {
+    if (buf == nullptr) {
+        return false;
+    }
 
-void DaplinkFlash::readSector(uint16_t sector, uint8_t* buf) {
     uint8_t payload[2];
     payload[0] = (sector >> 8) & 0xFF;
     payload[1] = sector & 0xFF;
 
-    _bridge->sendCommand(DAPLINK_FLASH_CMD_READ_SECTOR, payload, sizeof(payload));
-    _bridge->readResponse(DAPLINK_FLASH_CMD_READ_SECTOR, buf, DAPLINK_FLASH_SECTOR_SIZE);
+    if (!_bridge->sendCommand(DAPLINK_FLASH_CMD_READ_SECTOR, payload, sizeof(payload))) {
+        return false;
+    }
+
+    size_t bytesRead =
+        _bridge->readResponse(DAPLINK_FLASH_CMD_READ_SECTOR, buf, DAPLINK_FLASH_SECTOR_SIZE);
+
+    return bytesRead == DAPLINK_FLASH_SECTOR_SIZE;
 }
 
 size_t DaplinkFlash::readUntilSentinel(uint8_t* result, size_t maxLen) {
@@ -146,7 +166,9 @@ size_t DaplinkFlash::readUntilSentinel(uint8_t* result, size_t maxLen) {
 
     for (uint16_t sector = 0; sector < DAPLINK_FLASH_MAX_SECTORS; sector++) {
         uint8_t data[DAPLINK_FLASH_SECTOR_SIZE];
-        readSector(sector, data);
+        if (!readSector(sector, data)) {
+            return resultLen;
+        }
         for (int i = 0; i < DAPLINK_FLASH_SECTOR_SIZE; i++) {
             if (data[i] == 0xFF) {
                 return resultLen;
@@ -169,13 +191,14 @@ size_t DaplinkFlash::readN(uint8_t* result, size_t n) {
 
     for (uint16_t sector = 0; sector < DAPLINK_FLASH_MAX_SECTORS; sector++) {
         uint8_t data[DAPLINK_FLASH_SECTOR_SIZE];
-        readSector(sector, data);
+        if (!readSector(sector, data)) {
+            return resultLen;
+        }
 
         for (size_t i = 0; i < DAPLINK_FLASH_SECTOR_SIZE; i++) {
             if (resultLen >= n) {
                 return resultLen;
             }
-
             result[resultLen++] = data[i];
         }
     }

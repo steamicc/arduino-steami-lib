@@ -41,7 +41,7 @@ void setup() {
 | Method | Description |
 |--------|-------------|
 | `DaplinkFlash(DaplinkBridge& bridge)` | Construct. Requires an initialized `DaplinkBridge` instance. |
-| `void begin()` | Initialize the flash interface. Must be called after the bridge is ready. |
+| `bool begin()` | Initialize the flash interface. Must be called after the bridge is ready. Returns `true` if successful. |
 
 ### Filename management
 
@@ -65,7 +65,7 @@ void setup() {
 |--------|-------------|
 | `void readSector(uint16_t sector, uint8_t* buf)` | Read a 256-byte sector from flash into `buf`. |
 | `size_t readN(uint8_t* result, size_t maxLen)` | Read up to `maxLen` bytes of file content into `result`. Returns the number of bytes read. |
- | `size_t readUntilSentinel(uint8_t* result, size_t maxLen)` | Read file content into `result` until the first `0xFF` sentinel is encountered, or until `maxLen` bytes have been read. Returns the number of bytes read. |
+| `size_t readUntilSentinel(uint8_t* result, size_t maxLen)` | Read file content into `result` until the first `0xFF` sentinel is encountered, or until `maxLen` bytes have been read. Returns the number of bytes read. |
 
 ## Register constants
 

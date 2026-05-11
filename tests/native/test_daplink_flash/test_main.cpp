@@ -21,6 +21,7 @@ DaplinkFlash flash(bridge);
 void setUp() {
     Wire = TwoWire();
     Wire.setRegister(ADDR, DAPLINK_BRIDGE_CMD_WHO_AM_I, DAPLINK_BRIDGE_WHO_AM_I);
+    Wire.setRegister(ADDR, DAPLINK_BRIDGE_REG_ERROR, 0x00);
     preloadBusy(false);
     bridge = DaplinkBridge();
     flash = DaplinkFlash(bridge);
@@ -40,14 +41,29 @@ void test_begin_rejects_wrong_who_am_i(void) {
 void test_set_filename_sends_correct_payload(void) {
     Wire.clearWrites();
     flash.setFilename("TEST", "TXT");
-    bool sawWrite = false;
+    bool foundCmd = false;
+    bool payloadCorrect = false;
+
     for (const auto& w : Wire.getWrites()) {
         if (w.reg == DAPLINK_FLASH_CMD_SET_FILENAME) {
-            sawWrite = true;
+            foundCmd = true;
             break;
         }
     }
-    TEST_ASSERT_TRUE(sawWrite);
+
+    if (foundCmd) {
+        const auto& writes = Wire.getWrites();
+        if (writes.size() >= 10) {
+            payloadCorrect =
+                (writes[0].value == 'T') && (writes[1].value == 'E') && (writes[2].value == 'S') &&
+                (writes[3].value == 'T') && (writes[4].value == ' ') && (writes[5].value == ' ') &&
+                (writes[6].value == ' ') && (writes[7].value == ' ') && (writes[8].value == 'T') &&
+                (writes[9].value == 'X') && (writes[10].value == 'T');
+        }
+    }
+
+    TEST_ASSERT_TRUE(foundCmd);
+    TEST_ASSERT_TRUE(payloadCorrect);
 }
 
 void test_get_filename_returns_stripped_name(void) {
@@ -67,16 +83,18 @@ void test_get_filename_returns_stripped_name(void) {
 
 void test_clear_flash_sends_cmd(void) {
     Wire.clearWrites();
+    Wire.clearCommands();
     flash.clearFlash();
 
     bool sawCmd = false;
-    for (const auto& w : Wire.getWrites()) {
-        if (w.reg == DAPLINK_FLASH_CMD_CLEAR_FLASH) {
+    for (const auto& cmd : Wire.getCommands()) {
+        if (cmd.cmd == DAPLINK_FLASH_CMD_CLEAR_FLASH) {
             sawCmd = true;
+            break;
         }
     }
 
-    TEST_ASSERT_TRUE(true);
+    TEST_ASSERT_TRUE(sawCmd);
 }
 
 void test_write_sends_data(void) {
@@ -115,25 +133,37 @@ void test_write_line_appends_newline(void) {
 void test_read_sector_sends_correct_command(void) {
     Wire.clearWrites();
     uint8_t buf[DAPLINK_FLASH_SECTOR_SIZE];
-    flash.readSector(5, buf);
-    bool sawCmd = false;
-    for (const auto& w : Wire.getWrites()) {
-        if (w.reg == DAPLINK_FLASH_CMD_READ_SECTOR) {
-            sawCmd = true;
+    flash.readSector(0x1234, buf);
+
+    const auto& writes = Wire.getWrites();
+    bool foundAndCorrect = false;
+
+    for (size_t i = 0; i < writes.size(); ++i) {
+        if (writes[i].reg == DAPLINK_FLASH_CMD_READ_SECTOR) {
+            if (i + 1 < writes.size()) {
+                uint8_t sectorHi = writes[i].value;
+                uint8_t sectorLo = writes[i + 1].value;
+                if (sectorHi == 0x12 && sectorLo == 0x34) {
+                    foundAndCorrect = true;
+                }
+            }
             break;
         }
     }
-    TEST_ASSERT_TRUE(sawCmd);
+
+    TEST_ASSERT_TRUE(foundAndCorrect);
 }
 
 void test_read_stops_at_sentinel(void) {
     uint8_t data[DAPLINK_FLASH_SECTOR_SIZE];
     memset(data, 'A', sizeof(data));
-    data[10] = 0xFF;  // Sentinel
+    data[10] = 0xFF;
 
     for (size_t i = 0; i < sizeof(data); i++) {
         Wire.setRegister(ADDR, DAPLINK_BRIDGE_REG_RESPONSE + i, data[i]);
     }
+
+    Wire.setRegister(ADDR, DAPLINK_BRIDGE_REG_ERROR, 0x00);
 
     uint8_t result[20];
     size_t len = flash.readUntilSentinel(result, sizeof(result));
@@ -150,6 +180,8 @@ void test_read_limited_by_maxlen(void) {
     for (size_t i = 0; i < sizeof(data); i++) {
         Wire.setRegister(ADDR, DAPLINK_BRIDGE_REG_RESPONSE + i, data[i]);
     }
+
+    Wire.setRegister(ADDR, DAPLINK_BRIDGE_REG_ERROR, 0x00);
 
     uint8_t result[20];
     size_t len = flash.readUntilSentinel(result, sizeof(result));
