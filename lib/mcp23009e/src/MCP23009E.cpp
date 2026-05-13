@@ -94,6 +94,19 @@ bool MCP23009E::begin() {
     return true;
 }
 
+uint8_t MCP23009E::setBit(uint8_t reg, uint8_t bit, uint8_t value) {
+    if (value == 0) {
+        reg &= ~(1 << bit);
+    } else {
+        reg |= (1 << bit);
+    }
+    return reg;
+}
+
+uint8_t MCP23009E::getBit(uint8_t reg, uint8_t bit) {
+    return (reg & (1 << bit)) ? 1 : 0;
+}
+
 void MCP23009E::reset() {
     // Effectue un reset hardware du MCP23009E
     digitalWrite(_resetPin, LOW);
@@ -447,9 +460,7 @@ void MCP23009E::interruptEvent() {
 
 MCP23009Pin::MCP23009Pin(MCP23009E& mcp, uint8_t pinNumber, uint8_t mode, uint8_t pull,
                          uint8_t value)
-    : _mcp(mcp), _pinNumber(pinNumber), _mode(mode), _pull(pull), _value(value) {}
-
-bool MCP23009Pin::begin() {
+    : _mcp(mcp), _pinNumber(pinNumber), _mode(mode), _pull(pull), _value(value) {
     if (_mode != -1) {
         init(_mode, _pull, _value);
     }
@@ -591,12 +602,11 @@ MCP23009ActiveLowPin::MCP23009ActiveLowPin(MCP23009E& mcp, uint8_t pinNumber, ui
       _mode(mode),
       _pull(pull),
       _value(value),
-      _pin(mcp, pinNumber, 0xFF, 0xFF, 0xFF) {}
-
-bool MCP23009ActiveLowPin::begin() {
+      _pin(mcp, pinNumber, 0xFF, 0xFF, 0xFF) {
     if (_mode == 0xff) {
         _mode = MCP23009Pin::OUT;
     }
+    _pin.init(_mode, _pull, 0xFF);
     if (_value != 0xff) {
         this->value(_value);
     } else if (_mode == MCP23009Pin::OUT) {

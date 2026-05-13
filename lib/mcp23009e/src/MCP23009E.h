@@ -102,7 +102,6 @@ class MCP23009Pin {
 
     MCP23009Pin(MCP23009E& mcp, uint8_t pinNumber, uint8_t mode, uint8_t pull, uint8_t value);
 
-    bool begin();
     void init(uint8_t mode = 0xFF, uint8_t pull = 0xFF, uint8_t value = 0xFF);
     uint8_t value(uint8_t x = 0xFF);
     void on();
@@ -134,7 +133,6 @@ class MCP23009ActiveLowPin {
     MCP23009ActiveLowPin(MCP23009E& mcp, uint8_t pinNumber, uint8_t mode, uint8_t pull,
                          uint8_t value);
 
-    bool begin();
     void init(uint8_t mode = 0xFF, uint8_t pull = 0xFF, uint8_t value = 0xFF);
     uint8_t value(uint8_t x = 0xFF);
     void on();
