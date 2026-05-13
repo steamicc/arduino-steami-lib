@@ -65,8 +65,9 @@ inline void delay(uint32_t ms) {
     millisClock() += ms;
 }
 
-inline void attachInterrupt(int /*pin*/, const std::function<void()>& /*handler*/, int /*mode*/) {
-    // no-op in native tests
+inline void attachInterrupt(uint8_t /* pin */, const std::function<void()>& /* isr */,
+                            int /* mode */) {
+    // null operation for native tests
 }
 
 inline int digitalPinToInterrupt(int pin) {
