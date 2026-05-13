@@ -11,7 +11,6 @@
 
 class MCP23009Config {
    public:
-    // come of device.py
     MCP23009Config(uint8_t reg = 0x00);
 
     MCP23009Config& setSeqop();
