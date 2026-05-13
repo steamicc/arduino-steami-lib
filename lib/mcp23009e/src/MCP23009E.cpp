@@ -8,70 +8,70 @@ MCP23009Config::MCP23009Config(uint8_t reg) : _reg(reg) {}
 
 MCP23009Config& MCP23009Config::setSeqop() {
     // Active SEQOP : l'adresse du pointeur ne s'incrémente pas
-    _reg |= 0x20;
+    _reg |= MCP23009_IOCON_SEQOP;
     return *this;
 }
 
 MCP23009Config& MCP23009Config::clearSeqop() {
     // Désactive SEQOP : l'adresse du pointeur s'incrémente
-    _reg &= ~0x20;
+    _reg &= ~MCP23009_IOCON_SEQOP;
     return *this;
 }
 
 bool MCP23009Config::hasSeqop() {
     // Vérifie si SEQOP est activé
-    return (_reg & 0x20) > 0;
+    return (_reg & MCP23009_IOCON_SEQOP) > 0;
 }
 
 MCP23009Config& MCP23009Config::setOdr() {
     // Active ODR : sortie INT en drain ouvert
-    _reg |= 0x04;
+    _reg |= MCP23009_IOCON_ODR;
     return *this;
 }
 
 MCP23009Config& MCP23009Config::clearOdr() {
     // Désactive ODR : sortie INT en active driver
-    _reg &= ~0x04;
+    _reg &= ~MCP23009_IOCON_ODR;
     return *this;
 }
 
 bool MCP23009Config::hasOdr() {
     // Vérifie si ODR est activé
-    return (_reg & 0x04) > 0;
+    return (_reg & MCP23009_IOCON_ODR) > 0;
 }
 
 MCP23009Config& MCP23009Config::setIntpol() {
     // Configure la polarité INT à Active-High
-    _reg |= 0x02;
+    _reg |= MCP23009_IOCON_INTPOL;
     return *this;
 }
 
 MCP23009Config& MCP23009Config::clearIntpol() {
     // Configure la polarité INT à Active-Low
-    _reg &= ~0x02;
+    _reg &= ~MCP23009_IOCON_INTPOL;
     return *this;
 }
 
 bool MCP23009Config::hasIntpol() {
     // Vérifie si INTPOL est configuré à Active-High
-    return (_reg & 0x02) > 0;
+    return (_reg & MCP23009_IOCON_INTPOL) > 0;
 }
 
 MCP23009Config& MCP23009Config::setIntcc() {
     // Active INTCC : lecture de INTCAP efface l'interruption
-    _reg |= 0x01;
+    _reg |= MCP23009_IOCON_INTCC;
     return *this;
 }
 
 MCP23009Config& MCP23009Config::clearIntcc() {
     // Désactive INTCC : lecture de GPIO efface l'interruption
-    _reg &= ~0x01;
+    _reg &= ~MCP23009_IOCON_INTCC;
     return *this;
 }
 
 bool MCP23009Config::hasIntcc() {
     // Vérifie si INTCC est activé
-    return (_reg & 0x01) > 0;
+    return (_reg & MCP23009_IOCON_INTCC) > 0;
 }
 
 uint8_t MCP23009Config::getRegisterValue() {

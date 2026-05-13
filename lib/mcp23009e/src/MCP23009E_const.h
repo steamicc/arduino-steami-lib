@@ -22,6 +22,7 @@ constexpr uint8_t MCP23009_IOCON_SEQOP = 0x20;   // Mode d'opération séquentie
 constexpr uint8_t MCP23009_IOCON_DISSLW = 0x10;  // Désactive le slew rate
 constexpr uint8_t MCP23009_IOCON_ODR = 0x04;     // Configure INT comme drain ouvert
 constexpr uint8_t MCP23009_IOCON_INTPOL = 0x02;  // Polarité de la sortie INT
+constexpr uint8_t MCP23009_IOCON_INTCC = 0x01;   // Mode de capture d'interruption
 
 // Adresse I2C mise à jour pour 0x20
 constexpr uint8_t MCP23009_I2C_ADDR = 0x20;
