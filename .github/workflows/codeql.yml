@@ -1,0 +1,48 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Weekly Monday 12:00 UTC — matches the cadence the previous default
+    # setup was configured to use, so the security tab doesn't get a
+    # stale finding without a fresh scan to confirm it.
+    - cron: '0 12 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, c-cpp, javascript-typescript, python]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # `none` skips the build step for compiled languages and runs
+          # static analysis directly on the sources. Mirrors the previous
+          # default setup behaviour (no PlatformIO toolchain needed in
+          # the CodeQL runner) and keeps wall-clock under a couple of
+          # minutes per language.
+          build-mode: none
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
