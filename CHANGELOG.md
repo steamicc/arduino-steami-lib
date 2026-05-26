@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.9.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.8.0...v0.9.0) (2026-05-26)
+
+
+### Features
+
+* **wsen-hids:** Add basic driver. ([#131](https://github.com/steamicc/arduino-steami-lib/issues/131)) ([e0cab75](https://github.com/steamicc/arduino-steami-lib/commit/e0cab752a3f58da090babc7d70bafa6a0aab70ea)), closes [#pragma](https://github.com/steamicc/arduino-steami-lib/issues/pragma) [steamicc/micropython-steami-lib#425](https://github.com/steamicc/micropython-steami-lib/issues/425) [hi#level](https://github.com/hi/issues/level) [steamicc/micropython-steami-lib#425](https://github.com/steamicc/micropython-steami-lib/issues/425) [steamicc/micropython-steami-lib#425](https://github.com/steamicc/micropython-steami-lib/issues/425)
+
 # [0.8.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.7.4...v0.8.0) (2026-04-29)
 
 
