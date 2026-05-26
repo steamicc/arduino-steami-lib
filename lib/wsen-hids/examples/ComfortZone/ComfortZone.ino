@@ -68,4 +68,8 @@ void loop() {
     Serial.print(reading.humidity, 1);
     Serial.print(" %  ->  ");
     Serial.println(classifyComfort(reading.temperature, reading.humidity));
+
+    // Wait for the next 1 Hz sample. The 10 ms poll above only kicks in
+    // for the last fraction of a second before the next dataReady flag.
+    delay(1000);
 }
