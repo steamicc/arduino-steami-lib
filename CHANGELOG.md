@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.16.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.15.0...v0.16.0) (2026-05-26)
+
+
+### Features
+
+* **tooling:** Add YAML-driven qualification harness. ([#168](https://github.com/steamicc/arduino-steami-lib/issues/168)) ([b54f3af](https://github.com/steamicc/arduino-steami-lib/commit/b54f3afc8b564b103c0fc953336a4ea8321c9906)), closes [#124](https://github.com/steamicc/arduino-steami-lib/issues/124)
+
 # [0.15.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.14.0...v0.15.0) (2026-05-26)
 
 
