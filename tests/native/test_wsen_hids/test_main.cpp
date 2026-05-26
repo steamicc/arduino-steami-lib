@@ -193,20 +193,27 @@ void test_read_auto_triggers_when_powered_down(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 10.0f, r.temperature);
     TEST_ASSERT_FLOAT_WITHIN(0.1f, 30.0f, r.humidity);
 
-    // The read() flow should have emitted a CTRL1 power-up and a CTRL2
-    // ONE_SHOT write before reading the OUT registers.
-    bool sawCtrl1PowerUp = false;
+    // The read() flow should have written CTRL1 with PD=1, BDU=1, and
+    // ODR=12.5 Hz (continuous mode auto-bring-up). It must NOT have
+    // touched CTRL2.ONE_SHOT — the one-shot path is unreliable on this
+    // silicon and the driver deliberately avoids it here.
+    bool sawCtrl1Continuous = false;
     bool sawCtrl2OneShot = false;
     for (const auto& w : Wire.getWrites()) {
-        if (w.reg == WSEN_HIDS_REG_CTRL1 && (w.value & WSEN_HIDS_CTRL1_PD)) {
-            sawCtrl1PowerUp = true;
+        if (w.reg == WSEN_HIDS_REG_CTRL1) {
+            uint8_t expected = WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU | WSEN_HIDS_ODR_12_5_HZ;
+            if (w.value == expected) {
+                sawCtrl1Continuous = true;
+            }
         }
         if (w.reg == WSEN_HIDS_REG_CTRL2 && (w.value & WSEN_HIDS_CTRL2_ONE_SHOT)) {
             sawCtrl2OneShot = true;
         }
     }
-    TEST_ASSERT_TRUE_MESSAGE(sawCtrl1PowerUp, "auto-trigger missed CTRL1 PD write");
-    TEST_ASSERT_TRUE_MESSAGE(sawCtrl2OneShot, "auto-trigger missed CTRL2 ONE_SHOT write");
+    TEST_ASSERT_TRUE_MESSAGE(sawCtrl1Continuous,
+                             "auto-trigger missed CTRL1 PD|BDU|ODR=12.5Hz write");
+    TEST_ASSERT_FALSE_MESSAGE(sawCtrl2OneShot,
+                              "auto-trigger must not poke the unreliable ONE_SHOT path");
 }
 
 void test_set_temperature_offset_shifts_reading(void) {

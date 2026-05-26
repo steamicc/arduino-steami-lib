@@ -96,9 +96,15 @@ redundant `read` / `get` prefixes.
 
 ### Reading
 
-If the part is powered down when a read is requested, the driver auto-
-triggers a one-shot measurement, polls `dataReady()` with a timeout, and
-returns the result. The caller doesn't have to manage modes manually.
+If the part is powered down when a read is requested, the driver
+switches it to continuous mode at 12.5 Hz, polls `dataReady()` with a
+timeout, and returns the first sample. The caller doesn't have to
+manage modes manually — but be aware that the chip stays powered on in
+continuous mode afterwards (call `powerOff()` if you want it back in
+low-power sleep). The auto-bring-up uses the continuous path rather
+than `CTRL2.ONE_SHOT` because the on-board silicon does not honour the
+one-shot trigger reliably (see also the matching MicroPython issue in
+`steamicc/micropython-steami-lib`).
 
 | Method | Description |
 |--------|-------------|

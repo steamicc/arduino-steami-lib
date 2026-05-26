@@ -77,12 +77,19 @@ float WsenHids::humidity() {
 
 WsenHids::ReadResult WsenHids::read() {
     if (!isPoweredOn()) {
-        triggerOneShot();
-        if (!waitForDataReady()) {
-            // Device never reported fresh data — bus issue, missing sensor,
-            // or the caller disabled ODR and didn't trigger a conversion.
-            // Surface the failure as NaN so silent stale readings can't
-            // propagate; callers can check with isnan().
+        // Auto-trigger via continuous mode at 12.5 Hz rather than the
+        // CTRL2.ONE_SHOT path. The one-shot mechanism is unreliable on
+        // this silicon (the bit latches at 1 and STATUS never goes high
+        // — same issue in the MicroPython sister project and absent
+        // from both the Würth reference SDK and the stm32duino HTS221
+        // high-level wrapper, which both stick to continuous mode).
+        // 12.5 Hz keeps the first-sample latency under ~80 ms while
+        // letting the chip stay awake for subsequent reads.
+        setContinuous(WSEN_HIDS_ODR_12_5_HZ);
+        if (!waitForDataReady(200)) {
+            // Device never reported fresh data — bus issue or missing
+            // sensor. Surface the failure as NaN so silent stale
+            // readings can't propagate; callers can check with isnan().
             return {NAN, NAN};
         }
     }
