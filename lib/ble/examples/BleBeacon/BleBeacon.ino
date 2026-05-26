@@ -2,20 +2,20 @@
 //
 // BleBeacon — advertise the board name and a live temperature reading.
 //
-// The HTS221 temperature is encoded as int16 x100 in the manufacturer-
+// The WSEN-HIDS temperature is encoded as int16 x100 in the manufacturer-
 // specific data field (company ID 0x0059). The beacon is visible from
 // any BLE scanner app (nRF Connect, LightBlue, etc.).
 //
-// Wiring: no external hookup needed. The HTS221 sits on the STeaMi
+// Wiring: no external hookup needed. The WSEN-HIDS sits on the STeaMi
 // internal I2C bus. Flash and open the serial monitor at 115200 baud.
 
 #include <Arduino.h>
-#include <HTS221.h>
 #include <STM32duinoBLE.h>
+#include <WsenHids.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-HTS221 sensor(internalI2C);
+WsenHids sensor(internalI2C);
 
 void setup() {
     Serial.begin(115200);
@@ -25,12 +25,12 @@ void setup() {
     // Init sensor
     internalI2C.begin();
     if (!sensor.begin()) {
-        Serial.println("HTS221 not detected — check wiring.");
+        Serial.println("WSEN-HIDS not detected — check wiring.");
         while (true)
             ;
     }
-    sensor.setContinuous(HTS221_ODR_1_HZ);
-    Serial.println("HTS221 ready.");
+    sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
+    Serial.println("WSEN-HIDS ready.");
 
     // Init BLE
     if (!BLE.begin()) {
