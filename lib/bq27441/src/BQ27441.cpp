@@ -258,8 +258,8 @@ uint16_t BQ27441::soc1SetThreshold() {
 
 uint16_t BQ27441::setSoc1Thresholds(uint16_t set_soc, uint16_t clear_soc) {
     uint8_t thresholds[2] = {0, 0};
-    thresholds[0] = clamp<uint8_t>(static_cast<uint8_t>(set_soc), 0, 100);
-    thresholds[1] = clamp<uint8_t>(static_cast<uint8_t>(clear_soc), 0, 100);
+    thresholds[0] = bq27441_detail::clamp<uint8_t>(static_cast<uint8_t>(set_soc), 0, 100);
+    thresholds[1] = bq27441_detail::clamp<uint8_t>(static_cast<uint8_t>(clear_soc), 0, 100);
     return writeExtendedData(BQ27441_ID_DISCHARGE, 0, thresholds, 2);
 }
 
@@ -273,8 +273,8 @@ uint16_t BQ27441::socfClearThreshold() {
 
 uint16_t BQ27441::setSocfThresholds(uint16_t set_socf, uint16_t clear_socf) {
     uint8_t thresholds[2] = {0, 0};
-    thresholds[0] = clamp<uint8_t>(static_cast<uint8_t>(set_socf), 0, 100);
-    thresholds[1] = clamp<uint8_t>(static_cast<uint8_t>(clear_socf), 0, 100);
+    thresholds[0] = bq27441_detail::clamp<uint8_t>(static_cast<uint8_t>(set_socf), 0, 100);
+    thresholds[1] = bq27441_detail::clamp<uint8_t>(static_cast<uint8_t>(clear_socf), 0, 100);
     return writeExtendedData(BQ27441_ID_DISCHARGE, 2, thresholds, 2);
 }
 
@@ -288,7 +288,7 @@ uint16_t BQ27441::sociDelta() {
 }
 
 uint16_t BQ27441::setSociDelta(uint16_t delta) {
-    uint8_t soci = clamp<uint8_t>(static_cast<uint8_t>(delta), 0, 100);
+    uint8_t soci = bq27441_detail::clamp<uint8_t>(static_cast<uint8_t>(delta), 0, 100);
     return writeExtendedData(BQ27441_ID_STATE, 26, &soci, 1);
 }
 
@@ -338,7 +338,10 @@ bool BQ27441::exitConfig(bool resim) {
             uint32_t start_ms = TimeMs();
             bool timeout = false;
 
-            while (not(flags() & BQ27441_FLAG_CFGUPMODE)) {
+            // After softReset, CFGUPMODE clears as the gauge leaves
+            // config-update mode. enterConfig() waits for it to go high;
+            // exitConfig() must wait for it to go low.
+            while (flags() & BQ27441_FLAG_CFGUPMODE) {
                 delay(1);
                 uint32_t elapsed_ms = TimeMs() - start_ms;
                 if (elapsed_ms > BQ27441_I2C_TIMEOUT) {
@@ -488,7 +491,9 @@ uint16_t BQ27441::computeBlockChecksum() {
 
 uint16_t BQ27441::readExtendedData(uint16_t class_id, uint16_t offset) {
     if (not _user_config_control) {
-        enterConfig(false);
+        if (not enterConfig(false)) {
+            return 0;
+        }
     }
 
     if (not blockDataControl()) {
@@ -519,7 +524,9 @@ uint16_t BQ27441::writeExtendedData(uint16_t class_id, uint16_t offset, const ui
     }
 
     if (not _user_config_control) {
-        enterConfig(false);
+        if (not enterConfig(false)) {
+            return false;
+        }
     }
 
     if (not blockDataControl()) {
@@ -553,9 +560,17 @@ bool BQ27441::readReg(uint8_t sub_address, uint8_t* buf, uint16_t count) {
     _wire.write(sub_address);
     if (_wire.endTransmission(false) != 0)
         return false;
-    _wire.requestFrom(_address, count);
+    // Short reads return -1 from Wire.read() which becomes 0xFF when
+    // assigned to a uint8_t, so the caller would silently parse garbage.
+    // Treat any partial response as a hard failure.
+    if (_wire.requestFrom(_address, count) != count) {
+        return false;
+    }
     for (uint16_t i = 0; i < count; i++) {
-        buf[i] = _wire.read();
+        if (not _wire.available()) {
+            return false;
+        }
+        buf[i] = static_cast<uint8_t>(_wire.read());
     }
     return true;
 }

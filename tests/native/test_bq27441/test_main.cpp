@@ -14,7 +14,7 @@ static void preloadWhoAmI(bool valid = true) {
     Wire.setRegister(ADDR, 0x01, (value >> 8) & 0xFF);
 }
 
-static void preloadMensuration(uint16_t voltage, int16_t current_avg, uint8_t soc) {
+static void preloadMeasurement(uint16_t voltage, int16_t current_avg, uint8_t soc) {
     Wire.setRegister(ADDR, BQ27441_COMMAND_VOLTAGE, voltage & 0xFF);
     Wire.setRegister(ADDR, BQ27441_COMMAND_VOLTAGE + 1, (voltage >> 8) & 0xFF);
     Wire.setRegister(ADDR, BQ27441_COMMAND_AVG_CURRENT, current_avg & 0xFF);
@@ -50,17 +50,17 @@ void test_begin_returns_false_when_device_id_wrong(void) {
 }
 
 void test_voltage_returns_raw_register_value(void) {
-    preloadMensuration(4700, 0, 0);
+    preloadMeasurement(4700, 0, 0);
     TEST_ASSERT_EQUAL(4700, sensor->voltageMv());
 }
 
 void test_current_average_returns_signed_value(void) {
-    preloadMensuration(0, -1000, 0);
+    preloadMeasurement(0, -1000, 0);
     TEST_ASSERT_EQUAL(-1000, sensor->currentAverage());
 }
 
 void test_state_of_charge_returns_filtered_soc(void) {
-    preloadMensuration(0, 0, 80);
+    preloadMeasurement(0, 0, 80);
     TEST_ASSERT_EQUAL(80, sensor->stateOfCharge());
 }
 
@@ -117,10 +117,25 @@ void test_power_off_sends_shutdown_commands(void) {
     TEST_ASSERT_EQUAL(BQ27441_CONTROL_SHUTDOWN, (subcommand_high << 8) | subcommand_low);
 }
 
-void test_set_capacity_returns_valid_result(void) {
+void test_set_capacity_returns_success(void) {
+    // setCapacity forwards writeExtendedData's bool through a uint16_t —
+    // 1 on success, 0 on bridge error. writeExtendedData internally
+    // calls enterConfig() which polls FLAGS.CFGUPMODE; preload it set
+    // so the mock advances past the polling loop and returns success.
+    Wire.setRegister(ADDR, BQ27441_COMMAND_FLAGS, BQ27441_FLAG_CFGUPMODE & 0xFF);
+    Wire.setRegister(ADDR, BQ27441_COMMAND_FLAGS + 1, (BQ27441_FLAG_CFGUPMODE >> 8) & 0xFF);
+
     uint16_t capacity = 0x1234;
     uint16_t result = sensor->setCapacity(capacity);
-    TEST_ASSERT_TRUE(result >= 0);
+    TEST_ASSERT_EQUAL(1, result);
+}
+
+void test_set_capacity_returns_zero_when_enter_config_fails(void) {
+    // FLAGS stays at the setUp default (CFGUPMODE clear), so
+    // enterConfig() loops until timeout and returns false. The new
+    // guard in writeExtendedData() must propagate that as a failure.
+    uint16_t result = sensor->setCapacity(0x1234);
+    TEST_ASSERT_EQUAL(0, result);
 }
 
 void test_voltage_returns_max_value_when_registers_maxed(void) {
@@ -139,6 +154,13 @@ void test_power_on_executes_successfully(void) {
 }
 
 void test_voltage_returns_zero_on_i2c_error(void) {
+    // Inject a NACK on the address phase: every endTransmission() now
+    // returns 2, which readReg() must propagate as a failure (and
+    // readWord() / voltageMv() surface as 0).
+    Wire.setEndTransmissionResult(2);
+    Wire.setRegister(ADDR, BQ27441_COMMAND_VOLTAGE, 0xCD);
+    Wire.setRegister(ADDR, BQ27441_COMMAND_VOLTAGE + 1, 0xAB);
+
     TEST_ASSERT_EQUAL(0, sensor->voltageMv());
 }
 
@@ -176,7 +198,8 @@ int main(void) {
     RUN_TEST(test_data_ready_returns_true_when_initcomp_set);
     RUN_TEST(test_sealed_returns_true_when_ss_bit_set);
     RUN_TEST(test_power_off_sends_shutdown_commands);
-    RUN_TEST(test_set_capacity_returns_valid_result);
+    RUN_TEST(test_set_capacity_returns_success);
+    RUN_TEST(test_set_capacity_returns_zero_when_enter_config_fails);
     RUN_TEST(test_voltage_returns_max_value_when_registers_maxed);
     RUN_TEST(test_device_id_returns_expected_value);
     RUN_TEST(test_power_on_executes_successfully);

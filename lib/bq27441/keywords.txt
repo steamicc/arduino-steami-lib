@@ -8,11 +8,10 @@
 
 BQ27441	KEYWORD1
 CurrentMeasureType	KEYWORD1
-CapacityMeasureType KEYWORD1
-SocMeasureType KEYWORD1
-SohMeasureType KEYWORD1
-TempMeasureType KEYWORD1
-GpoutFunctionType KEYWORD1
+CapacityMeasureType	KEYWORD1
+SocMeasureType	KEYWORD1
+SohMeasureType	KEYWORD1
+TempMeasureType	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)

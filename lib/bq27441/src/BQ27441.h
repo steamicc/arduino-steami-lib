@@ -7,6 +7,7 @@
 
 #include "BQ27441_const.h"
 
+namespace bq27441_detail {
 template <typename T>
 inline T clamp(T x, T a, T b) {
     if (x < a) {
@@ -17,6 +18,7 @@ inline T clamp(T x, T a, T b) {
     }
     return x;
 }
+}  // namespace bq27441_detail
 
 class BQ27441 {
    public:
@@ -57,12 +59,6 @@ class BQ27441 {
     enum class TempMeasureType {
         BATTERY = 0,       // Battery Temperature (DEFAULT)
         INTERNAL_TEMP = 1  // Internal IC Temperature
-    };
-
-    // Parameters for the set_gpout_function() function
-    enum class GpoutFunctionType {
-        SOC_INT = 0,  // Set GPOUT to SOC_INT functionality
-        BAT_LOW = 1   // Set GPOUT to BAT_LOW functionality
     };
 
     BQ27441(TwoWire& wire = Wire, uint16_t capacity_mAh = LIPO_BATTERY_CAPACITY,

@@ -22,6 +22,12 @@ class TwoWire {
     }
 
     uint8_t endTransmission(bool = true) {
+        // Tests that want to exercise the I2C error path opt-in via
+        // setEndTransmissionResult(non-zero). Default = success.
+        if (endTransmissionResult_ != 0) {
+            txBuffer_.clear();
+            return endTransmissionResult_;
+        }
         if (txBuffer_.size() >= 2) {
             // [reg, val0, val1, ...] — I2C auto-increment: each value lands at
             // reg + offset, one WriteOp per byte so tests can assert the full
@@ -39,6 +45,10 @@ class TwoWire {
         }
         return 0;
     }
+
+    // Force endTransmission() to fail with the given Arduino I2C error
+    // code (1 = data too long, 2 = NACK on addr, 3 = NACK on data, 4 = other).
+    void setEndTransmissionResult(uint8_t result) { endTransmissionResult_ = result; }
 
     uint8_t requestFrom(uint8_t address, uint8_t quantity) {
         rxBuffer_.clear();
@@ -123,6 +133,7 @@ class TwoWire {
     size_t rxIndex_ = 0;
     std::map<uint16_t, uint8_t> registers_;
     std::vector<WriteOp> writes_;
+    uint8_t endTransmissionResult_ = 0;
 };
 
 inline TwoWire Wire;
