@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.12.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.11.0...v0.12.0) (2026-05-26)
+
+
+### Features
+
+* **ble:** Add BLE RSSI room mapper example with CSV export. ([#142](https://github.com/steamicc/arduino-steami-lib/issues/142)) ([a966bec](https://github.com/steamicc/arduino-steami-lib/commit/a966bec490106f3204aaf69fa17efc9d9c6eed00))
+
 # [0.11.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.10.0...v0.11.0) (2026-05-26)
 
 
