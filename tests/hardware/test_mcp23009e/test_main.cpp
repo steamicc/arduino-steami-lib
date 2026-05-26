@@ -29,6 +29,14 @@ void test_mcp23009e_begin_succeeds() {
     TEST_ASSERT_TRUE(expander.begin());
 }
 
+// Datasheet power-on default for IODIR is 0xFF (all pins as inputs).
+// begin() toggles the reset pin so the chip should be back at that
+// default. Catches a regression where reset wiring doesn't actually
+// pulse the device.
+void test_mcp23009e_iodir_default_after_begin() {
+    TEST_ASSERT_EQUAL_HEX8(0xFF, expander.getIodir());
+}
+
 // Write a known direction mask, read it back. Catches any I2C
 // transport regression on the GPIO register family.
 void test_mcp23009e_iodir_roundtrip() {
@@ -86,6 +94,7 @@ void setup() {
 
     UNITY_BEGIN();
     RUN_TEST(test_mcp23009e_begin_succeeds);
+    RUN_TEST(test_mcp23009e_iodir_default_after_begin);
     RUN_TEST(test_mcp23009e_iodir_roundtrip);
     RUN_TEST(test_mcp23009e_gppu_roundtrip);
     RUN_TEST(test_mcp23009e_dpad_idle_reads_high);

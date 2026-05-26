@@ -110,6 +110,27 @@ void testGetGppuReadsCorrectRegister(void) {
     TEST_ASSERT_EQUAL(0xF0, mcp->getGppu());
 }
 
+// OLAT round-trip — ported from the MicroPython scenario "Set and get
+// OLAT register". OLAT is the latch register driving the output pins;
+// callers can write it directly to bypass setLevel()'s pin-by-pin
+// masking, so the round-trip is part of the public contract.
+void testSetOlatWritesCorrectRegister(void) {
+    mcp->setOlat(0x3C);
+    bool found = false;
+    for (const auto& w : Wire.getWrites()) {
+        if (w.reg == MCP23009_OLAT && w.value == 0x3C) {
+            found = true;
+            break;
+        }
+    }
+    TEST_ASSERT_TRUE(found);
+}
+
+void testGetOlatReadsCorrectRegister(void) {
+    Wire.setRegister(ADDR, MCP23009_OLAT, 0x3C);
+    TEST_ASSERT_EQUAL(0x3C, mcp->getOlat());
+}
+
 void testSetupConfiguresDirection(void) {
     mcp->setup(0, MCP23009Pin::OUT);
     bool found = false;
@@ -455,6 +476,8 @@ int main(void) {
     RUN_TEST(testGetGpioReadsCorrectRegister);
     RUN_TEST(testSetGppuWritesCorrectRegister);
     RUN_TEST(testGetGppuReadsCorrectRegister);
+    RUN_TEST(testSetOlatWritesCorrectRegister);
+    RUN_TEST(testGetOlatReadsCorrectRegister);
     RUN_TEST(testSetupConfiguresDirection);
     RUN_TEST(testSetupConfiguresPullup);
     RUN_TEST(testSetupConfiguresPolarity);
