@@ -72,7 +72,12 @@ class MCP23009E {
     void interruptEvent();
 
    private:
-    TwoWire& _wire;
+    // Stored as a pointer (not a reference) so the class is
+    // default-assignable — matches the convention in HTS221 / WsenHids
+    // and the CONTRIBUTING.md "Attributes" guidance. The public
+    // constructor still takes a TwoWire& to keep the usual Arduino
+    // I2C interface at the call site.
+    TwoWire* _wire;
     uint8_t _address;
     uint8_t _resetPin;
     int _interruptPin;

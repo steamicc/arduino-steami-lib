@@ -80,7 +80,7 @@ uint8_t MCP23009Config::getRegisterValue() {
 }
 
 MCP23009E::MCP23009E(TwoWire& wire, uint8_t resetPin, uint8_t address, int interruptPin)
-    : _wire(wire), _resetPin(resetPin), _address(address), _interruptPin(interruptPin) {}
+    : _wire(&wire), _resetPin(resetPin), _address(address), _interruptPin(interruptPin) {}
 
 bool MCP23009E::begin() {
     pinMode(_resetPin, OUTPUT);
@@ -100,8 +100,8 @@ bool MCP23009E::begin() {
     // Probe the I2C bus: an address-only transmission ACK'd by the
     // device means it's present. Returns false otherwise so callers
     // can react to a missing/incorrectly-wired expander.
-    _wire.beginTransmission(_address);
-    return _wire.endTransmission() == 0;
+    _wire->beginTransmission(_address);
+    return _wire->endTransmission() == 0;
 }
 
 uint8_t MCP23009E::setBit(uint8_t reg, uint8_t bit, uint8_t value) {
@@ -207,26 +207,26 @@ uint8_t MCP23009E::getLevel(uint8_t gpx) {
 
 void MCP23009E::writeReg(uint8_t reg, uint8_t value) {
     // Écrit une valeur dans un registre
-    _wire.beginTransmission(_address);
-    _wire.write(reg);
-    _wire.write(value);
-    _wire.endTransmission();
+    _wire->beginTransmission(_address);
+    _wire->write(reg);
+    _wire->write(value);
+    _wire->endTransmission();
 }
 
 uint8_t MCP23009E::readReg(uint8_t reg) {
-    _wire.beginTransmission(_address);
-    _wire.write(reg);
-    _wire.endTransmission(false);
+    _wire->beginTransmission(_address);
+    _wire->write(reg);
+    _wire->endTransmission(false);
     // Short reads return -1 from Wire.read() which becomes 0xFF when
     // assigned to uint8_t — a perfectly valid-looking register value.
     // Reject the transaction on any partial response.
-    if (_wire.requestFrom(_address, static_cast<uint8_t>(1)) != 1) {
+    if (_wire->requestFrom(_address, static_cast<uint8_t>(1)) != 1) {
         return 0;
     }
-    if (!_wire.available()) {
+    if (!_wire->available()) {
         return 0;
     }
-    return static_cast<uint8_t>(_wire.read());
+    return static_cast<uint8_t>(_wire->read());
 }
 
 void MCP23009E::setIodir(uint8_t value) {
