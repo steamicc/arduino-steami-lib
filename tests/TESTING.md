@@ -123,6 +123,67 @@ pio test -e steami --filter integration/test_<driver>
 
 ---
 
+## Debugging a failing on-board test
+
+By default, on-board test output is intentionally minimal: Unity captures the
+serial channel and only prints test names with a final PASS/FAIL status.
+
+This keeps output clean, but makes debugging harder.
+
+### Verbose mode
+
+To see the full Unity stream and debug messages, set `VERBOSE=1` on any
+on-board test target — hardware or integration, full suite or per-driver:
+
+```bash
+make test-hardware/<suite> VERBOSE=1
+make test-integration/<suite> VERBOSE=1
+make test-hardware VERBOSE=1
+```
+
+This enables:
+
+* full Unity output (`-v`)
+* preservation of debug messages via the `TEST_VERBOSE` build flag
+* raw (non-humanised) output
+
+For one-off extra flags to PlatformIO test (e.g. `--without-flashing`, a
+specific test case filter), pass them through `PIO_TEST_EXTRA_OPTS`:
+
+```bash
+make test-hardware/wsen_hids PIO_TEST_EXTRA_OPTS="--without-flashing"
+```
+
+### Safe debug prints (Unity-compatible)
+
+Do **not** use `Serial.println()` inside tests.
+
+Unity uses the serial channel for its protocol. Writing directly to it will
+corrupt the output and can break test parsing.
+
+Instead, use Unity-safe debug helpers:
+
+```cpp
+#include <unity.h>
+
+void test_example() {
+    int state = 42;
+
+    TEST_MESSAGE("Starting test");
+    TEST_MESSAGE("state: 42");
+
+    TEST_ASSERT_EQUAL(42, state);
+}
+```
+
+This will:
+
+* print safely without breaking Unity
+* be visible in `VERBOSE=1` mode
+* keep normal test runs clean
+
+---
+
 ## Test Tier Responsibilities
 
 ### 1. Native tests (`tests/native/`)
