@@ -20,7 +20,7 @@ Spin up a dedicated `TwoWire` and hand it to the driver:
 #include <MCP23009E.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-MCP23009E expander(internalI2C, /*resetPin=*/RESET_PIN);
+MCP23009E expander(internalI2C, RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
 
 void setup() {
     Serial.begin(115200);
@@ -54,7 +54,7 @@ in method names only where they carry ambiguity.
 | Method | Description |
 |--------|-------------|
 | `MCP23009E(TwoWire& wire, uint8_t resetPin, uint8_t address = 0x20, int interruptPin = -1)` | Construct. Pass the reset pin number; interrupt pin is optional. |
-| `bool begin()` | Configure the reset pin, attach the interrupt handler if provided, and perform a hardware reset. Always returns `true`. |
+| `bool begin()` | Configure the reset pin, attach the interrupt handler if provided, perform a hardware reset, then probe the I2C bus. Returns `false` if the expander doesn't ACK. |
 | `void reset()` | Toggle the reset pin LOW then HIGH to perform a hardware reset. |
 | `void powerOn()` | Drive the reset pin HIGH. |
 | `void powerOff()` | Drive the reset pin LOW. |
@@ -63,7 +63,7 @@ in method names only where they carry ambiguity.
 
 | Method | Description |
 |--------|-------------|
-| `void setup(uint8_t gpx, uint8_t direction, uint8_t pullup = NO_PULLUP, uint8_t polarity = POL_SAME)` | Configure a GPIO pin. `gpx` is 0–7. |
+| `void setup(uint8_t gpx, uint8_t direction, uint8_t pullup = MCP23009_NO_PULLUP, uint8_t polarity = MCP23009_POL_SAME)` | Configure a GPIO pin. `gpx` is 0–7. |
 | `void setLevel(uint8_t gpx, uint8_t level)` | Set the output level of a GPIO configured as output. |
 | `uint8_t getLevel(uint8_t gpx)` | Read the current level of a GPIO. |
 
