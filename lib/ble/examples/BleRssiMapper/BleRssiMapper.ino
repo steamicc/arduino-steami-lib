@@ -30,11 +30,12 @@ static const int MAX_POINTS = 50;  // max measurement points
 static const int MAX_ROWS = MAX_POINTS * BEACON_COUNT;
 
 // === RSSI smoothing per beacon ===
-static int rssiHistory[3][RSSI_SAMPLES] = {{0}};
-static int rssiIndex[3] = {0};
-static int rssiCount[3] = {0};
-static int currentRssi[3];
-static bool beaconSeen[3] = {false};
+// Sizing all arrays by BEACON_COUNT so the constants stay in sync.
+static int rssiHistory[BEACON_COUNT][RSSI_SAMPLES] = {{0}};
+static int rssiIndex[BEACON_COUNT] = {0};
+static int rssiCount[BEACON_COUNT] = {0};
+static int currentRssi[BEACON_COUNT] = {0};
+static bool beaconSeen[BEACON_COUNT] = {false};
 
 // === CSV storage (in RAM) ===
 struct CsvRow {
@@ -115,7 +116,12 @@ void recordPoint() {
     for (int i = 0; i < BEACON_COUNT; i++) {
         if (beaconSeen[i] && rowCount < MAX_ROWS) {
             csvData[rowCount].pointId = pointId;
-            strncpy(csvData[rowCount].beaconName, BEACON_NAMES[i], 15);
+            // strncpy() does not null-terminate when src is longer than n —
+            // force the terminator explicitly so the struct stays safe even
+            // if BEACON_NAMES is later changed to longer strings.
+            strncpy(csvData[rowCount].beaconName, BEACON_NAMES[i],
+                    sizeof(csvData[rowCount].beaconName) - 1);
+            csvData[rowCount].beaconName[sizeof(csvData[rowCount].beaconName) - 1] = '\0';
             csvData[rowCount].rssi = currentRssi[i];
             rowCount++;
 
@@ -183,10 +189,12 @@ void loop() {
         }
     }
 
-    // Update RSSI from scan results
+    // Update RSSI from scan results — drain the whole queue, not just one
+    // packet per loop tick, otherwise some beacons go unseen during the
+    // 2 s gap between status prints.
     if (recording) {
-        BLEDevice device = BLE.available();
-        if (device) {
+        BLEDevice device;
+        while ((device = BLE.available())) {
             int idx = beaconIndex(device.localName());
             if (idx >= 0) {
                 smoothRssi(idx, device.rssi());
