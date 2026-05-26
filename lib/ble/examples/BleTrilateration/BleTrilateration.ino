@@ -81,11 +81,17 @@ void smoothRssi(int idx, int newRssi) {
     currentRssi[idx] = sum / rssiCount[idx];
 }
 
+// Returns the estimated distance in cm, or a negative value when the signal
+// is too weak to be trusted (avoids clamping to MAX_DIST_CM, which would let
+// trilateration succeed on aberrant inputs and lock the user near the
+// centroid).
+// powf() (not pow()) keeps the math in single-precision, which matches the
+// Cortex-M4F FPU on STM32WB55 — pow() would silently promote to double.
 float rssiToDistance(int rssi, int idx) {
-    float d = pow(10.0f, (RSSI_REF[idx] - rssi) / (10.0f * PATH_LOSS_N[idx]));
+    float d = powf(10.0f, (RSSI_REF[idx] - rssi) / (10.0f * PATH_LOSS_N[idx]));
     d *= 100.0f;  // metres -> cm
     if (d > MAX_DIST_CM)
-        d = MAX_DIST_CM;
+        return -1.0f;
     return d;
 }
 
@@ -208,9 +214,11 @@ void setup() {
 }
 
 void loop() {
-    // Update RSSI from scan
-    BLEDevice device = BLE.available();
-    if (device) {
+    // Update RSSI from scan. Drain the full queue so all three beacons get
+    // their RSSI refreshed on every loop tick even when several packets
+    // arrived between two ticks.
+    BLEDevice device;
+    while ((device = BLE.available())) {
         int idx = beaconIndex(device.localName());
         if (idx >= 0) {
             smoothRssi(idx, device.rssi());
@@ -240,21 +248,34 @@ void loop() {
         return;
     }
 
-    // Compute distances
+    // Compute distances. rssiToDistance() returns < 0 when the signal is too
+    // weak to be trusted — refuse trilateration if any beacon is out of range
+    // rather than feeding a clamped value to the solver.
     float d[BEACON_COUNT];
+    bool allValid = true;
     for (int i = 0; i < BEACON_COUNT; i++) {
         d[i] = rssiToDistance(currentRssi[i], i);
+        if (d[i] < 0.0f)
+            allValid = false;
     }
 
-    // Print distances
+    // Print distances (show "n/a" for out-of-range beacons)
     Serial.print("Distances: ");
     for (int i = 0; i < BEACON_COUNT; i++) {
         Serial.print(BEACON_NAMES[i]);
         Serial.print("=");
-        Serial.print((int)d[i]);
+        if (d[i] < 0.0f)
+            Serial.print("n/a");
+        else
+            Serial.print((int)d[i]);
         Serial.print("cm  ");
     }
     Serial.println();
+
+    if (!allValid) {
+        Serial.println("At least one beacon signal too weak — skipping trilateration.");
+        return;
+    }
 
     // Trilaterate
     float rawX, rawY;
