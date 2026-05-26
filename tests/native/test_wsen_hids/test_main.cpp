@@ -298,6 +298,49 @@ void test_set_averaging_writes_av_conf(void) {
     TEST_ASSERT_EQUAL_HEX8(expected, avconf);
 }
 
+// The chip lives on its own VDD rail on the STeaMi — an MCU reset does not
+// power-cycle it, so previous code can leave AV_CONF pegged at max
+// averaging (0x3F → 256+512 samples, which pushes any conversion past a
+// reasonable timeout). begin() must override AV_CONF back to the datasheet
+// default regardless of what the chip carries from a previous run.
+void test_begin_resets_av_conf_to_default(void) {
+    // Simulate the chip coming up with AV_CONF stuck at 0x3F from a
+    // previous sketch.
+    Wire.setRegister(ADDR, WSEN_HIDS_REG_AV_CONF, 0x3F);
+
+    sensor.begin();
+
+    TEST_ASSERT_EQUAL_HEX8(WSEN_HIDS_AV_CONF_DEFAULT,
+                           Wire.getRegister(ADDR, WSEN_HIDS_REG_AV_CONF));
+}
+
+// Same chip-state-survives-reset concern for CTRL2: a previous one-shot
+// attempt that the caller gave up on can leave CTRL2.ONE_SHOT latched at
+// 1, and the next trigger then sees no 0→1 edge. begin() must clear it.
+void test_begin_clears_ctrl2(void) {
+    Wire.setRegister(ADDR, WSEN_HIDS_REG_CTRL2, WSEN_HIDS_CTRL2_ONE_SHOT);
+
+    sensor.begin();
+
+    TEST_ASSERT_EQUAL_HEX8(0x00, Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL2));
+}
+
+// Following the stm32duino / Würth reference-driver pattern, the
+// auto-bring-up inside read() routes through continuous mode. After
+// read() returns, the chip must remain in continuous mode at the chosen
+// ODR so the next read short-circuits to a plain OUT-register read
+// instead of paying the bring-up cost again.
+void test_read_auto_bringup_leaves_chip_in_continuous(void) {
+    sensor.begin();
+    preloadMeasurement(20.0f, 50.0f);
+
+    sensor.read();
+
+    uint8_t ctrl1 = Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL1);
+    uint8_t expected = WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU | WSEN_HIDS_ODR_12_5_HZ;
+    TEST_ASSERT_EQUAL_HEX8(expected, ctrl1);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_begin_detects_device);
@@ -319,5 +362,8 @@ int main(void) {
     RUN_TEST(test_reboot_writes_ctrl2_boot);
     RUN_TEST(test_soft_reset_routes_to_reboot);
     RUN_TEST(test_set_averaging_writes_av_conf);
+    RUN_TEST(test_begin_resets_av_conf_to_default);
+    RUN_TEST(test_begin_clears_ctrl2);
+    RUN_TEST(test_read_auto_bringup_leaves_chip_in_continuous);
     return UNITY_END();
 }
