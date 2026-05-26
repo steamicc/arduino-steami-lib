@@ -244,6 +244,52 @@ void test_read_returns_nan_on_timeout(void) {
     TEST_ASSERT_TRUE_MESSAGE(isnan(r.humidity), "humidity should be NaN on timeout");
 }
 
+void test_read_one_shot_returns_calibrated_values(void) {
+    sensor.begin();  // begin() leaves the device powered down — the bundled
+                     // readOneShot() flow must drive the trigger itself.
+    preloadMeasurement(15.0f, 60.0f);
+
+    auto r = sensor.readOneShot();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.0f, r.temperature);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 60.0f, r.humidity);
+}
+
+void test_read_does_not_trigger_one_shot_when_continuous(void) {
+    sensor.begin();
+    sensor.setContinuous(HTS221_ODR_1_HZ);
+    preloadMeasurement(20.0f, 50.0f);
+    Wire.clearWrites();
+
+    sensor.read();
+
+    // In continuous mode the driver must rely on the periodic conversion
+    // and not poke CTRL2 at all — any write here would either re-arm a
+    // one-shot or reboot the device, both of which break continuous flow.
+    for (const auto& w : Wire.getWrites()) {
+        TEST_ASSERT_NOT_EQUAL_MESSAGE(HTS221_REG_CTRL2, w.reg,
+                                      "read() should not touch CTRL2 in continuous mode");
+    }
+}
+
+void test_soft_reset_writes_ctrl2_boot(void) {
+    sensor.begin();
+    Wire.clearWrites();
+    // Make BOOT bit clear itself on the very first poll so the driver
+    // doesn't spin against the mock.
+    Wire.setRegister(ADDR, HTS221_REG_CTRL2, 0);
+
+    sensor.softReset();
+
+    bool sawBootSet = false;
+    for (const auto& w : Wire.getWrites()) {
+        if (w.reg == HTS221_REG_CTRL2 && (w.value & HTS221_CTRL2_BOOT)) {
+            sawBootSet = true;
+            break;
+        }
+    }
+    TEST_ASSERT_TRUE(sawBootSet);
+}
+
 void test_reboot_writes_ctrl2_boot(void) {
     sensor.begin();
     Wire.clearWrites();
@@ -281,6 +327,9 @@ int main(void) {
     RUN_TEST(test_set_temperature_offset_shifts_reading);
     RUN_TEST(test_calibrate_temperature_applies_two_point_correction);
     RUN_TEST(test_read_returns_nan_on_timeout);
+    RUN_TEST(test_read_one_shot_returns_calibrated_values);
+    RUN_TEST(test_read_does_not_trigger_one_shot_when_continuous);
+    RUN_TEST(test_soft_reset_writes_ctrl2_boot);
     RUN_TEST(test_reboot_writes_ctrl2_boot);
     return UNITY_END();
 }
