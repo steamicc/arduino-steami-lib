@@ -33,7 +33,6 @@ static int rssiIndex = 0;
 static int rssiCount = 0;
 
 // === State ===
-static bool isTreasure = false;
 static bool modeSelected = false;
 
 // =============================================================================
@@ -59,7 +58,12 @@ int rssiToProximity(int rssi) {
     return (int)((float)(rssi - RSSI_FAR) / (RSSI_NEAR - RSSI_FAR) * 100);
 }
 
-void tone(int pin, int freq, int durationMs) {
+// Renamed from tone() to avoid shadowing the Arduino core tone() function
+// declared in Arduino.h with the signature
+//   void tone(uint8_t pin, unsigned int frequency, unsigned long duration);
+// Mixing signatures by overload-vs-shadow led to surprising behaviour at link
+// time depending on translation-unit order.
+void playTone(int pin, int freq, int durationMs) {
     if (freq == 0) {
         delay(durationMs);
         return;
@@ -154,8 +158,10 @@ void printZone(int proximity, int rssi) {
     Serial.print(proximity);
     Serial.println("%");
 
-    // Buzzer beep
-    tone(BUZZER_PIN, freq, beepMs);
+    // Buzzer beep. NOTE: this call blocks the BLE scan for beepMs + pauseMs
+    // (up to ~880 ms in the COLD zone). The smoothed RSSI is therefore based
+    // on samples up to ~1 s old. See review comment for a non-blocking pattern.
+    playTone(BUZZER_PIN, freq, beepMs);
     delay(pauseMs);
 }
 
@@ -166,9 +172,8 @@ void runSeeker() {
     BLE.scan(true);
 
     while (true) {
-        BLEDevice device = BLE.available();
-
-        if (device) {
+        BLEDevice device;
+        while ((device = BLE.available())) {
             if (device.localName() == BEACON_NAME) {
                 int rawRssi = device.rssi();
                 int avgRssi = smoothRssi(rawRssi);
@@ -207,11 +212,9 @@ void loop() {
 
         if (choice == '1') {
             modeSelected = true;
-            isTreasure = true;
             runTreasure();
         } else if (choice == '2') {
             modeSelected = true;
-            isTreasure = false;
             runSeeker();
         } else if (choice != '\n' && choice != '\r') {
             Serial.println("Invalid choice.");
