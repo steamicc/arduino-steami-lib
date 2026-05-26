@@ -56,5 +56,10 @@ constexpr uint8_t WSEN_HIDS_AV_CONF_AVGH_MASK = 0x07;
 constexpr uint8_t WSEN_HIDS_AV_CONF_AVGT_MASK = 0x38;
 constexpr uint8_t WSEN_HIDS_AV_CONF_AVGT_SHIFT = 3;
 
+// AV_CONF datasheet power-on default: AVGT=011 (16 samples temperature),
+// AVGH=011 (32 samples humidity). begin() restores this so the chip
+// can't carry over a max-averaging configuration from a previous sketch.
+constexpr uint8_t WSEN_HIDS_AV_CONF_DEFAULT = 0x1B;
+
 // MSB of the sub-address enables register auto-increment on burst reads.
 constexpr uint8_t WSEN_HIDS_AUTO_INCREMENT = 0x80;

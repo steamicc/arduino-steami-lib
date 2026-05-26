@@ -14,7 +14,7 @@ bool WsenHids::begin() {
     // does NOT power-cycle it. Force AV_CONF and CTRL2 to defaults so
     // we don't inherit max-averaging or a latched ONE_SHOT bit from
     // whatever sketch ran previously.
-    writeReg(WSEN_HIDS_REG_AV_CONF, 0x1B);
+    writeReg(WSEN_HIDS_REG_AV_CONF, WSEN_HIDS_AV_CONF_DEFAULT);
     writeReg(WSEN_HIDS_REG_CTRL2, 0x00);
 
     loadCalibration();
