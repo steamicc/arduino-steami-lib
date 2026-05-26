@@ -20,7 +20,7 @@ MCP23009Config& MCP23009Config::clearSeqop() {
 
 bool MCP23009Config::hasSeqop() {
     // Vérifie si SEQOP est activé
-    return (_reg & MCP23009_IOCON_SEQOP) > 0;
+    return (_reg & MCP23009_IOCON_SEQOP) != 0;
 }
 
 MCP23009Config& MCP23009Config::setOdr() {
@@ -37,7 +37,7 @@ MCP23009Config& MCP23009Config::clearOdr() {
 
 bool MCP23009Config::hasOdr() {
     // Vérifie si ODR est activé
-    return (_reg & MCP23009_IOCON_ODR) > 0;
+    return (_reg & MCP23009_IOCON_ODR) != 0;
 }
 
 MCP23009Config& MCP23009Config::setIntpol() {
@@ -54,7 +54,7 @@ MCP23009Config& MCP23009Config::clearIntpol() {
 
 bool MCP23009Config::hasIntpol() {
     // Vérifie si INTPOL est configuré à Active-High
-    return (_reg & MCP23009_IOCON_INTPOL) > 0;
+    return (_reg & MCP23009_IOCON_INTPOL) != 0;
 }
 
 MCP23009Config& MCP23009Config::setIntcc() {
@@ -71,7 +71,7 @@ MCP23009Config& MCP23009Config::clearIntcc() {
 
 bool MCP23009Config::hasIntcc() {
     // Vérifie si INTCC est activé
-    return (_reg & MCP23009_IOCON_INTCC) > 0;
+    return (_reg & MCP23009_IOCON_INTCC) != 0;
 }
 
 uint8_t MCP23009Config::getRegisterValue() {
@@ -478,7 +478,7 @@ void MCP23009E::interruptEvent() {
 MCP23009Pin::MCP23009Pin(MCP23009E& mcp, uint8_t pinNumber, uint8_t mode, uint8_t pull,
                          uint8_t value)
     : _mcp(mcp), _pinNumber(pinNumber), _mode(mode), _pull(pull), _value(value) {
-    if (_mode != -1) {
+    if (_mode != 0xFF) {
         init(_mode, _pull, _value);
     }
 }
@@ -496,7 +496,8 @@ void MCP23009Pin::init(uint8_t mode, uint8_t pull, uint8_t value) {
     }
     if (pull != 0xFF) {
         _pull = pull;
-    } else if (pull == 0xFF) {
+    } else {
+        // pull == 0xFF — sentinel for "no pull-up requested".
         _pull = MCP23009_NO_PULLUP;
     }
 
