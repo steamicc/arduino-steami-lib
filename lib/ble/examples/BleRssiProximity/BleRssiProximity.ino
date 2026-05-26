@@ -89,12 +89,14 @@ void setup() {
 }
 
 void loop() {
-    BLEDevice device = BLE.available();
-
-    if (device) {
-        String name = device.localName();
-
-        if (name == BEACON_NAME) {
+    // Drain every advertising packet queued since the last loop tick.
+    // BLE.available() returns the next packet (or an invalid device when
+    // empty) — looping until we hit an empty result keeps the gauge in
+    // sync with the freshest sample even when several packets arrived
+    // between two ticks.
+    BLEDevice device;
+    while ((device = BLE.available())) {
+        if (device.localName() == BEACON_NAME) {
             int rawRssi = device.rssi();
             int avgRssi = smoothRssi(rawRssi);
             int proximity = rssiToProximity(avgRssi);
