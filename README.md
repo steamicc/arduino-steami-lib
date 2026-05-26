@@ -47,6 +47,59 @@ pio run
 pio run --target upload
 ```
 
+## Examples
+
+### List available examples
+
+```bash
+make list-examples
+```
+
+This prints one ready-to-run target per example, e.g.:
+
+```
+flash-hts221/comfort_index
+flash-hts221/dew_point
+flash-hts221/read_temperature_humidity
+flash-hts221/temperature_alarm
+```
+
+Filter by driver:
+
+```bash
+make list-examples DRIVER=hts221
+```
+
+### Flash an example
+
+Copy any line from `make list-examples` and run it:
+
+```bash
+make flash-hts221/dew_point
+```
+
+This builds the example, uploads it to the STeaMi board, and opens the serial monitor at 115200 baud on success.
+
+### Capture early serial output
+
+`make flash-…` opens an interactive monitor, which often misses the first lines printed at boot (the monitor finishes its handshake while the board has already moved past `setup()`). When you need those lines — e.g. to see whether `begin()` returned `false` — swap `flash-` for `capture-`:
+
+```bash
+make capture-hts221/dew_point
+```
+
+This builds and uploads the example like `flash-…`, but instead of opening miniterm it opens the serial port first, asks OpenOCD to reset the board over CMSIS-DAP, and prints whatever the board sends on stdout for 10 seconds. The output is unbuffered and pipeable:
+
+```bash
+make capture-hts221/dew_point | grep -i "HTS221"
+```
+
+Override the duration with `DURATION=N` (in seconds):
+
+```bash
+make capture-hts221/dew_point DURATION=30
+```
+
 ## Development
 
 ### Setup

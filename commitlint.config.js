@@ -16,6 +16,7 @@ module.exports = {
         'apds9960',
         'bme280',
         'bq27441',
+        'daplink_bridge',
         'daplink_flash',
         'gc9a01',
         'hts221',

@@ -37,6 +37,60 @@ header check on every staged `.h`/`.cpp`/`.ino` before each commit. Run
 `make setup` on a fresh clone so you don't get surprised by CI enforcing
 things your local commit let through.
 
+### Make target naming convention
+
+Two shapes are in use, and they reflect the underlying directory structure:
+
+* **Flat targets** (`build`, `lint`, `test-native`, `test-hardware`, `test-integration`, `setup`, …) are top-level actions that operate on the whole tree. The verb may be compound (`test-native`), but there's no sub-path.
+* **Hierarchical targets** use `verb/<path>` whenever the action drills into one specific item:
+  * `flash-<driver>/<example>` — flash one example (e.g. `flash-hts221/dew_point`).
+  * `capture-<driver>/<example>` — same, but route serial through `scripts/capture-serial.py` instead of opening miniterm.
+  * `test-native/<suite>` / `test-hardware/<suite>` / `test-integration/<suite>` — run one test suite from a single tier. The suite is the directory name under `tests/<tier>/test_*` and isn't always a driver — `wire` and `led` cover mocks and board features rather than lib drivers.
+  * `test/<suite>` — composite: chains every tier that exists for that suite.
+
+The `/` separator (rather than another `-`) avoids visual ambiguity: drivers can themselves contain hyphens (`wsen-pads`, `wsen-hids`), and `flash-wsen-pads-altitude` would force the reader to guess where the boundary is. `flash-wsen-pads/altitude` is unambiguous and gives zsh's tab-completion a natural drill-down (`make flash-wsen-pads/<TAB>` lists only that driver's examples).
+
+To discover the targets:
+
+```bash
+make list-examples         # all flash-* and capture-* targets
+make list-tests            # all test-*/* and composite test/* targets
+```
+
+`list-examples` honors an optional `DRIVER=<name>` filter.
+
+### Shell completion for `make` (zsh)
+
+The hierarchical and per-suite targets above are generated dynamically via
+`foreach + eval`. zsh's stock `_make` completion can resolve them for you,
+but the relevant `zstyle` is off by default. Add to your `~/.zshrc`:
+
+```zsh
+zstyle ':completion:*:*:make:*:targets' call-command true
+zstyle ':completion:*:*:make:*' tag-order 'targets'
+```
+
+The first line tells zsh to invoke `make` in dry-run / print-database
+mode to query the resolved target list (instead of parsing the Makefile
+textually, which misses generated targets). The second line filters out
+variables and files from the completion output so `make <TAB>` only
+shows actual targets.
+
+`exec zsh` to reload, then `make flash-<TAB>` will list every example
+across every driver, and `make test-<TAB>` every test target across the
+three tiers.
+
+A side effect of `call-command true`: every `make <TAB>` runs `make`
+under the hood, which evaluates the Makefile — including any
+`$(shell ...)` calls made at parse time. In this repo those are cheap
+(`find` over `lib/` and `tests/`), but it means the zstyle should be
+applied **per project** rather than globally if you also work on
+untrusted repos. Scope it with a directory-specific `zstyle`, or set it
+inside a per-project `.zshrc.local` sourced by your dotfiles.
+
+If you don't want to touch your zshrc, `make list-examples` and
+`make list-tests` print the same information on stdout.
+
 ## Driver structure
 
 Each driver lives in its own directory under `lib/`:
@@ -65,15 +119,41 @@ lib/<component>/
   within its own tree.
 - The class name is `PascalCase` (`HTS221`, `Mcp23009e`) and lives in
   `src/<DriverName>.h`.
-- Each driver is self-contained — no cross-driver dependencies.
+- Drivers are self-contained by default. When one driver does need to
+  call into another's public API (e.g. the DAPLink family, where
+  `daplink_flash` and `daplink_config` both speak through
+  `daplink_bridge`), declare the dependency explicitly via the
+  `depends=` field of the consumer's `library.properties`. This is
+  what PlatformIO's library finder uses to resolve `-I` paths across
+  libs and what the Arduino Library Manager surfaces to end users.
+  Avoid implicit cross-driver `#include`s without a matching
+  `depends=` — the build will work locally but break for downstream
+  consumers.
 - Every new C/C++ source (`.h`, `.cpp`, `.ino`) carries the SPDX license
   header on the very first line (see issue #104):
   ```
   // SPDX-License-Identifier: GPL-3.0-or-later
   ```
 - Include guards use `#pragma once`, not `#ifndef`/`#define` wrappers.
-- `library.properties` declares `architectures=*` so host-side tests can
-  pull the library in (the native platform has no "framework").
+- Every driver ships a `library.properties` (Arduino Library Manager
+  metadata). Per the Arduino library specification the required fields
+  are `name`, `version`, `author`, `maintainer`, `sentence`, `category`,
+  `url`, and `architectures` — set `architectures=*` so host-side tests
+  can pull the library in (the native platform has no "framework"). The
+  collection convention is `author=STeaMi contributors` and
+  `maintainer=STeaMi contributors`; the `url` points back to this
+  repository. Optional but recommended: a longer `paragraph` describing
+  the API, and an `includes=` line listing the public header. Stub
+  drivers ship a `library.properties` with `version=0.0.0` to mark them
+  as not yet implemented; bump to `1.0.0` on first release.
+- When a driver becomes implemented (no longer a stub), add a section
+  to `src/main.cpp` that `#include`s its header, instantiates it on
+  the right bus, and calls `begin()` + a quick identity probe. The
+  sketch is the build smoke test: it links every implemented driver
+  in the steami env and lists every driver `.cpp` in
+  `compile_commands.json` so `make tidy` runs them with the proper
+  compile flags. New drivers that aren't wired in here will lint with
+  default flags only (and miss e.g. a cross-driver include resolution).
 
 ### Example folders
 

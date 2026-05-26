@@ -3,21 +3,21 @@
 #include <math.h>
 #include <unity.h>
 
-#include "HTS221.h"
 #include "Wire.h"
+#include "WsenHids.h"
 #include "driver_checks.h"
 
 // The driver uses bit 7 of the sub-address as the ST auto-increment flag for
-// multi-byte reads (see HTS221_AUTO_INCREMENT). The Wire mock is a straight
+// multi-byte reads (see WSEN_HIDS_AUTO_INCREMENT). The Wire mock is a straight
 // register map, so preloads for burst-read ranges have to sit at the
 // post-OR address the driver will actually emit on the wire.
-constexpr uint8_t ADDR = HTS221_DEFAULT_ADDRESS;
-constexpr uint8_t CAL_BASE = HTS221_REG_H0_RH_X2 | HTS221_AUTO_INCREMENT;
-constexpr uint8_t HUM_OUT_BASE = HTS221_REG_HUMIDITY_OUT_L | HTS221_AUTO_INCREMENT;
-constexpr uint8_t TEMP_OUT_BASE = HTS221_REG_TEMP_OUT_L | HTS221_AUTO_INCREMENT;
+constexpr uint8_t ADDR = WSEN_HIDS_DEFAULT_ADDRESS;
+constexpr uint8_t CAL_BASE = WSEN_HIDS_REG_H0_RH_X2 | WSEN_HIDS_AUTO_INCREMENT;
+constexpr uint8_t HUM_OUT_BASE = WSEN_HIDS_REG_HUMIDITY_OUT_L | WSEN_HIDS_AUTO_INCREMENT;
+constexpr uint8_t TEMP_OUT_BASE = WSEN_HIDS_REG_TEMP_OUT_L | WSEN_HIDS_AUTO_INCREMENT;
 
 static void preloadWhoAmI(bool valid = true) {
-    Wire.setRegister(ADDR, HTS221_REG_WHO_AM_I, valid ? HTS221_WHO_AM_I_VALUE : 0x42);
+    Wire.setRegister(ADDR, WSEN_HIDS_REG_WHO_AM_I, valid ? WSEN_HIDS_WHO_AM_I_VALUE : 0x42);
 }
 
 // Factory calibration chosen so the math is trivial to verify:
@@ -67,16 +67,16 @@ static void preloadMeasurement(float tempC, float humidityPct) {
     Wire.setRegister(ADDR, TEMP_OUT_BASE + 1, (tempRaw >> 8) & 0xFF);
     Wire.setRegister(ADDR, HUM_OUT_BASE + 0, humRaw & 0xFF);
     Wire.setRegister(ADDR, HUM_OUT_BASE + 1, (humRaw >> 8) & 0xFF);
-    Wire.setRegister(ADDR, HTS221_REG_STATUS, HTS221_STATUS_H_DA | HTS221_STATUS_T_DA);
+    Wire.setRegister(ADDR, WSEN_HIDS_REG_STATUS, WSEN_HIDS_STATUS_H_DA | WSEN_HIDS_STATUS_T_DA);
 }
 
-HTS221 sensor;
+WsenHids sensor;
 
 void setUp(void) {
     Wire = TwoWire();
     preloadWhoAmI(true);
     preloadFactoryCalibration();
-    sensor = HTS221();
+    sensor = WsenHids();
 }
 
 void tearDown(void) {}
@@ -91,48 +91,48 @@ void test_begin_rejects_wrong_who_am_i(void) {
 }
 
 void test_device_id_returns_who_am_i(void) {
-    check_who_am_i(sensor, HTS221_WHO_AM_I_VALUE);
+    check_who_am_i(sensor, WSEN_HIDS_WHO_AM_I_VALUE);
 }
 
 void test_power_on_sets_ctrl1_pd(void) {
     sensor.begin();
     sensor.powerOn();
-    uint8_t ctrl1 = Wire.getRegister(ADDR, HTS221_REG_CTRL1);
-    TEST_ASSERT_BITS_HIGH(HTS221_CTRL1_PD, ctrl1);
-    TEST_ASSERT_BITS_HIGH(HTS221_CTRL1_BDU, ctrl1);
+    uint8_t ctrl1 = Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL1);
+    TEST_ASSERT_BITS_HIGH(WSEN_HIDS_CTRL1_PD, ctrl1);
+    TEST_ASSERT_BITS_HIGH(WSEN_HIDS_CTRL1_BDU, ctrl1);
 }
 
 void test_power_off_clears_ctrl1_pd(void) {
     sensor.begin();
     sensor.powerOn();
     sensor.powerOff();
-    uint8_t ctrl1 = Wire.getRegister(ADDR, HTS221_REG_CTRL1);
-    TEST_ASSERT_BITS_LOW(HTS221_CTRL1_PD, ctrl1);
+    uint8_t ctrl1 = Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL1);
+    TEST_ASSERT_BITS_LOW(WSEN_HIDS_CTRL1_PD, ctrl1);
 }
 
 void test_set_continuous_writes_expected_ctrl1(void) {
     sensor.begin();
-    sensor.setContinuous(HTS221_ODR_7_HZ);
-    uint8_t ctrl1 = Wire.getRegister(ADDR, HTS221_REG_CTRL1);
-    uint8_t expected = HTS221_CTRL1_PD | HTS221_CTRL1_BDU | HTS221_ODR_7_HZ;
+    sensor.setContinuous(WSEN_HIDS_ODR_7_HZ);
+    uint8_t ctrl1 = Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL1);
+    uint8_t expected = WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU | WSEN_HIDS_ODR_7_HZ;
     TEST_ASSERT_EQUAL_HEX8(expected, ctrl1);
 }
 
 void test_trigger_one_shot_sets_ctrl2_one_shot(void) {
     sensor.begin();
     sensor.triggerOneShot();
-    uint8_t ctrl2 = Wire.getRegister(ADDR, HTS221_REG_CTRL2);
-    TEST_ASSERT_BITS_HIGH(HTS221_CTRL2_ONE_SHOT, ctrl2);
+    uint8_t ctrl2 = Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL2);
+    TEST_ASSERT_BITS_HIGH(WSEN_HIDS_CTRL2_ONE_SHOT, ctrl2);
 }
 
 void test_data_ready_reflects_status_register(void) {
     sensor.begin();
-    sensor.setContinuous(HTS221_ODR_1_HZ);
-    Wire.setRegister(ADDR, HTS221_REG_STATUS, 0);
+    sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
+    Wire.setRegister(ADDR, WSEN_HIDS_REG_STATUS, 0);
     TEST_ASSERT_FALSE(sensor.dataReady());
-    Wire.setRegister(ADDR, HTS221_REG_STATUS, HTS221_STATUS_T_DA);
+    Wire.setRegister(ADDR, WSEN_HIDS_REG_STATUS, WSEN_HIDS_STATUS_T_DA);
     TEST_ASSERT_FALSE(sensor.dataReady());  // one channel only
-    Wire.setRegister(ADDR, HTS221_REG_STATUS, HTS221_STATUS_H_DA | HTS221_STATUS_T_DA);
+    Wire.setRegister(ADDR, WSEN_HIDS_REG_STATUS, WSEN_HIDS_STATUS_H_DA | WSEN_HIDS_STATUS_T_DA);
     TEST_ASSERT_TRUE(sensor.dataReady());
     TEST_ASSERT_TRUE(sensor.temperatureReady());
     TEST_ASSERT_TRUE(sensor.humidityReady());
@@ -140,23 +140,23 @@ void test_data_ready_reflects_status_register(void) {
 
 void test_temperature_is_plausible(void) {
     sensor.begin();
-    sensor.setContinuous(HTS221_ODR_1_HZ);
+    sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
     preloadMeasurement(21.5f, 42.0f);
 
-    check_read_plausible(sensor, &HTS221::temperature, -40.0f, 120.0f);
+    check_read_plausible(sensor, &WsenHids::temperature, -40.0f, 120.0f);
 }
 
 void test_humidity_is_plausible(void) {
     sensor.begin();
-    sensor.setContinuous(HTS221_ODR_1_HZ);
+    sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
     preloadMeasurement(21.5f, 42.0f);
 
-    check_read_plausible(sensor, &HTS221::humidity, 0.0f, 100.0f);
+    check_read_plausible(sensor, &WsenHids::humidity, 0.0f, 100.0f);
 }
 
 void test_read_returns_calibrated_values(void) {
     sensor.begin();
-    sensor.setContinuous(HTS221_ODR_1_HZ);
+    sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
     preloadMeasurement(21.5f, 42.0f);
 
     auto r = sensor.read();
@@ -166,10 +166,10 @@ void test_read_returns_calibrated_values(void) {
 
 void test_humidity_is_clamped_to_0_100(void) {
     sensor.begin();
-    sensor.setContinuous(HTS221_ODR_1_HZ);
+    sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
     Wire.setRegister(ADDR, TEMP_OUT_BASE + 0, 0);
     Wire.setRegister(ADDR, TEMP_OUT_BASE + 1, 0);
-    Wire.setRegister(ADDR, HTS221_REG_STATUS, HTS221_STATUS_H_DA | HTS221_STATUS_T_DA);
+    Wire.setRegister(ADDR, WSEN_HIDS_REG_STATUS, WSEN_HIDS_STATUS_H_DA | WSEN_HIDS_STATUS_T_DA);
 
     // Positive raw above the 30000 span → calibrated value > 100 %RH,
     // driver clamps to 100.
@@ -193,25 +193,32 @@ void test_read_auto_triggers_when_powered_down(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 10.0f, r.temperature);
     TEST_ASSERT_FLOAT_WITHIN(0.1f, 30.0f, r.humidity);
 
-    // The read() flow should have emitted a CTRL1 power-up and a CTRL2
-    // ONE_SHOT write before reading the OUT registers.
-    bool sawCtrl1PowerUp = false;
+    // The read() flow should have written CTRL1 with PD=1, BDU=1, and
+    // ODR=12.5 Hz (continuous mode auto-bring-up). It must NOT have
+    // touched CTRL2.ONE_SHOT — the one-shot path is unreliable on this
+    // silicon and the driver deliberately avoids it here.
+    bool sawCtrl1Continuous = false;
     bool sawCtrl2OneShot = false;
     for (const auto& w : Wire.getWrites()) {
-        if (w.reg == HTS221_REG_CTRL1 && (w.value & HTS221_CTRL1_PD)) {
-            sawCtrl1PowerUp = true;
+        if (w.reg == WSEN_HIDS_REG_CTRL1) {
+            uint8_t expected = WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU | WSEN_HIDS_ODR_12_5_HZ;
+            if (w.value == expected) {
+                sawCtrl1Continuous = true;
+            }
         }
-        if (w.reg == HTS221_REG_CTRL2 && (w.value & HTS221_CTRL2_ONE_SHOT)) {
+        if (w.reg == WSEN_HIDS_REG_CTRL2 && (w.value & WSEN_HIDS_CTRL2_ONE_SHOT)) {
             sawCtrl2OneShot = true;
         }
     }
-    TEST_ASSERT_TRUE_MESSAGE(sawCtrl1PowerUp, "auto-trigger missed CTRL1 PD write");
-    TEST_ASSERT_TRUE_MESSAGE(sawCtrl2OneShot, "auto-trigger missed CTRL2 ONE_SHOT write");
+    TEST_ASSERT_TRUE_MESSAGE(sawCtrl1Continuous,
+                             "auto-trigger missed CTRL1 PD|BDU|ODR=12.5Hz write");
+    TEST_ASSERT_FALSE_MESSAGE(sawCtrl2OneShot,
+                              "auto-trigger must not poke the unreliable ONE_SHOT path");
 }
 
 void test_set_temperature_offset_shifts_reading(void) {
     sensor.begin();
-    sensor.setContinuous(HTS221_ODR_1_HZ);
+    sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
     preloadMeasurement(20.0f, 50.0f);
     sensor.setTemperatureOffset(-1.5f);
 
@@ -220,7 +227,7 @@ void test_set_temperature_offset_shifts_reading(void) {
 
 void test_calibrate_temperature_applies_two_point_correction(void) {
     sensor.begin();
-    sensor.setContinuous(HTS221_ODR_1_HZ);
+    sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
     // Factory curve maps raw -> 20 °C; user says "when sensor reads 20,
     // the truth is 22; when sensor reads 0, the truth is 1". Linear fit:
     //   corrected = 1 + (22 - 1) / (20 - 0) * factory = 1 + 1.05 * factory
@@ -249,18 +256,89 @@ void test_reboot_writes_ctrl2_boot(void) {
     Wire.clearWrites();
     // Make BOOT bit clear itself on the very first poll so the driver
     // doesn't spin against the mock.
-    Wire.setRegister(ADDR, HTS221_REG_CTRL2, 0);
+    Wire.setRegister(ADDR, WSEN_HIDS_REG_CTRL2, 0);
 
     sensor.reboot();
 
     bool sawBootSet = false;
     for (const auto& w : Wire.getWrites()) {
-        if (w.reg == HTS221_REG_CTRL2 && (w.value & HTS221_CTRL2_BOOT)) {
+        if (w.reg == WSEN_HIDS_REG_CTRL2 && (w.value & WSEN_HIDS_CTRL2_BOOT)) {
             sawBootSet = true;
             break;
         }
     }
     TEST_ASSERT_TRUE(sawBootSet);
+}
+
+void test_soft_reset_routes_to_reboot(void) {
+    sensor.begin();
+    Wire.clearWrites();
+    Wire.setRegister(ADDR, WSEN_HIDS_REG_CTRL2, 0);
+
+    sensor.softReset();
+
+    bool sawBootSet = false;
+    for (const auto& w : Wire.getWrites()) {
+        if (w.reg == WSEN_HIDS_REG_CTRL2 && (w.value & WSEN_HIDS_CTRL2_BOOT)) {
+            sawBootSet = true;
+            break;
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(sawBootSet, "softReset() should toggle CTRL2.BOOT like reboot()");
+}
+
+void test_set_averaging_writes_av_conf(void) {
+    sensor.begin();
+    // Humidity averaging code 5 (=> AVGH_128), temperature averaging code 3
+    // (=> AVGT_16). Driver packs them as [AVGT(5..3) | AVGH(2..0)].
+    sensor.setAveraging(0x05, 0x03);
+    uint8_t avconf = Wire.getRegister(ADDR, WSEN_HIDS_REG_AV_CONF);
+    uint8_t expected = static_cast<uint8_t>((0x03 << WSEN_HIDS_AV_CONF_AVGT_SHIFT) |
+                                            (0x05 & WSEN_HIDS_AV_CONF_AVGH_MASK));
+    TEST_ASSERT_EQUAL_HEX8(expected, avconf);
+}
+
+// The chip lives on its own VDD rail on the STeaMi — an MCU reset does not
+// power-cycle it, so previous code can leave AV_CONF pegged at max
+// averaging (0x3F → 256+512 samples, which pushes any conversion past a
+// reasonable timeout). begin() must override AV_CONF back to the datasheet
+// default regardless of what the chip carries from a previous run.
+void test_begin_resets_av_conf_to_default(void) {
+    // Simulate the chip coming up with AV_CONF stuck at 0x3F from a
+    // previous sketch.
+    Wire.setRegister(ADDR, WSEN_HIDS_REG_AV_CONF, 0x3F);
+
+    sensor.begin();
+
+    TEST_ASSERT_EQUAL_HEX8(WSEN_HIDS_AV_CONF_DEFAULT,
+                           Wire.getRegister(ADDR, WSEN_HIDS_REG_AV_CONF));
+}
+
+// Same chip-state-survives-reset concern for CTRL2: a previous one-shot
+// attempt that the caller gave up on can leave CTRL2.ONE_SHOT latched at
+// 1, and the next trigger then sees no 0→1 edge. begin() must clear it.
+void test_begin_clears_ctrl2(void) {
+    Wire.setRegister(ADDR, WSEN_HIDS_REG_CTRL2, WSEN_HIDS_CTRL2_ONE_SHOT);
+
+    sensor.begin();
+
+    TEST_ASSERT_EQUAL_HEX8(0x00, Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL2));
+}
+
+// Following the stm32duino / Würth reference-driver pattern, the
+// auto-bring-up inside read() routes through continuous mode. After
+// read() returns, the chip must remain in continuous mode at the chosen
+// ODR so the next read short-circuits to a plain OUT-register read
+// instead of paying the bring-up cost again.
+void test_read_auto_bringup_leaves_chip_in_continuous(void) {
+    sensor.begin();
+    preloadMeasurement(20.0f, 50.0f);
+
+    sensor.read();
+
+    uint8_t ctrl1 = Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL1);
+    uint8_t expected = WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU | WSEN_HIDS_ODR_12_5_HZ;
+    TEST_ASSERT_EQUAL_HEX8(expected, ctrl1);
 }
 
 int main(void) {
@@ -282,5 +360,10 @@ int main(void) {
     RUN_TEST(test_calibrate_temperature_applies_two_point_correction);
     RUN_TEST(test_read_returns_nan_on_timeout);
     RUN_TEST(test_reboot_writes_ctrl2_boot);
+    RUN_TEST(test_soft_reset_routes_to_reboot);
+    RUN_TEST(test_set_averaging_writes_av_conf);
+    RUN_TEST(test_begin_resets_av_conf_to_default);
+    RUN_TEST(test_begin_clears_ctrl2);
+    RUN_TEST(test_read_auto_bringup_leaves_chip_in_continuous);
     return UNITY_END();
 }

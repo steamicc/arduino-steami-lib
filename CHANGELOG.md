@@ -3,6 +3,91 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.14.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.13.0...v0.14.0) (2026-05-26)
+
+
+### Features
+
+* **ble:** Add BLE indoor map with real-time serial display. ([#150](https://github.com/steamicc/arduino-steami-lib/issues/150)) ([3e86103](https://github.com/steamicc/arduino-steami-lib/commit/3e861034c71cd7b7de024950567e1d9785917279))
+
+# [0.13.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.12.0...v0.13.0) (2026-05-26)
+
+
+### Features
+
+* **ble:** Add BLE trilateration indoor positioning example. ([#147](https://github.com/steamicc/arduino-steami-lib/issues/147)) ([89c5cc1](https://github.com/steamicc/arduino-steami-lib/commit/89c5cc1b133cb4eb003be04c207ebab5e4a7beb6))
+
+# [0.12.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.11.0...v0.12.0) (2026-05-26)
+
+
+### Features
+
+* **ble:** Add BLE RSSI room mapper example with CSV export. ([#142](https://github.com/steamicc/arduino-steami-lib/issues/142)) ([a966bec](https://github.com/steamicc/arduino-steami-lib/commit/a966bec490106f3204aaf69fa17efc9d9c6eed00))
+
+# [0.11.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.10.0...v0.11.0) (2026-05-26)
+
+
+### Features
+
+* **ble:** Add RSSI proximity detector example. ([#140](https://github.com/steamicc/arduino-steami-lib/issues/140)) ([85124fb](https://github.com/steamicc/arduino-steami-lib/commit/85124fbe5eb30c8349e225f5fa198c1a640a0d84))
+
+# [0.10.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.9.0...v0.10.0) (2026-05-26)
+
+
+### Features
+
+* **ble:** Add BLE beacon advertising example with WSEN-HIDS sensor. ([#139](https://github.com/steamicc/arduino-steami-lib/issues/139)) ([43ec925](https://github.com/steamicc/arduino-steami-lib/commit/43ec92559fe3c39020cb023f8a9fe08c17e5a219))
+
+# [0.9.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.8.0...v0.9.0) (2026-05-26)
+
+
+### Features
+
+* **wsen-hids:** Add basic driver. ([#131](https://github.com/steamicc/arduino-steami-lib/issues/131)) ([e0cab75](https://github.com/steamicc/arduino-steami-lib/commit/e0cab752a3f58da090babc7d70bafa6a0aab70ea)), closes [#pragma](https://github.com/steamicc/arduino-steami-lib/issues/pragma) [steamicc/micropython-steami-lib#425](https://github.com/steamicc/micropython-steami-lib/issues/425) [hi#level](https://github.com/hi/issues/level) [steamicc/micropython-steami-lib#425](https://github.com/steamicc/micropython-steami-lib/issues/425) [steamicc/micropython-steami-lib#425](https://github.com/steamicc/micropython-steami-lib/issues/425)
+
+# [0.8.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.7.4...v0.8.0) (2026-04-29)
+
+
+### Features
+
+* **daplink_bridge:** Implement Arduino driver. ([#161](https://github.com/steamicc/arduino-steami-lib/issues/161)) ([4b7ab0b](https://github.com/steamicc/arduino-steami-lib/commit/4b7ab0b85a6316e6079d0654c789bec9992fefe4)), closes [#156](https://github.com/steamicc/arduino-steami-lib/issues/156)
+
+## [0.7.4](https://github.com/steamicc/arduino-steami-lib/compare/v0.7.3...v0.7.4) (2026-04-29)
+
+## [0.7.3](https://github.com/steamicc/arduino-steami-lib/compare/v0.7.2...v0.7.3) (2026-04-29)
+
+## [0.7.2](https://github.com/steamicc/arduino-steami-lib/compare/v0.7.1...v0.7.2) (2026-04-29)
+
+## [0.7.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.7.0...v0.7.1) (2026-04-28)
+
+# [0.7.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.6.0...v0.7.0) (2026-04-28)
+
+
+### Features
+
+* **wsen-pads:** Add three practical example sketches. ([#152](https://github.com/steamicc/arduino-steami-lib/issues/152)) ([f6bc295](https://github.com/steamicc/arduino-steami-lib/commit/f6bc2950d9d307a1a985ed3d637d68ef12d9beae)), closes [#69](https://github.com/steamicc/arduino-steami-lib/issues/69)
+
+# [0.6.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.5.0...v0.6.0) (2026-04-28)
+
+
+### Features
+
+* **wsen-pads:** Implement Arduino driver. ([#143](https://github.com/steamicc/arduino-steami-lib/issues/143)) ([86a17d8](https://github.com/steamicc/arduino-steami-lib/commit/86a17d82f76ea5c4e8844cd5bf9cdb56e3bb1bc8)), closes [#5](https://github.com/steamicc/arduino-steami-lib/issues/5) [#25](https://github.com/steamicc/arduino-steami-lib/issues/25)
+
+# [0.5.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.4.0...v0.5.0) (2026-04-28)
+
+
+### Features
+
+* **tooling:** Add capture-<driver>/<example> for boot serial capture. ([#138](https://github.com/steamicc/arduino-steami-lib/issues/138)) ([6e23015](https://github.com/steamicc/arduino-steami-lib/commit/6e23015cfbd46ffdcc8af1cb1fea561d02e570b6))
+
+# [0.4.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.3.0...v0.4.0) (2026-04-28)
+
+
+### Features
+
+* **tooling:** Add per-example flash- targets and list-examples ([#133](https://github.com/steamicc/arduino-steami-lib/issues/133)) ([df21d26](https://github.com/steamicc/arduino-steami-lib/commit/df21d26ceb0241e1dd441231eba9f6b83643a6c3))
+
 # [0.3.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.2.5...v0.3.0) (2026-04-23)
 
 
