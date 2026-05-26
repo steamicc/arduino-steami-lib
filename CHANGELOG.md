@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.14.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.13.0...v0.14.0) (2026-05-26)
+
+
+### Features
+
+* **ble:** Add BLE indoor map with real-time serial display. ([#150](https://github.com/steamicc/arduino-steami-lib/issues/150)) ([3e86103](https://github.com/steamicc/arduino-steami-lib/commit/3e861034c71cd7b7de024950567e1d9785917279))
+
 # [0.13.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.12.0...v0.13.0) (2026-05-26)
 
 
