@@ -104,7 +104,8 @@ class MCP23009Pin {
     static constexpr uint8_t IRQ_FALLING = 1;
     static constexpr uint8_t IRQ_RISING = 2;
 
-    MCP23009Pin(MCP23009E& mcp, uint8_t pinNumber, uint8_t mode, uint8_t pull, uint8_t value);
+    MCP23009Pin(MCP23009E& mcp, uint8_t pinNumber, uint8_t mode = 0xFF, uint8_t pull = 0xFF,
+                uint8_t value = 0xFF);
 
     void init(uint8_t mode = 0xFF, uint8_t pull = 0xFF, uint8_t value = 0xFF);
     uint8_t value(uint8_t x = 0xFF);
@@ -134,8 +135,8 @@ class MCP23009ActiveLowPin {
     static constexpr uint8_t IRQ_FALLING = MCP23009Pin::IRQ_FALLING;
     static constexpr uint8_t IRQ_RISING = MCP23009Pin::IRQ_RISING;
 
-    MCP23009ActiveLowPin(MCP23009E& mcp, uint8_t pinNumber, uint8_t mode, uint8_t pull,
-                         uint8_t value);
+    MCP23009ActiveLowPin(MCP23009E& mcp, uint8_t pinNumber, uint8_t mode = 0xFF,
+                         uint8_t pull = 0xFF, uint8_t value = 0xFF);
 
     void init(uint8_t mode = 0xFF, uint8_t pull = 0xFF, uint8_t value = 0xFF);
     uint8_t value(uint8_t x = 0xFF);
