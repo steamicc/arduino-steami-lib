@@ -1,0 +1,36 @@
+baud: 115200
+
+phases:
+  - name: Baseline
+    prompt: "Press Enter, then leave the board undisturbed on the desk."
+    capture_seconds: 5
+    record:
+      - temperature
+      - humidity
+    assert:
+      temperature_min: 10
+      temperature_max: 50
+      humidity_min: 10
+      humidity_max: 90
+
+  - name: Breathing
+    prompt: "Press Enter, then breathe directly on the HTS221 sensor for ~5 seconds."
+    capture_seconds: 5
+    record:
+      - humidity
+    assert:
+      humidity_delta_vs: Baseline
+      humidity_delta_min: 1.0
+      humidity_delta_max: 10
+    wait_for_confirm: true
+
+  - name: Warm fingers
+    prompt: "Press Enter, then hold two fingers on the sensor area for ~5 seconds."
+    capture_seconds: 5
+    record:
+      - temperature
+    assert:
+      temperature_delta_vs: Baseline
+      temperature_delta_min: 0.5
+      temperature_delta_max: 5
+    wait_for_confirm: true

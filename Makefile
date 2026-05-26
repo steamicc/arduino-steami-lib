@@ -5,6 +5,7 @@
 include env.mk
 
 PIO := .venv/bin/pio
+PYTHON := .venv/bin/python3
 EXAMPLES_ROOT := lib
 
 # --- Setup ---
@@ -276,6 +277,27 @@ list-tests: ## List ready-to-run test- targets across all tiers
 	@for k in $(INTEGRATION_TEST_KEYS); do printf 'test-integration/%s\n' "$$k"; done
 	@for k in $(ALL_TEST_KEYS); do printf 'test/%s\n' "$$k"; done
 
+# --- Qualification ---
+
+QUALIFY_DRIVERS := $(notdir $(wildcard tests/qualification/*))
+
+.PHONY: list-qualification
+list-qualification: ## List all available qualification targets
+	@if [ -z "$(QUALIFY_DRIVERS)" ]; then \
+		echo "No qualification scenarios found under tests/qualification/."; \
+		exit 1; \
+	fi
+	@for drv in $(QUALIFY_DRIVERS); do \
+		echo qualify-$$drv; \
+	done
+
+define QUALIFY_template
+.PHONY: qualify-$(1)
+qualify-$(1): setup ## Run YAML qualification scenario for $(1)
+	@$(PYTHON) scripts/qualify.py $(1)
+endef
+
+$(foreach drv,$(QUALIFY_DRIVERS),$(eval $(call QUALIFY_template,$(drv))))
 # --- CI ---
 
 .PHONY: ci
