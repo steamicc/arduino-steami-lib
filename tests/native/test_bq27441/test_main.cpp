@@ -84,6 +84,31 @@ void test_temperature_internal_reads_correct_register(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.1, 4660 * 0.1 - 273.15, tempC);
 }
 
+// Ported from the MicroPython sister project's bq27441.yaml scenarios:
+// the average-power register lives in its own command and the readout
+// is a plain signed 16-bit value (185 mW in the MP fixture).
+void test_power_reads_avg_power_register(void) {
+    Wire.setRegister(ADDR, BQ27441_COMMAND_AVG_POWER, 0xB9);
+    Wire.setRegister(ADDR, BQ27441_COMMAND_AVG_POWER + 1, 0x00);
+    TEST_ASSERT_EQUAL(185, sensor->power());
+}
+
+// MP's "Battery temperature in Kelvin" check. Raw 2981 in deci-K maps
+// to 298.1 K.
+void test_temperature_k_converts_decikelvin_to_kelvin(void) {
+    Wire.setRegister(ADDR, BQ27441_COMMAND_TEMP, 0xA5);
+    Wire.setRegister(ADDR, BQ27441_COMMAND_TEMP + 1, 0x0B);
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 298.1f, sensor->temperatureK());
+}
+
+// MP's "Battery temperature in decikelvin" check. The Dk getter is the
+// raw register value with no conversion applied.
+void test_temperature_dk_returns_raw_register(void) {
+    Wire.setRegister(ADDR, BQ27441_COMMAND_TEMP, 0xA5);
+    Wire.setRegister(ADDR, BQ27441_COMMAND_TEMP + 1, 0x0B);
+    TEST_ASSERT_EQUAL(2981, sensor->temperatureDk());
+}
+
 void test_capacity_remaining_reads_correct_register(void) {
     Wire.setRegister(ADDR, BQ27441_COMMAND_REM_CAPACITY, 0x78);
     Wire.setRegister(ADDR, BQ27441_COMMAND_REM_CAPACITY + 1, 0x56);
@@ -192,6 +217,9 @@ int main(void) {
     RUN_TEST(test_state_of_health_returns_low_byte);
     RUN_TEST(test_temperature_converts_decikelvin_to_celsius);
     RUN_TEST(test_temperature_internal_reads_correct_register);
+    RUN_TEST(test_power_reads_avg_power_register);
+    RUN_TEST(test_temperature_k_converts_decikelvin_to_kelvin);
+    RUN_TEST(test_temperature_dk_returns_raw_register);
     RUN_TEST(test_capacity_remaining_reads_correct_register);
     RUN_TEST(test_capacity_full_reads_correct_register);
     RUN_TEST(test_data_ready_returns_false_when_initcomp_not_set);
