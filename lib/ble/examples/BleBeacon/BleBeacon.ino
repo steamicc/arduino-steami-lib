@@ -11,8 +11,8 @@
 
 #include <Arduino.h>
 #include <STM32duinoBLE.h>
-#include <WsenHids.h>
 #include <Wire.h>
+#include <WsenHids.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 WsenHids sensor(internalI2C);
