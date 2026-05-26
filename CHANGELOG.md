@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.10.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.9.0...v0.10.0) (2026-05-26)
+
+
+### Features
+
+* **ble:** Add BLE beacon advertising example with WSEN-HIDS sensor. ([#139](https://github.com/steamicc/arduino-steami-lib/issues/139)) ([43ec925](https://github.com/steamicc/arduino-steami-lib/commit/43ec92559fe3c39020cb023f8a9fe08c17e5a219))
+
 # [0.9.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.8.0...v0.9.0) (2026-05-26)
 
 
