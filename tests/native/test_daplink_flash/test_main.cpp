@@ -84,7 +84,7 @@ void test_get_filename_returns_stripped_name(void) {
 void test_clear_flash_sends_cmd(void) {
     Wire.clearWrites();
     Wire.clearCommands();
-    flash.clearFlash();
+    bool ok = flash.clearFlash();
 
     bool sawCmd = false;
     for (const auto& cmd : Wire.getCommands()) {
@@ -95,6 +95,13 @@ void test_clear_flash_sends_cmd(void) {
     }
 
     TEST_ASSERT_TRUE(sawCmd);
+    TEST_ASSERT_TRUE_MESSAGE(ok, "clearFlash() should return true on a clean bridge response");
+}
+
+void test_clear_flash_returns_false_on_device_error(void) {
+    Wire.setRegister(ADDR, DAPLINK_BRIDGE_REG_ERROR, DAPLINK_BRIDGE_ERROR_CMD_FAILED);
+
+    TEST_ASSERT_FALSE(flash.clearFlash());
 }
 
 void test_write_sends_data(void) {
@@ -204,6 +211,7 @@ int main(void) {
     RUN_TEST(test_set_filename_sends_correct_payload);
     RUN_TEST(test_get_filename_returns_stripped_name);
     RUN_TEST(test_clear_flash_sends_cmd);
+    RUN_TEST(test_clear_flash_returns_false_on_device_error);
     RUN_TEST(test_write_sends_data);
     RUN_TEST(test_write_returns_length);
     RUN_TEST(test_write_line_appends_newline);

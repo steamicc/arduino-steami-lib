@@ -22,7 +22,7 @@ class DaplinkFlash {
     FilenameResult getFilename();
 
     // Flash operations
-    void clearFlash();
+    bool clearFlash();
     size_t write(const char* data);
     size_t write(const uint8_t* data, size_t length);
     size_t writeLine(const char* text);

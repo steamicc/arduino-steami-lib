@@ -54,7 +54,7 @@ void setup() {
 
 | Method | Description |
 |--------|-------------|
-| `void clearFlash()` | Erase the entire flash memory. |
+| `bool clearFlash()` | Erase the entire flash memory. Returns `true` on success, `false` if the bridge times out or reports an error. |
 | `size_t write(const uint8_t* data, size_t length)` | Append raw bytes to the current file. Returns the number of bytes written, or `0` on error. |
 | `size_t write(const char* data)` | Append a null-terminated string to the current file. |
 | `size_t writeLine(const char* text)` | Append a string followed by a newline character. |
@@ -63,7 +63,7 @@ void setup() {
 
 | Method | Description |
 |--------|-------------|
-| `void readSector(uint16_t sector, uint8_t* buf)` | Read a 256-byte sector from flash into `buf`. |
+| `bool readSector(uint16_t sector, uint8_t* buf)` | Read a 256-byte sector from flash into `buf`. Returns `false` if `buf` is `nullptr`, the bridge fails, or fewer than 256 bytes are returned. |
 | `size_t readN(uint8_t* result, size_t maxLen)` | Read up to `maxLen` bytes of file content into `result`. Returns the number of bytes read. |
 | `size_t readUntilSentinel(uint8_t* result, size_t maxLen)` | Read file content into `result` until the first `0xFF` sentinel is encountered, or until `maxLen` bytes have been read. Returns the number of bytes read. |
 

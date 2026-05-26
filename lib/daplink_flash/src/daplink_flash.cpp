@@ -82,9 +82,11 @@ DaplinkFlash::FilenameResult DaplinkFlash::getFilename() {
 // Flash operations
 // --------------------------------------------------
 
-void DaplinkFlash::clearFlash() {
-    // Erase entire flash memory.
-    _bridge->sendCommand(DAPLINK_FLASH_CMD_CLEAR_FLASH);
+bool DaplinkFlash::clearFlash() {
+    // Erase entire flash memory. Propagates the bridge's status so the
+    // caller can detect a busy timeout or device-side error rather than
+    // assume the wipe succeeded.
+    return _bridge->sendCommand(DAPLINK_FLASH_CMD_CLEAR_FLASH);
 }
 
 size_t DaplinkFlash::write(const uint8_t* data, size_t length) {
