@@ -51,9 +51,12 @@ See [examples/BasicReader/](examples/BasicReader/) for the full sketch.
 
 ## Examples
 
-| Example                                | What it does                                                  |
-| -------------------------------------- | ------------------------------------------------------------- |
-| [`BasicReader`](examples/BasicReader/) | Baseline sketch: print temperature and humidity every second. |
+| Example                                        | What it does                                                                                |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [`BasicReader`](examples/BasicReader/)         | Baseline sketch: print temperature and humidity every second.                               |
+| [`HumidityAlert`](examples/HumidityAlert/)     | Sound the on-board buzzer when humidity climbs past a mold-risk threshold.                  |
+| [`DewPointMonitor`](examples/DewPointMonitor/) | Compute the dew point from T and RH, warn when condensation risk is high (T − Td < 2 °C).   |
+| [`ComfortZone`](examples/ComfortZone/)         | Classify the room as comfortable / too dry / too humid / too cold / too hot.                |
 
 ### Building an example
 
