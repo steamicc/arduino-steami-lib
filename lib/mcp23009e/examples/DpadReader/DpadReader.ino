@@ -32,7 +32,7 @@ void setup() {
 
     // Configure each D-PAD pin as input with an internal pull-up.
     // Buttons pull the line LOW when pressed.
-    for (uint8_t i = 0; i < sizeof(kButtons); ++i) {
+    for (uint8_t i = 0; i < (sizeof(kButtons) / sizeof(kButtons[0])); ++i) {
         expander.setup(kButtons[i], MCP23009_DIR_INPUT, MCP23009_PULLUP);
     }
 
@@ -40,7 +40,7 @@ void setup() {
 }
 
 void loop() {
-    for (uint8_t i = 0; i < sizeof(kButtons); ++i) {
+    for (uint8_t i = 0; i < (sizeof(kButtons) / sizeof(kButtons[0])); ++i) {
         if (expander.getLevel(kButtons[i]) == MCP23009_LOGIC_LOW) {
             Serial.print("Pressed: ");
             Serial.println(kButtonNames[i]);

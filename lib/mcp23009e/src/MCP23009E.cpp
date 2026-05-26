@@ -87,11 +87,21 @@ bool MCP23009E::begin() {
 
     if (_interruptPin != -1) {
         pinMode(_interruptPin, INPUT);
+        // STM32duino's attachInterrupt() is typedef'd as
+        // void(uint32_t, callback_function_t, uint32_t) where
+        // callback_function_t = std::function<void(void)>, so capturing
+        // lambdas are supported on the target. The native mock matches
+        // that signature.
         attachInterrupt(digitalPinToInterrupt(_interruptPin), [this]() { irqHandler(); }, FALLING);
     }
 
     reset();
-    return true;
+
+    // Probe the I2C bus: an address-only transmission ACK'd by the
+    // device means it's present. Returns false otherwise so callers
+    // can react to a missing/incorrectly-wired expander.
+    _wire.beginTransmission(_address);
+    return _wire.endTransmission() == 0;
 }
 
 uint8_t MCP23009E::setBit(uint8_t reg, uint8_t bit, uint8_t value) {
@@ -204,12 +214,19 @@ void MCP23009E::writeReg(uint8_t reg, uint8_t value) {
 }
 
 uint8_t MCP23009E::readReg(uint8_t reg) {
-    // Lit une valeur depuis un registre
     _wire.beginTransmission(_address);
     _wire.write(reg);
     _wire.endTransmission(false);
-    _wire.requestFrom(_address, (uint8_t)1);
-    return _wire.read();
+    // Short reads return -1 from Wire.read() which becomes 0xFF when
+    // assigned to uint8_t — a perfectly valid-looking register value.
+    // Reject the transaction on any partial response.
+    if (_wire.requestFrom(_address, static_cast<uint8_t>(1)) != 1) {
+        return 0;
+    }
+    if (!_wire.available()) {
+        return 0;
+    }
+    return static_cast<uint8_t>(_wire.read());
 }
 
 void MCP23009E::setIodir(uint8_t value) {

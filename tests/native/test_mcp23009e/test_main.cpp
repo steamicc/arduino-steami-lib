@@ -39,6 +39,15 @@ void testBeginReturnsTrue(void) {
     TEST_ASSERT_TRUE(mcp->begin());
 }
 
+// begin() must probe the bus and surface a missing/incorrectly-wired
+// expander as false, not silently succeed. Use the mock's NACK
+// injection to simulate the device not ACKing.
+void testBeginReturnsFalseWhenDeviceMissing(void) {
+    Wire.setEndTransmissionResult(2);  // NACK on address
+    TEST_ASSERT_FALSE(mcp->begin());
+    Wire.setEndTransmissionResult(0);  // restore default for the next test
+}
+
 void testResetLeavesPinHigh(void) {
     mcp->reset();
     TEST_ASSERT_EQUAL(HIGH, gpioPinState()[RESET_PIN]);
@@ -466,6 +475,7 @@ int main(void) {
     RUN_TEST(testBeginConfiguresResetPinAsOutput);
     RUN_TEST(testBeginResetsDevice);
     RUN_TEST(testBeginReturnsTrue);
+    RUN_TEST(testBeginReturnsFalseWhenDeviceMissing);
     RUN_TEST(testResetLeavesPinHigh);
     RUN_TEST(testPowerOffDrivesResetPinLow);
     RUN_TEST(testPowerOnDrivesResetPinHigh);
