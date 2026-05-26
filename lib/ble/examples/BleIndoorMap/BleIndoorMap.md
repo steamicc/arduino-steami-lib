@@ -53,7 +53,7 @@ M3 (330, 278)
 
 ### 3. Update Coordinates in the Code
 
-In `main.cpp`, modify the following arrays:
+In `BleIndoorMap.ino`, modify the following arrays:
 
 ```cpp
 static const float BEACON_X[BEACON_COUNT] = {0.0f, 420.0f, 330.0f};

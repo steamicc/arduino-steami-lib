@@ -79,11 +79,14 @@ void smoothRssi(int idx, int newRssi) {
     currentRssi[idx] = sum / rssiCount[idx];
 }
 
+// Returns the estimated distance in cm, or a negative value when the signal
+// is too weak to be trusted. powf() (not pow()) keeps the math in
+// single-precision, which matches the Cortex-M4F FPU.
 float rssiToDistance(int rssi, int idx) {
-    float d = pow(10.0f, (RSSI_REF[idx] - rssi) / (10.0f * PATH_LOSS_N[idx]));
+    float d = powf(10.0f, (RSSI_REF[idx] - rssi) / (10.0f * PATH_LOSS_N[idx]));
     d *= 100.0f;
     if (d > MAX_DIST_CM)
-        d = MAX_DIST_CM;
+        return -1.0f;
     return d;
 }
 
@@ -150,7 +153,7 @@ void printBeaconStatus() {
     unsigned long now = millis();
     Serial.println("--- Beacons ---");
     for (int i = 0; i < BEACON_COUNT; i++) {
-        // Expire beacon si pas vu depuis BEACON_TIMEOUT_MS
+        // Expire the beacon if not seen for BEACON_TIMEOUT_MS
         if (beaconSeen[i] && (now - lastSeenMs[i]) > BEACON_TIMEOUT_MS) {
             beaconSeen[i] = false;
         }
@@ -233,10 +236,10 @@ void printMap() {
         Serial.print((int)filteredY);
         Serial.println("cm");
     } else {
-        Serial.println("Position: en attente des 3 beacons...");
+        Serial.println("Position: waiting for all 3 beacons...");
     }
 
-    // Affichage status beacons
+    // Show beacon status
     printBeaconStatus();
 
     Serial.println("Commands: c=clear trail  h=help");
@@ -290,7 +293,7 @@ void loop() {
         }
     }
 
-    // === Drainer TOUS les devices disponibles ===
+    // === Drain ALL queued devices ===
     BLEDevice device;
     while ((device = BLE.available())) {
         String name = device.localName();
@@ -310,7 +313,7 @@ void loop() {
         return;
     lastUpdate = millis();
 
-    // Expirer les beacons trop vieux
+    // Expire stale beacons
     unsigned long now = millis();
     int seen = 0;
     for (int i = 0; i < BEACON_COUNT; i++) {
@@ -322,12 +325,18 @@ void loop() {
 
     if (seen == 3) {
         float d[BEACON_COUNT];
-        for (int i = 0; i < BEACON_COUNT; i++)
+        bool allValid = true;
+        for (int i = 0; i < BEACON_COUNT; i++) {
             d[i] = rssiToDistance(currentRssi[i], i);
+            if (d[i] < 0.0f)
+                allValid = false;
+        }
 
-        float rawX, rawY;
-        if (trilaterate(d[0], d[1], d[2], rawX, rawY))
-            applyFilter(rawX, rawY);
+        if (allValid) {
+            float rawX, rawY;
+            if (trilaterate(d[0], d[1], d[2], rawX, rawY))
+                applyFilter(rawX, rawY);
+        }
     }
 
     printMap();
