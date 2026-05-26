@@ -1,59 +1,116 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#ifndef WSEN_HIDS_H
-#define WSEN_HIDS_H
+
+#pragma once
 
 #include <Arduino.h>
 #include <Wire.h>
 
+#include "WsenHids_const.h"
+
+// WSEN-HIDS — Würth Elektronik capacitive humidity + temperature sensor, I2C.
+//
+// The public API intentionally mirrors the rest of the STeaMi driver
+// collection (begin / deviceId / powerOn / powerOff / softReset / reboot /
+// setContinuous / triggerOneShot / temperature / humidity / read) so
+// consumers learn one shape and reuse it across sensors.
 class WsenHids {
    public:
-    static constexpr uint8_t DEFAULT_ADDRESS = 0x5F;
+    struct ReadResult {
+        float temperature;  // Celsius
+        float humidity;     // %RH
+    };
 
-    explicit WsenHids(TwoWire& wire = Wire, uint8_t address = DEFAULT_ADDRESS);
+    WsenHids(TwoWire& wire = Wire, uint8_t address = WSEN_HIDS_DEFAULT_ADDRESS);
 
+    // Probe the device and load calibration. Returns false if WHO_AM_I
+    // does not match WSEN_HIDS_WHO_AM_I_VALUE.
     bool begin();
+
+    // WHO_AM_I value (always 0xBC on a healthy WSEN-HIDS).
     uint8_t deviceId();
 
-    void powerOn();
-    void powerOff();
+    // Software reset: reload the factory trimming from non-volatile memory.
     void reboot();
 
-    uint8_t status();
+    // Software-visible reset equivalent to reboot() — the part has no
+    // dedicated reset register beyond BOOT, so softReset() and reboot()
+    // share the same mechanism. softReset() is kept for API symmetry
+    // with other drivers in the collection.
+    void softReset();
+
+    // Power control via CTRL_REG1.PD.
+    void powerOn();
+    void powerOff();
+
+    // Data-ready bits from STATUS_REG.
+    bool dataReady();
     bool temperatureReady();
     bool humidityReady();
-    bool dataReady();
 
+    // Single-channel reads. If the device is powered down, the method
+    // auto-triggers a one-shot measurement, waits for dataReady(), and
+    // returns the result — the caller doesn't need to manage modes.
     float temperature();
     float humidity();
 
+    // Combined reading — preferred when both channels are needed to keep
+    // them consistent (single auto-trigger, single poll).
+    ReadResult read();
+
+    // Continuous mode at the requested ODR (WSEN_HIDS_ODR_1_HZ, _7_HZ, or
+    // _12_5_HZ). BDU is set so no register is updated mid-read.
     void setContinuous(uint8_t odr);
+
+    // Trigger a single measurement without blocking. Pair with
+    // temperature() / humidity() after polling dataReady(), or use
+    // readOneShot() for the bundled flow.
     void triggerOneShot();
-    std::tuple<float, float> readOneShot();
+
+    // Trigger a one-shot measurement, wait for dataReady() with a timeout,
+    // and return both channels.
+    ReadResult readOneShot();
+
+    // Number of internal samples averaged per output. Pass register
+    // values from AV_CONF (0..7 for humidity, 0..7 for temperature, see
+    // WSEN-HIDS datasheet table 18).
     void setAveraging(uint8_t humidityAvg, uint8_t temperatureAvg);
 
+    // Additive Celsius offset applied after the factory calibration.
+    void setTemperatureOffset(float offset);
+
+    // Two-point user calibration for temperature. refLow/refHigh are the
+    // known reference values in Celsius; measLow/measHigh are what the
+    // sensor reported at those references. Subsequent temperature()
+    // calls apply the correction on top of the factory calibration.
+    void calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh);
+
    private:
-    bool readReg(uint8_t reg, uint8_t* data, size_t len = 1);
-    bool writeReg(uint8_t reg, uint8_t data);
-    bool writeReg(uint8_t reg, const uint8_t* data, size_t len);
-    bool updateReg(uint8_t reg, uint8_t mask, uint8_t value);
-
-    bool readU16(uint8_t lowReg, uint16_t& value);
-    bool readS16(uint8_t lowReg, int16_t& value);
-    bool readCalibration();
-
-    bool _calibrationLoaded;
-    TwoWire& _wire;
+    // Stored as a pointer (not a reference) so the class is default-assignable
+    // — useful for tests that reconstruct the sensor between fixtures. The
+    // public constructor still takes a TwoWire& to keep the usual Arduino
+    // I2C interface at the call site.
+    TwoWire* _wire;
     uint8_t _address;
 
-    float _h0_rh;
-    float _h1_rh;
-    int16_t _h0_t0_out;
-    int16_t _h1_t0_out;
+    // Cached factory calibration, loaded by begin().
+    float _tempSlope = 0.0f;
+    float _tempIntercept = 0.0f;
+    float _humSlope = 0.0f;
+    float _humIntercept = 0.0f;
 
-    float _t0_degC;
-    float _t1_degC;
-    int16_t _t0_out;
-    int16_t _t1_out;
+    // User-applied correction (on top of the factory calibration).
+    float _tempOffset = 0.0f;
+    float _tempUserSlope = 1.0f;
+    float _tempUserIntercept = 0.0f;
+
+    uint8_t status();
+    uint8_t readReg(uint8_t reg);
+    void writeReg(uint8_t reg, uint8_t value);
+    void readRegs(uint8_t reg, uint8_t* buf, size_t len);
+
+    void loadCalibration();
+    bool isPoweredOn();
+    bool waitForDataReady(uint32_t timeoutMs = 100);
+    float computeTemperature(int16_t raw);
+    float computeHumidity(int16_t raw);
 };
-
-#endif

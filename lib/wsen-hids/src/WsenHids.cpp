@@ -2,339 +2,235 @@
 
 #include "WsenHids.h"
 
-#include <cmath>
+#include <math.h>
 
-#include "WsenHids_const.h"
-
-using namespace WsenHidsConst;
-
-WsenHids::WsenHids(TwoWire& wire, uint8_t address)
-    : _calibrationLoaded(false),
-      _wire(wire),
-      _address(address),
-      _h0_rh(0.0f),
-      _h1_rh(0.0f),
-      _h0_t0_out(0),
-      _h1_t0_out(0),
-      _t0_degC(0.0f),
-      _t1_degC(0.0f),
-      _t0_out(0),
-      _t1_out(0) {}
+WsenHids::WsenHids(TwoWire& wire, uint8_t address) : _wire(&wire), _address(address) {}
 
 bool WsenHids::begin() {
-    _wire.begin();
-
-    uint8_t id = deviceId();
-    if (id != WHO_AM_I_VALUE) {
+    if (deviceId() != WSEN_HIDS_WHO_AM_I_VALUE) {
         return false;
     }
-
-    powerOn();
-    setContinuous(1);
-
-    return readCalibration();
+    loadCalibration();
+    // Leave the part powered down after detection. Measurement methods
+    // auto-trigger on demand; users that want streaming call setContinuous().
+    powerOff();
+    return true;
 }
 
 uint8_t WsenHids::deviceId() {
-    uint8_t id = 0;
-    if (!readReg(WHO_AM_I_REG, &id, 1)) {
-        return 0x00;
-    }
-    return id;
-}
-
-void WsenHids::powerOn() {
-    updateReg(CTRL1_REG, CTRL1_PD_BIT, CTRL1_PD_BIT);
-}
-
-void WsenHids::powerOff() {
-    updateReg(CTRL1_REG, CTRL1_PD_BIT, 0x00);
+    return readReg(WSEN_HIDS_REG_WHO_AM_I);
 }
 
 void WsenHids::reboot() {
-    updateReg(CTRL2_REG, CTRL2_REBOOT_BIT, CTRL2_REBOOT_BIT);
-}
-
-uint8_t WsenHids::status() {
-    uint8_t value = 0;
-    if (!readReg(STATUS_REG, &value, 1)) {
-        return 0;
+    writeReg(WSEN_HIDS_REG_CTRL2, WSEN_HIDS_CTRL2_BOOT);
+    // BOOT clears itself when the reload completes. Poll with a bounded
+    // timeout so a stuck bus doesn't hang the caller.
+    for (uint8_t i = 0; i < 20; ++i) {
+        if ((readReg(WSEN_HIDS_REG_CTRL2) & WSEN_HIDS_CTRL2_BOOT) == 0) {
+            return;
+        }
+        delay(5);
     }
-    return value;
 }
 
-bool WsenHids::temperatureReady() {
-    return (status() & STATUS_T_DA) != 0;
+void WsenHids::softReset() {
+    reboot();
 }
 
-bool WsenHids::humidityReady() {
-    return (status() & STATUS_H_DA) != 0;
+void WsenHids::powerOn() {
+    uint8_t ctrl1 = readReg(WSEN_HIDS_REG_CTRL1);
+    writeReg(WSEN_HIDS_REG_CTRL1, ctrl1 | WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU);
+}
+
+void WsenHids::powerOff() {
+    uint8_t ctrl1 = readReg(WSEN_HIDS_REG_CTRL1);
+    writeReg(WSEN_HIDS_REG_CTRL1, ctrl1 & ~WSEN_HIDS_CTRL1_PD);
 }
 
 bool WsenHids::dataReady() {
-    uint8_t s = status();
-    return (s & (STATUS_T_DA | STATUS_H_DA)) == (STATUS_T_DA | STATUS_H_DA);
+    return (status() & (WSEN_HIDS_STATUS_H_DA | WSEN_HIDS_STATUS_T_DA)) ==
+           (WSEN_HIDS_STATUS_H_DA | WSEN_HIDS_STATUS_T_DA);
+}
+
+bool WsenHids::temperatureReady() {
+    return (status() & WSEN_HIDS_STATUS_T_DA) != 0;
+}
+
+bool WsenHids::humidityReady() {
+    return (status() & WSEN_HIDS_STATUS_H_DA) != 0;
 }
 
 float WsenHids::temperature() {
-    if (!_calibrationLoaded) {
-        if (!readCalibration()) {
-            return NAN;
-        }
-    }
-
-    if (_t1_out == _t0_out) {
-        return NAN;
-    }
-
-    int16_t raw = 0;
-    if (!readS16(TEMP_OUT_L_REG, raw)) {
-        return NAN;
-    }
-
-    float temp = _t0_degC + (static_cast<float>(raw - _t0_out) * (_t1_degC - _t0_degC)) /
-                                static_cast<float>(_t1_out - _t0_out);
-
-    return temp;
+    return read().temperature;
 }
 
 float WsenHids::humidity() {
-    if (!_calibrationLoaded) {
-        if (!readCalibration()) {
-            return NAN;
+    return read().humidity;
+}
+
+WsenHids::ReadResult WsenHids::read() {
+    if (!isPoweredOn()) {
+        triggerOneShot();
+        if (!waitForDataReady()) {
+            // Device never reported fresh data — bus issue, missing sensor,
+            // or the caller disabled ODR and didn't trigger a conversion.
+            // Surface the failure as NaN so silent stale readings can't
+            // propagate; callers can check with isnan().
+            return {NAN, NAN};
         }
     }
 
-    if (_h1_t0_out == _h0_t0_out) {
-        return NAN;
-    }
+    uint8_t humBytes[2];
+    uint8_t tempBytes[2];
+    readRegs(WSEN_HIDS_REG_HUMIDITY_OUT_L, humBytes, 2);
+    readRegs(WSEN_HIDS_REG_TEMP_OUT_L, tempBytes, 2);
 
-    int16_t raw = 0;
-    if (!readS16(HUMIDITY_OUT_L_REG, raw)) {
-        return NAN;
-    }
+    int16_t humRaw = static_cast<int16_t>(humBytes[0] | (humBytes[1] << 8));
+    int16_t tempRaw = static_cast<int16_t>(tempBytes[0] | (tempBytes[1] << 8));
 
-    float hum =
-        _h0_rh + ((float)(raw - _h0_t0_out) * (_h1_rh - _h0_rh)) / (float)(_h1_t0_out - _h0_t0_out);
-
-    if (hum < 0.0f) {
-        hum = 0.0f;
-    }
-    if (hum > 100.0f) {
-        hum = 100.0f;
-    }
-
-    return hum;
+    return {computeTemperature(tempRaw), computeHumidity(humRaw)};
 }
 
 void WsenHids::setContinuous(uint8_t odr) {
-    uint8_t ctrl1 = 0;
-    if (!readReg(CTRL1_REG, &ctrl1, 1)) {
-        return;
-    }
-
-    ctrl1 &= (uint8_t)~CTRL1_ODR_MASK;
-
-    switch (odr) {
-        case 1:
-            ctrl1 |= ODR_1HZ;
-            break;
-        case 7:
-            ctrl1 |= ODR_7HZ;
-            break;
-        default:
-            ctrl1 |= ODR_12_5HZ;
-            break;
-    }
-
-    ctrl1 |= CTRL1_PD_BIT;
-    ctrl1 |= CTRL1_BDU_BIT;
-
-    writeReg(CTRL1_REG, ctrl1);
+    uint8_t ctrl1 = WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU | (odr & WSEN_HIDS_CTRL1_ODR_MASK);
+    writeReg(WSEN_HIDS_REG_CTRL1, ctrl1);
 }
 
 void WsenHids::triggerOneShot() {
-    uint8_t ctrl1 = 0;
-    uint8_t ctrl2 = 0;
-
-    if (!readReg(CTRL1_REG, &ctrl1, 1)) {
-        return;
-    }
-
-    ctrl1 |= CTRL1_PD_BIT;
-    ctrl1 |= CTRL1_BDU_BIT;
-    ctrl1 &= (uint8_t)~CTRL1_ODR_MASK;
-    ctrl1 |= ODR_ONE_SHOT;
-
-    if (!writeReg(CTRL1_REG, ctrl1)) {
-        return;
-    }
-
-    updateReg(CTRL2_REG, CTRL2_ONE_SHOT_BIT, CTRL2_ONE_SHOT_BIT);
+    // Must be powered on at ODR=one-shot for the ONE_SHOT bit to matter.
+    writeReg(WSEN_HIDS_REG_CTRL1,
+             WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU | WSEN_HIDS_ODR_ONE_SHOT);
+    writeReg(WSEN_HIDS_REG_CTRL2, WSEN_HIDS_CTRL2_ONE_SHOT);
 }
 
-std::tuple<float, float> WsenHids::readOneShot() {
+WsenHids::ReadResult WsenHids::readOneShot() {
     triggerOneShot();
-
-    unsigned long start = millis();
-    while (!dataReady()) {
-        if (millis() - start > 100) {
-            return {NAN, NAN};
-        }
-        delay(1);
+    if (!waitForDataReady()) {
+        return {NAN, NAN};
     }
-
-    float hum = humidity();
-    float temp = temperature();
-
-    return {hum, temp};
+    return read();
 }
 
 void WsenHids::setAveraging(uint8_t humidityAvg, uint8_t temperatureAvg) {
-    uint8_t value = 0;
-
-    value |= (uint8_t)(humidityAvg & AV_CONF_AVGH_MASK);
-    value |= (uint8_t)((temperatureAvg & 0x07) << 3);
-
-    writeReg(AV_CONF_REG, value);
+    uint8_t value = static_cast<uint8_t>(humidityAvg & WSEN_HIDS_AV_CONF_AVGH_MASK) |
+                    static_cast<uint8_t>((temperatureAvg << WSEN_HIDS_AV_CONF_AVGT_SHIFT) &
+                                         WSEN_HIDS_AV_CONF_AVGT_MASK);
+    writeReg(WSEN_HIDS_REG_AV_CONF, value);
 }
 
-bool WsenHids::readReg(uint8_t reg, uint8_t* data, size_t len) {
-    if (len == 0) {
-        return true;
-    }
+void WsenHids::setTemperatureOffset(float offset) {
+    _tempOffset = offset;
+}
 
-    uint8_t regAddress = reg;
-    if (len > 1) {
-        regAddress |= AUTO_INCREMENT;
+void WsenHids::calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh) {
+    float span = measHigh - measLow;
+    if (span == 0.0f) {
+        _tempUserSlope = 1.0f;
+        _tempUserIntercept = 0.0f;
+        return;
     }
+    _tempUserSlope = (refHigh - refLow) / span;
+    _tempUserIntercept = refLow - _tempUserSlope * measLow;
+}
 
-    _wire.beginTransmission(_address);
-    _wire.write(regAddress);
-    if (_wire.endTransmission(false) != 0) {
-        return false;
+uint8_t WsenHids::status() {
+    return readReg(WSEN_HIDS_REG_STATUS);
+}
+
+uint8_t WsenHids::readReg(uint8_t reg) {
+    _wire->beginTransmission(_address);
+    _wire->write(reg);
+    _wire->endTransmission(false);
+    _wire->requestFrom(_address, static_cast<uint8_t>(1));
+    if (_wire->available()) {
+        return static_cast<uint8_t>(_wire->read());
     }
+    return 0;
+}
 
-    size_t readCount = _wire.requestFrom(_address, (uint8_t)len);
-    if (readCount != len) {
-        return false;
-    }
+void WsenHids::writeReg(uint8_t reg, uint8_t value) {
+    _wire->beginTransmission(_address);
+    _wire->write(reg);
+    _wire->write(value);
+    _wire->endTransmission();
+}
 
+void WsenHids::readRegs(uint8_t reg, uint8_t* buf, size_t len) {
+    // Zero-init up front so a short bus read leaves defined bytes in buf
+    // rather than whatever was on the stack — callers assume every slot
+    // was written.
     for (size_t i = 0; i < len; ++i) {
-        if (!_wire.available()) {
-            return false;
+        buf[i] = 0;
+    }
+
+    _wire->beginTransmission(_address);
+    _wire->write(reg | WSEN_HIDS_AUTO_INCREMENT);
+    _wire->endTransmission(false);
+    _wire->requestFrom(_address, static_cast<uint8_t>(len));
+    for (size_t i = 0; i < len && _wire->available(); ++i) {
+        buf[i] = static_cast<uint8_t>(_wire->read());
+    }
+}
+
+void WsenHids::loadCalibration() {
+    uint8_t block[16];
+    readRegs(WSEN_HIDS_REG_H0_RH_X2, block, 16);
+
+    // H0_rH and H1_rH are stored as %RH * 2.
+    float h0Rh = block[0] * 0.5f;
+    float h1Rh = block[1] * 0.5f;
+
+    // T0_degC / T1_degC are 10-bit unsigned values * 8. The high 2 bits of
+    // each live in the shared T1_T0_MSB register at block offset 5.
+    uint8_t msb = block[5];
+    uint16_t t0Raw = ((msb & 0x03) << 8) | block[2];
+    uint16_t t1Raw = ((msb & 0x0C) << 6) | block[3];
+    float t0DegC = t0Raw / 8.0f;
+    float t1DegC = t1Raw / 8.0f;
+
+    // 16-bit signed ADC reference points. T1_T0_MSB sits at offset 5,
+    // so the OUT registers follow with one byte of gap: H0_T0_OUT at
+    // offsets 6-7, H1_T0_OUT at 10-11, T0_OUT at 12-13, T1_OUT at 14-15.
+    int16_t h0Out = static_cast<int16_t>(block[6] | (block[7] << 8));
+    int16_t h1Out = static_cast<int16_t>(block[10] | (block[11] << 8));
+    int16_t t0Out = static_cast<int16_t>(block[12] | (block[13] << 8));
+    int16_t t1Out = static_cast<int16_t>(block[14] | (block[15] << 8));
+
+    if (t1Out != t0Out) {
+        _tempSlope = (t1DegC - t0DegC) / static_cast<float>(t1Out - t0Out);
+        _tempIntercept = t0DegC - _tempSlope * static_cast<float>(t0Out);
+    }
+    if (h1Out != h0Out) {
+        _humSlope = (h1Rh - h0Rh) / static_cast<float>(h1Out - h0Out);
+        _humIntercept = h0Rh - _humSlope * static_cast<float>(h0Out);
+    }
+}
+
+bool WsenHids::isPoweredOn() {
+    return (readReg(WSEN_HIDS_REG_CTRL1) & WSEN_HIDS_CTRL1_PD) != 0;
+}
+
+bool WsenHids::waitForDataReady(uint32_t timeoutMs) {
+    uint32_t start = millis();
+    while (millis() - start < timeoutMs) {
+        if (dataReady()) {
+            return true;
         }
-        data[i] = (uint8_t)_wire.read();
+        delay(1);
     }
-
-    return true;
+    return false;
 }
 
-bool WsenHids::writeReg(uint8_t reg, uint8_t data) {
-    return writeReg(reg, &data, 1);
+float WsenHids::computeTemperature(int16_t raw) {
+    float factory = _tempIntercept + _tempSlope * static_cast<float>(raw);
+    return _tempUserSlope * factory + _tempUserIntercept + _tempOffset;
 }
 
-bool WsenHids::updateReg(uint8_t reg, uint8_t mask, uint8_t value) {
-    uint8_t current = 0;
-    if (!readReg(reg, &current, 1)) {
-        return false;
-    }
-
-    current &= (uint8_t)~mask;
-    current |= (uint8_t)(value & mask);
-
-    return writeReg(reg, current);
-}
-
-bool WsenHids::writeReg(uint8_t reg, const uint8_t* data, size_t len) {
-    if (len == 0) {
-        return true;
-    }
-
-    uint8_t regAddress = reg;
-    if (len > 1) {
-        regAddress |= AUTO_INCREMENT;
-    }
-
-    _wire.beginTransmission(_address);
-    _wire.write(regAddress);
-
-    for (size_t i = 0; i < len; ++i) {
-        _wire.write(data[i]);
-    }
-
-    return _wire.endTransmission(true) == 0;
-}
-
-bool WsenHids::readU16(uint8_t lowReg, uint16_t& value) {
-    uint8_t buffer[2] = {0, 0};
-    if (!readReg(lowReg, buffer, 2)) {
-        value = 0;
-        return false;
-    }
-
-    value = (uint16_t)buffer[0] | ((uint16_t)buffer[1] << 8);
-    return true;
-}
-
-bool WsenHids::readS16(uint8_t lowReg, int16_t& value) {
-    uint16_t raw = 0;
-    if (!readU16(lowReg, raw)) {
-        value = 0;
-        return false;
-    }
-
-    value = (int16_t)raw;
-    return true;
-}
-
-bool WsenHids::readCalibration() {
-    uint8_t h0_x2 = 0;
-    uint8_t h1_x2 = 0;
-    uint8_t t0_x8_l = 0;
-    uint8_t t1_x8_l = 0;
-    uint8_t t1_t0_msb = 0;
-
-    _calibrationLoaded = false;
-
-    if (!readReg(H0_RH_X2_REG, &h0_x2, 1)) {
-        return false;
-    }
-    if (!readReg(H1_RH_X2_REG, &h1_x2, 1)) {
-        return false;
-    }
-    if (!readReg(T0_DEGC_X8_REG, &t0_x8_l, 1)) {
-        return false;
-    }
-    if (!readReg(T1_DEGC_X8_REG, &t1_x8_l, 1)) {
-        return false;
-    }
-    if (!readReg(T1_T0_MSB_REG, &t1_t0_msb, 1)) {
-        return false;
-    }
-
-    _h0_rh = ((float)h0_x2) / 2.0f;
-    _h1_rh = ((float)h1_x2) / 2.0f;
-
-    uint16_t t0_x8 = (uint16_t)t0_x8_l | (((uint16_t)(t1_t0_msb & 0x03)) << 8);
-    uint16_t t1_x8 = (uint16_t)t1_x8_l | (((uint16_t)((t1_t0_msb >> 2) & 0x03)) << 8);
-
-    _t0_degC = ((float)t0_x8) / 8.0f;
-    _t1_degC = ((float)t1_x8) / 8.0f;
-
-    if (!readS16(H0_T0_OUT_L_REG, _h0_t0_out)) {
-        return false;
-    }
-    if (!readS16(H1_T0_OUT_L_REG, _h1_t0_out)) {
-        return false;
-    }
-    if (!readS16(T0_OUT_L_REG, _t0_out)) {
-        return false;
-    }
-    if (!readS16(T1_OUT_L_REG, _t1_out)) {
-        return false;
-    }
-
-    _calibrationLoaded = true;
-    return true;
+float WsenHids::computeHumidity(int16_t raw) {
+    float value = _humIntercept + _humSlope * static_cast<float>(raw);
+    if (value < 0.0f)
+        return 0.0f;
+    if (value > 100.0f)
+        return 100.0f;
+    return value;
 }

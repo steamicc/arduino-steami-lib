@@ -37,26 +37,23 @@ void setup() {
 
 void loop() {
     if (sensor.dataReady()) {
-        float t = sensor.temperature();
-        float h = sensor.humidity();
-
-        Serial.print(t);
+        auto r = sensor.read();
+        Serial.print(r.temperature);
         Serial.print(" C / ");
-        Serial.print(h);
+        Serial.print(r.humidity);
         Serial.println(" %");
     }
-
     delay(100);
 }
 ```
 
-See [examples/BasicRead/](examples/BasicRead/) for the full sketch.
+See [examples/BasicReader/](examples/BasicReader/) for the full sketch.
 
 ## Examples
 
-| Example                            | What it does                                                  |
-| ---------------------------------- | ------------------------------------------------------------- |
-| [`BasicRead`](examples/BasicRead/) | Baseline sketch: print temperature and humidity every second. |
+| Example                                | What it does                                                  |
+| -------------------------------------- | ------------------------------------------------------------- |
+| [`BasicReader`](examples/BasicReader/) | Baseline sketch: print temperature and humidity every second. |
 
 ### Building an example
 
@@ -77,57 +74,64 @@ This builds, uploads, and opens the serial monitor at 115200 baud.
 To reliably capture the first lines printed at boot (which the interactive monitor often misses), swap `flash-` for `capture-`:
 
 ```bash
-make capture-wsen-hids/BasicReader
-make capture-wsen-hids/BasicReader DURATION=30
+make capture-wsen-hids/BasicReader             # 10 seconds, OpenOCD reset, stdout
+make capture-wsen-hids/BasicReader DURATION=30 # longer window
 ```
 
 ## API
 
-All methods follow the collection conventions: `camelCase`, minimal
-surface, and explicit environmental units.
+All methods follow the collection conventions: `camelCase`, include
+units in method names only when they carry ambiguity, and skip
+redundant `read` / `get` prefixes.
 
 ### Lifecycle
 
-| Method                                                                        | Description                                                                                                    |
-| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `WsenHids(TwoWire& wire = Wire, uint8_t address = WSEN_HIDS_DEFAULT_ADDRESS)` | Construct. Defaults to the global `Wire` and address `0x5F`.                                                   |
-| `bool begin()`                                                                | Probe `WHO_AM_I`, initialize the sensor, leave it powered down. Returns `false` if the sensor is not detected. |
-| `uint8_t deviceId()`                                                          | Reads `WHO_AM_I` (always `0xBC`).                                                                              |
-| `void softReset()`                                                            | Software reset of the device.                                                                                  |
-| `void powerOn()` / `void powerOff()`                                          | Toggle measurement engine power state.                                                                         |
+| Method | Description |
+|--------|-------------|
+| `WsenHids(TwoWire& wire = Wire, uint8_t address = WSEN_HIDS_DEFAULT_ADDRESS)` | Construct. Defaults to the global `Wire` and address `0x5F`. |
+| `bool begin()` | Probe `WHO_AM_I`, load factory calibration, leave the part powered down. Returns `false` if the sensor is not detected. |
+| `uint8_t deviceId()` | Reads `WHO_AM_I` (always `0xBC`). |
+| `void softReset()` / `void reboot()` | Reload factory trimming via `CTRL2.BOOT`. |
+| `void powerOn()` / `void powerOff()` | Toggle `CTRL1.PD`. |
 
 ### Reading
 
-The WSEN-HIDS can operate either in one-shot mode or in continuous
-background conversion mode.
+If the part is powered down when a read is requested, the driver auto-
+triggers a one-shot measurement, polls `dataReady()` with a timeout, and
+returns the result. The caller doesn't have to manage modes manually.
 
-| Method                                             | Description                                   |
-| -------------------------------------------------- | --------------------------------------------- |
-| `float temperature()`                              | Celsius.                                      |
-| `float humidity()`                                 | Relative humidity in `%RH`.                   |
-| `uint8_t status()`                                 | Raw status register.                          |
-| `bool dataReady()`                                 | Both humidity and temperature data available. |
-| `bool temperatureReady()` / `bool humidityReady()` | Per-channel readiness.                        |
+| Method | Description |
+|--------|-------------|
+| `float temperature()` | Celsius. |
+| `float humidity()` | %RH, clamped to `[0, 100]`. |
+| `ReadResult read()` | Both channels — `{temperature, humidity}`. |
+| `bool dataReady()` | Both `H_DA` and `T_DA` set in `STATUS_REG`. |
+| `bool temperatureReady()` / `bool humidityReady()` | Per-channel readiness. |
 
 ### Modes
 
-| Method                                   | Description                                                         |
-| ---------------------------------------- | ------------------------------------------------------------------- |
-| `void setContinuous(uint8_t odr)`        | Continuous mode. Pass `WSEN_HIDS_ODR_1_HZ`, `_7_HZ`, or `_12_5_HZ`. |
-| `void triggerOneShot()`                  | Non-blocking: start a single conversion.                            |
-| `std::tuple<float, float> readOneShot()` | Trigger + wait + return `{temperature, humidity}`.                  |
+| Method | Description |
+|--------|-------------|
+| `void setContinuous(uint8_t odr)` | Continuous mode. Pass `WSEN_HIDS_ODR_1_HZ`, `_7_HZ`, or `_12_5_HZ`. |
+| `void triggerOneShot()` | Non-blocking: start a single conversion. |
+| `ReadResult readOneShot()` | Trigger + wait + return. |
+| `void setAveraging(uint8_t humAvg, uint8_t tempAvg)` | Configure `AV_CONF` averaging (datasheet table 18). |
+
+### Calibration
+
+| Method | Description |
+|--------|-------------|
+| `void setTemperatureOffset(float offset)` | Additive Celsius offset on top of the factory calibration. |
+| `void calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point user calibration. Applied after the factory curve. |
 
 ## Register constants
 
 `WsenHids_const.h` exports register addresses (`WSEN_HIDS_REG_*`), bit
-masks, and ODR values (`WSEN_HIDS_ODR_*`) so applications can poke the
-part directly if they need functionality outside the driver's API
-surface.
+masks (`WSEN_HIDS_CTRL1_*`, `WSEN_HIDS_STATUS_*`), and ODR values
+(`WSEN_HIDS_ODR_*`) so applications can poke the part directly if they
+need something outside the driver's API surface.
 
 ## Testing
-
-The driver should be validated both in build CI and on real STeaMi
-hardware.
 
 Build-only verification:
 
@@ -141,7 +145,7 @@ Formatting:
 make lint
 ```
 
-Manual hardware validation can be done with the provided `BasicRead`
+Manual hardware validation can be done with the provided `BasicReader`
 example to confirm:
 
 * successful `begin()`
