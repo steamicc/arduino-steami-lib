@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.13.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.12.0...v0.13.0) (2026-05-26)
+
+
+### Features
+
+* **ble:** Add BLE trilateration indoor positioning example. ([#147](https://github.com/steamicc/arduino-steami-lib/issues/147)) ([89c5cc1](https://github.com/steamicc/arduino-steami-lib/commit/89c5cc1b133cb4eb003be04c207ebab5e4a7beb6))
+
 # [0.12.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.11.0...v0.12.0) (2026-05-26)
 
 
