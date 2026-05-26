@@ -1,0 +1,96 @@
+#######################################
+# Syntax Coloring Map For MCP23009E
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+MCP23009E	KEYWORD1
+MCP23009Config	KEYWORD1
+MCP23009Pin	KEYWORD1
+MCP23009ActiveLowPin	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin	KEYWORD2
+reset	KEYWORD2
+powerOn	KEYWORD2
+powerOff	KEYWORD2
+setup	KEYWORD2
+setLevel	KEYWORD2
+getLevel	KEYWORD2
+setIodir	KEYWORD2
+getIodir	KEYWORD2
+setIpol	KEYWORD2
+getIpol	KEYWORD2
+setGpinten	KEYWORD2
+getGpinten	KEYWORD2
+setDefval	KEYWORD2
+getDefval	KEYWORD2
+setIntcon	KEYWORD2
+getIntcon	KEYWORD2
+setIocon	KEYWORD2
+getIocon	KEYWORD2
+setGppu	KEYWORD2
+getGppu	KEYWORD2
+getIntf	KEYWORD2
+getIntcap	KEYWORD2
+setGpio	KEYWORD2
+getGpio	KEYWORD2
+setOlat	KEYWORD2
+getOlat	KEYWORD2
+interruptOnChange	KEYWORD2
+interruptOnFalling	KEYWORD2
+interruptOnRaising	KEYWORD2
+disableInterrupt	KEYWORD2
+interruptEvent	KEYWORD2
+setSeqop	KEYWORD2
+clearSeqop	KEYWORD2
+hasSeqop	KEYWORD2
+setOdr	KEYWORD2
+clearOdr	KEYWORD2
+hasOdr	KEYWORD2
+setIntpol	KEYWORD2
+clearIntpol	KEYWORD2
+hasIntpol	KEYWORD2
+setIntcc	KEYWORD2
+clearIntcc	KEYWORD2
+hasIntcc	KEYWORD2
+getRegisterValue	KEYWORD2
+init	KEYWORD2
+value	KEYWORD2
+on	KEYWORD2
+off	KEYWORD2
+toggle	KEYWORD2
+irq	KEYWORD2
+mode	KEYWORD2
+pull	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+MCP23009_I2C_ADDR	LITERAL1
+MCP23009_DIR_INPUT	LITERAL1
+MCP23009_DIR_OUTPUT	LITERAL1
+MCP23009_PULLUP	LITERAL1
+MCP23009_NO_PULLUP	LITERAL1
+MCP23009_POL_SAME	LITERAL1
+MCP23009_POL_INVERTED	LITERAL1
+MCP23009_LOGIC_LOW	LITERAL1
+MCP23009_LOGIC_HIGH	LITERAL1
+MCP23009_BTN_UP	LITERAL1
+MCP23009_BTN_DOWN	LITERAL1
+MCP23009_BTN_LEFT	LITERAL1
+MCP23009_BTN_RIGHT	LITERAL1
+MCP23009_GPIO1	LITERAL1
+MCP23009_GPIO2	LITERAL1
+MCP23009_GPIO3	LITERAL1
+MCP23009_GPIO4	LITERAL1
+MCP23009_GPIO5	LITERAL1
+MCP23009_GPIO6	LITERAL1
+MCP23009_GPIO7	LITERAL1
+MCP23009_GPIO8	LITERAL1
