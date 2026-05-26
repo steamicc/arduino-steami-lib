@@ -241,7 +241,7 @@ test-integration: .venv/bin/pio ## Run all on-board integration tests (skipped i
 		echo "STeaMi not detected — skipping integration tests."
 		exit 0
 	fi
-	$(PIO) test -e steami --filter integration/test_*
+	$(PIO) test -e steami $(PIO_TEST_FLAGS) --filter integration/test_* $(PIO_TEST_EXTRA_OPTS)
 
 # Per-suite integration test targets — same shape as test-hardware/<name>.
 # Integration suites validate runtime behaviour over time (acquisition
@@ -254,7 +254,7 @@ test-integration/$(1): .venv/bin/pio
 		echo "STeaMi not detected — skipping integration tests."
 		exit 0
 	fi
-	$$(PIO) test -e steami --filter integration/test_$(1)
+	$$(PIO) test -e steami $$(PIO_TEST_FLAGS) --filter integration/test_$(1) $$(PIO_TEST_EXTRA_OPTS)
 endef
 $(foreach k,$(INTEGRATION_TEST_KEYS),$(eval $(call INTEGRATION_TEST_RULE,$(k))))
 
