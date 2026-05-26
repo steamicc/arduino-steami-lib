@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.15.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.14.0...v0.15.0) (2026-05-26)
+
+
+### Features
+
+* **ble:** Add hot/cold treasure hunt example with BLE RSSI. ([#141](https://github.com/steamicc/arduino-steami-lib/issues/141)) ([0b9fe61](https://github.com/steamicc/arduino-steami-lib/commit/0b9fe61e8a4cd0477ca9cc5bad31bae5177b4c62))
+
 # [0.14.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.13.0...v0.14.0) (2026-05-26)
 
 
