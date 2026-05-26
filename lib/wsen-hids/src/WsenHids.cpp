@@ -10,6 +10,13 @@ bool WsenHids::begin() {
     if (deviceId() != WSEN_HIDS_WHO_AM_I_VALUE) {
         return false;
     }
+    // The chip lives on its own VDD rail on the STeaMi — an MCU reset
+    // does NOT power-cycle it. Force AV_CONF and CTRL2 to defaults so
+    // we don't inherit max-averaging or a latched ONE_SHOT bit from
+    // whatever sketch ran previously.
+    writeReg(WSEN_HIDS_REG_AV_CONF, 0x1B);
+    writeReg(WSEN_HIDS_REG_CTRL2, 0x00);
+
     loadCalibration();
     // Leave the part powered down after detection. Measurement methods
     // auto-trigger on demand; users that want streaming call setContinuous().
