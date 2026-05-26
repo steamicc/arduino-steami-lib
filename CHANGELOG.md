@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.17.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.16.0...v0.17.0) (2026-05-26)
+
+
+### Features
+
+* **wsen-hids:** Add examples. ([#160](https://github.com/steamicc/arduino-steami-lib/issues/160)) ([4b1759b](https://github.com/steamicc/arduino-steami-lib/commit/4b1759b87e5fa1e7ff65287c438549f94303ec62))
+
 # [0.16.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.15.0...v0.16.0) (2026-05-26)
 
 
