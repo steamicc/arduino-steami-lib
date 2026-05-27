@@ -193,7 +193,7 @@ void MCP23009E::setLevel(uint8_t gpx, uint8_t level) {
 
     uint8_t olat = readReg(MCP23009_OLAT);
     olat = setBit(olat, gpx, level);
-    writeReg(MCP23009_GPIO, olat);
+    writeReg(MCP23009_OLAT, olat);
 }
 
 uint8_t MCP23009E::getLevel(uint8_t gpx) {
@@ -209,8 +209,11 @@ uint8_t MCP23009E::getLevel(uint8_t gpx) {
         return MCP23009_LOGIC_LOW;
     }
 
-    uint8_t gpio = readReg(MCP23009_GPIO);
-    return getBit(gpio, gpx);
+    uint8_t iodir = readReg(MCP23009_IODIR);
+    if (getBit(iodir, gpx) == MCP23009_DIR_OUTPUT) {
+        return getBit(readReg(MCP23009_OLAT), gpx);
+    }
+    return getBit(readReg(MCP23009_GPIO), gpx);
 }
 
 void MCP23009E::writeReg(uint8_t reg, uint8_t value) {
