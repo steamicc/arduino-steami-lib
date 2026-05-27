@@ -3,6 +3,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <map>
 
 // Mirror the include-guard symbol the real Arduino.h advertises.
@@ -16,6 +17,10 @@
 #define OUTPUT 1
 #define INPUT 0
 #define INPUT_PULLUP 2
+
+#define FALLING 2
+#define RISING 3
+#define CHANGE 1
 
 inline std::map<int, int>& gpioPinState() {
     static std::map<int, int> state;
@@ -58,4 +63,13 @@ inline uint32_t millis() {
 
 inline void delay(uint32_t ms) {
     millisClock() += ms;
+}
+
+inline void attachInterrupt(uint8_t /* pin */, const std::function<void()>& /* isr */,
+                            int /* mode */) {
+    // null operation for native tests
+}
+
+inline int digitalPinToInterrupt(int pin) {
+    return pin;
 }
