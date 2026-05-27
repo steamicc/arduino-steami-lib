@@ -187,7 +187,7 @@ void testSetLevelWritesGpioRegister(void) {
     mcp->setLevel(3, 1);
     bool found = false;
     for (const auto& w : Wire.getWrites()) {
-        if (w.reg == MCP23009_GPIO && w.value == 0x08) {
+        if (w.reg == MCP23009_OLAT && w.value == 0x08) {
             found = true;
             break;
         }
@@ -213,7 +213,7 @@ void testSetLevelIgnoresInvalidPin(void) {
 }
 
 void testGetLevelReturnsPreloadedValue(void) {
-    Wire.setRegister(ADDR, MCP23009_GPIO, 0xAA);
+    Wire.setRegister(ADDR, MCP23009_OLAT, 0xAA);
     TEST_ASSERT_EQUAL(MCP23009_LOGIC_HIGH, mcp->getLevel(1));
 }
 
@@ -342,7 +342,7 @@ void testPinOnSetsLevelHigh(void) {
     pin.on();
     bool found = false;
     for (const auto& w : Wire.getWrites()) {
-        if (w.reg == MCP23009_GPIO && w.value == 0x20) {
+        if (w.reg == MCP23009_OLAT && w.value == 0x20) {
             found = true;
             break;
         }
@@ -357,7 +357,7 @@ void testPinOffSetsLevelLow(void) {
     pin.off();
     bool found = false;
     for (const auto& w : Wire.getWrites()) {
-        if (w.reg == MCP23009_GPIO && w.value == 0x00) {
+        if (w.reg == MCP23009_OLAT && w.value == 0x00) {
             found = true;
             break;
         }
@@ -372,7 +372,7 @@ void testPinToggleInvertsLevel(void) {
     pin.toggle();
     bool found = false;
     for (const auto& w : Wire.getWrites()) {
-        if (w.reg == MCP23009_GPIO && w.value == 0x20) {
+        if (w.reg == MCP23009_OLAT && w.value == 0x20) {
             found = true;
             break;
         }
@@ -381,7 +381,7 @@ void testPinToggleInvertsLevel(void) {
 }
 
 void testPinValueReadReturnsGpioLevel(void) {
-    Wire.setRegister(ADDR, MCP23009_GPIO, 0x20);
+    Wire.setRegister(ADDR, MCP23009_OLAT, 0x20);
     MCP23009Pin pin(*mcp, 5, MCP23009Pin::OUT, 0xff, 0xff);
     TEST_ASSERT_EQUAL(1, pin.value());
 }
@@ -393,7 +393,7 @@ void testPinValueWriteSetsGpioLevel(void) {
     pin.value(1);
     bool found = false;
     for (const auto& w : Wire.getWrites()) {
-        if (w.reg == MCP23009_GPIO && w.value == 0x20) {
+        if (w.reg == MCP23009_OLAT && w.value == 0x20) {
             found = true;
             break;
         }
@@ -409,7 +409,7 @@ void testActiveLowOnSetsGpioLow(void) {
     pin.on();
     bool found = false;
     for (const auto& w : Wire.getWrites()) {
-        if (w.reg == MCP23009_GPIO && !(w.value & (1 << 5))) {
+        if (w.reg == MCP23009_OLAT && !(w.value & (1 << 5))) {
             found = true;
             break;
         }
@@ -425,7 +425,7 @@ void testActiveLowOffSetsGpioHigh(void) {
     pin.off();
     bool found = false;
     for (const auto& w : Wire.getWrites()) {
-        if (w.reg == MCP23009_GPIO && (w.value & (1 << 5))) {
+        if (w.reg == MCP23009_OLAT && (w.value & (1 << 5))) {
             found = true;
             break;
         }
@@ -446,7 +446,7 @@ void testActiveLowValueWriteInvertsBeforeApplying(void) {
     pin.value(1);
     bool found = false;
     for (const auto& w : Wire.getWrites()) {
-        if (w.reg == MCP23009_GPIO && !(w.value & (1 << 5))) {
+        if (w.reg == MCP23009_OLAT && !(w.value & (1 << 5))) {
             found = true;
             break;
         }
@@ -462,7 +462,7 @@ void testActiveLowToggleInvertsState(void) {
     pin.toggle();
     bool found = false;
     for (const auto& w : Wire.getWrites()) {
-        if (w.reg == MCP23009_GPIO && !(w.value & (1 << 5))) {
+        if (w.reg == MCP23009_OLAT && !(w.value & (1 << 5))) {
             found = true;
             break;
         }
@@ -490,7 +490,7 @@ void testSetLevelReadsFromOlatNotGpio(void) {
     // what the driver committed.
     uint8_t gpioWrite = 0xAA;
     for (const auto& w : Wire.getWrites()) {
-        if (w.reg == MCP23009_GPIO) {
+        if (w.reg == MCP23009_OLAT) {
             gpioWrite = w.value;
             break;
         }
