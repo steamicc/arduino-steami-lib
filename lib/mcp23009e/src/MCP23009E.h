@@ -15,17 +15,17 @@ class MCP23009Config {
 
     MCP23009Config& setSeqop();
     MCP23009Config& clearSeqop();
-    bool hasSeqop();
+    bool hasSeqop() const;
     MCP23009Config& setOdr();
     MCP23009Config& clearOdr();
-    bool hasOdr();
+    bool hasOdr() const;
     MCP23009Config& setIntpol();
     MCP23009Config& clearIntpol();
-    bool hasIntpol();
+    bool hasIntpol() const;
     MCP23009Config& setIntcc();
     MCP23009Config& clearIntcc();
-    bool hasIntcc();
-    uint8_t getRegisterValue();
+    bool hasIntcc() const;
+    uint8_t getRegisterValue() const;
 
    private:
     uint8_t _reg;

@@ -18,7 +18,7 @@ MCP23009Config& MCP23009Config::clearSeqop() {
     return *this;
 }
 
-bool MCP23009Config::hasSeqop() {
+bool MCP23009Config::hasSeqop() const {
     // Vérifie si SEQOP est activé
     return (_reg & MCP23009_IOCON_SEQOP) != 0;
 }
@@ -35,7 +35,7 @@ MCP23009Config& MCP23009Config::clearOdr() {
     return *this;
 }
 
-bool MCP23009Config::hasOdr() {
+bool MCP23009Config::hasOdr() const {
     // Vérifie si ODR est activé
     return (_reg & MCP23009_IOCON_ODR) != 0;
 }
@@ -52,7 +52,7 @@ MCP23009Config& MCP23009Config::clearIntpol() {
     return *this;
 }
 
-bool MCP23009Config::hasIntpol() {
+bool MCP23009Config::hasIntpol() const {
     // Vérifie si INTPOL est configuré à Active-High
     return (_reg & MCP23009_IOCON_INTPOL) != 0;
 }
@@ -69,12 +69,12 @@ MCP23009Config& MCP23009Config::clearIntcc() {
     return *this;
 }
 
-bool MCP23009Config::hasIntcc() {
+bool MCP23009Config::hasIntcc() const {
     // Vérifie si INTCC est activé
     return (_reg & MCP23009_IOCON_INTCC) != 0;
 }
 
-uint8_t MCP23009Config::getRegisterValue() {
+uint8_t MCP23009Config::getRegisterValue() const {
     // Retourne la valeur du registre
     return _reg;
 }
@@ -434,9 +434,9 @@ void MCP23009E::disableInterrupt(uint8_t gpx) {
 }
 
 void MCP23009E::irqHandler() {
-    /*Handler d'interruption appelé par MicroPython lors d'un événement IRQ
-        Ce handler appelle interrupt_event pour traiter l'interruption*/
-
+    // ISR installed by begin() via attachInterrupt() on the INT
+    // expander pin. Reads INTF / INTCAP and dispatches the registered
+    // per-pin callbacks.
     interruptEvent();
 }
 
@@ -543,7 +543,7 @@ void MCP23009Pin::toggle() {
     value(1 - value());
 }
 
-void MCP23009Pin::irq(std::function<void()> handler, uint16_t trigger, bool hard) {
+void MCP23009Pin::irq(std::function<void()> handler, uint16_t trigger, [[maybe_unused]] bool hard) {
     /*Configure une interruption sur la pin
 
         Args:
@@ -694,8 +694,12 @@ void MCP23009ActiveLowPin::irq(std::function<void()> handler, uint16_t trigger, 
         Returns:
             Un objet callback*/
 
-    if (trigger != 0xff) {
-        uint8_t invertedTrigger = 0;
+    // 0xFFFF is the header sentinel for "no override" (matches the
+    // default argument); skip inversion in that case. A narrower
+    // 0xff literal compared against a uint16_t would mis-match the
+    // header default and always invert.
+    if (trigger != 0xFFFF) {
+        uint16_t invertedTrigger = 0;
         if (trigger & IRQ_FALLING) {
             invertedTrigger |= IRQ_RISING;
         }
