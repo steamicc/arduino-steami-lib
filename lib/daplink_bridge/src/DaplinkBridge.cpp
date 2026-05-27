@@ -171,24 +171,37 @@ size_t DaplinkBridge::readResponse(uint8_t cmd, uint8_t* buf, size_t maxLen, uin
         return 0;
     }
 
-    // Select the response stream associated with `cmd`.
+    // Select the response stream associated with `cmd`. The firmware
+    // loads its 256-byte TX buffer with the full response in one go
+    // after this write completes, and subsequent requestFrom() calls
+    // advance an internal cursor through that buffer.
     _wire->beginTransmission(_address);
     _wire->write(cmd);
     _wire->endTransmission(false);
 
+    // Stream the response in MAX_READ_CHUNK-sized requestFrom() calls
+    // WITHOUT calling waitNotBusy() or re-selecting any register
+    // between them. Either of those would force a STATUS-register
+    // read transaction that resets the firmware's response cursor,
+    // and re-emitting REG_RESPONSE + produced as an absolute
+    // sub-address wraps at 0xFF (0x82 + 0x7D == 0xFF, then 0x00)
+    // which silently steers later chunks to the wrong register.
     size_t produced = 0;
     while (produced < maxLen) {
-        if (!waitNotBusy(timeoutMs)) {
-            return produced;
-        }
-
         const uint8_t want = static_cast<uint8_t>(
             std::min<size_t>(DAPLINK_BRIDGE_MAX_READ_CHUNK, maxLen - produced));
 
-        readBlock(static_cast<uint8_t>(DAPLINK_BRIDGE_REG_RESPONSE + produced), buf + produced,
-                  want);
+        const uint8_t got = _wire->requestFrom(_address, want);
+        for (uint8_t i = 0; i < got && _wire->available(); ++i) {
+            buf[produced + i] = static_cast<uint8_t>(_wire->read());
+        }
+        produced += got;
 
-        produced += want;
+        if (got < want) {
+            // Short read — bus error or device dropped the
+            // transaction. Return what we managed to collect.
+            break;
+        }
     }
 
     return produced;

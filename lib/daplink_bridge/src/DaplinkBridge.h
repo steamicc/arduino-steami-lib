@@ -36,8 +36,11 @@ class DaplinkBridge {
     bool sendCommand(uint8_t cmd, const uint8_t* payload = nullptr, size_t payloadLen = 0,
                      uint32_t timeoutMs = DAPLINK_BRIDGE_WRITE_TIMEOUT_MS);
 
-    // Issue a command and read up to `maxLen` bytes back. Returns the
-    // number of bytes actually read (zero on busy timeout).
+    // Issue a command and stream up to `maxLen` bytes back from the
+    // bridge's response buffer. Returns the number of bytes actually
+    // read: 0 if the initial busy-wait times out (or buf is null /
+    // maxLen is 0), the partial count on a short read mid-stream
+    // (bus error, missing device), and `maxLen` on a full read.
     size_t readResponse(uint8_t cmd, uint8_t* buf, size_t maxLen,
                         uint32_t timeoutMs = DAPLINK_BRIDGE_READ_TIMEOUT_MS);
 
