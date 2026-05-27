@@ -23,6 +23,32 @@ class DaplinkBridge {
     bool writeConfig(const char* str, uint16_t offset = 0);
     size_t readConfig(uint8_t* result, size_t maxLen);
 
+    // --- Frame-level primitives (for sibling drivers) ---
+    // sendCommand and readResponse expose the bridge's I2C protocol so
+    // other drivers (daplink_flash, daplink_config, …) can compose their
+    // own commands without re-implementing the framing or the busy/error
+    // bookkeeping. The intended flow is always sendCommand() first to
+    // actuate (and let the firmware populate its response buffer), then
+    // readResponse() to slurp from the dedicated REG_RESPONSE register.
+
+    // Send `[cmd]` or `[cmd | payload...]`. Returns false on busy
+    // timeout or when the device's error register is non-zero.
+    bool sendCommand(uint8_t cmd, const uint8_t* payload = nullptr, size_t payloadLen = 0,
+                     uint32_t timeoutMs = DAPLINK_BRIDGE_WRITE_TIMEOUT_MS);
+
+    // Stream up to `maxLen` bytes from the bridge's response buffer via
+    // REG_RESPONSE. Call this AFTER a sendCommand() that has populated
+    // the response (no actuation happens here — we don't re-emit the
+    // cmd byte, which would either be interpreted as a fresh command
+    // and wipe the response, or hit BAD_PARAM on a payload-required
+    // cmd). Returns the number of bytes actually read: 0 if the
+    // initial busy-wait times out, the device reports a pending
+    // error, endTransmission rejects the register-pointer select,
+    // or buf is null / maxLen is 0; the partial count on a short
+    // read mid-stream; `maxLen` on a full read.
+    size_t readResponse(uint8_t* buf, size_t maxLen,
+                        uint32_t timeoutMs = DAPLINK_BRIDGE_READ_TIMEOUT_MS);
+
    private:
     TwoWire* _wire;
     uint8_t _address;
