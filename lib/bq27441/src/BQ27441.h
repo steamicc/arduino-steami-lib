@@ -136,12 +136,12 @@ class BQ27441 {
     uint16_t executeControlWord(uint16_t function);
     uint16_t blockDataControl();
     uint16_t blockDataClass(uint16_t id);
-    uint16_t blockDataOffset(uint16_t offset);
-    uint16_t blockDataChecksum();
+    bool blockDataOffset(uint16_t offset);
+    bool blockDataChecksum(uint8_t& out);
     uint16_t readBlockData(uint16_t offset);
     uint16_t writeBlockData(uint16_t offset, uint16_t data);
     uint16_t writeBlockChecksum(uint8_t csum);
-    uint16_t computeBlockChecksum();
+    bool computeBlockChecksum(uint8_t& out);
     uint16_t readExtendedData(uint16_t class_id, uint16_t offset);
     uint16_t writeExtendedData(uint16_t class_id, uint16_t offset, const uint8_t* data,
                                uint16_t length);

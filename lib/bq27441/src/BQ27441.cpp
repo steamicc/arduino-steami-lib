@@ -9,18 +9,30 @@ BQ27441::BQ27441(TwoWire& wire, uint16_t capacity_mAh, uint8_t address, int gpou
     : _wire(wire), _capacity_mAh(capacity_mAh), _address(address), _gpout_pin(gpout_pin) {}
 
 bool BQ27441::begin() {
+    // If a GPOUT pin is wired, the gauge may have been left in shutdown
+    // (e.g. by a previous powerOff()) and will not ACK on I2C until it's
+    // woken via the GPOUT line. Pulse the wake sequence before probing
+    // deviceId() so begin() recovers from shutdown instead of returning
+    // false. When no GPOUT pin is configured, disableShutdownMode() is a
+    // no-op, so the no-wake-pin path keeps its existing behaviour.
+    if (_gpout_pin != -1) {
+        disableShutdownMode();
+        delay(10);
+    }
+
     if (deviceId() != BQ27441_DEVICE_ID) {
         return false;
     }
 
+    // Switch GPOUT back to input so the caller can attach a SOC1 /
+    // BAT_LOW interrupt handler. Done after the device-id probe so the
+    // wake pulse above isn't fighting the line.
     configureGpoutInput();
 
     // Inline the powerOn() body so we can propagate setCapacity()'s
     // failure to the caller. Standalone powerOn() stays void to honour
     // the collection API convention; callers that need to detect the
     // initial-config failure go through begin().
-    disableShutdownMode();
-    delay(10);
     return setCapacity(_capacity_mAh) != 0;
 }
 
@@ -464,17 +476,13 @@ uint16_t BQ27441::blockDataClass(uint16_t id) {
     return writeReg(BQ27441_EXTENDED_DATACLASS, id_buf, 1);
 }
 
-uint16_t BQ27441::blockDataOffset(uint16_t offset) {
+bool BQ27441::blockDataOffset(uint16_t offset) {
     uint8_t id_buf[1] = {(uint8_t)offset};
     return writeReg(BQ27441_EXTENDED_DATABLOCK, id_buf, 1);
 }
 
-uint16_t BQ27441::blockDataChecksum() {
-    uint8_t csum[1];
-    if (!readReg(BQ27441_EXTENDED_CHECKSUM, csum, 1)) {
-        return 0;
-    }
-    return csum[0];
+bool BQ27441::blockDataChecksum(uint8_t& out) {
+    return readReg(BQ27441_EXTENDED_CHECKSUM, &out, 1);
 }
 
 uint16_t BQ27441::readBlockData(uint16_t offset) {
@@ -496,17 +504,17 @@ uint16_t BQ27441::writeBlockChecksum(uint8_t csum) {
     return writeReg(BQ27441_EXTENDED_CHECKSUM, &csum, 1);
 }
 
-uint16_t BQ27441::computeBlockChecksum() {
+bool BQ27441::computeBlockChecksum(uint8_t& out) {
     uint8_t data[32];
     if (!readReg(BQ27441_EXTENDED_BLOCKDATA, data, 32)) {
-        return 0;
+        return false;
     }
     uint16_t csum = 0;
     for (int i = 0; i < 32; i++) {
         csum += data[i];
     }
-    csum = (255 - (csum & 0xFF)) & 0xFF;
-    return csum;
+    out = static_cast<uint8_t>((255 - (csum & 0xFF)) & 0xFF);
+    return true;
 }
 
 uint16_t BQ27441::readExtendedData(uint16_t class_id, uint16_t offset) {
@@ -536,10 +544,24 @@ uint16_t BQ27441::readExtendedData(uint16_t class_id, uint16_t offset) {
         return bail(0);
     }
 
-    blockDataOffset(offset / 32);
+    if (!blockDataOffset(offset / 32)) {
+        return bail(0);
+    }
 
-    computeBlockChecksum();
-    blockDataChecksum();
+    // The gauge requires the staging buffer to be primed (via a read of
+    // the 32-byte block) and the on-chip checksum to be fetched before
+    // it will honour subsequent BLOCKDATA reads. We don't compare the
+    // computed and stored checksums here — that's a write-side concern
+    // — but a partial I2C transaction would leave the gauge in a
+    // half-prepared state, so propagate the failure as 0.
+    uint8_t computed_csum = 0;
+    if (!computeBlockChecksum(computed_csum)) {
+        return bail(0);
+    }
+    uint8_t stored_csum = 0;
+    if (!blockDataChecksum(stored_csum)) {
+        return bail(0);
+    }
 
     uint16_t ret_data = readBlockData(offset % 32);
 
@@ -553,6 +575,17 @@ uint16_t BQ27441::readExtendedData(uint16_t class_id, uint16_t offset) {
 uint16_t BQ27441::writeExtendedData(uint16_t class_id, uint16_t offset, const uint8_t* data,
                                     uint16_t length) {
     if (length > 32) {
+        return false;
+    }
+    // Extended data flash is paginated in 32-byte blocks. blockDataOffset
+    // selects the page once via `offset / 32` and every writeBlockData()
+    // call below indexes inside that page via `(offset % 32) + i`. A
+    // write that crosses the boundary (e.g. offset = 31, length = 2)
+    // would index past the BLOCKDATA window into the checksum / extended
+    // command region and silently corrupt unrelated state. Reject it
+    // here rather than chunking — callers are expected to issue one
+    // writeExtendedData per page.
+    if (static_cast<uint16_t>(offset % 32) + length > 32) {
         return false;
     }
 
@@ -582,9 +615,23 @@ uint16_t BQ27441::writeExtendedData(uint16_t class_id, uint16_t offset, const ui
         return bail(false);
     }
 
-    blockDataOffset(offset / 32);
-    computeBlockChecksum();
-    blockDataChecksum();
+    if (!blockDataOffset(offset / 32)) {
+        return bail(false);
+    }
+
+    // Prime the staging buffer and pull the gauge-side checksum so the
+    // block is in a known-good state before we start patching it. We
+    // discard both values, but a partial I2C frame here would leave
+    // the gauge with a stale staging buffer that would silently corrupt
+    // the eventual writeBlockChecksum() below.
+    uint8_t primed_csum = 0;
+    if (!computeBlockChecksum(primed_csum)) {
+        return bail(false);
+    }
+    uint8_t old_csum = 0;
+    if (!blockDataChecksum(old_csum)) {
+        return bail(false);
+    }
 
     for (int i = 0; i < length; i++) {
         if (!writeBlockData((offset % 32) + i, data[i])) {
@@ -592,7 +639,10 @@ uint16_t BQ27441::writeExtendedData(uint16_t class_id, uint16_t offset, const ui
         }
     }
 
-    uint16_t new_csum = computeBlockChecksum();
+    uint8_t new_csum = 0;
+    if (!computeBlockChecksum(new_csum)) {
+        return bail(false);
+    }
     if (!writeBlockChecksum(new_csum)) {
         return bail(false);
     }
@@ -611,8 +661,13 @@ bool BQ27441::readReg(uint8_t sub_address, uint8_t* buf, uint16_t count) {
         return false;
     // Short reads return -1 from Wire.read() which becomes 0xFF when
     // assigned to a uint8_t, so the caller would silently parse garbage.
-    // Treat any partial response as a hard failure.
-    if (_wire.requestFrom(_address, count) != count) {
+    // Treat any partial response as a hard failure. The static_cast
+    // pins the `requestFrom(uint8_t, uint8_t)` overload on the STM32
+    // toolchain — passing the uint16_t `count` directly would trigger
+    // an ambiguous-overload warning between the (int,int) and
+    // (uint8_t,uint8_t) signatures.
+    const uint8_t count8 = static_cast<uint8_t>(count);
+    if (_wire.requestFrom(_address, count8) != count8) {
         return false;
     }
     for (uint16_t i = 0; i < count; i++) {
