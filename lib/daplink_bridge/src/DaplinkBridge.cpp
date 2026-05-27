@@ -162,30 +162,36 @@ bool DaplinkBridge::sendCommand(uint8_t cmd, const uint8_t* payload, size_t payl
     return error() == 0;
 }
 
-size_t DaplinkBridge::readResponse(uint8_t cmd, uint8_t* buf, size_t maxLen, uint32_t timeoutMs) {
+size_t DaplinkBridge::readResponse(uint8_t* buf, size_t maxLen, uint32_t timeoutMs) {
     if (buf == nullptr || maxLen == 0) {
         return 0;
     }
 
+    // The caller is expected to have already issued a sendCommand()
+    // that populated the response buffer. Confirm the firmware is no
+    // longer busy and that no error is pending before slurping —
+    // otherwise an I2C glitch during the response-prep window would
+    // come back as a partial/garbage read instead of a clean failure.
     if (!waitNotBusy(timeoutMs)) {
         return 0;
     }
+    if (error() != 0) {
+        return 0;
+    }
 
-    // Select the response stream associated with `cmd`. The firmware
-    // loads its 256-byte TX buffer with the full response in one go
-    // after this write completes, and subsequent requestFrom() calls
-    // advance an internal cursor through that buffer.
+    // Select the dedicated response-stream register once. The firmware
+    // streams its 256-byte TX buffer back through successive
+    // requestFrom() chunks without us having to re-select between
+    // chunks — incrementing REG_RESPONSE + produced wraps at 0xFF
+    // (0x82 + 0x7D == 0xFF) and re-emitting the cmd byte would either
+    // be interpreted as a fresh command (wiping the response) or hit
+    // BAD_PARAM on payload-required cmds.
     _wire->beginTransmission(_address);
-    _wire->write(cmd);
-    _wire->endTransmission(false);
+    _wire->write(DAPLINK_BRIDGE_REG_RESPONSE);
+    if (_wire->endTransmission(false) != 0) {
+        return 0;
+    }
 
-    // Stream the response in MAX_READ_CHUNK-sized requestFrom() calls
-    // WITHOUT calling waitNotBusy() or re-selecting any register
-    // between them. Either of those would force a STATUS-register
-    // read transaction that resets the firmware's response cursor,
-    // and re-emitting REG_RESPONSE + produced as an absolute
-    // sub-address wraps at 0xFF (0x82 + 0x7D == 0xFF, then 0x00)
-    // which silently steers later chunks to the wrong register.
     size_t produced = 0;
     while (produced < maxLen) {
         const uint8_t want = static_cast<uint8_t>(

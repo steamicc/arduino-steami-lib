@@ -113,12 +113,12 @@ class TwoWire {
     }
 
     // Pre-load a response payload streamed back when the next
-    // requestFrom() targets `cmd` as the selected register. Lets
-    // command-style protocols (DAPLink) stage response data without
-    // colliding with payload bytes that sendCommand writes into the
-    // register space at the same offsets.
-    void setResponse(uint8_t address, uint8_t cmd, const std::vector<uint8_t>& data) {
-        uint16_t key = makeKey(address, cmd);
+    // requestFrom() targets `selectorReg` as the current register
+    // pointer. Lets command-style protocols (DAPLink) stage response
+    // data on a dedicated stream register (e.g. REG_RESPONSE) without
+    // colliding with payload bytes that sendCommand writes elsewhere.
+    void setResponse(uint8_t address, uint8_t selectorReg, const std::vector<uint8_t>& data) {
+        uint16_t key = makeKey(address, selectorReg);
         responses_[key] = data;
         responseCursors_[key] = 0;
     }

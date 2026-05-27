@@ -27,21 +27,26 @@ class DaplinkBridge {
     // sendCommand and readResponse expose the bridge's I2C protocol so
     // other drivers (daplink_flash, daplink_config, …) can compose their
     // own commands without re-implementing the framing or the busy/error
-    // bookkeeping. They wait for the bridge to clear before issuing the
-    // request, send `[cmd | payload...]` (or just `[cmd]`), wait again
-    // for the device to finish, and check the error register.
+    // bookkeeping. The intended flow is always sendCommand() first to
+    // actuate (and let the firmware populate its response buffer), then
+    // readResponse() to slurp from the dedicated REG_RESPONSE register.
 
     // Send `[cmd]` or `[cmd | payload...]`. Returns false on busy
     // timeout or when the device's error register is non-zero.
     bool sendCommand(uint8_t cmd, const uint8_t* payload = nullptr, size_t payloadLen = 0,
                      uint32_t timeoutMs = DAPLINK_BRIDGE_WRITE_TIMEOUT_MS);
 
-    // Issue a command and stream up to `maxLen` bytes back from the
-    // bridge's response buffer. Returns the number of bytes actually
-    // read: 0 if the initial busy-wait times out (or buf is null /
-    // maxLen is 0), the partial count on a short read mid-stream
-    // (bus error, missing device), and `maxLen` on a full read.
-    size_t readResponse(uint8_t cmd, uint8_t* buf, size_t maxLen,
+    // Stream up to `maxLen` bytes from the bridge's response buffer via
+    // REG_RESPONSE. Call this AFTER a sendCommand() that has populated
+    // the response (no actuation happens here — we don't re-emit the
+    // cmd byte, which would either be interpreted as a fresh command
+    // and wipe the response, or hit BAD_PARAM on a payload-required
+    // cmd). Returns the number of bytes actually read: 0 if the
+    // initial busy-wait times out, the device reports a pending
+    // error, endTransmission rejects the register-pointer select,
+    // or buf is null / maxLen is 0; the partial count on a short
+    // read mid-stream; `maxLen` on a full read.
+    size_t readResponse(uint8_t* buf, size_t maxLen,
                         uint32_t timeoutMs = DAPLINK_BRIDGE_READ_TIMEOUT_MS);
 
    private:

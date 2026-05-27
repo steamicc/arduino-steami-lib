@@ -68,14 +68,13 @@ void test_set_filename_sends_correct_payload(void) {
 }
 
 void test_get_filename_returns_stripped_name(void) {
-    // readResponse(cmd, ...) writes `cmd` as the register pointer, then
-    // streams the response back. Stage the padded name+ext via the
-    // response queue rather than the register map so the data survives
-    // any command-side payload writes.
+    // getFilename() now actuates via sendCommand() and then streams
+    // the result from REG_RESPONSE, so stage the padded name+ext at
+    // that register key.
     std::vector<uint8_t> raw(DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN, ' ');
     memcpy(raw.data(), "MYFILE", 6);
     memcpy(raw.data() + DAPLINK_FLASH_FILENAME_LEN, "BIN", 3);
-    Wire.setResponse(ADDR, DAPLINK_FLASH_CMD_GET_FILENAME, raw);
+    Wire.setResponse(ADDR, DAPLINK_BRIDGE_REG_RESPONSE, raw);
 
     DaplinkFlash::FilenameResult result = flash.getFilename();
     TEST_ASSERT_EQUAL_STRING("MYFILE", result.name);
@@ -163,13 +162,12 @@ void test_read_sector_sends_correct_command(void) {
 }
 
 void test_read_stops_at_sentinel(void) {
-    // readSector(...) does sendCommand(CMD_READ_SECTOR, payload) then
-    // readResponse(CMD_READ_SECTOR, ...). Stage the sector payload via
-    // the response queue so the sentinel byte survives the
-    // sendCommand-side payload writes targeting the same cmd offsets.
+    // readSector() now actuates via sendCommand(CMD_READ_SECTOR, ...)
+    // then streams the response from REG_RESPONSE, so stage the
+    // sector payload at that key.
     std::vector<uint8_t> data(DAPLINK_FLASH_SECTOR_SIZE, 'A');
     data[10] = 0xFF;
-    Wire.setResponse(ADDR, DAPLINK_FLASH_CMD_READ_SECTOR, data);
+    Wire.setResponse(ADDR, DAPLINK_BRIDGE_REG_RESPONSE, data);
 
     Wire.setRegister(ADDR, DAPLINK_BRIDGE_REG_ERROR, 0x00);
 
@@ -183,7 +181,7 @@ void test_read_stops_at_sentinel(void) {
 
 void test_read_limited_by_maxlen(void) {
     std::vector<uint8_t> data(DAPLINK_FLASH_SECTOR_SIZE, 'B');
-    Wire.setResponse(ADDR, DAPLINK_FLASH_CMD_READ_SECTOR, data);
+    Wire.setResponse(ADDR, DAPLINK_BRIDGE_REG_RESPONSE, data);
 
     Wire.setRegister(ADDR, DAPLINK_BRIDGE_REG_ERROR, 0x00);
 

@@ -47,15 +47,24 @@ bool DaplinkFlash::setFilename(const char* name, const char* ext) {
 }
 
 DaplinkFlash::FilenameResult DaplinkFlash::getFilename() {
-    uint8_t raw[DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN];
-    memset(raw, ' ', sizeof(raw));
-
-    size_t bytesRead = _bridge->readResponse(DAPLINK_FLASH_CMD_GET_FILENAME, raw,
-                                             DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN);
-
     FilenameResult result;
     memset(result.name, 0, sizeof(result.name));
     memset(result.ext, 0, sizeof(result.ext));
+
+    // Actuate the cmd so the firmware populates its response buffer,
+    // then stream the result from REG_RESPONSE. sendCommand() already
+    // waited for not-busy and checked the error register, so the cmd
+    // is not re-emitted by readResponse() — that would either be read
+    // as a fresh command or hit BAD_PARAM on payload-required cmds.
+    if (!_bridge->sendCommand(DAPLINK_FLASH_CMD_GET_FILENAME)) {
+        return result;
+    }
+
+    uint8_t raw[DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN];
+    memset(raw, ' ', sizeof(raw));
+
+    size_t bytesRead =
+        _bridge->readResponse(raw, DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN);
 
     if (bytesRead != DAPLINK_FLASH_FILENAME_LEN + DAPLINK_FLASH_EXT_LEN) {
         return result;
@@ -90,7 +99,13 @@ bool DaplinkFlash::clearFlash() {
 }
 
 size_t DaplinkFlash::write(const uint8_t* data, size_t length) {
-    // Append data to the current file. Returns the number of bytes
+    // Append `data` to the current file in MAX_WRITE_CHUNK-sized
+    // frames. Flash writes are append-only and not atomic, so on a
+    // mid-stream chunk failure we return `offset` — the byte count
+    // that actually landed in flash — rather than 0. Callers can tell
+    // a clean failure (`return == 0`) from a partial write (`0 <
+    // return < length`) and avoid blind retries that would otherwise
+    // duplicate data on the device.
     if (length == 0 || data == nullptr) {
         return 0;
     }
@@ -106,7 +121,7 @@ size_t DaplinkFlash::write(const uint8_t* data, size_t length) {
         memcpy(&payload[1], &data[offset], chunkLen);
 
         if (!_bridge->sendCommand(DAPLINK_FLASH_CMD_WRITE_DATA, payload, 1 + chunkLen)) {
-            return 0;
+            return offset;
         }
         offset += chunkLen;
     }
@@ -153,8 +168,7 @@ bool DaplinkFlash::readSector(uint16_t sector, uint8_t* buf) {
         return false;
     }
 
-    size_t bytesRead =
-        _bridge->readResponse(DAPLINK_FLASH_CMD_READ_SECTOR, buf, DAPLINK_FLASH_SECTOR_SIZE);
+    size_t bytesRead = _bridge->readResponse(buf, DAPLINK_FLASH_SECTOR_SIZE);
 
     return bytesRead == DAPLINK_FLASH_SECTOR_SIZE;
 }
