@@ -5,10 +5,17 @@
 #include <cstdint>
 #include <map>
 
+// Mirror the include-guard symbol the real Arduino.h advertises.
+// Driver code uses `#ifdef Arduino_h` to gate pin operations; without
+// this define those bodies would compile out in native tests and make
+// the wake / interrupt paths untestable.
+#define Arduino_h 1
+
 #define HIGH 1
 #define LOW 0
 #define OUTPUT 1
 #define INPUT 0
+#define INPUT_PULLUP 2
 
 inline std::map<int, int>& gpioPinState() {
     static std::map<int, int> state;

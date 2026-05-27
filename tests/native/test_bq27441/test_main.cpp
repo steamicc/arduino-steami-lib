@@ -211,6 +211,40 @@ void test_soc_returns_100_when_full(void) {
     TEST_ASSERT_EQUAL(100, sensor->stateOfCharge());
 }
 
+// Regression: 856628f — begin() must pulse GPOUT (LOW then HIGH)
+// BEFORE probing deviceId() when a gpout_pin is wired. The
+// previous order (probe first) returned false whenever the gauge
+// was already in shutdown, because shutdown silences the I2C
+// interface. Verify the wake pulse landed on the configured pin.
+void test_begin_pulses_gpout_low_high_when_pin_wired(void) {
+    constexpr int kGpoutPin = 7;
+    gpioPinState().clear();
+    gpioPinMode().clear();
+    delete sensor;
+    sensor = new BQ27441(Wire, LIPO_BATTERY_CAPACITY, ADDR, kGpoutPin);
+
+    TEST_ASSERT_TRUE(sensor->begin());
+
+    // After begin(): disableShutdownMode() set OUTPUT then drove
+    // LOW -> HIGH, and the post-probe configureGpoutInput() switched
+    // the pin to INPUT_PULLUP. The pinMode map records the LAST mode,
+    // so the final state must be INPUT_PULLUP; the line must be HIGH.
+    TEST_ASSERT_EQUAL(INPUT_PULLUP, gpioPinMode()[kGpoutPin]);
+    TEST_ASSERT_EQUAL(HIGH, gpioPinState()[kGpoutPin]);
+}
+
+// Regression: 856628f — begin() with no wake pin (-1) must NOT
+// touch the pin map at all (no spurious pinMode / digitalWrite
+// on whatever pin -1 maps to). Keeps the no-wake path strictly
+// no-op so the wake reorder doesn't sneak in any side effects.
+void test_begin_does_not_touch_pins_when_no_gpout(void) {
+    gpioPinState().clear();
+    gpioPinMode().clear();
+    TEST_ASSERT_TRUE(sensor->begin());
+    TEST_ASSERT_TRUE(gpioPinMode().empty());
+    TEST_ASSERT_TRUE(gpioPinState().empty());
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_begin_returns_true_when_device_id_matches);
@@ -239,5 +273,7 @@ int main(void) {
     RUN_TEST(test_current_average_returns_negative_value_near_zero);
     RUN_TEST(test_soc_returns_zero_when_empty);
     RUN_TEST(test_soc_returns_100_when_full);
+    RUN_TEST(test_begin_pulses_gpout_low_high_when_pin_wired);
+    RUN_TEST(test_begin_does_not_touch_pins_when_no_gpout);
     return UNITY_END();
 }
