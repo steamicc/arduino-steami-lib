@@ -10,6 +10,8 @@
  * bus / register-decoding regression.
  */
 
+// WARNING! don’t forget to connect a battery to the card before starting the test
+
 #include <Arduino.h>
 #include <BQ27441.h>
 #include <Wire.h>
