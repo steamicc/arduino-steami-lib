@@ -29,8 +29,13 @@ void setUp(void) {
     millisClock() = 0xFFFFFFFF - 1;
     Wire.setControlResponse(BQ27441_CONTROL_DEVICE_TYPE, BQ27441_DEVICE_ID);
     Wire.setControlResponse(BQ27441_CONTROL_STATUS, 0x0080);
-    Wire.setRegister(ADDR, BQ27441_COMMAND_FLAGS, 0x00);
-    Wire.setRegister(ADDR, BQ27441_COMMAND_FLAGS + 1, 0x00);
+    // Preload the FLAGS register with CFGUPMODE set so begin() →
+    // powerOn() → setCapacity() → writeExtendedData() → enterConfig()
+    // observes the chip already in config-update mode. Without it the
+    // enterConfig loop spins until timeout and begin() now returns
+    // false (the fix that brought this dependency in).
+    Wire.setRegister(ADDR, BQ27441_COMMAND_FLAGS, BQ27441_FLAG_CFGUPMODE & 0xFF);
+    Wire.setRegister(ADDR, BQ27441_COMMAND_FLAGS + 1, (BQ27441_FLAG_CFGUPMODE >> 8) & 0xFF);
     sensor = new BQ27441(Wire);
     preloadWhoAmI(true);
 }
@@ -144,21 +149,20 @@ void test_power_off_sends_shutdown_commands(void) {
 
 void test_set_capacity_returns_success(void) {
     // setCapacity forwards writeExtendedData's bool through a uint16_t —
-    // 1 on success, 0 on bridge error. writeExtendedData internally
-    // calls enterConfig() which polls FLAGS.CFGUPMODE; preload it set
-    // so the mock advances past the polling loop and returns success.
-    Wire.setRegister(ADDR, BQ27441_COMMAND_FLAGS, BQ27441_FLAG_CFGUPMODE & 0xFF);
-    Wire.setRegister(ADDR, BQ27441_COMMAND_FLAGS + 1, (BQ27441_FLAG_CFGUPMODE >> 8) & 0xFF);
-
+    // 1 on success, 0 on bridge error. setUp() already preloads
+    // FLAGS.CFGUPMODE so enterConfig() advances past the polling loop.
     uint16_t capacity = 0x1234;
     uint16_t result = sensor->setCapacity(capacity);
     TEST_ASSERT_EQUAL(1, result);
 }
 
 void test_set_capacity_returns_zero_when_enter_config_fails(void) {
-    // FLAGS stays at the setUp default (CFGUPMODE clear), so
-    // enterConfig() loops until timeout and returns false. The new
-    // guard in writeExtendedData() must propagate that as a failure.
+    // Clear FLAGS so the CFGUPMODE bit is unset — enterConfig() then
+    // loops until timeout and writeExtendedData() must propagate the
+    // failure as a zero return.
+    Wire.setRegister(ADDR, BQ27441_COMMAND_FLAGS, 0x00);
+    Wire.setRegister(ADDR, BQ27441_COMMAND_FLAGS + 1, 0x00);
+
     uint16_t result = sensor->setCapacity(0x1234);
     TEST_ASSERT_EQUAL(0, result);
 }

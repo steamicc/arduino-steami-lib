@@ -14,8 +14,14 @@ bool BQ27441::begin() {
     }
 
     configureGpoutInput();
-    powerOn();
-    return true;
+
+    // Inline the powerOn() body so we can propagate setCapacity()'s
+    // failure to the caller. Standalone powerOn() stays void to honour
+    // the collection API convention; callers that need to detect the
+    // initial-config failure go through begin().
+    disableShutdownMode();
+    delay(10);
+    return setCapacity(_capacity_mAh) != 0;
 }
 
 void BQ27441::configureGpoutInput() {
@@ -309,8 +315,13 @@ bool BQ27441::enterConfig(bool user_control) {
         _user_config_control = true;
     }
 
-    if (sealed()) {
-        _seal_flag = true;
+    // Refresh the seal flag from the current chip state on every call.
+    // Without this reset, a previous enterConfig() that found the gauge
+    // sealed would leave _seal_flag stuck at true even after someone
+    // unsealed the chip externally — and the matching exitConfig()
+    // would then re-seal it against the caller's intent.
+    _seal_flag = sealed();
+    if (_seal_flag) {
         unseal();
     }
 
@@ -376,15 +387,24 @@ bool BQ27441::sealed() {
 }
 
 bool BQ27441::seal() {
-    return readControlWord(BQ27441_CONTROL_SEALED);
+    // SEALED is a write-only control command — the chip doesn't return
+    // a meaningful data word in response, so using readControlWord
+    // would always treat the 0 reply as failure. executeControlWord
+    // returns the success of the I2C frame itself, which is the right
+    // signal here.
+    return executeControlWord(BQ27441_CONTROL_SEALED) != 0;
 }
 
 bool BQ27441::unseal() {
-    if (readControlWord(BQ27441_UNSEAL_KEY)) {
-        return readControlWord(BQ27441_UNSEAL_KEY);
-    }
-
-    return false;
+    // The TI BQ27441 expects the unseal key sent twice in succession.
+    // The previous implementation used readControlWord and skipped the
+    // second send if the first reply was 0 (legal — the chip doesn't
+    // return data here), leaving the gauge sealed. Both keys must
+    // always be issued via executeControlWord; the I2C ACK on each
+    // frame is what we care about.
+    bool ok = executeControlWord(BQ27441_UNSEAL_KEY) != 0;
+    ok = (executeControlWord(BQ27441_UNSEAL_KEY) != 0) && ok;
+    return ok;
 }
 
 uint16_t BQ27441::opConfig() {
@@ -478,8 +498,8 @@ uint16_t BQ27441::writeBlockChecksum(uint8_t csum) {
 
 uint16_t BQ27441::computeBlockChecksum() {
     uint8_t data[32];
-    if (!readReg(BQ27441_EXTENDED_BLOCKDATA, data, 32)) {  // ✅ Vérifier le retour
-        return 0;                                          // Retour d'erreur
+    if (!readReg(BQ27441_EXTENDED_BLOCKDATA, data, 32)) {
+        return 0;
     }
     uint16_t csum = 0;
     for (int i = 0; i < 32; i++) {
@@ -490,17 +510,30 @@ uint16_t BQ27441::computeBlockChecksum() {
 }
 
 uint16_t BQ27441::readExtendedData(uint16_t class_id, uint16_t offset) {
+    bool entered_config = false;
     if (not _user_config_control) {
         if (not enterConfig(false)) {
             return 0;
         }
+        entered_config = true;
     }
 
+    // We own the config-mode lifecycle from this point. Any failure
+    // below has to call exitConfig() before returning, otherwise the
+    // gauge stays in CFGUPDATE (and possibly unsealed) and the next
+    // public read/write sees an inconsistent state machine.
+    auto bail = [&](uint16_t result) -> uint16_t {
+        if (entered_config) {
+            exitConfig();
+        }
+        return result;
+    };
+
     if (not blockDataControl()) {
-        return false;
+        return bail(0);
     }
     if (not blockDataClass(class_id)) {
-        return false;
+        return bail(0);
     }
 
     blockDataOffset(offset / 32);
@@ -510,7 +543,7 @@ uint16_t BQ27441::readExtendedData(uint16_t class_id, uint16_t offset) {
 
     uint16_t ret_data = readBlockData(offset % 32);
 
-    if (not _user_config_control) {
+    if (entered_config) {
         exitConfig();
     }
 
@@ -523,18 +556,30 @@ uint16_t BQ27441::writeExtendedData(uint16_t class_id, uint16_t offset, const ui
         return false;
     }
 
+    bool entered_config = false;
     if (not _user_config_control) {
         if (not enterConfig(false)) {
             return false;
         }
+        entered_config = true;
     }
 
+    // See readExtendedData() — any failure past enterConfig() has to
+    // run exitConfig() before returning so we don't leave the gauge
+    // stuck in CFGUPDATE.
+    auto bail = [&](uint16_t result) -> uint16_t {
+        if (entered_config) {
+            exitConfig();
+        }
+        return result;
+    };
+
     if (not blockDataControl()) {
-        return false;
+        return bail(false);
     }
 
     if (not blockDataClass(class_id)) {
-        return false;
+        return bail(false);
     }
 
     blockDataOffset(offset / 32);
@@ -542,13 +587,17 @@ uint16_t BQ27441::writeExtendedData(uint16_t class_id, uint16_t offset, const ui
     blockDataChecksum();
 
     for (int i = 0; i < length; i++) {
-        writeBlockData((offset % 32) + i, data[i]);
+        if (not writeBlockData((offset % 32) + i, data[i])) {
+            return bail(false);
+        }
     }
 
     uint16_t new_csum = computeBlockChecksum();
-    writeBlockChecksum(new_csum);
+    if (not writeBlockChecksum(new_csum)) {
+        return bail(false);
+    }
 
-    if (not _user_config_control) {
+    if (entered_config) {
         exitConfig();
     }
 
