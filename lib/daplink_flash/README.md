@@ -10,9 +10,10 @@ I2C bridge on the STeaMi board.
 
 ## Quick start
 
-> ⚠️ `clearFlash()` erases the entire on-board SPI flash. The snippet
-> below wipes it on every boot — replace the call with your own gating
-> (a button, a one-shot config flag, etc.) before deploying.
+The snippet below opens the existing file, appends two CSV rows, and
+exits. It does **not** call `clearFlash()` — that command is destructive
+and currently unsafe on real silicon (see [Destructive
+operations](#destructive-operations) below).
 
 ```cpp
 #include <Wire.h>
@@ -31,10 +32,33 @@ void setup() {
         return;
     }
 
-    flash.clearFlash();  // destructive — wipes the whole partition
     flash.setFilename("DATA", "CSV");
     flash.writeLine("temperature,pressure");
     flash.writeLine("23.5,1013.2");
+}
+```
+
+## Destructive operations
+
+> ⚠️ **`clearFlash()` is known to brick STeaMi boards into DAPLink
+> maintenance mode** until DAPLink firmware issue
+> [`steamicc/DAPLink#9`](https://github.com/steamicc/DAPLink/issues/9)
+> is fixed. Recovery requires a manual maintenance-mode reset of the
+> board.
+>
+> The call is part of the public API to match the MicroPython sister
+> project, but **do not invoke it on production hardware** until the
+> firmware fix lands. If you must exercise it on a development board,
+> gate it behind an explicit, one-shot user action (a button held at
+> boot, an external trigger, a `--clear` build flag) and never on
+> every `setup()`.
+
+```cpp
+// Example: only wipe when GPIO0 is held low at boot.
+if (digitalRead(0) == LOW) {
+    if (!flash.clearFlash()) {
+        Serial.println("clearFlash() failed");
+    }
 }
 ```
 
@@ -58,8 +82,8 @@ void setup() {
 
 | Method | Description |
 |--------|-------------|
-| `bool clearFlash()` | Erase the entire flash memory. Returns `true` on success, `false` if the bridge times out or reports an error. |
-| `size_t write(const uint8_t* data, size_t length)` | Append raw bytes to the current file. Returns the number of bytes written, or `0` on error. |
+| `bool clearFlash()` | Erase the entire flash memory. **Currently unsafe on real STeaMi silicon** — see [Destructive operations](#destructive-operations). Returns `true` on success, `false` if the bridge times out or reports an error. |
+| `size_t write(const uint8_t* data, size_t length)` | Append raw bytes to the current file. Returns the number of bytes successfully written — `length` on full success, `0` if the first chunk fails, and the number of bytes that landed in flash before a mid-stream failure. Use this to detect partial writes and avoid duplicate retries (writes are append-only and not atomic). |
 | `size_t write(const char* data)` | Append a null-terminated string to the current file. |
 | `size_t writeLine(const char* text)` | Append a string followed by a newline character. |
 

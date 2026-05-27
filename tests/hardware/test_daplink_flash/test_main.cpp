@@ -4,10 +4,12 @@
  * Hardware unit validation for DaplinkFlash on real STeaMi silicon.
  *
  * Non-destructive checks only: this suite probes the driver / bridge
- * round-trip without touching flash data. The full destructive cycle
- * (clearFlash + setFilename + writeLine + readUntilSentinel) lives in
- * tests/integration/test_daplink_flash/ — running it wipes the
- * partition.
+ * round-trip without touching flash data. A full destructive cycle
+ * (clearFlash + setFilename + writeLine + readUntilSentinel) is
+ * deliberately NOT shipped in this PR — calling clearFlash() on
+ * real hardware bricks the board into DAPLink maintenance mode (see
+ * steamicc/DAPLink#9). The destructive integration suite will be
+ * added once that firmware issue is fixed.
  */
 
 #include <Arduino.h>
