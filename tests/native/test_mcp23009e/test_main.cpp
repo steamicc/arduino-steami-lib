@@ -470,6 +470,105 @@ void testActiveLowToggleInvertsState(void) {
     TEST_ASSERT_TRUE(found);
 }
 
+// Regression: 9ef4737 — setLevel() reads OLAT (the output latch), not
+// GPIO (the physical pin states). Reading GPIO on a mixed in/out port
+// would latch input levels into OLAT and drive surprise values once
+// the input is reconfigured as an output.
+void testSetLevelReadsFromOlatNotGpio(void) {
+    Wire.setRegister(ADDR, MCP23009_IODIR, 0x00);  // all output
+    // Stage divergent OLAT and GPIO snapshots so we can tell which
+    // one setLevel() chose as the RMW source.
+    Wire.setRegister(ADDR, MCP23009_OLAT, 0x00);
+    Wire.setRegister(ADDR, MCP23009_GPIO, 0xFF);
+    Wire.clearWrites();
+
+    mcp->setLevel(0, 1);
+
+    // The write to GPIO must reflect OLAT(=0x00) with bit 0 set,
+    // i.e. 0x01. A regression that reads GPIO instead would write
+    // 0xFF (OR-in bit 0 on already-0xFF). The first GPIO write is
+    // what the driver committed.
+    uint8_t gpioWrite = 0xAA;
+    for (const auto& w : Wire.getWrites()) {
+        if (w.reg == MCP23009_GPIO) {
+            gpioWrite = w.value;
+            break;
+        }
+    }
+    TEST_ASSERT_EQUAL_HEX8(0x01, gpioWrite);
+}
+
+// Regression: 9ef4737 — interruptEvent() classifies edges from INTCAP
+// (the chip's snapshot at the moment of the interrupt) regardless of
+// the INTCC bit. Reading GPIO instead would mis-classify rising vs
+// falling when the line bounced or already changed back between the
+// IRQ and the deferred dispatch.
+void testInterruptEventUsesIntcapNotGpio(void) {
+    bool risingFired = false;
+    bool fallingFired = false;
+    mcp->interruptOnRaising(0, [&]() { risingFired = true; });
+    mcp->interruptOnFalling(0, [&]() { fallingFired = true; });
+
+    // INTF says pin 0 fired. INTCAP says it was HIGH at the event
+    // (-> rising). GPIO says it's currently LOW (bounced back) —
+    // which is what the buggy code would mis-classify as falling.
+    Wire.setRegister(ADDR, MCP23009_INTF, 0x01);
+    Wire.setRegister(ADDR, MCP23009_INTCAP, 0x01);
+    Wire.setRegister(ADDR, MCP23009_GPIO, 0x00);
+
+    mcp->interruptEvent();
+
+    TEST_ASSERT_TRUE_MESSAGE(risingFired, "rising callback must fire on INTCAP=HIGH");
+    TEST_ASSERT_FALSE_MESSAGE(fallingFired, "falling callback must not fire when INTCAP=HIGH");
+}
+
+// Regression: 9ef4737 — poll() drains the _irqPending flag set by
+// irqHandler() and dispatches in non-ISR context. With no pending
+// flag, poll() must be a strict no-op (no I2C, no callbacks); this
+// guarantees the ISR-only path stays the only way to schedule work.
+void testPollIsNoOpWhenNoPending(void) {
+    int callCount = 0;
+    mcp->interruptOnChange(0, [&](uint8_t) { ++callCount; });
+    Wire.setRegister(ADDR, MCP23009_INTF, 0x01);
+    Wire.setRegister(ADDR, MCP23009_INTCAP, 0x01);
+    Wire.clearWrites();
+
+    mcp->poll();
+
+    TEST_ASSERT_EQUAL_MESSAGE(0, callCount, "poll() with no pending flag must not fire callbacks");
+    TEST_ASSERT_TRUE_MESSAGE(Wire.getWrites().empty(),
+                             "poll() with no pending flag must not do I2C");
+}
+
+// Regression: 9ef4737 — MCP23009Pin destructor must call
+// disableInterrupt() on its pin number so the parent expander's
+// [this]-capturing callback lambda is cleared. Without this, a
+// destroyed Pin still has its slot live in the expander and a later
+// poll() would dereference dangling state.
+void testPinDestructorClearsExpanderCallbackSlot(void) {
+    // Pre-set GPINTEN so we can detect the destructor's clear-write.
+    Wire.setRegister(ADDR, MCP23009_GPINTEN, 0xFF);
+    {
+        MCP23009Pin pin(*mcp, 5, MCP23009Pin::IN, 0xff, 0xff);
+        pin.irq([]() {}, MCP23009Pin::IRQ_RISING);
+        Wire.clearWrites();
+        // Pin destructor runs at scope exit.
+    }
+    // Locate the LAST GPINTEN write — that's the one the destructor
+    // pushed. Bit 5 must be cleared (pin 5 disabled).
+    uint8_t lastGpinten = 0xFF;
+    bool sawGpintenWrite = false;
+    for (const auto& w : Wire.getWrites()) {
+        if (w.reg == MCP23009_GPINTEN) {
+            lastGpinten = w.value;
+            sawGpintenWrite = true;
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(sawGpintenWrite, "destructor must write GPINTEN to disable the pin");
+    TEST_ASSERT_FALSE_MESSAGE(lastGpinten & (1 << 5),
+                              "destructor must clear pin 5's bit in GPINTEN");
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(testBeginConfiguresResetPinAsOutput);
@@ -520,5 +619,9 @@ int main(void) {
     RUN_TEST(testActiveLowValueReadReturnsInverted);
     RUN_TEST(testActiveLowValueWriteInvertsBeforeApplying);
     RUN_TEST(testActiveLowToggleInvertsState);
+    RUN_TEST(testSetLevelReadsFromOlatNotGpio);
+    RUN_TEST(testInterruptEventUsesIntcapNotGpio);
+    RUN_TEST(testPollIsNoOpWhenNoPending);
+    RUN_TEST(testPinDestructorClearsExpanderCallbackSlot);
     return UNITY_END();
 }
