@@ -225,8 +225,8 @@ uint16_t BQ27441::gpoutPolarity() {
 bool BQ27441::setGpoutPolarity(bool active_high) {
     uint16_t old_op_config = opConfig();
 
-    if ((active_high and (old_op_config & BQ27441_OPCONFIG_GPIOPOL)) ||
-        (not active_high and not(old_op_config & BQ27441_OPCONFIG_GPIOPOL)))
+    if ((active_high && (old_op_config & BQ27441_OPCONFIG_GPIOPOL)) ||
+        (!active_high && !(old_op_config & BQ27441_OPCONFIG_GPIOPOL)))
         return true;
     uint16_t new_op_config = old_op_config;
     if (active_high) {
@@ -245,8 +245,8 @@ uint16_t BQ27441::gpoutFunction() {
 
 bool BQ27441::setGpoutFunction(bool gpout_function) {
     uint16_t old_op_config = opConfig();
-    if ((gpout_function and (old_op_config & BQ27441_OPCONFIG_BATLOWEN)) ||
-        (not gpout_function and not(old_op_config & BQ27441_OPCONFIG_BATLOWEN))) {
+    if ((gpout_function && (old_op_config & BQ27441_OPCONFIG_BATLOWEN)) ||
+        (!gpout_function && !(old_op_config & BQ27441_OPCONFIG_BATLOWEN))) {
         return true;
     }
     uint16_t new_op_config = old_op_config;
@@ -328,7 +328,7 @@ bool BQ27441::enterConfig(bool user_control) {
     if (executeControlWord(BQ27441_CONTROL_SET_CFGUPDATE)) {
         uint32_t start_ms = TimeMs();
         bool timeout = false;
-        while (not(flags() & BQ27441_FLAG_CFGUPMODE)) {
+        while (!(flags() & BQ27441_FLAG_CFGUPMODE)) {
             delay(1);
             uint32_t elapsed_ms = TimeMs() - start_ms;
             if (elapsed_ms > BQ27441_I2C_TIMEOUT) {
@@ -336,7 +336,7 @@ bool BQ27441::enterConfig(bool user_control) {
                 break;
             }
         }
-        if (not timeout) {
+        if (!timeout) {
             return true;
         }
     }
@@ -361,7 +361,7 @@ bool BQ27441::exitConfig(bool resim) {
                 }
             }
 
-            if (not timeout) {
+            if (!timeout) {
                 if (_seal_flag) {
                     seal();
                 }
@@ -511,8 +511,8 @@ uint16_t BQ27441::computeBlockChecksum() {
 
 uint16_t BQ27441::readExtendedData(uint16_t class_id, uint16_t offset) {
     bool entered_config = false;
-    if (not _user_config_control) {
-        if (not enterConfig(false)) {
+    if (!_user_config_control) {
+        if (!enterConfig(false)) {
             return 0;
         }
         entered_config = true;
@@ -529,10 +529,10 @@ uint16_t BQ27441::readExtendedData(uint16_t class_id, uint16_t offset) {
         return result;
     };
 
-    if (not blockDataControl()) {
+    if (!blockDataControl()) {
         return bail(0);
     }
-    if (not blockDataClass(class_id)) {
+    if (!blockDataClass(class_id)) {
         return bail(0);
     }
 
@@ -557,8 +557,8 @@ uint16_t BQ27441::writeExtendedData(uint16_t class_id, uint16_t offset, const ui
     }
 
     bool entered_config = false;
-    if (not _user_config_control) {
-        if (not enterConfig(false)) {
+    if (!_user_config_control) {
+        if (!enterConfig(false)) {
             return false;
         }
         entered_config = true;
@@ -574,11 +574,11 @@ uint16_t BQ27441::writeExtendedData(uint16_t class_id, uint16_t offset, const ui
         return result;
     };
 
-    if (not blockDataControl()) {
+    if (!blockDataControl()) {
         return bail(false);
     }
 
-    if (not blockDataClass(class_id)) {
+    if (!blockDataClass(class_id)) {
         return bail(false);
     }
 
@@ -587,13 +587,13 @@ uint16_t BQ27441::writeExtendedData(uint16_t class_id, uint16_t offset, const ui
     blockDataChecksum();
 
     for (int i = 0; i < length; i++) {
-        if (not writeBlockData((offset % 32) + i, data[i])) {
+        if (!writeBlockData((offset % 32) + i, data[i])) {
             return bail(false);
         }
     }
 
     uint16_t new_csum = computeBlockChecksum();
-    if (not writeBlockChecksum(new_csum)) {
+    if (!writeBlockChecksum(new_csum)) {
         return bail(false);
     }
 
@@ -616,7 +616,7 @@ bool BQ27441::readReg(uint8_t sub_address, uint8_t* buf, uint16_t count) {
         return false;
     }
     for (uint16_t i = 0; i < count; i++) {
-        if (not _wire.available()) {
+        if (!_wire.available()) {
             return false;
         }
         buf[i] = static_cast<uint8_t>(_wire.read());
