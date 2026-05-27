@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.18.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.17.0...v0.18.0) (2026-05-27)
+
+
+### Features
+
+* **bq27441:** Add driver for the on-board Li-Po fuel gauge. ([#171](https://github.com/steamicc/arduino-steami-lib/issues/171)) ([1d98747](https://github.com/steamicc/arduino-steami-lib/commit/1d98747eed10a959826b275226ccd85295d8cc46)), closes [hi#byte](https://github.com/hi/issues/byte) [#ifdef](https://github.com/steamicc/arduino-steami-lib/issues/ifdef)
+
 # [0.17.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.16.0...v0.17.0) (2026-05-26)
 
 
