@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.19.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.18.0...v0.19.0) (2026-05-27)
+
+
+### Features
+
+* **mcp23009e:** Add driver for the on-board GPIO expander. ([#172](https://github.com/steamicc/arduino-steami-lib/issues/172)) ([f3ca686](https://github.com/steamicc/arduino-steami-lib/commit/f3ca686afc36fd7e92124ddb22d9bc99cb465cb7))
+
 # [0.18.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.17.0...v0.18.0) (2026-05-27)
 
 
