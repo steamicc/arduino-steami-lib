@@ -14,6 +14,9 @@ class TwoWire {
     void beginTransmission(uint8_t address) {
         currentAddress_ = address;
         txBuffer_.clear();
+        // A new transmission re-selects the response stream on the next
+        // requestFrom(), so any in-flight stream is closed here.
+        activeResponseByAddr_.erase(address);
     }
 
     size_t write(uint8_t value) {
@@ -43,11 +46,48 @@ class TwoWire {
     }
 
     uint8_t requestFrom(uint8_t address, uint8_t quantity) {
+        // A single-byte transmission immediately followed by requestFrom
+        // is an I2C register-pointer-select preceding a read, not a
+        // standalone device command. Roll back the matching entry from
+        // commands_ so tests scanning getCommands() for actuation
+        // commands don't trip on pointer selects.
+        if (!commands_.empty() && commands_.back().address == address) {
+            commands_.pop_back();
+        }
         rxBuffer_.clear();
         uint8_t reg = currentRegisterByAddr_[address];
+
+        // Pick (or continue) a response stream for this address.
+        // beginTransmission() resets the binding; the first requestFrom()
+        // after a fresh select latches onto the response queue keyed by
+        // the currently selected register. Subsequent chunks keep pulling
+        // from the same queue, mirroring the bridge firmware which
+        // streams its 256-byte TX buffer in one continuous read.
+        auto activeIt = activeResponseByAddr_.find(address);
+        if (activeIt == activeResponseByAddr_.end()) {
+            const uint16_t respKey = makeKey(address, reg);
+            if (responses_.count(respKey)) {
+                activeResponseByAddr_[address] = respKey;
+                activeIt = activeResponseByAddr_.find(address);
+            }
+        }
+
         for (uint8_t i = 0; i < quantity; ++i) {
+            if (activeIt != activeResponseByAddr_.end()) {
+                auto& queue = responses_[activeIt->second];
+                auto& cursor = responseCursors_[activeIt->second];
+                if (cursor < queue.size()) {
+                    rxBuffer_.push_back(queue[cursor++]);
+                    continue;
+                }
+            }
             rxBuffer_.push_back(registers_[makeKey(address, reg + i)]);
         }
+        // Advance the per-address register cursor by `quantity` so that
+        // successive requestFrom() calls without an intervening
+        // beginTransmission stream contiguous data, matching the real
+        // I2C auto-increment used by the DAPLink bridge response buffer.
+        currentRegisterByAddr_[address] = static_cast<uint8_t>(reg + quantity);
         rxIndex_ = 0;
         return quantity;
     }
@@ -70,6 +110,17 @@ class TwoWire {
     uint8_t getRegister(uint8_t address, uint8_t reg) const {
         auto it = registers_.find(makeKey(address, reg));
         return (it != registers_.end()) ? it->second : 0x00;
+    }
+
+    // Pre-load a response payload streamed back when the next
+    // requestFrom() targets `cmd` as the selected register. Lets
+    // command-style protocols (DAPLink) stage response data without
+    // colliding with payload bytes that sendCommand writes into the
+    // register space at the same offsets.
+    void setResponse(uint8_t address, uint8_t cmd, const std::vector<uint8_t>& data) {
+        uint16_t key = makeKey(address, cmd);
+        responses_[key] = data;
+        responseCursors_[key] = 0;
     }
 
     struct WriteOp {
@@ -102,6 +153,9 @@ class TwoWire {
     std::vector<uint8_t> rxBuffer_;
     size_t rxIndex_ = 0;
     std::map<uint16_t, uint8_t> registers_;
+    std::map<uint16_t, std::vector<uint8_t>> responses_;
+    std::map<uint16_t, size_t> responseCursors_;
+    std::map<uint8_t, uint16_t> activeResponseByAddr_;
     std::vector<WriteOp> writes_;
     std::vector<CommandOp> commands_;
 };

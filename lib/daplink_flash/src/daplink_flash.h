@@ -18,7 +18,7 @@ class DaplinkFlash {
     };
 
     // Filename management
-    void setFilename(const char* name, const char* ext);
+    bool setFilename(const char* name, const char* ext);
     FilenameResult getFilename();
 
     // Flash operations

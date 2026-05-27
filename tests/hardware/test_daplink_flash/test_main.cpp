@@ -24,8 +24,10 @@ DaplinkFlash flash(bridge);
 
 void setUp(void) {
     // begin() on the flash driver re-probes the bridge, so we can call
-    // it before every test without any extra plumbing.
-    flash.begin();
+    // it before every test without any extra plumbing. Assert here so
+    // a missing bridge fails fast rather than letting downstream
+    // assertions explode with confusing messages.
+    TEST_ASSERT_TRUE_MESSAGE(flash.begin(), "flash.begin() must succeed in setUp");
 }
 
 void tearDown(void) {}

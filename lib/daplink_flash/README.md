@@ -10,6 +10,10 @@ I2C bridge on the STeaMi board.
 
 ## Quick start
 
+> ⚠️ `clearFlash()` erases the entire on-board SPI flash. The snippet
+> below wipes it on every boot — replace the call with your own gating
+> (a button, a one-shot config flag, etc.) before deploying.
+
 ```cpp
 #include <Wire.h>
 #include <DaplinkBridge.h>
@@ -27,7 +31,7 @@ void setup() {
         return;
     }
 
-    flash.clearFlash();
+    flash.clearFlash();  // destructive — wipes the whole partition
     flash.setFilename("DATA", "CSV");
     flash.writeLine("temperature,pressure");
     flash.writeLine("23.5,1013.2");
@@ -47,7 +51,7 @@ void setup() {
 
 | Method | Description |
 |--------|-------------|
-| `void setFilename(const char* name, const char* ext)` | Set the 8.3 filename. `name` is max 8 chars, `ext` is max 3 chars. Both are uppercased and space-padded automatically. |
+| `bool setFilename(const char* name, const char* ext)` | Set the 8.3 filename. `name` is max 8 chars, `ext` is max 3 chars. Both are uppercased and space-padded automatically. Returns `true` on success, `false` if either argument is `nullptr` or the bridge reports an error. |
 | `FilenameResult getFilename()` | Read the current filename. Returns a `FilenameResult` struct with `name` and `ext` fields, both stripped of trailing spaces. |
 
 ### Flash operations

@@ -21,20 +21,20 @@ bool DaplinkFlash::begin() {
     return _bridge->begin();
 }
 
-void DaplinkFlash::setFilename(const char* name, const char* ext) {
+bool DaplinkFlash::setFilename(const char* name, const char* ext) {
     // Set 8.3 filename. name: max 8 chars, ext: max 3 chars.
     if (name == nullptr || ext == nullptr) {
-        return;
+        return false;
     }
     char n[DAPLINK_FLASH_FILENAME_LEN];
     size_t nameLen = std::min(strlen(name), (size_t(DAPLINK_FLASH_FILENAME_LEN)));
-    for (int i = 0; i < nameLen; i++) {
+    for (size_t i = 0; i < nameLen; i++) {
         n[i] = toupper((unsigned char)name[i]);
     }
 
     char e[DAPLINK_FLASH_EXT_LEN];
     size_t extLen = std::min(strlen(ext), (size_t(DAPLINK_FLASH_EXT_LEN)));
-    for (int j = 0; j < extLen; j++) {
+    for (size_t j = 0; j < extLen; j++) {
         e[j] = toupper((unsigned char)ext[j]);
     }
 
@@ -43,7 +43,7 @@ void DaplinkFlash::setFilename(const char* name, const char* ext) {
     memcpy(padded, n, nameLen);
     memcpy(padded + DAPLINK_FLASH_FILENAME_LEN, e, extLen);
 
-    _bridge->sendCommand(DAPLINK_FLASH_CMD_SET_FILENAME, padded, sizeof(padded));
+    return _bridge->sendCommand(DAPLINK_FLASH_CMD_SET_FILENAME, padded, sizeof(padded));
 }
 
 DaplinkFlash::FilenameResult DaplinkFlash::getFilename() {
