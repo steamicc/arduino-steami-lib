@@ -199,6 +199,71 @@ void test_write_returns_zero_on_error(void) {
     TEST_ASSERT_EQUAL(0, len);
 }
 
+// Regression: e6842dc — write() must return the bytes already in
+// flash on a mid-stream chunk failure, not 0. Otherwise the caller
+// can't distinguish "nothing written" from "prefix written, retry
+// would duplicate" since flash writes are append-only and not atomic.
+void test_write_returns_partial_offset_on_midstream_failure(void) {
+    // Schedule REG_ERROR = CMD_FAILED to land right after the 2nd
+    // multi-byte transaction (= the 2nd chunk's writeFrame). The
+    // sendCommand wrapping that 2nd writeFrame then reads non-zero
+    // from error() and returns false. The 1st chunk already
+    // succeeded with REG_ERROR == 0, so write() must return one
+    // chunk's worth, not zero.
+    Wire.setRegisterAfterNWrites(2, DAPLINK_BRIDGE_REG_ERROR, DAPLINK_BRIDGE_ERROR_CMD_FAILED);
+
+    uint8_t buf[3 * DAPLINK_FLASH_MAX_WRITE_CHUNK];
+    memset(buf, 'X', sizeof(buf));
+    size_t written = flash.write(buf, sizeof(buf));
+
+    TEST_ASSERT_EQUAL(DAPLINK_FLASH_MAX_WRITE_CHUNK, written);
+}
+
+// Regression: 8b3b27f + e6842dc — readResponse used to recompute
+// REG_RESPONSE + produced for every chunk, wrapping at 0xFF
+// (0x82 + 0x7D == 0xFF) so multi-chunk reads silently lost data
+// past the wrap. The fix emits REG_RESPONSE exactly once and lets
+// the firmware cursor advance. Verify a full 256-byte sector
+// round-trips byte-for-byte (the mock falls back to registers_
+// for any key it doesn't have a queued response for, so a
+// regression where the bridge re-selects mid-stream would either
+// miss the response queue entirely or skip past it — both surface
+// as a mismatch here).
+void test_read_sector_streams_full_256_bytes_contiguously(void) {
+    std::vector<uint8_t> sector(DAPLINK_FLASH_SECTOR_SIZE);
+    for (size_t i = 0; i < sector.size(); ++i) {
+        sector[i] = static_cast<uint8_t>(i & 0xFF);
+    }
+    Wire.setResponse(ADDR, DAPLINK_BRIDGE_REG_RESPONSE, sector);
+    Wire.setRegister(ADDR, DAPLINK_BRIDGE_REG_ERROR, 0x00);
+
+    uint8_t out[DAPLINK_FLASH_SECTOR_SIZE];
+    TEST_ASSERT_TRUE(flash.readSector(0, out));
+    for (size_t i = 0; i < DAPLINK_FLASH_SECTOR_SIZE; ++i) {
+        TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(i & 0xFF), out[i]);
+    }
+}
+
+// Regression: 9c6cc64 — setFilename now returns bool. Null name /
+// null ext / bridge error all surface as false instead of being
+// silently dropped.
+void test_set_filename_rejects_null_name(void) {
+    TEST_ASSERT_FALSE(flash.setFilename(nullptr, "TXT"));
+}
+
+void test_set_filename_rejects_null_ext(void) {
+    TEST_ASSERT_FALSE(flash.setFilename("DATA", nullptr));
+}
+
+void test_set_filename_propagates_bridge_error(void) {
+    Wire.setRegister(ADDR, DAPLINK_BRIDGE_REG_ERROR, DAPLINK_BRIDGE_ERROR_CMD_FAILED);
+    TEST_ASSERT_FALSE(flash.setFilename("DATA", "TXT"));
+}
+
+void test_set_filename_returns_true_on_success(void) {
+    TEST_ASSERT_TRUE(flash.setFilename("DATA", "TXT"));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_begin_detects_device);
@@ -214,5 +279,11 @@ int main(void) {
     RUN_TEST(test_read_stops_at_sentinel);
     RUN_TEST(test_read_limited_by_maxlen);
     RUN_TEST(test_write_returns_zero_on_error);
+    RUN_TEST(test_write_returns_partial_offset_on_midstream_failure);
+    RUN_TEST(test_read_sector_streams_full_256_bytes_contiguously);
+    RUN_TEST(test_set_filename_rejects_null_name);
+    RUN_TEST(test_set_filename_rejects_null_ext);
+    RUN_TEST(test_set_filename_propagates_bridge_error);
+    RUN_TEST(test_set_filename_returns_true_on_success);
     return UNITY_END();
 }

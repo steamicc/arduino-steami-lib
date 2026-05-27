@@ -37,6 +37,18 @@ class TwoWire {
                 writes_.push_back({currentAddress_, targetReg, val});
             }
             currentRegisterByAddr_[currentAddress_] = reg;
+            // Drain any register-write schedules that should fire on
+            // this multi-byte transaction. Used by tests that need to
+            // inject a device-side error mid-stream (e.g. flip the
+            // ERROR register only after the Nth successful chunk).
+            for (auto it = scheduledRegSets_.begin(); it != scheduledRegSets_.end();) {
+                if (--it->countdown == 0) {
+                    registers_[makeKey(currentAddress_, it->reg)] = it->value;
+                    it = scheduledRegSets_.erase(it);
+                } else {
+                    ++it;
+                }
+            }
         } else if (txBuffer_.size() == 1) {
             uint8_t cmd = txBuffer_[0];
             commands_.push_back({currentAddress_, cmd});
@@ -123,6 +135,17 @@ class TwoWire {
         responseCursors_[key] = 0;
     }
 
+    // Schedule a register write to land on the device exactly after
+    // the Nth subsequent multi-byte I2C transaction (writeFrame /
+    // [reg, val0, val1, ...]). Used by tests that need to inject a
+    // mid-stream device-side error: e.g. schedule REG_ERROR =
+    // CMD_FAILED after N successful writes to validate that the
+    // driver returns the count of bytes already committed rather
+    // than zero on a partial failure.
+    void setRegisterAfterNWrites(uint16_t n, uint8_t reg, uint8_t value) {
+        scheduledRegSets_.push_back({n, reg, value});
+    }
+
     struct WriteOp {
         uint8_t address;
         uint8_t reg;
@@ -158,6 +181,12 @@ class TwoWire {
     std::map<uint8_t, uint16_t> activeResponseByAddr_;
     std::vector<WriteOp> writes_;
     std::vector<CommandOp> commands_;
+    struct ScheduledRegSet {
+        uint16_t countdown;
+        uint8_t reg;
+        uint8_t value;
+    };
+    std::vector<ScheduledRegSet> scheduledRegSets_;
 };
 
 inline TwoWire Wire;
