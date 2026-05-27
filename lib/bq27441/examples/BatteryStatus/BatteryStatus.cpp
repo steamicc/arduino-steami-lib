@@ -1,7 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// BatteryStatus — print voltage, state of charge, remaining capacity
+// and state of health to the serial monitor every 3 seconds.
+//
+// The BQ27441 sits on the STeaMi internal I2C bus, so spin up a
+// dedicated TwoWire pointed at the variant pin macros and hand it to the
+// driver. Open the serial monitor at 115200 baud to see the live readings.
+
 #include <Arduino.h>
 #include <BQ27441.h>
 #include <Wire.h>
-#include <math.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 BQ27441 sensor(internalI2C);
@@ -19,7 +27,7 @@ void setup() {
     }
 }
 
-void loop(){
+void loop() {
     Serial.print("Voltage: ");
     Serial.print(sensor.voltageMv());
     Serial.print("mV \n");
