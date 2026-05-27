@@ -71,6 +71,13 @@ class MCP23009E {
     void disableInterrupt(uint8_t gpx);
     void interruptEvent();
 
+    // Drains the pending-interrupt flag set by the ISR and dispatches
+    // the registered callbacks in normal (non-interrupt) context. Call
+    // this from loop() — the ISR itself only flags so it can finish
+    // fast and so callbacks aren't run from ISR context (where Wire
+    // and arbitrary user code are unsafe on STM32duino).
+    void poll();
+
    private:
     // Stored as a pointer (not a reference) so the class is
     // default-assignable — matches the convention in HTS221 / WsenHids
@@ -81,6 +88,10 @@ class MCP23009E {
     uint8_t _address;
     uint8_t _resetPin;
     int _interruptPin;
+
+    // Set from the MCU-side ISR, drained by poll() in normal context.
+    // volatile because the writer (ISR) and reader (loop) are racing.
+    volatile bool _irqPending = false;
 
     std::function<void(uint8_t)> _eventsChange[8];
     std::function<void()> _eventsFall[8];
@@ -106,6 +117,20 @@ class MCP23009Pin {
 
     MCP23009Pin(MCP23009E& mcp, uint8_t pinNumber, uint8_t mode = 0xFF, uint8_t pull = 0xFF,
                 uint8_t value = 0xFF);
+
+    // Unregisters any irq() callback this Pin had set on the parent
+    // expander so a dispatched interrupt can't invoke a destroyed
+    // object. Stack-allocated Pin lifetimes therefore no longer leak
+    // dangling lambdas into MCP23009E::_eventsChange/Fall/Rise.
+    ~MCP23009Pin();
+
+    // Disable copy/move — a copied Pin would share the parent's
+    // callback slot and the destructor of the moved-from object would
+    // unregister the callback the moved-to object still expects.
+    MCP23009Pin(const MCP23009Pin&) = delete;
+    MCP23009Pin& operator=(const MCP23009Pin&) = delete;
+    MCP23009Pin(MCP23009Pin&&) = delete;
+    MCP23009Pin& operator=(MCP23009Pin&&) = delete;
 
     void init(uint8_t mode = 0xFF, uint8_t pull = 0xFF, uint8_t value = 0xFF);
     uint8_t value(uint8_t x = 0xFF);

@@ -92,7 +92,13 @@ bool MCP23009E::begin() {
         // callback_function_t = std::function<void(void)>, so capturing
         // lambdas are supported on the target. The native mock matches
         // that signature.
-        attachInterrupt(digitalPinToInterrupt(_interruptPin), [this]() { irqHandler(); }, FALLING);
+        //
+        // Trigger on CHANGE so the MCU-side ISR fires regardless of
+        // the user-configurable INTPOL bit (CTRL2 / MCP23009Config).
+        // Whether INT is active-high or active-low, both edges land in
+        // the ISR and the deferred poll() reads INTF/INTCAP to figure
+        // out which pin actually fired and at what level.
+        attachInterrupt(digitalPinToInterrupt(_interruptPin), [this]() { irqHandler(); }, CHANGE);
     }
 
     reset();
@@ -169,11 +175,13 @@ void MCP23009E::setup(uint8_t gpx, uint8_t direction, uint8_t pullup, uint8_t po
 }
 
 void MCP23009E::setLevel(uint8_t gpx, uint8_t level) {
-    /*Définit le niveau logique d'un GPIO configuré en sortie
-
-        Args:
-            gpx: Numéro de GPIO (0 à 7)
-            level: MCP_LOGIC_LOW ou MCP_LOGIC_HIGH*/
+    // Drive the output level on a pin configured as output. The RMW
+    // reads OLAT (the output latch) — reading GPIO would return the
+    // physical pin states, which on a mixed input/output port could
+    // latch input levels into OLAT and drive surprise values once an
+    // input is reconfigured as an output. Per the MCP23009 datasheet
+    // writing to GPIO is equivalent to writing OLAT, so the write
+    // stays on GPIO for clarity at the call site.
     if (gpx > 7) {
         return;
     }
@@ -183,9 +191,9 @@ void MCP23009E::setLevel(uint8_t gpx, uint8_t level) {
         return;
     }
 
-    uint8_t gpio = readReg(MCP23009_GPIO);
-    gpio = setBit(gpio, gpx, level);
-    writeReg(MCP23009_GPIO, gpio);
+    uint8_t olat = readReg(MCP23009_OLAT);
+    olat = setBit(olat, gpx, level);
+    writeReg(MCP23009_GPIO, olat);
 }
 
 uint8_t MCP23009E::getLevel(uint8_t gpx) {
@@ -434,26 +442,33 @@ void MCP23009E::disableInterrupt(uint8_t gpx) {
 }
 
 void MCP23009E::irqHandler() {
-    // ISR installed by begin() via attachInterrupt() on the INT
-    // expander pin. Reads INTF / INTCAP and dispatches the registered
-    // per-pin callbacks.
-    interruptEvent();
+    // STM32duino calls this from ISR context. Doing I2C transactions
+    // or running user-provided callbacks here can deadlock (Wire uses
+    // interrupts internally) or block real-time work. Just flag and
+    // defer — the application drains via poll() from loop().
+    _irqPending = true;
+}
+
+void MCP23009E::poll() {
+    // Non-ISR dispatcher. Call this from loop() (or any non-interrupt
+    // context) — it picks up the pending flag set by irqHandler() and
+    // runs interruptEvent() with the bus + callback rules of normal
+    // user code.
+    if (_irqPending) {
+        _irqPending = false;
+        interruptEvent();
+    }
 }
 
 void MCP23009E::interruptEvent() {
-    /*Traite les événements d'interruption du MCP23009E
-        Cette méthode lit les flags d'interruption et appelle les callbacks appropriés*/
-
-    MCP23009Config iocon = getIocon();
-
+    // Reads which pins fired (INTF) and which value they had at the
+    // moment of the event (INTCAP — the captured snapshot, not the
+    // current GPIO state, so a bounce or follow-up edge can't
+    // misclassify the callback). INTCAP is the authoritative source
+    // whether INTCC is set or not.
     uint8_t intf = readReg(MCP23009_INTF);
-    uint8_t state;
+    uint8_t state = readReg(MCP23009_INTCAP);
 
-    if (iocon.hasIntcc()) {
-        state = readReg(MCP23009_INTCAP);
-    } else {
-        state = readReg(MCP23009_GPIO);
-    }
     for (uint8_t i = 0; i < 8; i++) {
         if (getBit(intf, i)) {
             uint8_t level = getBit(state, i);
@@ -481,6 +496,15 @@ MCP23009Pin::MCP23009Pin(MCP23009E& mcp, uint8_t pinNumber, uint8_t mode, uint8_
     if (_mode != 0xFF) {
         init(_mode, _pull, _value);
     }
+}
+
+MCP23009Pin::~MCP23009Pin() {
+    // If irq() was ever called on this Pin, the parent expander still
+    // holds [this]-capturing lambdas in its callback arrays. Strip
+    // them on destruction so a deferred poll() doesn't invoke a dead
+    // object. Safe to call unconditionally: disableInterrupt is a
+    // no-op when no callback was registered.
+    _mcp.disableInterrupt(_pinNumber);
 }
 
 void MCP23009Pin::init(uint8_t mode, uint8_t pull, uint8_t value) {

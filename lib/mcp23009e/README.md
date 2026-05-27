@@ -90,7 +90,8 @@ Direct read/write access to every register in the MCP23009E register map.
 | `void interruptOnFalling(uint8_t gpx, std::function<void()> callback)` | Call `callback()` on falling edge of `gpx`. |
 | `void interruptOnRaising(uint8_t gpx, std::function<void()> callback)` | Call `callback()` on rising edge of `gpx`. |
 | `void disableInterrupt(uint8_t gpx)` | Disable and clear all callbacks for `gpx`. |
-| `void interruptEvent()` | Process pending interrupt flags and dispatch callbacks. |
+| `void poll()` | Drain the ISR-set pending flag and dispatch the registered callbacks. Call this from `loop()`. The ISR itself only sets the flag — running callbacks (and the I²C reads they involve) from interrupt context is unsafe on STM32duino. |
+| `void interruptEvent()` | Force a dispatch pass regardless of the pending flag. Usually you'll call `poll()` instead. |
 
 ### IOCON configuration — `MCP23009Config`
 
