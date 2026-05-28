@@ -36,6 +36,7 @@ void setup() {
     if (!sensor.begin()) {
         while (true) {
             delay(1000);
+            Serial.println("Failed to initialize BQ27441! Check your wiring.");
         }
     }
 
@@ -44,11 +45,12 @@ void setup() {
 }
 
 void loop() {
-    if (sensor.stateOfCharge() <= 20) {
+    uint8_t state = sensor.stateOfCharge();
+    if (state <= 20) {
         blink();
         delay(200);
     }
-    if (sensor.stateOfCharge() <= 5) {
+    if (state <= 5) {
         buzzAlert();
         delay(1000);
     } else {
