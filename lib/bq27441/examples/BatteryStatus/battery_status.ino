@@ -31,15 +31,15 @@ void setup() {
 void loop() {
     Serial.print("Voltage: ");
     Serial.print(sensor.voltageMv());
-    Serial.println("mV ");
+    Serial.println("mV\n");
     Serial.print("State of Charge: ");
     Serial.print(sensor.stateOfCharge());
-    Serial.print("% ");
+    Serial.print("%\n");
     Serial.print("Remaining Capacity: ");
     Serial.print(sensor.capacityRemaining());
-    Serial.print("mAh ");
+    Serial.print("mAh\n");
     Serial.print("State of Health: ");
     Serial.print(sensor.stateOfHealth());
-    Serial.println("% ");
+    Serial.println("%\n");
     delay(3000);
 }
