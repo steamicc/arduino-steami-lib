@@ -23,6 +23,7 @@ void setup() {
     if (!sensor.begin()) {
         while (true) {
             delay(1000);
+            Serial.println("Failed to initialize BQ27441! Check your wiring.");
         }
     }
 }
@@ -30,15 +31,15 @@ void setup() {
 void loop() {
     Serial.print("Voltage: ");
     Serial.print(sensor.voltageMv());
-    Serial.print("mV \n");
+    Serial.println("mV ");
     Serial.print("State of Charge: ");
     Serial.print(sensor.stateOfCharge());
-    Serial.print("% \n");
+    Serial.print("% ");
     Serial.print("Remaining Capacity: ");
     Serial.print(sensor.capacityRemaining());
-    Serial.print("mAh \n");
+    Serial.print("mAh ");
     Serial.print("State of Health: ");
     Serial.print(sensor.stateOfHealth());
-    Serial.println("% \n");
+    Serial.println("% ");
     delay(3000);
 }
