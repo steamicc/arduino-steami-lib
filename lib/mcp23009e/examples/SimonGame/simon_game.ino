@@ -95,9 +95,9 @@ void setup() {
     pinMode(LED_GREEN, OUTPUT);
     pinMode(LED_BLUE, OUTPUT);
 
-    Serial.println("DpadReader — press a D-PAD button.");
-
     randomSeed(analogRead(0));
+
+    Serial.println("SimonGame — watch the LED sequence, then repeat it on the D-PAD.");
 }
 
 void loop() {
