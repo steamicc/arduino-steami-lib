@@ -98,10 +98,14 @@ void setup() {
         // !Serial stays true until the host enumerates.
     }
 
+    for (const auto& [pinNumber, melody] : kMelodies) {
+        expander.setup(pinNumber, MCP23009_DIR_INPUT, MCP23009_PULLUP);
+    }
+
     internalI2C.begin();
     expander.begin();
 
-    Serial.println("DpadReader — press a D-PAD button.");
+    Serial.println("MusicPlayer — UP: Tetris, DOWN: Mario, LEFT: Zelda, RIGHT: Pokemon.");
 }
 
 void loop() {
