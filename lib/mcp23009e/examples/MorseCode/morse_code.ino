@@ -58,7 +58,7 @@ void setup() {
     internalI2C.begin();
     expander.begin();
 
-    Serial.println("DpadReader — press a D-PAD button.");
+    Serial.println("MorseDecoder — use the UP button: press < 300 ms for dot, >= 300 ms for dash.");
 }
 
 void loop() {
