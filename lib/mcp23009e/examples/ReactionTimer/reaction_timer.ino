@@ -23,11 +23,17 @@ void setup() {
     internalI2C.begin();
     expander.begin();
 
+    expander.setup(MCP23009_BTN_UP, MCP23009_DIR_INPUT, MCP23009_PULLUP);
+
     pinMode(LED_RED, OUTPUT);
     randomSeed(analogRead(0));
 }
 
 void loop() {
+    while (expander.getLevel(MCP23009_BTN_UP) == MCP23009_LOGIC_LOW) {
+        delay(10);
+    }
+
     delay(random(300, 1500));
     digitalWrite(LED_RED, HIGH);
     uint32_t startTime = millis();
