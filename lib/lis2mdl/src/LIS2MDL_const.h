@@ -8,11 +8,12 @@
 constexpr uint8_t LIS2MDL_I2C_ADDR = 0x1E;
 
 // Register addresses
-constexpr uint8_t LIS2MDL_WHO_AM_I = 0x4F;    // Device identification register
-constexpr uint8_t LIS2MDL_CFG_REG_A = 0x60;   // Configuration register A
-constexpr uint8_t LIS2MDL_CFG_REG_B = 0x61;   // Configuration register B
-constexpr uint8_t LIS2MDL_CFG_REG_C = 0x62;   // Configuration register C
-constexpr uint8_t LIS2MDL_STATUS_REG = 0x67;  // Status register
+constexpr uint8_t LIS2MDL_WHO_AM_I = 0x4F;      // Device identification register
+constexpr uint8_t LIS2MDL_WHO_AM_I_VAL = 0x40;  // Expected value of WHO_AM_I register
+constexpr uint8_t LIS2MDL_CFG_REG_A = 0x60;     // Configuration register A
+constexpr uint8_t LIS2MDL_CFG_REG_B = 0x61;     // Configuration register B
+constexpr uint8_t LIS2MDL_CFG_REG_C = 0x62;     // Configuration register C
+constexpr uint8_t LIS2MDL_STATUS_REG = 0x67;    // Status register
 
 // Output data registers
 constexpr uint8_t LIS2MDL_OUTX_L_REG = 0x68;  // X-axis output low byte

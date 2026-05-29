@@ -3,6 +3,17 @@
 #include "LIS2MDL.h"
 
 #include <math.h>
+#include <string.h>
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+#ifndef radians
+#define radians(deg) ((deg) * M_PI / 180.0f)
+#endif
+#ifndef degrees
+#define degrees(rad) ((rad) * 180.0f / M_PI)
+#endif
 
 LIS2MDL::LIS2MDL(TwoWire& wire, uint8_t address, uint8_t odrHz, bool tempComp, bool lowPower,
                  bool drdyEnable)
@@ -16,14 +27,13 @@ LIS2MDL::LIS2MDL(TwoWire& wire, uint8_t address, uint8_t odrHz, bool tempComp, b
       _readBuffer{0},
       _tempGain(1.0f),
       _tempOffset(0.0f),
-      _tempBaseOffset(static_cast<float>(LIS2MDL_TEMP_OFFSET)),
-      _headingOffsetDeg(0.0f),
-      _declinationDeg(0.0f),
-      _hfAlpha(0.0f),
-      _hfCos(0.0f),
-      _hfSin(0.0f) {}
+      _tempBaseOffset(static_cast<float>(LIS2MDL_TEMP_OFFSET)) {}
 
-void LIS2MDL::begin() {
+bool LIS2MDL::begin() {
+    if (deviceId() != LIS2MDL_WHO_AM_I_VAL) {
+        return false;
+    }
+
     writeReg(LIS2MDL_CFG_REG_A, 0x20);
     delay(10);
 
@@ -44,7 +54,7 @@ void LIS2MDL::begin() {
     }
 
     uint8_t comp = _tempComp ? 1 : 0;
-    uint8_t lp   = _lowPower ? 1 : 0;
+    uint8_t lp = _lowPower ? 1 : 0;
     uint8_t cfgA = (comp << 7) | (lp << 4) | (odrBits << 2);
     writeReg(LIS2MDL_CFG_REG_A, cfgA);
 
@@ -52,26 +62,24 @@ void LIS2MDL::begin() {
 
     uint8_t cfgC = 0x10 | (_drdyEnable ? 0x01 : 0x00);
     writeReg(LIS2MDL_CFG_REG_C, cfgC);
+
+    return true;
 }
 
 //--------------------------------------------------------
 // -------------------- SET functions --------------------
 //--------------------------------------------------------
 
-void LIS2MDL::setMode(const String& mode) {
-    uint8_t md;
-    if (mode == "continuous") {
-        md = 0b00;
-    } else if (mode == "single") {
+void LIS2MDL::setMode(const char* mode) {
+    uint8_t md = 0b00;
+    if (strcmp(mode, "single") == 0) {
         md = 0b01;
-    } else if (mode == "powerdown") {
+    } else if (strcmp(mode, "powerdown") == 0) {
         md = 0b11;
-    } else {
-        md = 0b00;
     }
 
     uint8_t reg = readReg(LIS2MDL_CFG_REG_A);
-    reg         = (reg & ~0b11) | md;
+    reg = (reg & ~0b11) | md;
     writeReg(LIS2MDL_CFG_REG_A, reg);
 }
 
@@ -96,7 +104,7 @@ void LIS2MDL::setOdr(int hz) {
     }
 
     uint8_t reg = readReg(LIS2MDL_CFG_REG_A);
-    reg         = (reg & ~(0b11 << 2)) | (odrBits << 2);
+    reg = (reg & ~(0b11 << 2)) | (odrBits << 2);
     writeReg(LIS2MDL_CFG_REG_A, reg);
 }
 
@@ -204,7 +212,6 @@ void LIS2MDL::write16(uint8_t regL, int16_t value) {
     _wire->beginTransmission(_address);
     _wire->write(regL);
     _wire->write(value & 0xFF);
-    _wire->write(regL + 1);
     _wire->write((value >> 8) & 0xFF);
     _wire->endTransmission();
 }
@@ -264,7 +271,7 @@ uint8_t LIS2MDL::readReg(uint8_t reg) {
 
 MagneticFieldUt LIS2MDL::magneticFieldUt() {
     // Reads the magnetic field in µT, uncalibrated (simple conversion from LSB).
-    MagneticField   raw = magneticField();
+    MagneticField raw = magneticField();
     MagneticFieldUt f;
     f.x = raw.x * _MAG_LSB_TO_uT;
     f.y = raw.y * _MAG_LSB_TO_uT;
@@ -274,7 +281,7 @@ MagneticFieldUt LIS2MDL::magneticFieldUt() {
 
 CalibratedField LIS2MDL::calibratedField() {
     // Reads the calibrated field (offset/scale per axis), normalized (unitless, ~circle in XY).
-    MagneticField   raw = magneticField();
+    MagneticField raw = magneticField();
     CalibratedField f;
     f.x = (raw.x - xOff) / (xScale != 0 ? xScale : 1.0f);
     f.y = (raw.y - yOff) / (yScale != 0 ? yScale : 1.0f);
@@ -330,7 +337,7 @@ void LIS2MDL::setTempOffset(float offset) {
 
         Args:
             offset_c: offset value in degrees Celsius.*/
-    _tempGain   = 1.0f;
+    _tempGain = 1.0f;
     _tempOffset = offset;
 }
 
@@ -349,7 +356,7 @@ bool LIS2MDL::calibrateTemperature(float refLow, float measuredLow, float refHig
     float delta = measuredHigh - measuredLow;
     if (delta == 0.0f)
         return false;
-    _tempGain   = (refHigh - refLow) / delta;
+    _tempGain = (refHigh - refLow) / delta;
     _tempOffset = refLow - _tempGain * measuredLow;
     return true;
 }
@@ -389,10 +396,10 @@ void LIS2MDL::readRegisters(uint8_t startAddr, uint8_t length, uint8_t* buffer) 
 ReadAll LIS2MDL::readAll() {
     // Grouped reading useful for debug & logs.
     ReadAll r;
-    r.raw    = magneticFieldRaw();
-    r.ut     = magneticFieldUt();
-    r.cal    = calibratedField();
-    r.tempC  = temperature();
+    r.raw = magneticFieldRaw();
+    r.ut = magneticFieldUt();
+    r.cal = calibratedField();
+    r.tempC = temperature();
     r.status = status();
     return r;
 }
@@ -408,9 +415,9 @@ bool LIS2MDL::isIdle() {
 void LIS2MDL::setCalibrateStep(float xoff, float yoff, float zoff, float xscale, float yscale,
                                float zscale) {
     // Set the calibration offsets and scales manually.
-    xOff   = xoff;
-    yOff   = yoff;
-    zOff   = zoff;
+    xOff = xoff;
+    yOff = yoff;
+    zOff = zoff;
     xScale = xscale;
     yScale = yscale;
     zScale = zscale;
@@ -426,21 +433,25 @@ void LIS2MDL::calibrateMinmax2d(uint16_t samples, uint16_t delayMs) {
 
     for (uint16_t i = 0; i < samples; i++) {
         MagneticField f = magneticField();
-        if (f.x < xmin) xmin = f.x;
-        if (f.x > xmax) xmax = f.x;
-        if (f.y < ymin) ymin = f.y;
-        if (f.y > ymax) ymax = f.y;
+        if (f.x < xmin)
+            xmin = f.x;
+        if (f.x > xmax)
+            xmax = f.x;
+        if (f.y < ymin)
+            ymin = f.y;
+        if (f.y > ymax)
+            ymax = f.y;
         delay(delayMs);
     }
 
-    xOff   = (xmin + xmax) / 2.0f;
-    yOff   = (ymin + ymax) / 2.0f;
+    xOff = (xmin + xmax) / 2.0f;
+    yOff = (ymin + ymax) / 2.0f;
     xScale = (xmax - xmin) / 2.0f != 0.0f ? (xmax - xmin) / 2.0f : 1.0f;
     yScale = (ymax - ymin) / 2.0f != 0.0f ? (ymax - ymin) / 2.0f : 1.0f;
 
     float avg = (xScale + yScale) / 2.0f;
-    xScale    = (xScale != 0.0f) ? avg : 1.0f;
-    yScale    = (yScale != 0.0f) ? avg : 1.0f;
+    xScale = (xScale != 0.0f) ? avg : 1.0f;
+    yScale = (yScale != 0.0f) ? avg : 1.0f;
 }
 
 void LIS2MDL::calibrateMinmax3d(uint16_t samples, uint16_t delayMs) {
@@ -452,18 +463,24 @@ void LIS2MDL::calibrateMinmax3d(uint16_t samples, uint16_t delayMs) {
 
     for (uint16_t i = 0; i < samples; i++) {
         MagneticField f = magneticField();
-        if (f.x < xmin) xmin = f.x;
-        if (f.x > xmax) xmax = f.x;
-        if (f.y < ymin) ymin = f.y;
-        if (f.y > ymax) ymax = f.y;
-        if (f.z < zmin) zmin = f.z;
-        if (f.z > zmax) zmax = f.z;
+        if (f.x < xmin)
+            xmin = f.x;
+        if (f.x > xmax)
+            xmax = f.x;
+        if (f.y < ymin)
+            ymin = f.y;
+        if (f.y > ymax)
+            ymax = f.y;
+        if (f.z < zmin)
+            zmin = f.z;
+        if (f.z > zmax)
+            zmax = f.z;
         delay(delayMs);
     }
 
-    xOff   = (xmin + xmax) / 2.0f;
-    yOff   = (ymin + ymax) / 2.0f;
-    zOff   = (zmin + zmax) / 2.0f;
+    xOff = (xmin + xmax) / 2.0f;
+    yOff = (ymin + ymax) / 2.0f;
+    zOff = (zmin + zmax) / 2.0f;
     xScale = (xmax - xmin) / 2.0f != 0.0f ? (xmax - xmin) / 2.0f : 1.0f;
     yScale = (ymax - ymin) / 2.0f != 0.0f ? (ymax - ymin) / 2.0f : 1.0f;
     zScale = (zmax - zmin) / 2.0f != 0.0f ? (zmax - zmin) / 2.0f : 1.0f;
@@ -487,9 +504,9 @@ CalibrationQuality LIS2MDL::calibrateQuality(uint16_t samplesCheck, uint16_t del
     float xs[samplesCheck], ys[samplesCheck], zs[samplesCheck];
     for (uint16_t i = 0; i < samplesCheck; i++) {
         CalibratedField cal = calibratedField();
-        xs[i]               = cal.x;
-        ys[i]               = cal.y;
-        zs[i]               = cal.z;
+        xs[i] = cal.x;
+        ys[i] = cal.y;
+        zs[i] = cal.z;
         delay(delayMs);
     }
 
@@ -530,23 +547,23 @@ CalibrationQuality LIS2MDL::calibrateQuality(uint16_t samplesCheck, uint16_t del
     float maxSxy = (sx > sy ? sx : sy);
 
     CalibrationQuality q;
-    q.meanX        = mx;
-    q.meanY        = my;
-    q.meanZ        = mz;
-    q.stdX         = sx;
-    q.stdY         = sy;
-    q.stdZ         = sz;
-    q.rMeanXY      = rMean;
-    q.rStdXY       = sqrt(rVar);
+    q.meanX = mx;
+    q.meanY = my;
+    q.meanZ = mz;
+    q.stdX = sx;
+    q.stdY = sy;
+    q.stdZ = sz;
+    q.rMeanXY = rMean;
+    q.rStdXY = sqrt(rVar);
     q.anisotropyXY = maxSxy / (minSxy + 1e-9f);
     return q;
 }
 
 void LIS2MDL::calibrateReset() {
     // Resets to a 'neutral' calibration (useful before re-calibrating).
-    xOff   = 0.0f;
-    yOff   = 0.0f;
-    zOff   = 0.0f;
+    xOff = 0.0f;
+    yOff = 0.0f;
+    zOff = 0.0f;
     xScale = 1.0f;
     yScale = 1.0f;
     zScale = 1.0f;
@@ -564,8 +581,8 @@ void LIS2MDL::setHeadingFilter(float alpha) {
     /*alpha=0 -> no filtering. 0.1..0.3 = light/medium smoothing.
         Filter by averaging cos/sin to avoid artifacts at 0/360°.*/
     _hfAlpha = (alpha < 0.0f) ? 0.0f : (alpha > 1.0f) ? 1.0f : alpha;
-    _hfCos   = 0.0f;
-    _hfSin   = 0.0f;
+    _hfCos = 0.0f;
+    _hfSin = 0.0f;
 }
 
 float LIS2MDL::normalizeDeg(float a) {
@@ -591,8 +608,8 @@ float LIS2MDL::filterHeading(float angleDeg) {
         _hfSin = s;
     } else {
         float a = _hfAlpha;
-        _hfCos  = (1.0f - a) * _hfCos + a * c;
-        _hfSin  = (1.0f - a) * _hfSin + a * s;
+        _hfCos = (1.0f - a) * _hfCos + a * c;
+        _hfSin = (1.0f - a) * _hfSin + a * s;
 
         float norm = sqrt(_hfCos * _hfCos + _hfSin * _hfSin);
         if (norm > 1e-6f) {
@@ -612,7 +629,7 @@ float LIS2MDL::headingFromVectors(float x, float y, float z, bool calibrated) {
         y = (y - yOff) / (yScale != 0.0f ? yScale : 1.0f);
     }
     float angle = degrees(atan2(y, x));
-    angle       = applyHeadingOffsets(angle);
+    angle = applyHeadingOffsets(angle);
     return filterHeading(angle);
 }
 
@@ -632,22 +649,22 @@ float LIS2MDL::headingWithTiltCompensation(Vec3f (*readAccel)()) {
     float z = (raw.z - zOff) / (zScale != 0.0f ? zScale : 1.0f);
 
     Vec3f accel = readAccel();
-    float roll  = atan2(accel.y, accel.z);
+    float roll = atan2(accel.y, accel.z);
     float pitch = atan2(-accel.x, sqrt(accel.y * accel.y + accel.z * accel.z));
 
-    float xh    = x * cos(pitch) + z * sin(pitch);
-    float yh    = x * sin(roll) * sin(pitch) + y * cos(roll) - z * sin(roll) * cos(pitch);
+    float xh = x * cos(pitch) + z * sin(pitch);
+    float yh = x * sin(roll) * sin(pitch) + y * cos(roll) - z * sin(roll) * cos(pitch);
     float angle = degrees(atan2(yh, xh));
-    angle       = applyHeadingOffsets(angle);
+    angle = applyHeadingOffsets(angle);
     return filterHeading(angle);
 }
 
-String LIS2MDL::directionLabel(float angle) {
+const char* LIS2MDL::directionLabel(float angle) {
     // Returns N/NE/E/... ; if angle=-1, reads headingFlatOnly().
     if (angle < 0.0f) {
         angle = headingFlatOnly();
     }
-    const String dirs[] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
+    const char* dirs[] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
     return dirs[(int)(angle / 45.0f) % 8];
 }
 
@@ -655,22 +672,24 @@ String LIS2MDL::directionLabel(float angle) {
 // -------------------- Power/reset functions ------------
 //--------------------------------------------------------
 
-String LIS2MDL::getMode() {
-    uint8_t r  = readReg(LIS2MDL_CFG_REG_A);
+const char* LIS2MDL::getMode() {
+    uint8_t r = readReg(LIS2MDL_CFG_REG_A);
     uint8_t md = r & 0b11;
-    if (md == 0b00) return "continuous";
-    if (md == 0b01) return "single";
+    if (md == 0b00)
+        return "continuous";
+    if (md == 0b01)
+        return "single";
     return "idle";
 }
 
 void LIS2MDL::powerOff() {
     // Switches to IDLE mode (low power).
     uint8_t r = readReg(LIS2MDL_CFG_REG_A);
-    r         = (r & ~0b11) | 0b11;
+    r = (r & ~0b11) | 0b11;
     writeReg(LIS2MDL_CFG_REG_A, r);
 }
 
-void LIS2MDL::powerOn(const String& mode) {
+void LIS2MDL::powerOn(const char* mode) {
     // Power on the sensor: 'continuous' (default) or 'single'.
     uint8_t md;
     if (mode == "single") {
@@ -679,7 +698,7 @@ void LIS2MDL::powerOn(const String& mode) {
         md = 0b00;
     }
     uint8_t r = readReg(LIS2MDL_CFG_REG_A);
-    r         = (r & ~0b11) | md;
+    r = (r & ~0b11) | md;
     writeReg(LIS2MDL_CFG_REG_A, r);
 }
 

@@ -47,8 +47,8 @@ class LIS2MDL {
     LIS2MDL(TwoWire& wire = Wire, uint8_t address = LIS2MDL_I2C_ADDR, uint8_t odrHz = 10,
             bool tempComp = true, bool lowPower = false, bool drdyEnable = false);
 
-    void begin();
-    void setMode(const String& mode);
+    bool begin();
+    void setMode(const char* mode);
     void setOdr(int hz);
     void setContinuous(uint8_t hz = 10);
     void triggerOneShot();
@@ -93,10 +93,10 @@ class LIS2MDL {
     float headingFromVectors(float x, float y, float z, bool calibrated = true);
     float headingFlatOnly();
     float headingWithTiltCompensation(Vec3f (*readAccel)());
-    String directionLabel(float angle = -1.0f);
-    String getMode();
+    const char* directionLabel(float angle = -1.0f);
+    const char* getMode();
     void powerOff();
-    void powerOn(const String& mode = "continuous");
+    void powerOn(const char* mode = "continuous");
     void softReset(uint16_t waitMs = 10);
     void reboot(uint16_t waitMs = 10);
     bool isIdle();
