@@ -44,10 +44,10 @@ void test_lis2mdl_magnitude_ut_plausible(void) {
 
     float avgMag = (mag1 + mag2 + mag3) / 3.0f;
     float tolerance = avgMag * 0.1f;
-    TEST_ASSERT_TRUE_MESSAGE(avgMag > 5.0f, "magnitude trop faible");
-    TEST_ASSERT_TRUE_MESSAGE(fabs(mag1 - avgMag) < tolerance, "lecture 1 instable");
-    TEST_ASSERT_TRUE_MESSAGE(fabs(mag2 - avgMag) < tolerance, "lecture 2 instable");
-    TEST_ASSERT_TRUE_MESSAGE(fabs(mag3 - avgMag) < tolerance, "lecture 3 instable");
+    TEST_ASSERT_TRUE_MESSAGE(avgMag > 5.0f, "magnitude too low");
+    TEST_ASSERT_TRUE_MESSAGE(fabs(mag1 - avgMag) < tolerance, "reading 1 unstable");
+    TEST_ASSERT_TRUE_MESSAGE(fabs(mag2 - avgMag) < tolerance, "reading 2 unstable");
+    TEST_ASSERT_TRUE_MESSAGE(fabs(mag3 - avgMag) < tolerance, "reading 3 unstable");
 }
 
 void test_lis2mdl_heading_flat_only_in_range(void) {
