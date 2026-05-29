@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <LIS2MDL.h>
 #include <Wire.h>
+#include <math.h>
 #include <unity.h>
 
 #include "driver_checks.h"
