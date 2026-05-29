@@ -384,6 +384,9 @@ HwOffsets LIS2MDL::readHwOffsets() {
 
 void LIS2MDL::readRegisters(uint8_t startAddr, uint8_t length, uint8_t* buffer) {
     // Dump of consecutive registers (useful for debugging).
+    for (uint8_t i = 0; i < length; i++) {
+        buffer[i] = 0;
+    }
     _wire->beginTransmission(_address);
     _wire->write(startAddr);
     _wire->endTransmission(false);
@@ -501,7 +504,14 @@ CalibrationQuality LIS2MDL::calibrateQuality(uint16_t samplesCheck, uint16_t del
         Returns a dict with useful metrics: center (mean), anisotropy, XY radius dispersion.
         (Move the board a bit while flat during the measurement.)*/
 
-    float xs[samplesCheck], ys[samplesCheck], zs[samplesCheck];
+    static constexpr uint16_t MAX_SAMPLES = 200;
+    if (samplesCheck == 0) {
+        return {0, 0, 0, 0, 0, 0, 0, 0, 0};
+    }
+    if (samplesCheck > MAX_SAMPLES) {
+        samplesCheck = MAX_SAMPLES;
+    }
+    float xs[MAX_SAMPLES], ys[MAX_SAMPLES], zs[MAX_SAMPLES];
     for (uint16_t i = 0; i < samplesCheck; i++) {
         CalibratedField cal = calibratedField();
         xs[i] = cal.x;
@@ -692,7 +702,7 @@ void LIS2MDL::powerOff() {
 void LIS2MDL::powerOn(const char* mode) {
     // Power on the sensor: 'continuous' (default) or 'single'.
     uint8_t md;
-    if (mode == "single") {
+    if (mode != nullptr && strcmp(mode, "single") == 0) {
         md = 0b01;
     } else {
         md = 0b00;
