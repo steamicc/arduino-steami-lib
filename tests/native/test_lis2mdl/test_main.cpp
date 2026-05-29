@@ -8,7 +8,6 @@
 #include "driver_checks.h"
 
 constexpr uint8_t ADDR = LIS2MDL_I2C_ADDR;
-constexpr uint8_t WHO_AM_I_VAL = LIS2MDL_WHO_AM_I_VAL;
 
 static void preloadWhoAmI(bool valid = true) {
     Wire.setRegister(ADDR, LIS2MDL_WHO_AM_I, valid ? LIS2MDL_WHO_AM_I_VAL : 0x00);
@@ -414,6 +413,7 @@ int main(void) {
     RUN_TEST(test_read_all_returns_all_channels);
     RUN_TEST(test_read_one_shot_returns_magnetic_field);
     RUN_TEST(test_read_one_shot_returns_zeros_on_timeout);
+    RUN_TEST(test_ensure_data_returns_false_on_timeout);
     RUN_TEST(test_temperature_raw_is_signed);
     RUN_TEST(test_set_temp_offset_shifts_reading);
     RUN_TEST(test_calibrate_temperature_applies_two_point_correction);
