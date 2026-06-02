@@ -23,7 +23,7 @@ class VL53L1X {
     uint16_t read();
 
    private:
-    TwoWire& _wire;
+    TwoWire* _wire;
     uint8_t _address;
     static const uint8_t DEFAULT_CONFIG[];
 

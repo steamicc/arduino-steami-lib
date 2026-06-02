@@ -98,7 +98,7 @@ const uint8_t VL53L1X::DEFAULT_CONFIG[] = {
     0x40,  // 0x87 : start ranging
 };
 
-VL53L1X::VL53L1X(TwoWire& wire, uint8_t address) : _wire(wire), _address(address) {}
+VL53L1X::VL53L1X(TwoWire& wire, uint8_t address) : _wire(&wire), _address(address) {}
 
 bool VL53L1X::begin() {
     reset();
@@ -115,56 +115,56 @@ bool VL53L1X::begin() {
 }
 
 void VL53L1X::writeReg(uint16_t reg, uint8_t value) {
-    _wire.beginTransmission(_address);
-    _wire.write((reg >> 8) & 0xFF);
-    _wire.write(reg & 0xFF);
-    _wire.write(static_cast<uint8_t>(value));
-    _wire.endTransmission();
+    _wire->beginTransmission(_address);
+    _wire->write((reg >> 8) & 0xFF);
+    _wire->write(reg & 0xFF);
+    _wire->write(static_cast<uint8_t>(value));
+    _wire->endTransmission();
 }
 
 void VL53L1X::writeReg16(uint16_t reg, uint16_t value) {
-    _wire.beginTransmission(_address);
-    _wire.write((reg >> 8) & 0xFF);
-    _wire.write(reg & 0xFF);
-    _wire.write(static_cast<uint8_t>((value >> 8) & 0xFF));
-    _wire.write(static_cast<uint8_t>(value & 0xFF));
-    _wire.endTransmission();
+    _wire->beginTransmission(_address);
+    _wire->write((reg >> 8) & 0xFF);
+    _wire->write(reg & 0xFF);
+    _wire->write(static_cast<uint8_t>((value >> 8) & 0xFF));
+    _wire->write(static_cast<uint8_t>(value & 0xFF));
+    _wire->endTransmission();
 }
 
 uint8_t VL53L1X::readReg(uint16_t reg) {
-    _wire.beginTransmission(_address);
-    _wire.write((reg >> 8) & 0xFF);
-    _wire.write(reg & 0xFF);
-    _wire.endTransmission(false);
-    _wire.requestFrom(_address, static_cast<uint8_t>(1));
-    if (_wire.available()) {
-        return static_cast<uint8_t>(_wire.read());
+    _wire->beginTransmission(_address);
+    _wire->write((reg >> 8) & 0xFF);
+    _wire->write(reg & 0xFF);
+    _wire->endTransmission(false);
+    _wire->requestFrom(_address, static_cast<uint8_t>(1));
+    if (_wire->available()) {
+        return static_cast<uint8_t>(_wire->read());
     }
     return 0;
 }
 
 uint16_t VL53L1X::readReg16(uint16_t reg) {
-    _wire.beginTransmission(_address);
-    _wire.write((reg >> 8) & 0xFF);
-    _wire.write(reg & 0xFF);
-    _wire.endTransmission(false);
-    _wire.requestFrom(_address, static_cast<uint8_t>(2));
-    if (_wire.available() >= 2) {
-        uint8_t msb = static_cast<uint8_t>(_wire.read());
-        uint8_t lsb = static_cast<uint8_t>(_wire.read());
+    _wire->beginTransmission(_address);
+    _wire->write((reg >> 8) & 0xFF);
+    _wire->write(reg & 0xFF);
+    _wire->endTransmission(false);
+    _wire->requestFrom(_address, static_cast<uint8_t>(2));
+    if (_wire->available() >= 2) {
+        uint8_t msb = static_cast<uint8_t>(_wire->read());
+        uint8_t lsb = static_cast<uint8_t>(_wire->read());
         return (msb << 8) | lsb;
     }
     return 0;
 }
 
 void VL53L1X::writeRegBytes(uint16_t reg, const uint8_t* data, size_t len) {
-    _wire.beginTransmission(_address);
-    _wire.write((reg >> 8) & 0xFF);
-    _wire.write(reg & 0xFF);
+    _wire->beginTransmission(_address);
+    _wire->write((reg >> 8) & 0xFF);
+    _wire->write(reg & 0xFF);
     for (size_t i = 0; i < len; i++) {
-        _wire.write(data[i]);
+        _wire->write(data[i]);
     }
-    _wire.endTransmission();
+    _wire->endTransmission();
 }
 
 uint16_t VL53L1X::deviceId() {
@@ -221,13 +221,13 @@ bool VL53L1X::ensureData() {
 uint16_t VL53L1X::distanceMm() {
     ensureData();
     uint8_t data[RESULT_BLOCK_SIZE] = {};
-    _wire.beginTransmission(_address);
-    _wire.write((REG_RESULT_RANGE_STATUS >> 8) & 0xFF);
-    _wire.write(REG_RESULT_RANGE_STATUS & 0xFF);
-    _wire.endTransmission(false);
-    _wire.requestFrom(_address, static_cast<uint8_t>(RESULT_BLOCK_SIZE));
-    for (uint8_t i = 0; i < RESULT_BLOCK_SIZE && _wire.available(); i++) {
-        data[i] = static_cast<uint8_t>(_wire.read());
+    _wire->beginTransmission(_address);
+    _wire->write((REG_RESULT_RANGE_STATUS >> 8) & 0xFF);
+    _wire->write(REG_RESULT_RANGE_STATUS & 0xFF);
+    _wire->endTransmission(false);
+    _wire->requestFrom(_address, static_cast<uint8_t>(RESULT_BLOCK_SIZE));
+    for (uint8_t i = 0; i < RESULT_BLOCK_SIZE && _wire->available(); i++) {
+        data[i] = static_cast<uint8_t>(_wire->read());
     }
     uint16_t distance = static_cast<uint16_t>(data[RESULT_DISTANCE_MSB_OFFSET] << 8) +
                         data[RESULT_DISTANCE_LSB_OFFSET];
