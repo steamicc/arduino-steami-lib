@@ -158,13 +158,20 @@ uint16_t VL53L1X::readReg16(uint16_t reg) {
 }
 
 void VL53L1X::writeRegBytes(uint16_t reg, const uint8_t* data, size_t len) {
-    _wire->beginTransmission(_address);
-    _wire->write((reg >> 8) & 0xFF);
-    _wire->write(reg & 0xFF);
-    for (size_t i = 0; i < len; i++) {
-        _wire->write(data[i]);
+    constexpr size_t MAX_DATA_PER_FRAME = 30;
+    size_t offset = 0;
+    while (offset < len) {
+        const size_t chunk =
+            (len - offset > MAX_DATA_PER_FRAME) ? MAX_DATA_PER_FRAME : (len - offset);
+        _wire->beginTransmission(_address);
+        _wire->write(((reg + offset) >> 8) & 0xFF);
+        _wire->write((reg + offset) & 0xFF);
+        for (size_t i = 0; i < chunk; ++i) {
+            _wire->write(data[offset + i]);
+        }
+        _wire->endTransmission();
+        offset += chunk;
     }
-    _wire->endTransmission();
 }
 
 uint16_t VL53L1X::deviceId() {
@@ -219,7 +226,9 @@ bool VL53L1X::ensureData() {
 }
 
 uint16_t VL53L1X::distanceMm() {
-    ensureData();
+    if (!ensureData()) {
+        return 0;
+    }
     uint8_t data[RESULT_BLOCK_SIZE] = {};
     _wire->beginTransmission(_address);
     _wire->write((REG_RESULT_RANGE_STATUS >> 8) & 0xFF);

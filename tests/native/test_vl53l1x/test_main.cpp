@@ -23,10 +23,10 @@ static void preloadDataReady(bool ready = true) {
 }
 
 static void preloadDistance(uint16_t distance) {
-    Wire.setRegister(ADDR, (uint8_t)(REG_RESULT_RANGE_STATUS + RESULT_DISTANCE_MSB_OFFSET),
-                     (uint8_t)(distance >> 8));
-    Wire.setRegister(ADDR, (uint8_t)(REG_RESULT_RANGE_STATUS + RESULT_DISTANCE_LSB_OFFSET),
-                     (uint8_t)(distance & 0xFF));
+    preloadDataReady(true);
+    Wire.setRegister(ADDR, REG_RESULT_RANGE_STATUS + RESULT_DISTANCE_MSB_OFFSET,
+                     (distance >> 8) & 0xFF);
+    Wire.setRegister(ADDR, REG_RESULT_RANGE_STATUS + RESULT_DISTANCE_LSB_OFFSET, distance & 0xFF);
 }
 
 VL53L1X sensor;
