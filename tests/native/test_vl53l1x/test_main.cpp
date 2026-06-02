@@ -45,8 +45,7 @@ void test_begin_detects_device() {
 
 void test_device_id_returns_who_am_i() {
     preloadWhoAmI(true);
-    VL53L1X testSensor;  // ← Créé ici
-    testSensor.begin();
+    sensor.begin();
     check_who_am_i(sensor, VL53L1X_DEVICE_ID);
 }
 
@@ -56,14 +55,33 @@ void test_begin_rejects_wrong_who_am_i() {
 }
 
 void test_reset_writes_assert_then_release(void) {
-    preloadDataReady(false);
-    TEST_ASSERT_FALSE(sensor.dataReady());
+    Wire.clearWrites();
+    sensor.reset();
+    bool sawAssert = false;
+    bool sawRelease = false;
+    for (const auto& w : Wire.getWrites()) {
+        if (w.reg == (uint8_t)REG_SOFT_RESET && w.value == SOFT_RESET_ASSERT) {
+            sawAssert = true;
+        }
+        if (w.reg == (uint8_t)REG_SOFT_RESET && w.value == SOFT_RESET_RELEASE) {
+            sawRelease = true;
+        }
+    }
+    TEST_ASSERT_TRUE(sawAssert);
+    TEST_ASSERT_TRUE(sawRelease);
 }
 
 void test_power_off_writes_assert(void) {
+    Wire.clearWrites();
     sensor.powerOff();
-    preloadDataReady(false);
-    TEST_ASSERT_FALSE(sensor.dataReady());
+    bool sawAssert = false;
+    for (const auto& w : Wire.getWrites()) {
+        if (w.reg == (uint8_t)REG_SOFT_RESET && w.value == SOFT_RESET_ASSERT) {
+            sawAssert = true;
+            break;
+        }
+    }
+    TEST_ASSERT_TRUE(sawAssert);
 }
 
 void test_power_on_writes_release(void) {
