@@ -34,8 +34,7 @@ class TwoWire {
             // write sequence.
             uint8_t reg = txBuffer_[0];
 
-            bool is16bit =
-                (txBuffer_.size() >= 2) && (txBuffer_[0] <= 0x03) && (currentAddress_ == 0x29);
+            bool is16bit = (currentAddress_ == 0x29) && (txBuffer_.size() >= 2);
 
             if (is16bit && txBuffer_.size() == 2) {
                 uint16_t regAddr = (static_cast<uint16_t>(txBuffer_[0]) << 8) | txBuffer_[1];
@@ -43,7 +42,7 @@ class TwoWire {
             } else if (is16bit) {
                 uint16_t regAddr = (static_cast<uint16_t>(txBuffer_[0]) << 8) | txBuffer_[1];
                 for (size_t i = 2; i < txBuffer_.size(); ++i) {
-                    uint8_t targetReg = static_cast<uint8_t>(regAddr + (i - 2));
+                    uint16_t targetReg = static_cast<uint16_t>(regAddr + (i - 2));
                     uint8_t val = txBuffer_[i];
                     registers_[makeKey(currentAddress_, targetReg)] = val;
                     writes_.push_back({currentAddress_, targetReg, val});
@@ -51,7 +50,7 @@ class TwoWire {
                 currentRegisterByAddr_[currentAddress_] = regAddr;
             } else {
                 for (size_t i = 1; i < txBuffer_.size(); ++i) {
-                    uint8_t targetReg = static_cast<uint8_t>(reg + (i - 1));
+                    uint16_t targetReg = static_cast<uint16_t>(reg + (i - 1));
                     uint8_t val = txBuffer_[i];
                     registers_[makeKey(currentAddress_, targetReg)] = val;
                     writes_.push_back({currentAddress_, targetReg, val});
@@ -120,7 +119,7 @@ class TwoWire {
 
     struct WriteOp {
         uint8_t address;
-        uint8_t reg;
+        uint16_t reg;
         uint8_t value;
     };
 
