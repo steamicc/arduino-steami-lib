@@ -19,6 +19,17 @@ class SSD1327 {
 
     bool begin();
     void show();
+    void fill(uint8_t color);
+    void pixel(uint8_t x, uint8_t y, uint8_t color);
+    void fillRect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint8_t color);
+    void line(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t color);
+    void scroll(int16_t dx, int16_t dy);
+    void text(const char* str, uint8_t x, uint8_t y, uint8_t color);
+    void contrast(uint8_t contrast);
+    void rotate(uint8_t rotate);
+    void invert(uint8_t invert);
+    void powerOff();
+    void powerOn();
 
    private:
     uint8_t _width;
@@ -30,18 +41,7 @@ class SSD1327 {
     uint8_t _rowAddr[2];
     uint8_t _offset;
 
-    void powerOff();
-    void powerOn();
-    void contrast(uint8_t contrast);
-    void rotate(uint8_t rotate);
-    void invert(uint8_t invert);
     void initDisplay();
-    void fill(uint8_t color);
-    void pixel(uint8_t x, uint8_t y, uint8_t color);
-    void fillRect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint8_t color);
-    void line(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t color);
-    void scroll(int16_t dx, int16_t dy);
-    void text(const char* str, uint8_t x, uint8_t y, uint8_t color);
 
    protected:
     virtual void writeCmd(uint8_t cmd) = 0;
