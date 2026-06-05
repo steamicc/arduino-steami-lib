@@ -127,9 +127,15 @@ void SSD1327::pixel(uint8_t x, uint8_t y, uint8_t color) {
 }
 
 void SSD1327::fillRect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint8_t color) {
-    for (uint8_t row = y; row < y + h; row++) {
-        for (uint8_t col = x; col < x + w; col++) {
-            pixel(col, row, color);
+    uint16_t xEnd = static_cast<uint16_t>(x) + static_cast<uint16_t>(w);
+    uint16_t yEnd = static_cast<uint16_t>(y) + static_cast<uint16_t>(h);
+    if (xEnd > _width)
+        xEnd = _width;
+    if (yEnd > _height)
+        yEnd = _height;
+    for (uint16_t row = y; row < yEnd; row++) {
+        for (uint16_t col = x; col < xEnd; col++) {
+            pixel(static_cast<uint8_t>(col), static_cast<uint8_t>(row), color);
         }
     }
 }
