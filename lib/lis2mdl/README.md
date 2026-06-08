@@ -52,10 +52,8 @@ for the full sketch.
 
 | Example | What it does |
 |---------|--------------|
-| [`read_magnetic_field`](examples/read_magnetic_field/) | Print raw X/Y/Z magnetic field values at 10 Hz. |
-| [`compass`](examples/compass/) | Flat 2D compass heading with min/max calibration and cardinal direction label. |
-| [`magnitude`](examples/magnitude/) | Print total field strength in µT — useful to detect nearby magnets or metallic objects. |
-| [`tilt_compensated_compass`](examples/tilt_compensated_compass/) | Heading with tilt compensation using an external accelerometer. |
+| `basic_reader` | Reads and prints magnetic field XYZ and temperature in a loop. |
+|`metal_detector`| Simple metal detector: calibrates a baseline magnitude at startup, then alerts when the field deviates by more than 30 µT. |
 
 ### Building an example
 
