@@ -5,6 +5,7 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+
 #include "SSD1327.h"
 
 #define OLED_CS PD0
