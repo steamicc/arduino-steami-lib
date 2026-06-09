@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// VL53L1X — count objects crossing a baseline threshold, using a
+// state flag to avoid counting the same passage multiple times.
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <VL53L1X.h>

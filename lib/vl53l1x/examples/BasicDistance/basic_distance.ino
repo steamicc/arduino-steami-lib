@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// VL53L1X — read and print the measured distance over Serial at 10 Hz.
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <VL53L1X.h>

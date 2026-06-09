@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// VL53L1X — buzz the speaker when an object is closer than a
+// user-defined maximum distance entered over Serial at startup.
+
 #include <Arduino.h>
 #include <VL53L1X.h>
 #include <Wire.h>

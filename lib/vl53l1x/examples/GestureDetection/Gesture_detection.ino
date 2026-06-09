@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// VL53L1X — blink the red LED when an object crosses a baseline
+// threshold calibrated from 20 samples at startup.
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <VL53L1X.h>

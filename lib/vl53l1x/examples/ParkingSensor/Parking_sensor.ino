@@ -1,3 +1,8 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+//
+// VL53L1X — buzz the speaker at increasing frequency as an object
+// gets closer, with four distance zones between 50 and 300 mm.
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <VL53L1X.h>
