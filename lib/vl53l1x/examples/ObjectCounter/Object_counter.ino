@@ -4,8 +4,8 @@
 // state flag to avoid counting the same passage multiple times.
 
 #include <Arduino.h>
-#include <Wire.h>
 #include <VL53L1X.h>
+#include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 VL53L1X sensor(internalI2C);
@@ -15,7 +15,7 @@ uint8_t counter = 0;
 bool objectDetected = false;
 
 void setup() {
-  Serial.begin(115200);
+    Serial.begin(115200);
     while (!Serial && millis() < 2000) {
         // Wait up to 2 s for the host USB CDC to enumerate so the
         // "not detected" diagnostic below isn't silently dropped.
@@ -42,7 +42,7 @@ void loop() {
     if (sensor.dataReady()) {
         uint16_t distance = sensor.read();
 
-        if(distance < distanceMoy - 50 && !objectDetected) {
+        if (distance < distanceMoy - 50 && !objectDetected) {
             counter++;
             delay(700);
             objectDetected = true;

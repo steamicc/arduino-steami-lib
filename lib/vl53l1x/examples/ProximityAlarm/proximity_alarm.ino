@@ -36,7 +36,8 @@ void setup() {
     sensor.startRanging();
 
     Serial.println("Entrez la distance maximale (mm) :");
-    while (Serial.available() == 0);
+    while (Serial.available() == 0)
+        ;
     distanceMax = Serial.parseFloat();
     Serial.print("Distance max configurée : ");
     Serial.print(distanceMax);

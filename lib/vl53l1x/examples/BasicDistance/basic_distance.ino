@@ -3,14 +3,14 @@
 // VL53L1X — read and print the measured distance over Serial at 10 Hz.
 
 #include <Arduino.h>
-#include <Wire.h>
 #include <VL53L1X.h>
+#include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 VL53L1X sensor(internalI2C);
 
 void setup() {
-  Serial.begin(115200);
+    Serial.begin(115200);
     while (!Serial && millis() < 2000) {
         // Wait up to 2 s for the host USB CDC to enumerate so the
         // "not detected" diagnostic below isn't silently dropped.

@@ -4,8 +4,8 @@
 // threshold calibrated from 20 samples at startup.
 
 #include <Arduino.h>
-#include <Wire.h>
 #include <VL53L1X.h>
+#include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 VL53L1X sensor(internalI2C);
@@ -13,7 +13,7 @@ VL53L1X sensor(internalI2C);
 float distanceMoy = 0.0f;
 
 void setup() {
-  Serial.begin(115200);
+    Serial.begin(115200);
     while (!Serial && millis() < 2000) {
         // Wait up to 2 s for the host USB CDC to enumerate so the
         // "not detected" diagnostic below isn't silently dropped.
@@ -41,16 +41,14 @@ void loop() {
     if (sensor.dataReady()) {
         uint16_t distance = sensor.read();
 
-        if(distance < distanceMoy - 10) {
-            if(digitalRead(LED_RED) == LOW) {
+        if (distance < distanceMoy - 10) {
+            if (digitalRead(LED_RED) == LOW) {
                 digitalWrite(LED_RED, HIGH);
-            }
-            else {
+            } else {
                 digitalWrite(LED_RED, LOW);
             }
             delay(700);
         }
-
     }
 
     delay(50);
