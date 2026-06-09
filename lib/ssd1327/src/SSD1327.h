@@ -24,7 +24,7 @@ class SSD1327 {
     void fillRect(uint8_t x, uint8_t y, uint8_t w, uint8_t h, uint8_t color);
     void line(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t color);
     void scroll(int16_t dx, int16_t dy);
-    void text(const char* str, uint8_t x, uint8_t y, uint8_t color);
+    void text(const char* str, int16_t x, uint8_t y, uint8_t color);
     void contrast(uint8_t contrast);
     void rotate(uint8_t rotate);
     void invert(uint8_t invert);
