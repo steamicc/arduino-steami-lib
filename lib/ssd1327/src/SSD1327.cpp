@@ -212,7 +212,7 @@ void SSD1327::scroll(int16_t dx, int16_t dy) {
     (void)dx;
 }
 
-void SSD1327::text(const char* str, uint8_t x, uint8_t y, uint8_t color) {
+void SSD1327::text(const char* str, int16_t x, uint8_t y, uint8_t color) {
     while (*str) {
         char c = *str++;
 
@@ -228,7 +228,9 @@ void SSD1327::text(const char* str, uint8_t x, uint8_t y, uint8_t color) {
 
             for (uint8_t row = 0; row < 7; row++) {
                 if (line & (1 << row)) {
-                    pixel(x + col, y + row, color & 0x0F);
+                    if (x + col >= 0 && x + col < _width) {
+                        pixel(static_cast<uint8_t>(x + col), y + row, color & 0x0F);
+                    }
                 }
             }
         }
