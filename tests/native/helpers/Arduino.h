@@ -73,3 +73,5 @@ inline void attachInterrupt(uint8_t /* pin */, const std::function<void()>& /* i
 inline int digitalPinToInterrupt(int pin) {
     return pin;
 }
+
+inline void yield() {}
