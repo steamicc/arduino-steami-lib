@@ -33,13 +33,30 @@ class TwoWire {
             // reg + offset, one WriteOp per byte so tests can assert the full
             // write sequence.
             uint8_t reg = txBuffer_[0];
-            for (size_t i = 1; i < txBuffer_.size(); ++i) {
-                uint8_t targetReg = static_cast<uint8_t>(reg + (i - 1));
-                uint8_t val = txBuffer_[i];
-                registers_[makeKey(currentAddress_, targetReg)] = val;
-                writes_.push_back({currentAddress_, targetReg, val});
+
+            bool is16bit = (currentAddress_ == 0x29) && (txBuffer_.size() >= 2);
+
+            if (is16bit && txBuffer_.size() == 2) {
+                uint16_t regAddr = (static_cast<uint16_t>(txBuffer_[0]) << 8) | txBuffer_[1];
+                currentRegisterByAddr_[currentAddress_] = regAddr;
+            } else if (is16bit) {
+                uint16_t regAddr = (static_cast<uint16_t>(txBuffer_[0]) << 8) | txBuffer_[1];
+                for (size_t i = 2; i < txBuffer_.size(); ++i) {
+                    uint16_t targetReg = static_cast<uint16_t>(regAddr + (i - 2));
+                    uint8_t val = txBuffer_[i];
+                    registers_[makeKey(currentAddress_, targetReg)] = val;
+                    writes_.push_back({currentAddress_, targetReg, val});
+                }
+                currentRegisterByAddr_[currentAddress_] = regAddr;
+            } else {
+                for (size_t i = 1; i < txBuffer_.size(); ++i) {
+                    uint16_t targetReg = static_cast<uint16_t>(reg + (i - 1));
+                    uint8_t val = txBuffer_[i];
+                    registers_[makeKey(currentAddress_, targetReg)] = val;
+                    writes_.push_back({currentAddress_, targetReg, val});
+                }
+                currentRegisterByAddr_[currentAddress_] = reg;
             }
-            currentRegisterByAddr_[currentAddress_] = reg;
         } else if (txBuffer_.size() == 1) {
             currentRegisterByAddr_[currentAddress_] = txBuffer_[0];
         }
@@ -52,7 +69,7 @@ class TwoWire {
 
     uint8_t requestFrom(uint8_t address, uint8_t quantity) {
         rxBuffer_.clear();
-        uint8_t reg = currentRegisterByAddr_[address];
+        uint16_t reg = currentRegisterByAddr_[address];
 
         if (reg == 0 && quantity == 2) {
             uint16_t subcommand = (static_cast<uint16_t>(registers_[makeKey(address, 1)]) << 8) |
@@ -92,18 +109,17 @@ class TwoWire {
 
     // Host-side helpers — not part of the real Arduino TwoWire API.
 
-    void setRegister(uint8_t address, uint8_t reg, uint8_t value) {
+    void setRegister(uint8_t address, uint16_t reg, uint8_t value) {
         registers_[makeKey(address, reg)] = value;
     }
-
-    uint8_t getRegister(uint8_t address, uint8_t reg) const {
+    uint8_t getRegister(uint8_t address, uint16_t reg) const {
         auto it = registers_.find(makeKey(address, reg));
         return (it != registers_.end()) ? it->second : 0x00;
     }
 
     struct WriteOp {
         uint8_t address;
-        uint8_t reg;
+        uint16_t reg;
         uint8_t value;
     };
 
@@ -122,16 +138,16 @@ class TwoWire {
     }
 
    private:
-    static uint16_t makeKey(uint8_t addr, uint8_t reg) {
-        return (static_cast<uint16_t>(addr) << 8) | reg;
+    static uint32_t makeKey(uint8_t addr, uint16_t reg) {
+        return (static_cast<uint32_t>(addr) << 16) | reg;
     }
 
     uint8_t currentAddress_ = 0;
-    std::map<uint8_t, uint8_t> currentRegisterByAddr_;
+    std::map<uint8_t, uint16_t> currentRegisterByAddr_;
     std::vector<uint8_t> txBuffer_;
     std::vector<uint8_t> rxBuffer_;
     size_t rxIndex_ = 0;
-    std::map<uint16_t, uint8_t> registers_;
+    std::map<uint32_t, uint8_t> registers_;
     std::vector<WriteOp> writes_;
     uint8_t endTransmissionResult_ = 0;
 };
