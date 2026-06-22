@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.21.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.20.0...v0.21.0) (2026-06-22)
+
+
+### Features
+
+* **vl53l1x:** Implement Arduino driver.  [#9](https://github.com/steamicc/arduino-steami-lib/issues/9) ([#191](https://github.com/steamicc/arduino-steami-lib/issues/191)) ([d78c4a3](https://github.com/steamicc/arduino-steami-lib/commit/d78c4a3480c6f9bce67e4848bdb29c4117005c7c))
+
 # [0.20.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.19.0...v0.20.0) (2026-06-22)
 
 
