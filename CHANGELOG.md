@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.20.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.19.0...v0.20.0) (2026-06-22)
+
+
+### Features
+
+* **lis2mdl:** Implement Arduino driver.  [#4](https://github.com/steamicc/arduino-steami-lib/issues/4) ([#190](https://github.com/steamicc/arduino-steami-lib/issues/190)) ([d89fc2a](https://github.com/steamicc/arduino-steami-lib/commit/d89fc2acaa1c6497403ba3433a447aefe5259780))
+
 # [0.19.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.18.0...v0.19.0) (2026-05-27)
 
 
