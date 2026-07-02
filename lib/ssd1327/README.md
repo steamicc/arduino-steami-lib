@@ -106,7 +106,7 @@ Colors are 4-bit grayscale values (0 = black, 15 = white).
 |--------|-------------|
 | `void contrast(uint8_t contrast)` | Set display contrast (0–255). |
 | `void invert(uint8_t invert)` | Invert display colors (`1` = inverted, `0` = normal). |
-| `void rotate(uint8_t rotate)` | Rotate display (`0` = normal, `1` = rotated 180°). |
+| `void rotate(bool rotate)` | Rotate display (`true` = normal, `fales` = rotated 180°). |
 
 ## Register constants
 

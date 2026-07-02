@@ -124,7 +124,7 @@ void SSD1327::contrast(uint8_t contrast) {
     writeCmd(contrast);
 }
 
-void SSD1327::rotate(uint8_t rotate) {
+void SSD1327::rotate(bool rotate) {
     powerOff();
     writeCmd(SET_DISP_OFFSET);
     writeCmd(rotate ? _height : _offset);

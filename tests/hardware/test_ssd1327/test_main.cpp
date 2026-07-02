@@ -49,8 +49,8 @@ void test_ssd1327_invert_does_not_crash(void) {
 }
 
 void test_ssd1327_rotate_does_not_crash(void) {
-    display.rotate(0);
-    display.rotate(1);
+    display.rotate(true);
+    display.rotate(false);
 }
 
 void setup() {

@@ -135,7 +135,7 @@ void test_ssd1327_i2c_invert_sends_correct_mode(void) {
 
 void test_ssd1327_i2c_rotate_sends_correct_offset_and_remap(void) {
     Wire.clearWrites();
-    display->rotate(1);
+    display->rotate(true);
     auto writes = Wire.getWrites();
     bool foundOffset = false;
     bool foundRemap = false;

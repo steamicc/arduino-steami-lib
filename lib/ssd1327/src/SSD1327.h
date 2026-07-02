@@ -26,7 +26,7 @@ class SSD1327 {
     void scroll(int16_t dx, int16_t dy);
     void text(const char* str, int16_t x, uint8_t y, uint8_t color);
     void contrast(uint8_t contrast);
-    void rotate(uint8_t rotate);
+    void rotate(bool rotate);
     void invert(uint8_t invert);
     void powerOff();
     void powerOn();
