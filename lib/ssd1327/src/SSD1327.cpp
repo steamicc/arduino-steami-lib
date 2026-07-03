@@ -133,8 +133,8 @@ void SSD1327::rotate(bool rotate) {
     powerOn();
 }
 
-void SSD1327::invert(uint8_t invert) {
-    writeCmd(SET_DISP_MODE | (invert & 1) << 1 | (invert & 1));
+void SSD1327::invert(bool invert) {
+    writeCmd(invert ? SET_DISP_MODE_INVERSE : SET_DISP_MODE_NORMAL);
 }
 
 void SSD1327::show() {

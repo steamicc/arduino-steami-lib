@@ -27,7 +27,7 @@ class SSD1327 {
     void text(const char* str, int16_t x, uint8_t y, uint8_t color);
     void contrast(uint8_t contrast);
     void rotate(bool rotate);
-    void invert(uint8_t invert);
+    void invert(bool invert);
     void powerOff();
     void powerOn();
 
