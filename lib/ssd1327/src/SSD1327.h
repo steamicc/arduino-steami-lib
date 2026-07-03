@@ -45,7 +45,7 @@ class SSD1327 {
 
    protected:
     virtual void writeCmd(uint8_t cmd) = 0;
-    virtual void writeData(uint8_t* data, size_t len) = 0;
+    virtual void writeData(const uint8_t* data, size_t len) = 0;
 };
 
 class SSD1327_I2C : public SSD1327 {
@@ -59,7 +59,7 @@ class SSD1327_I2C : public SSD1327 {
     uint8_t _dataList[2];
 
     void writeCmd(uint8_t cmd);
-    void writeData(uint8_t* data, size_t len);
+    virtual void writeData(const uint8_t* data, size_t len);
 };
 
 class SSD1327_SPI : public SSD1327 {
@@ -75,7 +75,7 @@ class SSD1327_SPI : public SSD1327 {
 
     void reset();
     void writeCmd(uint8_t cmd);
-    void writeData(uint8_t* data, size_t len);
+    void writeData(const uint8_t* data, size_t len);
 };
 
 class WS_OLED_128X128_SPI : public SSD1327_SPI {

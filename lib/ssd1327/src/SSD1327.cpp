@@ -199,17 +199,49 @@ void SSD1327::line(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2, uint8_t color
 }
 
 void SSD1327::scroll(int16_t dx, int16_t dy) {
-    size_t stride = static_cast<size_t>(_width) / 2;
-    if (dy > 0) {
-        size_t offset = static_cast<size_t>(dy) * stride;
-        memmove(_buffer + offset, _buffer, _buffSize - offset);
-        memset(_buffer, 0, offset);
-    } else if (dy < 0) {
-        size_t offset = static_cast<size_t>(-dy) * stride;
-        memmove(_buffer, _buffer + offset, _buffSize - offset);
-        memset(_buffer + _buffSize - offset, 0, offset);
+    if (dx == 0 && dy == 0) {
+        return;
     }
-    (void)dx;
+
+    if (dx <= -static_cast<int16_t>(_width) || dx >= static_cast<int16_t>(_width) ||
+        dy <= -static_cast<int16_t>(_height) || dy >= static_cast<int16_t>(_height)) {
+        fill(0);
+        return;
+    }
+
+    const size_t stride = static_cast<size_t>(_width) / 2;
+
+    uint8_t* tmp = new uint8_t[_buffSize];
+    memset(tmp, 0, _buffSize);
+
+    for (int16_t y = 0; y < static_cast<int16_t>(_height); y++) {
+        int16_t srcY = y - dy;
+        if (srcY < 0 || srcY >= static_cast<int16_t>(_height)) {
+            continue;
+        }
+
+        for (int16_t x = 0; x < static_cast<int16_t>(_width); x++) {
+            int16_t srcX = x - dx;
+            if (srcX < 0 || srcX >= static_cast<int16_t>(_width)) {
+                continue;
+            }
+
+            size_t srcIndex = static_cast<size_t>(srcY) * stride + static_cast<size_t>(srcX) / 2;
+            uint8_t color =
+                (srcX & 1) ? (_buffer[srcIndex] & 0x0F) : ((_buffer[srcIndex] >> 4) & 0x0F);
+
+            size_t dstIndex = static_cast<size_t>(y) * stride + static_cast<size_t>(x) / 2;
+
+            if (x & 1) {
+                tmp[dstIndex] = (tmp[dstIndex] & 0xF0) | color;
+            } else {
+                tmp[dstIndex] = (tmp[dstIndex] & 0x0F) | (color << 4);
+            }
+        }
+    }
+
+    memcpy(_buffer, tmp, _buffSize);
+    delete[] tmp;
 }
 
 void SSD1327::text(const char* str, int16_t x, uint8_t y, uint8_t color) {
@@ -253,7 +285,7 @@ void SSD1327_I2C::writeCmd(uint8_t cmd) {
     _wire->endTransmission();
 }
 
-void SSD1327_I2C::writeData(uint8_t* data, size_t len) {
+void SSD1327_I2C::writeData(const uint8_t* data, size_t len) {
     const size_t chunkSize = 31;
     size_t offset = 0;
 
@@ -304,13 +336,18 @@ void SSD1327_SPI::writeCmd(uint8_t cmd) {
     _spi->endTransaction();
 }
 
-void SSD1327_SPI::writeData(uint8_t* data, size_t len) {
+void SSD1327_SPI::writeData(const uint8_t* data, size_t len) {
     _spi->beginTransaction(SPISettings(_rate, MSBFIRST, SPI_MODE0));
+
     pinMode(_dc, OUTPUT);
     digitalWrite(_cs, HIGH);
     digitalWrite(_dc, HIGH);
     digitalWrite(_cs, LOW);
-    _spi->transfer(data, len);
+
+    for (size_t i = 0; i < len; i++) {
+        _spi->transfer(data[i]);
+    }
+
     digitalWrite(_cs, HIGH);
     _spi->endTransaction();
 }
