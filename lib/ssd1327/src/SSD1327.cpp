@@ -352,6 +352,7 @@ void SSD1327_SPI::writeData(const uint8_t* data, size_t len) {
     _spi->endTransaction();
 }
 
+#ifdef ARDUINO
 SPIClass& WS_OLED_128X128_STEAMI::internalSpi() {
     static SPIClass spi(SPI_INT_MOSI, SPI_INT_MISO, SPI_INT_SCK);
     return spi;
@@ -364,3 +365,4 @@ bool WS_OLED_128X128_STEAMI::begin() {
     internalSpi().begin();
     return SSD1327::begin();
 }
+#endif

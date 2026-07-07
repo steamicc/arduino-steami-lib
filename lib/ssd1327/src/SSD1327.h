@@ -84,6 +84,7 @@ class WS_OLED_128X128_SPI : public SSD1327_SPI {
         : SSD1327_SPI(128, 128, spi, dc, res, cs) {}
 };
 
+#ifdef ARDUINO
 class WS_OLED_128X128_STEAMI : public SSD1327_SPI {
    public:
     WS_OLED_128X128_STEAMI();
@@ -92,6 +93,7 @@ class WS_OLED_128X128_STEAMI : public SSD1327_SPI {
    private:
     static SPIClass& internalSpi();
 };
+#endif
 
 class WS_OLED_128X128_I2C : public SSD1327_I2C {
    public:
