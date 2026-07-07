@@ -351,3 +351,16 @@ void SSD1327_SPI::writeData(const uint8_t* data, size_t len) {
     digitalWrite(_cs, HIGH);
     _spi->endTransaction();
 }
+
+SPIClass& WS_OLED_128X128_STEAMI::internalSpi() {
+    static SPIClass spi(SPI_INT_MOSI, SPI_INT_MISO, SPI_INT_SCK);
+    return spi;
+}
+
+WS_OLED_128X128_STEAMI::WS_OLED_128X128_STEAMI()
+    : SSD1327_SPI(128, 128, internalSpi(), SPI_INT_MISO, RST_DISPLAY, CS_DISPLAY) {}
+
+bool WS_OLED_128X128_STEAMI::begin() {
+    internalSpi().begin();
+    return SSD1327::begin();
+}
