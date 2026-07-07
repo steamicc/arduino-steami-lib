@@ -95,22 +95,29 @@ See [examples/](examples/) for full sketches.
 
 | Example | What it does |
 |---------|--------------|
-| [`fill_and_show`](examples/fill_and_show/) | Fill the screen with a uniform grayscale level and display it. |
-| [`draw_shapes`](examples/draw_shapes/) | Draw pixels, lines, and rectangles at various grayscale levels. |
-| [`scroll`](examples/scroll/) | Software-scroll the framebuffer horizontally and/or vertically. |
-| [`contrast`](examples/contrast/) | Cycle through contrast levels to demonstrate brightness control. |
+| [`framebuf_pixels`](examples/framebuf_pixels/) | Draw individual pixels at various positions and grayscale levels. |
+| [`framebuf_lines`](examples/framebuf_lines/) | Draw diagonal and intersecting lines across the display. |
+| [`framebuf_rects`](examples/framebuf_rects/) | Draw filled and outlined rectangles using different grayscale levels. |
+| [`framebuf_text`](examples/framebuf_text/) | Render text strings at different positions on the display. |
+| [`framebuf_scroll`](examples/framebuf_scroll/) | Demonstrate software scrolling of the framebuffer with text. |
+| [`invert`](examples/invert/) | Toggle the display between normal and inverted modes. |
+| [`rotation`](examples/rotation/) | Demonstrate 180° display rotation. |
+| [`shades`](examples/shades/) | Display vertical bands covering all 16 shades of gray. |
+| [`random_pixels`](examples/random_pixels/) | Display one randomly positioned grayscale pixels on each iteration. |
+| [`illusion`](examples/illusion/) | Render an optical illusion pattern using alternating squares and horizontal lines. |
+| [`rotating_3d_cube`](examples/rotating_3d_cube/) | Animate a rotating wireframe 3D cube. |
 
 ### Building an example
 
 ```bash
 make list-examples
-make flash-ssd1327/fill_and_show
+make flash-ssd1327/rotating_3d_cube
 ```
 
 To capture serial output from boot:
 
 ```bash
-make capture-ssd1327/fill_and_show
+make capture-ssd1327/rotating_3d_cube
 ```
 
 ## API
