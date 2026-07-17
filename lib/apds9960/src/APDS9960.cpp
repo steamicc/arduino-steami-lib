@@ -204,7 +204,8 @@ APDS9960::Gesture APDS9960::readGesture(uint32_t timeoutMs) {
             }
 
             uint8_t fifo[APDS9960_GESTURE_DATASETS_MAX * 4];
-            size_t bytesRead = readRegs(APDS9960_REG_GFIFO_U, fifo, datasets * 4U);
+            size_t bytesRead =
+                readRegs(APDS9960_REG_GFIFO_U, fifo, static_cast<size_t>(datasets) * 4U);
             size_t completeSets = bytesRead / 4U;
 
             for (size_t i = 0;
@@ -553,10 +554,23 @@ bool APDS9960::processGestureData() {
         }
     }
 
-    int16_t udRatioFirst = static_cast<int16_t>(((uFirst - dFirst) * 100L) / (uFirst + dFirst));
-    int16_t lrRatioFirst = static_cast<int16_t>(((lFirst - rFirst) * 100L) / (lFirst + rFirst));
-    int16_t udRatioLast = static_cast<int16_t>(((uLast - dLast) * 100L) / (uLast + dLast));
-    int16_t lrRatioLast = static_cast<int16_t>(((lLast - rLast) * 100L) / (lLast + rLast));
+    if (uLast == 0 || dLast == 0 || lLast == 0 || rLast == 0) {
+        return false;
+    }
+
+    const int16_t udDenFirst = static_cast<int16_t>(uFirst + dFirst);
+    const int16_t lrDenFirst = static_cast<int16_t>(lFirst + rFirst);
+    const int16_t udDenLast = static_cast<int16_t>(uLast + dLast);
+    const int16_t lrDenLast = static_cast<int16_t>(lLast + rLast);
+
+    if (udDenFirst == 0 || lrDenFirst == 0 || udDenLast == 0 || lrDenLast == 0) {
+        return false;
+    }
+
+    int16_t udRatioFirst = static_cast<int16_t>(((uFirst - dFirst) * 100L) / udDenFirst);
+    int16_t lrRatioFirst = static_cast<int16_t>(((lFirst - rFirst) * 100L) / lrDenFirst);
+    int16_t udRatioLast = static_cast<int16_t>(((uLast - dLast) * 100L) / udDenLast);
+    int16_t lrRatioLast = static_cast<int16_t>(((lLast - rLast) * 100L) / lrDenLast);
 
     int16_t udDelta = udRatioLast - udRatioFirst;
     int16_t lrDelta = lrRatioLast - lrRatioFirst;
