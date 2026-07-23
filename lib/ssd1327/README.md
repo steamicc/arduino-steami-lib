@@ -95,7 +95,7 @@ See [examples/](examples/) for full sketches.
 
 | Example | What it does |
 |---------|--------------|
-| [`framebuf_pixels`](examples/framebuf_pixels/) | Draw individual pixels at various positions and grayscale levels. |
+| [`framebuf_pixels`](examples/framebuf_pixels/) | Draw individual pixel at various positions and grayscale levels. |
 | [`framebuf_lines`](examples/framebuf_lines/) | Draw diagonal and intersecting lines across the display. |
 | [`framebuf_rects`](examples/framebuf_rects/) | Draw filled and outlined rectangles using different grayscale levels. |
 | [`framebuf_text`](examples/framebuf_text/) | Render text strings at different positions on the display. |
