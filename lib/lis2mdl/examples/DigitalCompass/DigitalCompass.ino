@@ -61,13 +61,13 @@ void setup() {
         }
     }
 
-    magnetometer.setContinuous(20);
+    magnetometer.setContinuous(50);
     magnetometer.setHeadingFilter(0.2f);
 
     delay(1000);
 
     Serial.println("Rotate the board flat in a full circle for calibration for 30 seconds...");
-    magnetometer.calibrateMinmax2d(300, 20);
+    magnetometer.calibrateMinmax2d(1000, 20);
     Serial.println("Calibration done.");
 
     Serial.println("Rotate the board flat in a full circle for best results.");
