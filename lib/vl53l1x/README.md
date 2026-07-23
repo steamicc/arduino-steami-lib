@@ -45,7 +45,7 @@ void loop() {
 }
 ```
 
-See [examples/read_distance/](examples/read_distance/) for the complete
+See [examples/basic_distance/](examples/basic_distance/) for the complete
 example sketch.
 
 ## Examples
@@ -53,7 +53,7 @@ example sketch.
 | Example | What it does |
 |---------|--------------|
 | [`BasicDistance`](examples/basic_distance/) | Continuously measures and prints the distance in millimeters to the serial monitor. |
-| [`ProximityAlarm`](examples/proximity_alarm/) | Turns on the red LED when an object comes closer than a configurable distance threshold. |
+| [`ProximityAlarm`](examples/proximity_alarm/) | Buzzes the on-board `SPEAKER` when an object comes closer than a configurable distance threshold. |
 | [`ParkingSensor`](examples/parking_sensor/) | Simulates a parking sensor by increasing the beep rate as an object gets closer. |
 
 ### Building an example
