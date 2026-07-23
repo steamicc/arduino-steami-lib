@@ -19,7 +19,7 @@ void setup() {
     }
 
     display.fill(0);
-    for (uint8_t shade = 0; shade <= 16; shade++) {
+    for (uint8_t shade = 0; shade <= 15; shade++) {
         display.fillRect((shade) * 8, 0, 8, 128, shade);
     }
     display.show();
