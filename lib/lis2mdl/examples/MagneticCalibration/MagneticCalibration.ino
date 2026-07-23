@@ -27,7 +27,7 @@ static void printCalibration() {
 }
 
 static void printQuality() {
-    CalibrationQuality quality = magnetometer.calibrateQuality(200, 10);
+    CalibrationQuality quality = magnetometer.calibrateQuality(200, 20);
     Serial.println("Calibration quality:");
     Serial.print("center=(");
     Serial.print(quality.meanX, 3);
