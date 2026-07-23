@@ -45,17 +45,16 @@ void loop() {
 }
 ```
 
-See [examples/read_distance/](examples/read_distance/) for the complete
+See [examples/basic_distance/](examples/basic_distance/) for the complete
 example sketch.
 
 ## Examples
 
 | Example | What it does |
 |---------|--------------|
-| [`read_distance`](examples/read_distance/) | Continuously reads and prints the measured distance in millimeters. |
-| [`distance_alarm`](examples/distance_alarm/) | Triggers an alert when an object comes closer than a configurable threshold. |
-| [`power_cycle`](examples/power_cycle/) | Demonstrates sensor power control using `powerOff()` and `powerOn()`. |
-| [`continuous_ranging`](examples/continuous_ranging/) | Runs continuous ranging and prints measurements as soon as data becomes available. |
+| [`BasicDistance`](examples/basic_distance/) | Continuously measures and prints the distance in millimeters to the serial monitor. |
+| [`ProximityAlarm`](examples/proximity_alarm/) | Buzzes the on-board `SPEAKER` when an object comes closer than a configurable distance threshold. |
+| [`ParkingSensor`](examples/parking_sensor/) | Simulates a parking sensor by increasing the beep rate as an object gets closer. |
 
 ### Building an example
 
@@ -68,19 +67,19 @@ make list-examples
 Flash an example:
 
 ```bash
-make flash-vl53l1x/read_distance
+make flash-vl53l1x/BasicDistance
 ```
 
 Capture boot logs reliably:
 
 ```bash
-make capture-vl53l1x/read_distance
+make capture-vl53l1x/BasicDistance
 ```
 
 Longer capture session:
 
 ```bash
-make capture-vl53l1x/read_distance DURATION=30
+make capture-vl53l1x/BasicDistance DURATION=30
 ```
 
 ## API
