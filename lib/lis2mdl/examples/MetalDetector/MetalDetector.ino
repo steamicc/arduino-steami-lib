@@ -26,12 +26,7 @@ static float averageMagnitude(uint16_t samples, uint16_t delayMs) {
 }
 
 static void beep(uint16_t frequency, uint16_t durationMs) {
-#if defined(SPEAKER)
     tone(SPEAKER, frequency, durationMs);
-#else
-    (void)frequency;
-    (void)durationMs;
-#endif
 }
 
 void setup() {
