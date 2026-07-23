@@ -52,10 +52,10 @@ for the full sketch.
 
 | Example | What it does |
 |---------|--------------|
-| [`read_magnetic_field`](examples/read_magnetic_field/) | Print raw X/Y/Z magnetic field values at 10 Hz. |
-| [`compass`](examples/compass/) | Flat 2D compass heading with min/max calibration and cardinal direction label. |
-| [`magnitude`](examples/magnitude/) | Print total field strength in µT — useful to detect nearby magnets or metallic objects. |
-| [`tilt_compensated_compass`](examples/tilt_compensated_compass/) | Heading with tilt compensation using an external accelerometer. |
+| [`BasicReader`](examples/BasicReader/) | Read X/Y/Z magnetic field and temperature, then print the values to the Serial Monitor. |
+| [`DigitalCompass`](examples/DigitalCompass/) | Perform a 2D min/max calibration, compute the compass heading, and display the heading and cardinal direction on Serial (and OLED on STeaMi when available). |
+| [`MetalDetector`](examples/MetalDetector/) | Measure the magnetic field magnitude, learn a baseline, and detect nearby metallic or magnetic objects. |
+| [`MagneticCalibration`](examples/MagneticCalibration/) | Perform a guided hard-iron calibration by rotating the board, then compute and display the calibration offsets. |
 
 ### Building an example
 
@@ -68,14 +68,14 @@ make list-examples
 Then flash one:
 
 ```bash
-make flash-lis2mdl/compass
+make flash-lis2mdl/BasicReader
 ```
 
 To capture the first lines printed at boot:
 
 ```bash
-make capture-lis2mdl/compass
-make capture-lis2mdl/compass DURATION=30
+make capture-lis2mdl/BasicReader
+make capture-lis2mdl/BasicReader DURATION=30
 ```
 
 ## API
