@@ -1,0 +1,76 @@
+#######################################
+# Syntax Coloring Map for LIS2MDL
+#######################################
+
+#######################################
+# Class
+#######################################
+
+LIS2MDL	KEYWORD1
+
+#######################################
+# Public methods
+#######################################
+
+begin	KEYWORD2
+deviceId	KEYWORD2
+softReset	KEYWORD2
+reboot	KEYWORD2
+powerOn	KEYWORD2
+powerOff	KEYWORD2
+isIdle	KEYWORD2
+getMode	KEYWORD2
+
+magneticField	KEYWORD2
+magneticFieldRaw	KEYWORD2
+magneticFieldUt	KEYWORD2
+calibratedField	KEYWORD2
+magnitudeUt	KEYWORD2
+readAll	KEYWORD2
+dataReady	KEYWORD2
+status	KEYWORD2
+readIntSource	KEYWORD2
+
+temperature	KEYWORD2
+readTemperatureRaw	KEYWORD2
+setTempOffset	KEYWORD2
+calibrateTemperature	KEYWORD2
+
+setContinuous	KEYWORD2
+triggerOneShot	KEYWORD2
+readOneShot	KEYWORD2
+setOdr	KEYWORD2
+
+setCalibrateStep	KEYWORD2
+calibrateMinmax2d	KEYWORD2
+calibrateMinmax3d	KEYWORD2
+calibrateApply	KEYWORD2
+calibrateQuality	KEYWORD2
+calibrateReset	KEYWORD2
+calibrateStep	KEYWORD2
+readHwOffsets	KEYWORD2
+setHwOffsets	KEYWORD2
+
+headingFlatOnly	KEYWORD2
+headingFromVectors	KEYWORD2
+headingWithTiltCompensation	KEYWORD2
+setHeadingOffset	KEYWORD2
+setDeclination	KEYWORD2
+setHeadingFilter	KEYWORD2
+directionLabel	KEYWORD2
+
+setLowPower	KEYWORD2
+setLowPass	KEYWORD2
+setOffsetCancellation	KEYWORD2
+setBdu	KEYWORD2
+setEndianness	KEYWORD2
+useSpi4wire	KEYWORD2
+
+#######################################
+# Public constants
+#######################################
+
+LIS2MDL_I2C_ADDR	LITERAL1
+LIS2MDL_WHO_AM_I_VAL	LITERAL1
+LIS2MDL_TEMP_SENSITIVITY	LITERAL1
+LIS2MDL_TEMP_OFFSET	LITERAL1
