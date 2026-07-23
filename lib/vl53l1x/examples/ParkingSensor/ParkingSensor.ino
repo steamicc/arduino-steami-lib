@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: GPL-3.0-or-later#include <Arduino.h>
+// SPDX-License-Identifier: GPL-3.0-or-later
 #include <Arduino.h>
 #include <VL53L1X.h>
 #include <Wire.h>
@@ -19,6 +19,7 @@ unsigned long lastBeepMs = 0;
 void setup() {
     Serial.begin(115200);
     while (!Serial) {
+        // Wait up to 2 s for the host USB CDC to enumerate.
     }
 
     pinMode(BUZZER_PIN, OUTPUT);
