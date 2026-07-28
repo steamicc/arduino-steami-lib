@@ -68,10 +68,26 @@ void test_ism330dl_temperature_is_plausible(void) {
 }
 
 void test_ism330dl_status_register_is_readable(void) {
-    const uint8_t currentStatus = sensor.status();
+    constexpr uint8_t dataReadyMask = ISM330DL_STATUS_XLDA | ISM330DL_STATUS_GDA;
+    constexpr uint32_t timeoutMs = 200U;
+    constexpr uint32_t pollingIntervalMs = 5U;
 
-    TEST_ASSERT_BITS_HIGH_MESSAGE(ISM330DL_STATUS_XLDA | ISM330DL_STATUS_GDA, currentStatus,
-                                  "Accelerometer and gyroscope data-ready bits should be set");
+    uint8_t currentStatus = 0;
+    const uint32_t startTime = millis();
+
+    do {
+        currentStatus = sensor.status();
+
+        if ((currentStatus & dataReadyMask) == dataReadyMask) {
+            break;
+        }
+
+        delay(pollingIntervalMs);
+    } while (millis() - startTime < timeoutMs);
+
+    TEST_ASSERT_BITS_HIGH_MESSAGE(
+        dataReadyMask, currentStatus,
+        "Accelerometer and gyroscope data-ready bits were not set before timeout");
 }
 
 void test_ism330dl_orientation_returns_valid_value(void) {
