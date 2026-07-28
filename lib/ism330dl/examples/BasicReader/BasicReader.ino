@@ -8,6 +8,10 @@ ISM330DL imu(internalI2C);
 
 void setup() {
     Serial.begin(115200);
+    while (!Serial && millis() < 2000) {
+        // Wait up to 2 s for a connected monitor — on the STeaMi USB CDC
+        // !Serial stays true until the host enumerates.
+    }
 
     internalI2C.begin();
 
