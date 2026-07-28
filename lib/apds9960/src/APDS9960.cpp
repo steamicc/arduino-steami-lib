@@ -110,7 +110,6 @@ bool APDS9960::proximityReady() {
 }
 
 void APDS9960::enableLightSensor(bool interrupts) {
-    setAmbientLightGain(AmbientLightGain::X4);
     setAmbientLightInterrupt(interrupts);
     powerOn();
     setMode(Mode::AMBIENT_LIGHT, true);
@@ -122,8 +121,6 @@ void APDS9960::disableLightSensor() {
 }
 
 void APDS9960::enableProximitySensor(bool interrupts) {
-    setProximityGain(ProximityGain::X4);
-    setLedDrive(LedDrive::MA_100);
     setProximityInterrupt(interrupts);
     powerOn();
     setMode(Mode::PROXIMITY, true);
@@ -479,19 +476,29 @@ bool APDS9960::waitForProximity(uint32_t timeoutMs) {
 
 bool APDS9960::ensureLightEnabled() {
     uint8_t enabled = mode();
-    if ((enabled & (APDS9960_ENABLE_PON | APDS9960_ENABLE_AEN)) !=
-        (APDS9960_ENABLE_PON | APDS9960_ENABLE_AEN)) {
-        enableLightSensor(false);
+
+    if ((enabled & APDS9960_ENABLE_PON) == 0) {
+        powerOn();
     }
+
+    if ((enabled & APDS9960_ENABLE_AEN) == 0) {
+        setMode(Mode::AMBIENT_LIGHT, true);
+    }
+
     return lightReady() || waitForLight();
 }
 
 bool APDS9960::ensureProximityEnabled() {
     uint8_t enabled = mode();
-    if ((enabled & (APDS9960_ENABLE_PON | APDS9960_ENABLE_PEN)) !=
-        (APDS9960_ENABLE_PON | APDS9960_ENABLE_PEN)) {
-        enableProximitySensor(false);
+
+    if ((enabled & APDS9960_ENABLE_PON) == 0) {
+        powerOn();
     }
+
+    if ((enabled & APDS9960_ENABLE_PEN) == 0) {
+        setMode(Mode::PROXIMITY, true);
+    }
+
     return proximityReady() || waitForProximity();
 }
 
