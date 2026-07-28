@@ -16,7 +16,6 @@ ISM330DL::ISM330DL(TwoWire& wire, uint8_t address)
       _tempOffset(0.0F) {}
 
 bool ISM330DL::begin() {
-    _wire.begin();
     if (!isConnected()) {
         return false;
     }
