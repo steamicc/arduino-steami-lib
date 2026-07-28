@@ -273,17 +273,17 @@ const char* ISM330DL::orientationToString(Orientation value) {
 const char* ISM330DL::motionToString(MotionType value) {
     switch (value) {
         case MotionType::TURNING_RIGHT:
-            return "TURNING RIGHT";
+            return "TURNING_RIGHT";
         case MotionType::TURNING_LEFT:
-            return "TURNING LEFT";
+            return "TURNING_LEFT";
         case MotionType::TILTING_LEFT:
-            return "TILTING LEFT";
+            return "TILTING_LEFT";
         case MotionType::TILTING_RIGHT:
-            return "TILTING RIGHT";
+            return "TILTING_RIGHT";
         case MotionType::TILTING_DOWN:
-            return "TILTING DOWN";
+            return "TILTING_DOWN";
         case MotionType::TILTING_UP:
-            return "TILTING UP";
+            return "TILTING_UP";
         default:
             return "STABLE";
     }
