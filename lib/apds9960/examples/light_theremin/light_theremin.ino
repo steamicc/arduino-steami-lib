@@ -89,8 +89,11 @@ void setup() {
 
 void loop() {
     uint32_t now = millis();
-    if (now - lastSampleMs < SAMPLE_PERIOD_MS)
+    uint32_t elapsed = now - lastSampleMs;
+    if (elapsed < SAMPLE_PERIOD_MS) {
+        delay(SAMPLE_PERIOD_MS - elapsed);
         return;
+    }
 
     lastSampleMs = now;
 
