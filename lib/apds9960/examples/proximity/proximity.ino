@@ -21,6 +21,9 @@ void setup() {
     while (!Serial && millis() < 2000)
         ;
 
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite(LED_BUILTIN, LOW);
+
     internalI2C.begin();
 
     if (!sensor.begin()) {
@@ -44,8 +47,12 @@ void setup() {
 
 void loop() {
     uint32_t now = millis();
-    if (now - lastPrintMs < PRINT_PERIOD_MS)
+
+    uint32_t elapsed = now - lastPrintMs;
+    if (elapsed < PRINT_PERIOD_MS) {
+        delay(PRINT_PERIOD_MS - elapsed);
         return;
+    }
 
     lastPrintMs = now;
 
