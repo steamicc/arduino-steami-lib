@@ -66,8 +66,11 @@ void test_begin_rejects_wrong_device_id(void) {
 
 void test_begin_rejects_i2c_error(void) {
     Wire.setEndTransmissionResult(2);
-    TEST_ASSERT_FALSE(sensor.begin());
+
+    const bool ok = sensor.begin();
+
     Wire.setEndTransmissionResult(0);
+    TEST_ASSERT_FALSE(ok);
 }
 
 void test_device_id_returns_identity_register(void) {
@@ -214,10 +217,10 @@ void test_light_read_returns_false_on_i2c_error(void) {
     Wire.setEndTransmissionResult(2);
 
     uint16_t value = 0xFFFF;
-    TEST_ASSERT_FALSE(sensor.ambientLight(value));
-    TEST_ASSERT_EQUAL_UINT16(0, value);
-
+    const bool ok = sensor.ambientLight(value);
     Wire.setEndTransmissionResult(0);
+    TEST_ASSERT_FALSE(ok);
+    TEST_ASSERT_EQUAL_UINT16(0, value);
 }
 
 void test_proximity_read_returns_value_and_auto_enables(void) {
