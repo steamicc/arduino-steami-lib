@@ -97,28 +97,60 @@ size_t DaplinkBridge::readConfig(uint8_t* result, size_t maxLen) {
     }
 
     size_t produced = 0;
+
     while (produced < maxLen) {
         if (!waitNotBusy(DAPLINK_BRIDGE_READ_TIMEOUT_MS)) {
             return produced;
         }
 
-        uint8_t chunk[DAPLINK_BRIDGE_MAX_READ_CHUNK];
         const uint8_t want = static_cast<uint8_t>(
             std::min<size_t>(DAPLINK_BRIDGE_MAX_READ_CHUNK, maxLen - produced));
-        readBlock(DAPLINK_BRIDGE_CMD_READ_CONFIG, chunk, want);
 
-        for (uint8_t i = 0; i < want; ++i) {
-            // 0xFF marks the first unused byte in the config zone — treat
-            // it as end-of-string and stop returning data to the caller.
-            if (chunk[i] == 0xFF) {
+        const uint16_t offset = static_cast<uint16_t>(produced);
+
+        // READ_CONFIG frame:
+        // [CMD | offsetHi | offsetLo | length]
+        _wire->beginTransmission(_address);
+        _wire->write(DAPLINK_BRIDGE_CMD_READ_CONFIG);
+        _wire->write(static_cast<uint8_t>((offset >> 8) & 0xFF));
+        _wire->write(static_cast<uint8_t>(offset & 0xFF));
+        _wire->write(want);
+
+        if (_wire->endTransmission(false) != 0) {
+            return produced;
+        }
+
+        const uint8_t received = _wire->requestFrom(_address, want);
+
+        if (received == 0) {
+            return produced;
+        }
+
+        for (uint8_t i = 0; i < received; ++i) {
+            if (!_wire->available()) {
                 return produced;
             }
-            result[produced++] = chunk[i];
+
+            const uint8_t value = static_cast<uint8_t>(_wire->read());
+
+            // Erased flash marks the end of stored config.
+            if (value == 0xFF) {
+                return produced;
+            }
+
+            result[produced++] = value;
+
             if (produced == maxLen) {
                 return produced;
             }
         }
+
+        // Prevent an infinite loop if fewer bytes are returned.
+        if (received < want) {
+            return produced;
+        }
     }
+
     return produced;
 }
 
