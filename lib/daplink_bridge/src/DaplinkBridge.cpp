@@ -38,11 +38,17 @@ bool DaplinkBridge::clearConfig() {
     if (!waitNotBusy(DAPLINK_BRIDGE_WRITE_TIMEOUT_MS)) {
         return false;
     }
+
     uint8_t cmd = DAPLINK_BRIDGE_CMD_CLEAR_CONFIG;
     writeFrame(&cmd, 1);
+
+    // Match the MicroPython implementation.
+    delay(100);
+
     if (!waitNotBusy(DAPLINK_BRIDGE_CLEAR_TIMEOUT_MS)) {
         return false;
     }
+
     return error() == 0;
 }
 
@@ -59,25 +65,36 @@ bool DaplinkBridge::writeConfig(const uint8_t* data, size_t length, uint16_t off
     uint8_t buf[kHeaderLen + DAPLINK_BRIDGE_MAX_WRITE_CHUNK];
 
     size_t pos = 0;
+
     while (pos < length) {
         if (!waitNotBusy(DAPLINK_BRIDGE_WRITE_TIMEOUT_MS)) {
             return false;
         }
+
         const size_t remaining = length - pos;
+
         const uint8_t chunkLen =
             static_cast<uint8_t>(std::min<size_t>(DAPLINK_BRIDGE_MAX_WRITE_CHUNK, remaining));
+
         const uint16_t curOffset = static_cast<uint16_t>(offset + pos);
+
+        // MicroPython always sends a complete 32-byte frame.
+        memset(buf, 0, sizeof(buf));
 
         buf[0] = DAPLINK_BRIDGE_CMD_WRITE_CONFIG;
         buf[1] = static_cast<uint8_t>((curOffset >> 8) & 0xFF);
         buf[2] = static_cast<uint8_t>(curOffset & 0xFF);
         buf[3] = chunkLen;
+
         memcpy(&buf[kHeaderLen], &data[pos], chunkLen);
 
-        writeFrame(buf, kHeaderLen + chunkLen);
+        // Send the complete fixed-size frame, like MicroPython.
+        writeFrame(buf, sizeof(buf));
+
+        delay(50);
+
         pos += chunkLen;
     }
-
     if (!waitNotBusy(DAPLINK_BRIDGE_WRITE_TIMEOUT_MS)) {
         return false;
     }
@@ -97,28 +114,60 @@ size_t DaplinkBridge::readConfig(uint8_t* result, size_t maxLen) {
     }
 
     size_t produced = 0;
+
     while (produced < maxLen) {
         if (!waitNotBusy(DAPLINK_BRIDGE_READ_TIMEOUT_MS)) {
             return produced;
         }
 
-        uint8_t chunk[DAPLINK_BRIDGE_MAX_READ_CHUNK];
         const uint8_t want = static_cast<uint8_t>(
             std::min<size_t>(DAPLINK_BRIDGE_MAX_READ_CHUNK, maxLen - produced));
-        readBlock(DAPLINK_BRIDGE_CMD_READ_CONFIG, chunk, want);
 
-        for (uint8_t i = 0; i < want; ++i) {
-            // 0xFF marks the first unused byte in the config zone — treat
-            // it as end-of-string and stop returning data to the caller.
-            if (chunk[i] == 0xFF) {
+        const uint16_t offset = static_cast<uint16_t>(produced);
+
+        // READ_CONFIG frame:
+        _wire->beginTransmission(_address);
+        _wire->write(DAPLINK_BRIDGE_CMD_READ_CONFIG);
+        _wire->write(static_cast<uint8_t>((offset >> 8) & 0xFF));
+        _wire->write(static_cast<uint8_t>(offset & 0xFF));
+
+        if (_wire->endTransmission() != 0) {
+            return produced;
+        }
+
+        delay(100);
+
+        const uint8_t received = _wire->requestFrom(_address, want);
+
+        if (received == 0) {
+            return produced;
+        }
+
+        for (uint8_t i = 0; i < received; ++i) {
+            if (!_wire->available()) {
                 return produced;
             }
-            result[produced++] = chunk[i];
+
+            const uint8_t value = static_cast<uint8_t>(_wire->read());
+
+            // Erased flash marks the end of stored config.
+            if (value == 0xFF) {
+                return produced;
+            }
+
+            result[produced++] = value;
+
             if (produced == maxLen) {
                 return produced;
             }
         }
+
+        // Prevent an infinite loop if fewer bytes are returned.
+        if (received < want) {
+            return produced;
+        }
     }
+
     return produced;
 }
 
