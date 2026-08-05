@@ -113,58 +113,65 @@ size_t DaplinkBridge::readConfig(uint8_t* result, size_t maxLen) {
         return 0;
     }
 
+    constexpr uint16_t kSectorSize = 256;
+
     size_t produced = 0;
 
-    while (produced < maxLen) {
+    for (uint16_t pageOffset = 0; pageOffset < DAPLINK_BRIDGE_CONFIG_SIZE && produced < maxLen;
+         pageOffset += kSectorSize) {
         if (!waitNotBusy(DAPLINK_BRIDGE_READ_TIMEOUT_MS)) {
             return produced;
         }
 
-        const uint8_t want = static_cast<uint8_t>(
-            std::min<size_t>(DAPLINK_BRIDGE_MAX_READ_CHUNK, maxLen - produced));
-
-        const uint16_t offset = static_cast<uint16_t>(produced);
-
         // READ_CONFIG frame:
+        // [CMD | offsetHi | offsetLo]
         _wire->beginTransmission(_address);
         _wire->write(DAPLINK_BRIDGE_CMD_READ_CONFIG);
-        _wire->write(static_cast<uint8_t>((offset >> 8) & 0xFF));
-        _wire->write(static_cast<uint8_t>(offset & 0xFF));
+        _wire->write(static_cast<uint8_t>((pageOffset >> 8) & 0xFF));
+        _wire->write(static_cast<uint8_t>(pageOffset & 0xFF));
 
         if (_wire->endTransmission() != 0) {
             return produced;
         }
 
+        // Match the MicroPython implementation.
         delay(100);
 
-        const uint8_t received = _wire->requestFrom(_address, want);
+        // STM32 Wire requestFrom length is uint8_t, so request 255 then 1.
+        uint16_t sectorRead = 0;
 
-        if (received == 0) {
-            return produced;
-        }
+        while (sectorRead < kSectorSize && produced < maxLen) {
+            const uint8_t chunk =
+                static_cast<uint8_t>(std::min<uint16_t>(255, kSectorSize - sectorRead));
 
-        for (uint8_t i = 0; i < received; ++i) {
-            if (!_wire->available()) {
+            const uint8_t received = _wire->requestFrom(_address, chunk);
+
+            if (received == 0) {
                 return produced;
             }
 
-            const uint8_t value = static_cast<uint8_t>(_wire->read());
+            for (uint8_t i = 0; i < received; ++i) {
+                if (!_wire->available()) {
+                    return produced;
+                }
 
-            // Erased flash marks the end of stored config.
-            if (value == 0xFF) {
-                return produced;
+                const uint8_t value = static_cast<uint8_t>(_wire->read());
+
+                if (value == 0xFF) {
+                    return produced;
+                }
+
+                result[produced++] = value;
+                ++sectorRead;
+
+                if (produced == maxLen) {
+                    return produced;
+                }
             }
 
-            result[produced++] = value;
-
-            if (produced == maxLen) {
+            if (received < chunk) {
                 return produced;
             }
-        }
-
-        // Prevent an infinite loop if fewer bytes are returned.
-        if (received < want) {
-            return produced;
         }
     }
 
