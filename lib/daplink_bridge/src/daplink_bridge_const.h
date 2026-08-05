@@ -49,7 +49,7 @@ constexpr uint8_t DAPLINK_BRIDGE_ERROR_CMD_FAILED = 0x80;
 // Maximum payload bytes per WRITE_CONFIG frame. The bridge accepts
 // `CMD + 2-byte offset + 1-byte length + payload` and the F103 buffers
 // it up to ~32 bytes; 30 leaves headroom for the 4-byte header.
-constexpr uint8_t DAPLINK_BRIDGE_MAX_WRITE_CHUNK = 30;
+constexpr uint8_t DAPLINK_BRIDGE_MAX_WRITE_CHUNK = 28;
 
 // Maximum payload bytes per READ_CONFIG frame. Arduino Wire's default
 // receive buffer is 32 bytes, so we cap reads at 16 to leave room for
