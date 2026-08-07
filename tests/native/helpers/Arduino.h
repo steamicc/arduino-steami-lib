@@ -4,7 +4,10 @@
 
 #include <cstdint>
 #include <functional>
+#include <iomanip>
 #include <map>
+#include <sstream>
+#include <string>
 
 // Mirror the include-guard symbol the real Arduino.h advertises.
 // Driver code uses `#ifdef Arduino_h` to gate pin operations; without
@@ -73,3 +76,106 @@ inline void attachInterrupt(uint8_t /* pin */, const std::function<void()>& /* i
 inline int digitalPinToInterrupt(int pin) {
     return pin;
 }
+
+class String {
+   public:
+    String() = default;
+
+    String(const char* value) : _value(value != nullptr ? value : "") {}
+
+    String(const std::string& value) : _value(value) {}
+
+    String(char value) : _value(1, value) {}
+
+    String(int value) : _value(std::to_string(value)) {}
+
+    String(unsigned int value) : _value(std::to_string(value)) {}
+
+    String(long value) : _value(std::to_string(value)) {}
+
+    String(unsigned long value) : _value(std::to_string(value)) {}
+
+    String(float value, unsigned int decimals) { setFloat(value, decimals); }
+
+    String(double value, unsigned int decimals) { setFloat(value, decimals); }
+
+    size_t length() const { return _value.length(); }
+
+    const char* c_str() const { return _value.c_str(); }
+
+    char operator[](size_t index) const { return _value[index]; }
+
+    String substring(unsigned int from, unsigned int to) const {
+        if (from >= _value.length()) {
+            return String("");
+        }
+
+        if (to > _value.length()) {
+            to = _value.length();
+        }
+
+        if (to <= from) {
+            return String("");
+        }
+
+        return String(_value.substr(from, to - from));
+    }
+
+    bool endsWith(const char* suffix) const {
+        if (suffix == nullptr) {
+            return false;
+        }
+
+        const std::string suffixString(suffix);
+
+        if (suffixString.length() > _value.length()) {
+            return false;
+        }
+
+        return _value.compare(_value.length() - suffixString.length(), suffixString.length(),
+                              suffixString) == 0;
+    }
+
+    void remove(unsigned int index) {
+        if (index < _value.length()) {
+            _value.erase(index);
+        }
+    }
+
+    void remove(unsigned int index, unsigned int count) {
+        if (index < _value.length()) {
+            _value.erase(index, count);
+        }
+    }
+
+    String& operator=(const char* value) {
+        _value = value != nullptr ? value : "";
+        return *this;
+    }
+
+    String& operator+=(const String& other) {
+        _value += other._value;
+        return *this;
+    }
+
+    String& operator+=(const char* value) {
+        if (value != nullptr) {
+            _value += value;
+        }
+        return *this;
+    }
+
+    String& operator+=(char value) {
+        _value += value;
+        return *this;
+    }
+
+   private:
+    std::string _value;
+
+    void setFloat(double value, unsigned int decimals) {
+        std::ostringstream stream;
+        stream << std::fixed << std::setprecision(decimals) << value;
+        _value = stream.str();
+    }
+};
