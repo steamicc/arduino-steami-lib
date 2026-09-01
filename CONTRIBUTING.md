@@ -299,7 +299,7 @@ hook (and the `check-commits` workflow on every PR):
 `build`, `chore`, `perf`, `revert`, `tooling`.
 
 **Scopes** (optional): driver names (`hts221`, `ism330dl`, `wsen-pads`, …)
-or domains (`ci`, `docs`, `style`, `tests`, `tooling`). Recommended for
+or domains (`ci`, `docs`, `style`, `tests`, `tooling`, `boards`). Recommended for
 driver-specific changes, omit for cross-cutting ones.
 
 Header length capped at 78 characters. Body optional but encouraged —

@@ -35,6 +35,7 @@ module.exports = {
         'style',
         'tests',
         'tooling',
+        'board',
       ],
     ],
     'type-enum': [
