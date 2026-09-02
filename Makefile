@@ -132,6 +132,18 @@ upload: .venv/bin/pio ## Upload to board
 # new directory under lib/<driver>/examples/.
 EXAMPLE_KEYS := $(shell find $(EXAMPLES_ROOT) -mindepth 3 -maxdepth 3 -type d -path '$(EXAMPLES_ROOT)/*/examples/*' 2>/dev/null | sed 's|$(EXAMPLES_ROOT)/\([^/]*\)/examples/\([^/]*\)|\1/\2|' | LC_ALL=C sort)
 
+EXAMPLE_VERBOSE_FLAG := $(if $(filter 1,$(VERBOSE)),--verbose,)
+
+.PHONY: test-examples
+test-examples: .venv/bin/pio ## Compile every Arduino example
+	@$(PYTHON) scripts/test-examples.py $(EXAMPLE_VERBOSE_FLAG)
+
+test-examples/%: .venv/bin/pio
+	@$(PYTHON) scripts/test-examples.py --driver "$*" $(EXAMPLE_VERBOSE_FLAG)
+
+test-example/%: .venv/bin/pio
+	@$(PYTHON) scripts/test-examples.py --example "$*" $(EXAMPLE_VERBOSE_FLAG)
+
 .PHONY: list-examples
 list-examples: ## List ready-to-run flash-/capture- targets, optionally filtered with DRIVER=<driver>
 	@if [ -n "$(DRIVER)" ]; then \
@@ -278,11 +290,19 @@ endef
 $(foreach k,$(ALL_TEST_KEYS),$(eval $(call COMPOSITE_TEST_RULE,$(k))))
 
 .PHONY: list-tests
-list-tests: ## List ready-to-run test- targets across all tiers
+list-tests: ## List ready-to-run test targets
 	@for k in $(NATIVE_TEST_KEYS); do printf 'test-native/%s\n' "$$k"; done
 	@for k in $(HARDWARE_TEST_KEYS); do printf 'test-hardware/%s\n' "$$k"; done
 	@for k in $(INTEGRATION_TEST_KEYS); do printf 'test-integration/%s\n' "$$k"; done
 	@for k in $(ALL_TEST_KEYS); do printf 'test/%s\n' "$$k"; done
+	@for k in $(EXAMPLE_KEYS); do printf 'test-example/%s\n' "$$k"; done
+
+EXAMPLE_DRIVERS := $(sort $(foreach k,$(EXAMPLE_KEYS),$(word 1,$(subst /, ,$(k)))))
+.PHONY: list-test-examples
+list-test-examples: ## List available example validation targets
+	@echo "test-examples"
+	@for d in $(EXAMPLE_DRIVERS); do printf 'test-examples/%s\n' "$$d"; done
+	@for k in $(EXAMPLE_KEYS); do printf 'test-example/%s\n' "$$k"; done
 
 # --- Qualification ---
 
@@ -308,7 +328,7 @@ $(foreach drv,$(QUALIFY_DRIVERS),$(eval $(call QUALIFY_template,$(drv))))
 # --- CI ---
 
 .PHONY: ci
-ci: lint build test-native ## Run all CI checks (lint + build + native tests, no board required)
+ci: lint build test-native test-examples ## Run all CI checks (lint + build + native tests + examples, no board required)
 
 # --- Utilities ---
 
