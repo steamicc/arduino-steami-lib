@@ -19,10 +19,6 @@ void setup() {
     }
 
     display.fill(0);
-    display.pixel(0, 0, 15);
-    display.pixel(127, 0, 15);
-    display.pixel(0, 127, 15);
-    display.pixel(127, 127, 15);
     display.pixel(64, 64, 15);
     display.pixel(32, 32, 8);
     display.pixel(96, 32, 8);
