@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.23.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.22.0...v0.23.0) (2026-09-15)
+
+
+### Features
+
+* **ism330dl:** Implement Arduino driver ([#199](https://github.com/steamicc/arduino-steami-lib/issues/199)). ([14c9136](https://github.com/steamicc/arduino-steami-lib/commit/14c9136cb0e301dc6918d631053f2ae5a9c833be)), closes [#201](https://github.com/steamicc/arduino-steami-lib/issues/201) [#202](https://github.com/steamicc/arduino-steami-lib/issues/202) [#209](https://github.com/steamicc/arduino-steami-lib/issues/209)
+
 # [0.22.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.21.0...v0.22.0) (2026-09-14)
 
 
