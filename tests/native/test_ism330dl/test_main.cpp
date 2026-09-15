@@ -371,7 +371,7 @@ void test_orientation_and_motion_string_helpers(void) {
                              ISM330DL::orientationToString(ISM330DL::Orientation::SCREEN_UP));
     TEST_ASSERT_EQUAL_STRING("MOVING",
                              ISM330DL::orientationToString(ISM330DL::Orientation::MOVING));
-    TEST_ASSERT_EQUAL_STRING("TURNING RIGHT",
+    TEST_ASSERT_EQUAL_STRING("TURNING_RIGHT",
                              ISM330DL::motionToString(ISM330DL::MotionType::TURNING_RIGHT));
     TEST_ASSERT_EQUAL_STRING("STABLE", ISM330DL::motionToString(ISM330DL::MotionType::STABLE));
 }
