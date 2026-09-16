@@ -1,0 +1,57 @@
+#######################################
+# Syntax Coloring Map for WSEN_PADS
+#######################################
+
+#######################################
+# Class
+#######################################
+
+WSEN_PADS	KEYWORD1
+
+#######################################
+# Public methods
+#######################################
+
+begin	KEYWORD2
+deviceId	KEYWORD2
+softReset	KEYWORD2
+reboot	KEYWORD2
+powerOn	KEYWORD2
+powerOff	KEYWORD2
+
+pressureHpa	KEYWORD2
+temperature	KEYWORD2
+read	KEYWORD2
+dataReady	KEYWORD2
+pressureReady	KEYWORD2
+temperatureReady	KEYWORD2
+
+setContinuous	KEYWORD2
+triggerOneShot	KEYWORD2
+readOneShot	KEYWORD2
+
+setTemperatureOffset	KEYWORD2
+calibrateTemperature	KEYWORD2
+
+enableLowPass	KEYWORD2
+disableLowPass	KEYWORD2
+enableLowNoise	KEYWORD2
+disableLowNoise	KEYWORD2
+
+#######################################
+# Public constants
+#######################################
+
+WSEN_PADS_I2C_DEFAULT_ADDR	LITERAL1
+WSEN_PADS_I2C_ADDR_SAO_LOW	LITERAL1
+
+ODR_1_HZ	LITERAL1
+ODR_10_HZ	LITERAL1
+ODR_25_HZ	LITERAL1
+ODR_50_HZ	LITERAL1
+ODR_75_HZ	LITERAL1
+ODR_100_HZ	LITERAL1
+ODR_200_HZ	LITERAL1
+
+PRESSURE_HPA_PER_DIGIT	LITERAL1
+TEMPERATURE_C_PER_DIGIT	LITERAL1

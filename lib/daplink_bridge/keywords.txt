@@ -1,0 +1,28 @@
+#######################################
+# Syntax Coloring Map for DaplinkBridge
+#######################################
+
+#######################################
+# Class
+#######################################
+
+DaplinkBridge	KEYWORD1
+
+#######################################
+# Public methods
+#######################################
+
+begin	KEYWORD2
+deviceId	KEYWORD2
+busy	KEYWORD2
+clearConfig	KEYWORD2
+writeConfig	KEYWORD2
+readConfig	KEYWORD2
+
+#######################################
+# Public constants
+#######################################
+
+DAPLINK_BRIDGE_DEFAULT_ADDR	LITERAL1
+DAPLINK_BRIDGE_CONFIG_SIZE	LITERAL1
+DAPLINK_BRIDGE_MAX_WRITE_CHUNK	LITERAL1

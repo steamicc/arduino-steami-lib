@@ -1,0 +1,46 @@
+#######################################
+# Syntax Coloring Map for SSD1327
+#######################################
+
+#######################################
+# Classes
+#######################################
+
+SSD1327	KEYWORD1
+WS_OLED_128X128_STEAMI	KEYWORD1
+WS_OLED_128X128_I2C	KEYWORD1
+WS_OLED_128X128_SPI	KEYWORD1
+
+#######################################
+# Public methods
+#######################################
+
+begin	KEYWORD2
+show	KEYWORD2
+powerOn	KEYWORD2
+powerOff	KEYWORD2
+
+fill	KEYWORD2
+pixel	KEYWORD2
+line	KEYWORD2
+fillRect	KEYWORD2
+scroll	KEYWORD2
+text	KEYWORD2
+width	KEYWORD2
+height	KEYWORD2
+
+contrast	KEYWORD2
+invert	KEYWORD2
+rotate	KEYWORD2
+
+#######################################
+# Public constants
+#######################################
+
+SET_COL_ADDR	LITERAL1
+SET_CONTRAST	LITERAL1
+SET_DISP	LITERAL1
+SET_DISP_MODE_NORMAL	LITERAL1
+SET_DISP_MODE_INVERSE	LITERAL1
+REG_CMD	LITERAL1
+REG_DATA	LITERAL1
