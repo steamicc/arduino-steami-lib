@@ -1,0 +1,109 @@
+#######################################
+# Syntax Coloring Map For APDS9960
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+APDS9960	KEYWORD1
+Gesture	KEYWORD1
+Mode	KEYWORD1
+AmbientLightGain	KEYWORD1
+ProximityGain	KEYWORD1
+GestureGain	KEYWORD1
+LedDrive	KEYWORD1
+LedBoost	KEYWORD1
+GestureWaitTime	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin	KEYWORD2
+deviceId	KEYWORD2
+powerOn	KEYWORD2
+powerOff	KEYWORD2
+
+setMode	KEYWORD2
+mode	KEYWORD2
+
+enableLightSensor	KEYWORD2
+disableLightSensor	KEYWORD2
+enableProximitySensor	KEYWORD2
+disableProximitySensor	KEYWORD2
+enableGestureSensor	KEYWORD2
+disableGestureSensor	KEYWORD2
+
+ambientLight	KEYWORD2
+redLight	KEYWORD2
+greenLight	KEYWORD2
+blueLight	KEYWORD2
+proximity	KEYWORD2
+
+lightReady	KEYWORD2
+proximityReady	KEYWORD2
+dataReady	KEYWORD2
+
+gestureAvailable	KEYWORD2
+readGesture	KEYWORD2
+
+setAmbientLightGain	KEYWORD2
+ambientLightGain	KEYWORD2
+setProximityGain	KEYWORD2
+proximityGain	KEYWORD2
+setGestureGain	KEYWORD2
+gestureGain	KEYWORD2
+
+setLedDrive	KEYWORD2
+ledDrive	KEYWORD2
+setGestureLedDrive	KEYWORD2
+gestureLedDrive	KEYWORD2
+setLedBoost	KEYWORD2
+ledBoost	KEYWORD2
+
+setGestureWaitTime	KEYWORD2
+gestureWaitTime	KEYWORD2
+
+setGestureEnterThreshold	KEYWORD2
+gestureEnterThreshold	KEYWORD2
+setGestureExitThreshold	KEYWORD2
+gestureExitThreshold	KEYWORD2
+
+setLightInterruptLowThreshold	KEYWORD2
+lightInterruptLowThreshold	KEYWORD2
+setLightInterruptHighThreshold	KEYWORD2
+lightInterruptHighThreshold	KEYWORD2
+
+setProximityInterruptLowThreshold	KEYWORD2
+proximityInterruptLowThreshold	KEYWORD2
+setProximityInterruptHighThreshold	KEYWORD2
+proximityInterruptHighThreshold	KEYWORD2
+
+setAmbientLightInterrupt	KEYWORD2
+ambientLightInterruptEnabled	KEYWORD2
+clearAmbientLightInterrupt	KEYWORD2
+
+setProximityInterrupt	KEYWORD2
+proximityInterruptEnabled	KEYWORD2
+clearProximityInterrupt	KEYWORD2
+
+setGestureInterrupt	KEYWORD2
+gestureInterruptEnabled	KEYWORD2
+
+setGestureMode	KEYWORD2
+gestureModeEnabled	KEYWORD2
+
+setProximityGainCompensation	KEYWORD2
+proximityGainCompensationEnabled	KEYWORD2
+setProximityPhotodiodeMask	KEYWORD2
+proximityPhotodiodeMask	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+APDS9960_DEFAULT_ADDRESS	LITERAL1
+APDS9960_DEVICE_ID_1	LITERAL1
+APDS9960_DEVICE_ID_2	LITERAL1
+APDS9960_DEVICE_ID_3	LITERAL1
