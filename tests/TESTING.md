@@ -299,16 +299,36 @@ Native tests use lightweight Arduino-compatible mocks stored in
 `tests/native/helpers/`. They are automatically included by the `[env:native]`
 PlatformIO environment.
 
-### GPIO mock
+### Arduino mock
 
-`Arduino.h` provides:
+`Arduino.h` provides lightweight host-side replacements for the Arduino APIs
+used by drivers.
+
+GPIO and timing support:
 
 * `pinMode(pin, mode)` records the mode into `gpioPinMode()`,
 * `digitalWrite(pin, value)` records the state into `gpioPinState()`,
 * `digitalRead(pin)` returns the last recorded state,
-* `delay(ms)` is a no-op.
+* `millis()` returns a simulated 32-bit monotonic clock,
+* `delay(ms)` advances the simulated clock,
+* `attachInterrupt()` and `digitalPinToInterrupt()` provide minimal interrupt
+  compatibility for native tests.
 
-Tests assert expected pin state by querying the two maps directly.
+The mock also provides a minimal Arduino-compatible `String` implementation for
+drivers that expose or manipulate `String` values. It supports the subset used
+by the repository drivers, including:
+
+* construction from strings, integers, and floating-point values,
+* `length()` and `c_str()`,
+* `substring()`,
+* `endsWith()`,
+* `remove()`,
+* character indexing,
+* string concatenation.
+
+The mock intentionally implements only the Arduino APIs required by the native
+test suites. Extend it when a driver requires additional behaviour rather than
+depending on the full Arduino core.
 
 ### I2C mock (`TwoWire`)
 
