@@ -96,6 +96,55 @@ Requires a board (same skip behaviour as hardware unit tests). Integration
 suites are intentionally slower than hardware unit tests because they observe
 repeated measurements over time — typically tens of seconds per suite.
 
+### Example validation
+
+Arduino examples are compiled as an additional hardware-free validation step.
+
+Unlike native, hardware, and integration suites, example validation does not
+use Unity and does not execute the sketch. It verifies that each example
+remains valid C++ and compatible with the current driver API.
+
+Examples are discovered automatically from:
+
+```bash
+lib/<driver>/examples/<example>/<example>.ino
+```
+List all available example validation targets:
+
+```bash
+make list-test-examples
+```
+
+Compile all examples:
+
+```bash
+make test-examples
+```
+Compile all examples for one driver:
+
+```bash
+make test-examples/hts221
+```
+Compile one example:
+
+```bash
+make test-example/hts221/dew_point
+```
+
+Aggregate example validation continues after individual build failures and
+prints a final PASS/FAIL summary.
+
+Failed builds always show their PlatformIO output. To display the full
+PlatformIO output for every example, use:
+
+```bash
+make test-examples VERBOSE=1
+make test-examples/hts221 VERBOSE=1
+make test-example/hts221/dew_point VERBOSE=1
+```
+
+Example validation requires no connected STeaMi board and runs as part of make ci.
+
 ### Composite per-suite target
 
 `make test/<suite>` chains whichever tiers exist for that suite:
