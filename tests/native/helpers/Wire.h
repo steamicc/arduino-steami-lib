@@ -21,6 +21,12 @@ class TwoWire {
         return 1;
     }
 
+    size_t write(const uint8_t* buf, size_t len) {
+        for (size_t i = 0; i < len; i++)
+            write(buf[i]);
+        return len;
+    }
+
     uint8_t endTransmission(bool = true) {
         // Tests that want to exercise the I2C error path opt-in via
         // setEndTransmissionResult(non-zero). Default = success.

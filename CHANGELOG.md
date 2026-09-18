@@ -3,6 +3,27 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.24.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.23.0...v0.24.0) (2026-09-16)
+
+
+### Features
+
+* **apds9960:** Implement Arduino driver ([#203](https://github.com/steamicc/arduino-steami-lib/issues/203)). ([9d3164f](https://github.com/steamicc/arduino-steami-lib/commit/9d3164f87eca854733ae9d2418705e7a0861b4ba)), closes [#204](https://github.com/steamicc/arduino-steami-lib/issues/204) [#205](https://github.com/steamicc/arduino-steami-lib/issues/205) [#210](https://github.com/steamicc/arduino-steami-lib/issues/210)
+
+# [0.23.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.22.0...v0.23.0) (2026-09-15)
+
+
+### Features
+
+* **ism330dl:** Implement Arduino driver ([#199](https://github.com/steamicc/arduino-steami-lib/issues/199)). ([14c9136](https://github.com/steamicc/arduino-steami-lib/commit/14c9136cb0e301dc6918d631053f2ae5a9c833be)), closes [#201](https://github.com/steamicc/arduino-steami-lib/issues/201) [#202](https://github.com/steamicc/arduino-steami-lib/issues/202) [#209](https://github.com/steamicc/arduino-steami-lib/issues/209)
+
+# [0.22.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.21.0...v0.22.0) (2026-09-14)
+
+
+### Features
+
+* **ssd1327:** Implement Arduino driver [#11](https://github.com/steamicc/arduino-steami-lib/issues/11) ([#192](https://github.com/steamicc/arduino-steami-lib/issues/192)). ([ed03c59](https://github.com/steamicc/arduino-steami-lib/commit/ed03c593cd1cffeee79ab41518fd97b9a63047af)), closes [#ifdef](https://github.com/steamicc/arduino-steami-lib/issues/ifdef) [#196](https://github.com/steamicc/arduino-steami-lib/issues/196)
+
 # [0.21.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.20.0...v0.21.0) (2026-06-22)
 
 
