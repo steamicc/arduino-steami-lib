@@ -4,7 +4,10 @@
 
 #include <cstdint>
 #include <functional>
+#include <iomanip>
 #include <map>
+#include <sstream>
+#include <string>
 
 // Mirror the include-guard symbol the real Arduino.h advertises.
 // Driver code uses `#ifdef Arduino_h` to gate pin operations; without
