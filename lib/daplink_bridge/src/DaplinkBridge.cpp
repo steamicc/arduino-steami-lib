@@ -123,6 +123,97 @@ size_t DaplinkBridge::readConfig(uint8_t* result, size_t maxLen) {
 }
 
 // ---------------------------------------------------------------------
+// Frame-level primitives (for sibling drivers)
+// ---------------------------------------------------------------------
+
+bool DaplinkBridge::sendCommand(uint8_t cmd, const uint8_t* payload, size_t payloadLen,
+                                uint32_t timeoutMs) {
+    if (!waitNotBusy(timeoutMs)) {
+        return false;
+    }
+
+    if (payload == nullptr || payloadLen == 0) {
+        writeFrame(&cmd, 1);
+    } else {
+        // Stack-allocated buffer: payload + 1 for the leading command
+        // byte. Callers are expected to keep payloads bounded (the
+        // protocol caps them anyway), so a small VLA-ish staging buffer
+        // is fine here. We size it to MAX_WRITE_CHUNK + a few bytes of
+        // header, which is enough for every framed command in the
+        // bridge protocol.
+        constexpr size_t kStagingMax = DAPLINK_BRIDGE_MAX_WRITE_CHUNK + 4;
+        uint8_t buf[kStagingMax];
+        if (payloadLen > kStagingMax - 1) {
+            // Don't truncate silently; the caller must chunk on its
+            // side if it wants to send a payload bigger than the
+            // protocol allows in a single frame.
+            return false;
+        }
+        buf[0] = cmd;
+        for (size_t i = 0; i < payloadLen; ++i) {
+            buf[1 + i] = payload[i];
+        }
+        writeFrame(buf, 1 + payloadLen);
+    }
+
+    if (!waitNotBusy(timeoutMs)) {
+        return false;
+    }
+    return error() == 0;
+}
+
+size_t DaplinkBridge::readResponse(uint8_t* buf, size_t maxLen, uint32_t timeoutMs) {
+    if (buf == nullptr || maxLen == 0) {
+        return 0;
+    }
+
+    // The caller is expected to have already issued a sendCommand()
+    // that populated the response buffer. Confirm the firmware is no
+    // longer busy and that no error is pending before slurping —
+    // otherwise an I2C glitch during the response-prep window would
+    // come back as a partial/garbage read instead of a clean failure.
+    if (!waitNotBusy(timeoutMs)) {
+        return 0;
+    }
+    if (error() != 0) {
+        return 0;
+    }
+
+    // Select the dedicated response-stream register once. The firmware
+    // streams its 256-byte TX buffer back through successive
+    // requestFrom() chunks without us having to re-select between
+    // chunks — incrementing REG_RESPONSE + produced wraps at 0xFF
+    // (0x82 + 0x7D == 0xFF) and re-emitting the cmd byte would either
+    // be interpreted as a fresh command (wiping the response) or hit
+    // BAD_PARAM on payload-required cmds.
+    _wire->beginTransmission(_address);
+    _wire->write(DAPLINK_BRIDGE_REG_RESPONSE);
+    if (_wire->endTransmission(false) != 0) {
+        return 0;
+    }
+
+    size_t produced = 0;
+    while (produced < maxLen) {
+        const uint8_t want = static_cast<uint8_t>(
+            std::min<size_t>(DAPLINK_BRIDGE_MAX_READ_CHUNK, maxLen - produced));
+
+        const uint8_t got = _wire->requestFrom(_address, want);
+        for (uint8_t i = 0; i < got && _wire->available(); ++i) {
+            buf[produced + i] = static_cast<uint8_t>(_wire->read());
+        }
+        produced += got;
+
+        if (got < want) {
+            // Short read — bus error or device dropped the
+            // transaction. Return what we managed to collect.
+            break;
+        }
+    }
+
+    return produced;
+}
+
+// ---------------------------------------------------------------------
 // I2C helpers
 // ---------------------------------------------------------------------
 

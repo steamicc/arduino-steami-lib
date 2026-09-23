@@ -28,6 +28,7 @@ constexpr uint8_t DAPLINK_BRIDGE_CMD_CLEAR_CONFIG = 0x32;
 
 constexpr uint8_t DAPLINK_BRIDGE_REG_STATUS = 0x80;
 constexpr uint8_t DAPLINK_BRIDGE_REG_ERROR = 0x81;
+constexpr uint8_t DAPLINK_BRIDGE_REG_RESPONSE = 0x82;
 
 // ============================================================================
 // Status register bits
