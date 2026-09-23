@@ -21,6 +21,15 @@ inline void check_who_am_i(D& drv, uint8_t expected) {
     TEST_ASSERT_EQUAL_UINT8(expected, drv.deviceId());
 }
 
+// 16-bit overload for drivers whose deviceId() spans two bytes
+// (e.g. BQ27441_DEVICE_ID = 0x0421). Without it, callers passing a
+// 16-bit constant fall through to the uint8_t overload and only the
+// low byte gets validated.
+template <class D>
+inline void check_who_am_i(D& drv, uint16_t expected) {
+    TEST_ASSERT_EQUAL_UINT16(expected, drv.deviceId());
+}
+
 template <class D, class Reading>
 inline void check_read_plausible(D& drv, Reading minValue, Reading maxValue) {
     const Reading value = drv.read();

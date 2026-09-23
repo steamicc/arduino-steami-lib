@@ -24,17 +24,47 @@ class TwoWire {
         return 1;
     }
 
+    size_t write(const uint8_t* buf, size_t len) {
+        for (size_t i = 0; i < len; i++)
+            write(buf[i]);
+        return len;
+    }
+
     uint8_t endTransmission(bool = true) {
+        // Tests that want to exercise the I2C error path opt-in via
+        // setEndTransmissionResult(non-zero). Default = success.
+        if (endTransmissionResult_ != 0) {
+            txBuffer_.clear();
+            return endTransmissionResult_;
+        }
         if (txBuffer_.size() >= 2) {
             // [reg, val0, val1, ...] — I2C auto-increment: each value lands at
             // reg + offset, one WriteOp per byte so tests can assert the full
             // write sequence.
             uint8_t reg = txBuffer_[0];
-            for (size_t i = 1; i < txBuffer_.size(); ++i) {
-                uint8_t targetReg = static_cast<uint8_t>(reg + (i - 1));
-                uint8_t val = txBuffer_[i];
-                registers_[makeKey(currentAddress_, targetReg)] = val;
-                writes_.push_back({currentAddress_, targetReg, val});
+
+            bool is16bit = (currentAddress_ == 0x29) && (txBuffer_.size() >= 2);
+
+            if (is16bit && txBuffer_.size() == 2) {
+                uint16_t regAddr = (static_cast<uint16_t>(txBuffer_[0]) << 8) | txBuffer_[1];
+                currentRegisterByAddr_[currentAddress_] = regAddr;
+            } else if (is16bit) {
+                uint16_t regAddr = (static_cast<uint16_t>(txBuffer_[0]) << 8) | txBuffer_[1];
+                for (size_t i = 2; i < txBuffer_.size(); ++i) {
+                    uint16_t targetReg = static_cast<uint16_t>(regAddr + (i - 2));
+                    uint8_t val = txBuffer_[i];
+                    registers_[makeKey(currentAddress_, targetReg)] = val;
+                    writes_.push_back({currentAddress_, targetReg, val});
+                }
+                currentRegisterByAddr_[currentAddress_] = regAddr;
+            } else {
+                for (size_t i = 1; i < txBuffer_.size(); ++i) {
+                    uint16_t targetReg = static_cast<uint16_t>(reg + (i - 1));
+                    uint8_t val = txBuffer_[i];
+                    registers_[makeKey(currentAddress_, targetReg)] = val;
+                    writes_.push_back({currentAddress_, targetReg, val});
+                }
+                currentRegisterByAddr_[currentAddress_] = reg;
             }
             currentRegisterByAddr_[currentAddress_] = reg;
             // Drain any register-write schedules that should fire on
@@ -56,6 +86,10 @@ class TwoWire {
         }
         return 0;
     }
+
+    // Force endTransmission() to fail with the given Arduino I2C error
+    // code (1 = data too long, 2 = NACK on addr, 3 = NACK on data, 4 = other).
+    void setEndTransmissionResult(uint8_t result) { endTransmissionResult_ = result; }
 
     uint8_t requestFrom(uint8_t address, uint8_t quantity) {
         // A single-byte transmission immediately followed by requestFrom
@@ -104,6 +138,13 @@ class TwoWire {
         return quantity;
     }
 
+    struct ControlWordResponse {
+        uint16_t subcommand;
+        uint16_t response;
+    };
+
+    std::vector<ControlWordResponse> controlResponses_;
+
     int available() { return static_cast<int>(rxBuffer_.size() - rxIndex_); }
 
     int read() {
@@ -115,11 +156,10 @@ class TwoWire {
 
     // Host-side helpers — not part of the real Arduino TwoWire API.
 
-    void setRegister(uint8_t address, uint8_t reg, uint8_t value) {
+    void setRegister(uint8_t address, uint16_t reg, uint8_t value) {
         registers_[makeKey(address, reg)] = value;
     }
-
-    uint8_t getRegister(uint8_t address, uint8_t reg) const {
+    uint8_t getRegister(uint8_t address, uint16_t reg) const {
         auto it = registers_.find(makeKey(address, reg));
         return (it != registers_.end()) ? it->second : 0x00;
     }
@@ -148,7 +188,7 @@ class TwoWire {
 
     struct WriteOp {
         uint8_t address;
-        uint8_t reg;
+        uint16_t reg;
         uint8_t value;
     };
 
@@ -166,12 +206,12 @@ class TwoWire {
     void clearCommands() { commands_.clear(); }
 
    private:
-    static uint16_t makeKey(uint8_t addr, uint8_t reg) {
-        return (static_cast<uint16_t>(addr) << 8) | reg;
+    static uint32_t makeKey(uint8_t addr, uint16_t reg) {
+        return (static_cast<uint32_t>(addr) << 16) | reg;
     }
 
     uint8_t currentAddress_ = 0;
-    std::map<uint8_t, uint8_t> currentRegisterByAddr_;
+    std::map<uint8_t, uint16_t> currentRegisterByAddr_;
     std::vector<uint8_t> txBuffer_;
     std::vector<uint8_t> rxBuffer_;
     size_t rxIndex_ = 0;
