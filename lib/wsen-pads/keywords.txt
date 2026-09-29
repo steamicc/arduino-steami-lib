@@ -39,7 +39,7 @@ enableLowNoise	KEYWORD2
 disableLowNoise	KEYWORD2
 
 #######################################
-# Public constants
+# Public constant
 #######################################
 
 WSEN_PADS_I2C_DEFAULT_ADDR	LITERAL1
