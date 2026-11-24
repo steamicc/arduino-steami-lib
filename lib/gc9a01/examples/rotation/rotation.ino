@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <Arduino.h>
-#include <GC9A01.h>
+#include <SteamiGC9A01.h>
 
-GC9A01_STEAMI display;
+SteamiGC9A01 display;
 
 bool rotated = false;
 

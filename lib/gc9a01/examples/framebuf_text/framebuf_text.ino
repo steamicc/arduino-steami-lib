@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <Arduino.h>
-#include <GC9A01.h>
+#include <SteamiGC9A01.h>
 #include <string.h>
 
-GC9A01_STEAMI display;
+SteamiGC9A01 display;
 
 // Characters are 5x7 pixels with a 6-pixel advance.
 void centeredText(const char* str, int16_t y, uint16_t color) {

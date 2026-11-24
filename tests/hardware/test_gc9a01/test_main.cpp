@@ -3,12 +3,12 @@
 // STeaMi V1c only: the GC9A01 round TFT replaces the V1b SSD1327 OLED.
 
 #include <Arduino.h>
-#include <GC9A01.h>
+#include <SteamiGC9A01.h>
 #include <unity.h>
 
 #include "driver_checks.h"
 
-GC9A01_STEAMI display;
+SteamiGC9A01 display;
 
 void setUp(void) {}
 

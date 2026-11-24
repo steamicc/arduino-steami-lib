@@ -11,7 +11,7 @@
 #include "SPI.h"
 #endif
 
-#include "GC9A01_const.h"
+#include "SteamiGC9A01_const.h"
 
 // GC9A01 240x240 round colour TFT, RGB565 frame buffer.
 //
@@ -94,9 +94,9 @@ class GC9A01_SPI : public GC9A01 {
 #ifdef ARDUINO
 // Built-in display of the STeaMi V1c: internal SPI bus, D/C on the internal
 // MISO pin, CS_DISPLAY and RST_DISPLAY. The backlight is always on.
-class GC9A01_STEAMI : public GC9A01_SPI {
+class SteamiGC9A01 : public GC9A01_SPI {
    public:
-    GC9A01_STEAMI();
+    SteamiGC9A01();
     bool begin() override;
 
    private:

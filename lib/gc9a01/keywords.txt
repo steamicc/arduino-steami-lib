@@ -8,7 +8,7 @@
 
 GC9A01	KEYWORD1
 GC9A01_SPI	KEYWORD1
-GC9A01_STEAMI	KEYWORD1
+SteamiGC9A01	KEYWORD1
 
 #######################################
 # Public methods

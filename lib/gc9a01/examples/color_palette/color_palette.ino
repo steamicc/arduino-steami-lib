@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <Arduino.h>
-#include <GC9A01.h>
+#include <SteamiGC9A01.h>
 
-GC9A01_STEAMI display;
+SteamiGC9A01 display;
 
 const uint16_t swatches[] = {
     GC9A01_RED,    GC9A01_ORANGE,  GC9A01_YELLOW, GC9A01_GREEN, GC9A01_CYAN, GC9A01_BLUE,

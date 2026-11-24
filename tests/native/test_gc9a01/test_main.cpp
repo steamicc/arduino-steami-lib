@@ -6,8 +6,8 @@
 #include <vector>
 
 #include "Arduino.h"
-#include "GC9A01.h"
 #include "SPI.h"
+#include "SteamiGC9A01.h"
 #include "driver_checks.h"
 
 constexpr uint8_t PIN_DC = 10;

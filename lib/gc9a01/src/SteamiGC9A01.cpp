@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "GC9A01.h"
+#include "SteamiGC9A01.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -428,14 +428,14 @@ void GC9A01_SPI::writeData(const uint8_t* data, size_t len) {
 }
 
 #ifdef ARDUINO
-SPIClass& GC9A01_STEAMI::internalSpi() {
+SPIClass& SteamiGC9A01::internalSpi() {
     static SPIClass spi(SPI_INT_MOSI, SPI_INT_MISO, SPI_INT_SCK);
     return spi;
 }
 
-GC9A01_STEAMI::GC9A01_STEAMI() : GC9A01_SPI(internalSpi(), SPI_INT_MISO, RST_DISPLAY, CS_DISPLAY) {}
+SteamiGC9A01::SteamiGC9A01() : GC9A01_SPI(internalSpi(), SPI_INT_MISO, RST_DISPLAY, CS_DISPLAY) {}
 
-bool GC9A01_STEAMI::begin() {
+bool SteamiGC9A01::begin() {
     internalSpi().begin();
     return GC9A01_SPI::begin();
 }

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <Arduino.h>
-#include <GC9A01.h>
+#include <SteamiGC9A01.h>
 #include <string.h>
 
-GC9A01_STEAMI display;
+SteamiGC9A01 display;
 
 const char* const lines[] = {"STeaMi", "GC9A01", "240x240", "RGB565", "scroll()"};
 const uint16_t colors[] = {GC9A01_WHITE, GC9A01_CYAN, GC9A01_YELLOW, GC9A01_GREEN, GC9A01_MAGENTA};

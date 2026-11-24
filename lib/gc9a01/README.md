@@ -45,9 +45,9 @@ Use this preset with the built-in STeaMi V1c display. It creates and starts the 
 bus automatically.
 
 ```cpp
-#include <GC9A01.h>
+#include <SteamiGC9A01.h>
 
-GC9A01_STEAMI display;
+SteamiGC9A01 display;
 
 void setup() {
     Serial.begin(115200);
@@ -70,7 +70,7 @@ For custom wiring, pass the SPI bus and the display control pins explicitly. Use
 
 ```cpp
 #include <SPI.h>
-#include <GC9A01.h>
+#include <SteamiGC9A01.h>
 
 SPIClass spiDisplay(SPI_INT_MOSI, SPI_INT_MISO, SPI_INT_SCK);
 GC9A01_SPI display(spiDisplay, SPI_INT_MISO, RST_DISPLAY, CS_DISPLAY);
@@ -94,13 +94,16 @@ void loop() {}
 The drawing API is the same as the SSD1327 driver. Change the include and the class, then
 replace the 4-bit grey levels (`0` to `15`) by RGB565 colours:
 
-| SSD1327 (V1a/V1b)              | GC9A01 (V1c)                           |
-|--------------------------------|----------------------------------------|
-| `#include <SSD1327.h>`         | `#include <GC9A01.h>`                  |
-| `WS_OLED_128X128_STEAMI display;` | `GC9A01_STEAMI display;`            |
-| `display.fill(0);`             | `display.fill(GC9A01_BLACK);`          |
-| `display.pixel(64, 64, 15);`   | `display.pixel(120, 120, GC9A01_WHITE);` |
-| `display.contrast(...)`        | no equivalent (backlight always on)    |
+| SSD1327 (V1a/V1b)                 | GC9A01 (V1c)                             |
+|-----------------------------------|------------------------------------------|
+| `#include <SSD1327.h>`            | `#include <SteamiGC9A01.h>`              |
+| `WS_OLED_128X128_STEAMI display;` | `SteamiGC9A01 display;`                  |
+| `display.fill(0);`                | `display.fill(GC9A01_BLACK);`            |
+| `display.pixel(64, 64, 15);`      | `display.pixel(120, 120, GC9A01_WHITE);` |
+| `display.contrast(...)`           | no equivalent (backlight always on)      |
+
+The SSD1327 driver will be renamed `SteamiSSD1327` (header `SteamiSSD1327.h`) in a follow-up, to
+follow the same `Steami<Chip>` naming. Until then the left column shows its current names.
 
 Coordinates go from `0` to `239` instead of `0` to `127`.
 
@@ -134,7 +137,7 @@ make flash-gc9a01/rotating_3d_cube
 
 | Method | Description |
 |--------|-------------|
-| `GC9A01_STEAMI()` | Construct the built-in STeaMi V1c display using the internal SPI bus and board pin mapping. |
+| `SteamiGC9A01()` | Construct the built-in STeaMi V1c display using the internal SPI bus and board pin mapping. |
 | `GC9A01_SPI(SPIClass& spi, uint8_t dc, uint8_t rst, uint8_t cs)` | Construct a display on any SPI bus. `rst` may be `GC9A01_PIN_NONE`. |
 | `bool begin()` | Allocate the frame buffer, reset and initialise the controller, clear the screen, then turn the display on (the uninitialised display RAM is never shown). Returns `false` if the frame buffer cannot be allocated. |
 | `void show()` | Send the frame buffer to the display. |
@@ -176,7 +179,7 @@ In the frame buffer and on the wire, each pixel is two bytes, high byte first.
 
 ## Register constants
 
-`GC9A01_const.h` exports the command bytes (`GC9A01_CMD_CASET`, `GC9A01_CMD_RAMWR`,
+`SteamiGC9A01_const.h` exports the command bytes (`GC9A01_CMD_CASET`, `GC9A01_CMD_RAMWR`,
 `GC9A01_CMD_MADCTL`, `GC9A01_CMD_INVON`, ...), the MADCTL bits (`GC9A01_MAD_*`), the two
 orientations used by `rotate()` (`GC9A01_ORIENT_NORMAL`, `GC9A01_ORIENT_ROTATED`), the panel size
 (`GC9A01_WIDTH`, `GC9A01_HEIGHT`) and the colours. Every name starts with `GC9A01_` so it does not
