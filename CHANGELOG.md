@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.24.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.24.0...v0.24.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **mcp23009e:** Rename example sketches and fix broken example links ([#218](https://github.com/steamicc/arduino-steami-lib/issues/218)). ([2ffc8ca](https://github.com/steamicc/arduino-steami-lib/commit/2ffc8caaa9b5c634fc13cd3fcc671a58b49730ff)), closes [#217](https://github.com/steamicc/arduino-steami-lib/issues/217) [#194](https://github.com/steamicc/arduino-steami-lib/issues/194) [#217](https://github.com/steamicc/arduino-steami-lib/issues/217)
+* **tooling:** Really compile the examples in test-examples.py ([#223](https://github.com/steamicc/arduino-steami-lib/issues/223)). ([9f1bb72](https://github.com/steamicc/arduino-steami-lib/commit/9f1bb725a7e3d42ea0507e94ae419dae89b5280a)), closes [#222](https://github.com/steamicc/arduino-steami-lib/issues/222)
+
 # [0.24.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.23.0...v0.24.0) (2026-09-16)
 
 
