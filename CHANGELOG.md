@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.25.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.25.0...v0.25.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **ci:** Publish the Arduino package on published releases. ([#228](https://github.com/steamicc/arduino-steami-lib/issues/228)) ([484fd4b](https://github.com/steamicc/arduino-steami-lib/commit/484fd4bc9bbe6b87b86ddc4e4db5511ef5901d31)), closes [#227](https://github.com/steamicc/arduino-steami-lib/issues/227)
+
 # [0.25.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.24.1...v0.25.0) (2026-11-24)
 
 
