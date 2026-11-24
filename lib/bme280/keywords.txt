@@ -1,0 +1,69 @@
+#######################################
+# Syntax Coloring Map For BME280
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+SteamiBME280	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin	KEYWORD2
+deviceId	KEYWORD2
+softReset	KEYWORD2
+powerOn	KEYWORD2
+powerOff	KEYWORD2
+dataReady	KEYWORD2
+temperatureReady	KEYWORD2
+pressureReady	KEYWORD2
+humidityReady	KEYWORD2
+temperature	KEYWORD2
+humidity	KEYWORD2
+pressureHpa	KEYWORD2
+read	KEYWORD2
+setContinuous	KEYWORD2
+triggerOneShot	KEYWORD2
+readOneShot	KEYWORD2
+setOversampling	KEYWORD2
+setIirFilter	KEYWORD2
+setStandby	KEYWORD2
+measurementTimeMs	KEYWORD2
+altitude	KEYWORD2
+dewPoint	KEYWORD2
+altitudeFromPressure	KEYWORD2
+dewPointFrom	KEYWORD2
+setTemperatureOffset	KEYWORD2
+calibrateTemperature	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+BME280_DEFAULT_ADDRESS	LITERAL1
+BME280_ALT_ADDRESS	LITERAL1
+BME280_CHIP_ID_VALUE	LITERAL1
+BME280_OSRS_SKIP	LITERAL1
+BME280_OSRS_X1	LITERAL1
+BME280_OSRS_X2	LITERAL1
+BME280_OSRS_X4	LITERAL1
+BME280_OSRS_X8	LITERAL1
+BME280_OSRS_X16	LITERAL1
+BME280_OSRS_KEEP	LITERAL1
+BME280_FILTER_OFF	LITERAL1
+BME280_FILTER_2	LITERAL1
+BME280_FILTER_4	LITERAL1
+BME280_FILTER_8	LITERAL1
+BME280_FILTER_16	LITERAL1
+BME280_STANDBY_0_5_MS	LITERAL1
+BME280_STANDBY_62_5_MS	LITERAL1
+BME280_STANDBY_125_MS	LITERAL1
+BME280_STANDBY_250_MS	LITERAL1
+BME280_STANDBY_500_MS	LITERAL1
+BME280_STANDBY_1000_MS	LITERAL1
+BME280_STANDBY_10_MS	LITERAL1
+BME280_STANDBY_20_MS	LITERAL1
+BME280_SEA_LEVEL_HPA	LITERAL1

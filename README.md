@@ -23,7 +23,7 @@ Arduino/C++ driver library for the [STeaMi](https://www.steami.cc/) board. Each 
 | ISM330DL      | [`ism330dl`](lib/ism330dl/)             | `0x6B`      | 6-axis IMU (accel + gyro)             |
 | LIS2MDL       | [`lis2mdl`](lib/lis2mdl/)               | `0x1E`      | 3-axis magnetometer                   |
 | IM34DT05      | `im34dt05` *(not yet implemented)*       | — (PDM)     | Digital microphone                    |
-| BME280        | `bme280` *(not yet implemented)*         | `0x76`      | Pressure + humidity + temperature     |
+| BME280        | [`bme280`](lib/bme280/)                 | `0x76`      | Pressure + humidity + temp. (V1c)     |
 | GC9A01        | [`gc9a01`](lib/gc9a01/)                 | — (SPI)     | 240x240 round colour TFT display (V1c) |
 | STeaMi Config | [`steami_config`](lib/steami_config/)   | —           | Persistent board configuration        |
 
