@@ -35,8 +35,12 @@ void setup() {
     }
     internalI2C.begin();
 
-    if (!config.begin()) {
+    if (!bridge.begin()) {
         Serial.println("DAPLink bridge not detected.");
+        return;
+    }
+    if (!config.begin()) {
+        Serial.println("This board's DAPLink firmware has no config zone: update it.");
         return;
     }
     if (!config.load()) {

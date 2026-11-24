@@ -6,6 +6,13 @@ Configuration data is stored as compact JSON in the 1 KB STM32F103 DAPLink
 config zone. It is intended for board information, sensor calibration values,
 and small persistent counters.
 
+## DAPLink firmware
+
+The config zone needs a recent DAPLink firmware on the board. Older
+firmwares lock up when they receive a config command, so the driver checks
+for the zone first (`DaplinkBridge::hasConfigZone()`): on such a board,
+`begin()`, `load()` and `save()` return `false` without touching it.
+
 ## Dependency
 
 - `STeaMi DAPLink Bridge` — config-zone access over the STeaMi internal I2C
@@ -49,7 +56,7 @@ the other stored settings are lost.
 
 | Method | Description |
 |---|---|
-| `bool begin()` | Probe the DAPLink bridge. |
+| `bool begin()` | Probe the DAPLink bridge. Returns `false` if it is missing or if its firmware has no config zone. |
 | `bool load()` | Load the JSON configuration from the config zone. An empty zone gives an empty configuration. |
 | `bool save()` | Erase the config zone and write the current compact JSON. Returns `false` if it does not fit. |
 | `void clear()` | Clear only the in-memory configuration. |

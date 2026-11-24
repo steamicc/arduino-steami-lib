@@ -370,6 +370,20 @@ void test_load_of_empty_zone_gives_empty_config(void) {
     TEST_ASSERT_FALSE(config.bootCount(bootCount));
 }
 
+void test_legacy_firmware_is_refused_without_locking_it_up(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
+    firmware.legacyFirmware = true;
+
+    TEST_ASSERT_FALSE(config.begin());
+    TEST_ASSERT_FALSE(config.load());
+
+    config.setBootCount(1);
+    TEST_ASSERT_FALSE(config.save());
+
+    TEST_ASSERT_EQUAL_INT(0, firmware.configCommandsOnLegacy);
+    TEST_ASSERT_FALSE(firmware.hung);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_initial_config_is_empty);
@@ -392,5 +406,6 @@ int main(void) {
     RUN_TEST(test_save_rejects_config_larger_than_zone);
     RUN_TEST(test_load_rejects_truncated_json);
     RUN_TEST(test_load_of_empty_zone_gives_empty_config);
+    RUN_TEST(test_legacy_firmware_is_refused_without_locking_it_up);
     return UNITY_END();
 }

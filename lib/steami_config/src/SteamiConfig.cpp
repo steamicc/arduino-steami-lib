@@ -43,13 +43,14 @@ bool SteamiConfig::begin() {
         return false;
     }
 
-    return _bridge->begin();
+    // A DAPLink firmware without the config zone is detected, not used.
+    return _bridge->begin() && _bridge->hasConfigZone();
 }
 
 bool SteamiConfig::load() {
     clear();
 
-    if (_bridge == nullptr) {
+    if (_bridge == nullptr || !_bridge->hasConfigZone()) {
         return false;
     }
 

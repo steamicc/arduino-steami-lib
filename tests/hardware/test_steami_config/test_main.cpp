@@ -139,13 +139,24 @@ void test_steami_config_restore_board_config(void) {
     TEST_ASSERT_TRUE(backup.restore(bridge));
 }
 
+void test_daplink_firmware_has_config_zone(void) {
+    TEST_FAIL_MESSAGE("DAPLink firmware without config zone: update it to run this suite.");
+}
+
 void setup() {
     delay(2000);
     internalI2C.begin();
     bridge.begin();
-    backup.take(bridge);
 
     UNITY_BEGIN();
+    if (!bridge.hasConfigZone()) {
+        // Never send config commands to such a firmware: it locks up.
+        RUN_TEST(test_daplink_firmware_has_config_zone);
+        UNITY_END();
+        return;
+    }
+    backup.take(bridge);
+
     RUN_TEST(test_steami_config_begin);
     RUN_TEST(test_steami_config_board_info_round_trip);
     RUN_TEST(test_steami_config_temperature_calibration_round_trip);
