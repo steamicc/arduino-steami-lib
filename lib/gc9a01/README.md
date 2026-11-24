@@ -94,16 +94,13 @@ void loop() {}
 The drawing API is the same as the SSD1327 driver. Change the include and the class, then
 replace the 4-bit grey levels (`0` to `15`) by RGB565 colours:
 
-| SSD1327 (V1a/V1b)                 | GC9A01 (V1c)                             |
-|-----------------------------------|------------------------------------------|
-| `#include <SSD1327.h>`            | `#include <SteamiGC9A01.h>`              |
-| `WS_OLED_128X128_STEAMI display;` | `SteamiGC9A01 display;`                  |
-| `display.fill(0);`                | `display.fill(GC9A01_BLACK);`            |
-| `display.pixel(64, 64, 15);`      | `display.pixel(120, 120, GC9A01_WHITE);` |
-| `display.contrast(...)`           | no equivalent (backlight always on)      |
-
-The SSD1327 driver will be renamed `SteamiSSD1327` (header `SteamiSSD1327.h`) in a follow-up, to
-follow the same `Steami<Chip>` naming. Until then the left column shows its current names.
+| SSD1327 (V1a/V1b)              | GC9A01 (V1c)                             |
+|--------------------------------|------------------------------------------|
+| `#include <SteamiSSD1327.h>`   | `#include <SteamiGC9A01.h>`              |
+| `SteamiSSD1327 display;`       | `SteamiGC9A01 display;`                  |
+| `display.fill(0);`             | `display.fill(GC9A01_BLACK);`            |
+| `display.pixel(64, 64, 15);`   | `display.pixel(120, 120, GC9A01_WHITE);` |
+| `display.contrast(...)`        | no equivalent (backlight always on)      |
 
 Coordinates go from `0` to `239` instead of `0` to `127`.
 

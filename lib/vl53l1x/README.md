@@ -20,10 +20,10 @@ global `Wire`). Spin up a dedicated `TwoWire` and hand it to the driver:
 
 ```cpp
 #include <Wire.h>
-#include <VL53L1X.h>
+#include <SteamiVL53L1X.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-VL53L1X sensor(internalI2C);
+SteamiVL53L1X sensor(internalI2C);
 
 void setup() {
     Serial.begin(115200);
@@ -66,7 +66,7 @@ units where relevant, and minimal redundant prefixes.
 
 | Method | Description |
 |--------|-------------|
-| `VL53L1X(TwoWire& wire = Wire, uint8_t address = VL53L1X_I2C_DEFAULT_ADDR)` | Construct a driver instance. |
+| `SteamiVL53L1X(TwoWire& wire = Wire, uint8_t address = VL53L1X_I2C_DEFAULT_ADDR)` | Construct a driver instance. |
 | `bool begin()` | Reset the sensor, verify the device ID, and upload the default configuration. Returns `false` if the sensor is not detected. |
 | `uint16_t deviceId()` | Read the device model ID register. |
 | `void reset()` | Perform a software reset. |
@@ -97,7 +97,7 @@ The polling timeout is approximately 1 second.
 
 ## Register constants
 
-`VL53L1X_const.h` exports all public register definitions and bit masks,
+`SteamiVL53L1X_const.h` exports all public register definitions and bit masks,
 including:
 
 * Device identification registers

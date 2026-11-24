@@ -55,6 +55,17 @@ All the drivers are published as one Arduino library named **STeaMi**, built fro
 * Select the STeaMi board from the "STM32 MCU based boards" package, then open the examples under **File > Examples > STeaMi**.
 * Contributors can build the package locally with `make package` (output in `build/arduino-package`).
 
+Each on-board component is driven by a `Steami<Chip>` class declared in `Steami<Chip>.h`, so the headers never clash with homonymous libraries of the Library Manager:
+
+```cpp
+#include <SteamiLIS2MDL.h>
+
+TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
+SteamiLIS2MDL magnetometer(internalI2C);
+```
+
+With the Library Manager package, `#include <STeaMi.h>` pulls in every driver at once.
+
 ## Examples
 
 ### List available examples

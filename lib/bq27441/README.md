@@ -17,10 +17,10 @@ Spin up a dedicated `TwoWire` and hand it to the driver:
 
 ```cpp
 #include <Wire.h>
-#include <BQ27441.h>
+#include <SteamiBQ27441.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-BQ27441 fuelGauge(internalI2C);
+SteamiBQ27441 fuelGauge(internalI2C);
 
 void setup() {
     Serial.begin(115200);
@@ -62,7 +62,7 @@ included in method names only where they carry ambiguity.
 
 | Method | Description |
 |--------|-------------|
-| `BQ27441(TwoWire& wire = Wire, uint16_t capacity_mAh = 650, uint8_t address = 0x55, int gpout_pin = -1)` | Construct. Defaults to global `Wire`, 650 mAh capacity, address `0x55`, no GPOUT pin. |
+| `SteamiBQ27441(TwoWire& wire = Wire, uint16_t capacity_mAh = 650, uint8_t address = 0x55, int gpout_pin = -1)` | Construct. Defaults to global `Wire`, 650 mAh capacity, address `0x55`, no GPOUT pin. |
 | `bool begin()` | Verify device ID, configure GPOUT, set design capacity. Returns `false` if the IC is not detected. |
 | `void powerOn()` | Wake the IC from shutdown and apply design capacity. |
 | `void powerOff()` | Put the IC into shutdown mode. |
@@ -103,24 +103,24 @@ included in method names only where they carry ambiguity.
 
 ```cpp
 // Select which current measurement to read
-BQ27441::CurrentMeasureType::AVG   // Average current (default)
-BQ27441::CurrentMeasureType::STBY  // Standby current
-BQ27441::CurrentMeasureType::MAX   // Max load current
+SteamiBQ27441::CurrentMeasureType::AVG   // Average current (default)
+SteamiBQ27441::CurrentMeasureType::STBY  // Standby current
+SteamiBQ27441::CurrentMeasureType::MAX   // Max load current
 
 // Select which capacity measurement to read
-BQ27441::CapacityMeasureType::REMAIN     // Remaining capacity (default)
-BQ27441::CapacityMeasureType::FULL       // Full charge capacity
-BQ27441::CapacityMeasureType::AVAIL      // Nominal available capacity
-BQ27441::CapacityMeasureType::DESIGN     // Design capacity
+SteamiBQ27441::CapacityMeasureType::REMAIN     // Remaining capacity (default)
+SteamiBQ27441::CapacityMeasureType::FULL       // Full charge capacity
+SteamiBQ27441::CapacityMeasureType::AVAIL      // Nominal available capacity
+SteamiBQ27441::CapacityMeasureType::DESIGN     // Design capacity
 
 // Select which temperature source to read
-BQ27441::TempMeasureType::BATTERY       // Battery temperature (default)
-BQ27441::TempMeasureType::INTERNAL_TEMP // IC internal temperature
+SteamiBQ27441::TempMeasureType::BATTERY       // Battery temperature (default)
+SteamiBQ27441::TempMeasureType::INTERNAL_TEMP // IC internal temperature
 ```
 
 ## Register constants
 
-`BQ27441_const.h` exports all register addresses (`BQ27441_COMMAND_*`),
+`SteamiBQ27441_const.h` exports all register addresses (`BQ27441_COMMAND_*`),
 control sub-commands (`BQ27441_CONTROL_*`), status bit masks
 (`BQ27441_STATUS_*`, `BQ27441_FLAG_*`), and configuration class IDs
 (`BQ27441_ID_*`) so applications can access the IC directly if they need

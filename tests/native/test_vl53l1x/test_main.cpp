@@ -3,7 +3,7 @@
 #include <math.h>
 #include <unity.h>
 
-#include "VL53L1X.h"
+#include "SteamiVL53L1X.h"
 #include "Wire.h"
 #include "driver_checks.h"
 
@@ -29,7 +29,7 @@ static void preloadDistance(uint16_t distance) {
     Wire.setRegister(ADDR, REG_RESULT_RANGE_STATUS + RESULT_DISTANCE_LSB_OFFSET, distance & 0xFF);
 }
 
-VL53L1X sensor;
+SteamiVL53L1X sensor;
 
 void setUp() {
     Wire = TwoWire();

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <Arduino.h>
-#include <SSD1327.h>
+#include <SteamiSSD1327.h>
 #include <Wire.h>
 #include <unity.h>
 

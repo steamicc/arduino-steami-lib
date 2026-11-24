@@ -13,14 +13,14 @@
 // WARNING! don’t forget to connect a battery to the card before starting the test
 
 #include <Arduino.h>
-#include <BQ27441.h>
+#include <SteamiBQ27441.h>
 #include <Wire.h>
 #include <unity.h>
 
 #include "driver_checks.h"
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-BQ27441 sensor(internalI2C);
+SteamiBQ27441 sensor(internalI2C);
 
 void setUp(void) {
     sensor.begin();
@@ -37,27 +37,27 @@ void test_bq27441_device_id() {
 }
 
 void test_bq27441_voltage_in_plausible_range() {
-    check_read_plausible(sensor, &BQ27441::voltageMv, static_cast<uint16_t>(3000),
+    check_read_plausible(sensor, &SteamiBQ27441::voltageMv, static_cast<uint16_t>(3000),
                          static_cast<uint16_t>(4300));
 }
 
 void test_bq27441_state_of_charge_in_valid_range() {
-    check_read_plausible(sensor, &BQ27441::stateOfCharge, static_cast<uint8_t>(0),
+    check_read_plausible(sensor, &SteamiBQ27441::stateOfCharge, static_cast<uint8_t>(0),
                          static_cast<uint8_t>(100));
 }
 
 void test_bq27441_state_of_health_in_valid_range() {
-    check_read_plausible(sensor, &BQ27441::stateOfHealth, static_cast<uint8_t>(0),
+    check_read_plausible(sensor, &SteamiBQ27441::stateOfHealth, static_cast<uint8_t>(0),
                          static_cast<uint8_t>(100));
 }
 
 void test_bq27441_capacity_remaining_positive() {
-    check_read_plausible(sensor, &BQ27441::capacityRemaining, static_cast<uint16_t>(0),
+    check_read_plausible(sensor, &SteamiBQ27441::capacityRemaining, static_cast<uint16_t>(0),
                          static_cast<uint16_t>(2000));
 }
 
 void test_bq27441_capacity_full_positive() {
-    check_read_plausible(sensor, &BQ27441::capacityFull, static_cast<uint16_t>(100),
+    check_read_plausible(sensor, &SteamiBQ27441::capacityFull, static_cast<uint16_t>(100),
                          static_cast<uint16_t>(2000));
 }
 

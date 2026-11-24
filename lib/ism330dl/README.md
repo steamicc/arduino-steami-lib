@@ -28,10 +28,10 @@ I2C bus (`I2C_INT_SDA` / `I2C_INT_SCL`).
 
 ```cpp
 #include <Wire.h>
-#include <ISM330DL.h>
+#include <SteamiISM330DL.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-ISM330DL imu(internalI2C);
+SteamiISM330DL imu(internalI2C);
 
 void setup() {
     Serial.begin(115200);
@@ -44,8 +44,8 @@ void setup() {
 }
 
 void loop() {
-    ISM330DL::Vector3 accel;
-    ISM330DL::Vector3 gyro;
+    SteamiISM330DL::Vector3 accel;
+    SteamiISM330DL::Vector3 gyro;
     float temperature;
 
     imu.accelerationG(accel);
@@ -105,7 +105,7 @@ The driver follows the common STeaMi API conventions.
 
 | Method | Description |
 |---------|-------------|
-| `ISM330DL(TwoWire&, uint8_t)` | Construct the driver. |
+| `SteamiISM330DL(TwoWire&, uint8_t)` | Construct the driver. |
 | `bool begin()` | Initialize the sensor and verify `WHO_AM_I`. |
 | `uint8_t deviceId()` | Read the `WHO_AM_I` register. |
 | `bool isConnected()` | Return true if the sensor responds correctly. |
@@ -276,7 +276,7 @@ returns a printable string.
 
 ## Constants
 
-`ISM330DL_const.h` exports
+`SteamiISM330DL_const.h` exports
 
 - register addresses
 - bit masks

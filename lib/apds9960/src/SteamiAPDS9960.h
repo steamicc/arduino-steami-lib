@@ -5,9 +5,9 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-#include "APDS9960_const.h"
+#include "SteamiAPDS9960_const.h"
 
-class APDS9960 {
+class SteamiAPDS9960 {
    public:
     enum class Mode : uint8_t {
         POWER = 0,
@@ -76,7 +76,7 @@ class APDS9960 {
         MS_39_2,
     };
 
-    APDS9960(TwoWire& wire = Wire, uint8_t address = APDS9960_DEFAULT_ADDRESS);
+    SteamiAPDS9960(TwoWire& wire = Wire, uint8_t address = APDS9960_DEFAULT_ADDRESS);
 
     bool begin();
     uint8_t deviceId();

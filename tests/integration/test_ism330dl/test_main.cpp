@@ -5,8 +5,8 @@
 #include <math.h>
 #include <unity.h>
 
-#include "ISM330DL.h"
-#include "ISM330DL_const.h"
+#include "SteamiISM330DL.h"
+#include "SteamiISM330DL_const.h"
 
 namespace {
 
@@ -27,7 +27,7 @@ constexpr float ACCEL_CHANGE_EPSILON_G = 0.0001F;
 constexpr float GYRO_CHANGE_EPSILON_DPS = 0.001F;
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-ISM330DL sensor(internalI2C);
+SteamiISM330DL sensor(internalI2C);
 
 bool waitForDataReady(uint32_t timeoutMs = DATA_READY_TIMEOUT_MS) {
     const uint32_t start = millis();
@@ -42,13 +42,13 @@ bool waitForDataReady(uint32_t timeoutMs = DATA_READY_TIMEOUT_MS) {
     return false;
 }
 
-void assertFiniteVector(const ISM330DL::Vector3& value, const char* message) {
+void assertFiniteVector(const SteamiISM330DL::Vector3& value, const char* message) {
     TEST_ASSERT_TRUE_MESSAGE(isfinite(value.x), message);
     TEST_ASSERT_TRUE_MESSAGE(isfinite(value.y), message);
     TEST_ASSERT_TRUE_MESSAGE(isfinite(value.z), message);
 }
 
-void assertPlausibleAcceleration(const ISM330DL::Vector3& acceleration) {
+void assertPlausibleAcceleration(const SteamiISM330DL::Vector3& acceleration) {
     assertFiniteVector(acceleration, "Acceleration contains a non-finite value");
 
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(MAX_ACCEL_G, 0.0F, acceleration.x,
@@ -59,7 +59,7 @@ void assertPlausibleAcceleration(const ISM330DL::Vector3& acceleration) {
                                      "Acceleration Z is outside the configured range");
 }
 
-void assertPlausibleGyroscope(const ISM330DL::Vector3& gyroscope) {
+void assertPlausibleGyroscope(const SteamiISM330DL::Vector3& gyroscope) {
     assertFiniteVector(gyroscope, "Gyroscope contains a non-finite value");
 
     TEST_ASSERT_FLOAT_WITHIN_MESSAGE(MAX_GYRO_DPS, 0.0F, gyroscope.x,
@@ -79,14 +79,14 @@ void assertPlausibleTemperature(float temperature) {
                                             "Temperature is above the plausible range");
 }
 
-bool vectorChanged(const ISM330DL::Vector3& previous, const ISM330DL::Vector3& current,
+bool vectorChanged(const SteamiISM330DL::Vector3& previous, const SteamiISM330DL::Vector3& current,
                    float epsilon) {
     return fabsf(current.x - previous.x) > epsilon || fabsf(current.y - previous.y) > epsilon ||
            fabsf(current.z - previous.z) > epsilon;
 }
 
-void readAndValidateSample(ISM330DL::Vector3& acceleration, ISM330DL::Vector3& gyroscope,
-                           float& temperature) {
+void readAndValidateSample(SteamiISM330DL::Vector3& acceleration,
+                           SteamiISM330DL::Vector3& gyroscope, float& temperature) {
     TEST_ASSERT_TRUE_MESSAGE(waitForDataReady(), "Timed out waiting for ISM330DL data");
 
     TEST_ASSERT_TRUE_MESSAGE(sensor.accelerationG(acceleration), "Failed to read acceleration");
@@ -119,8 +119,8 @@ void test_device_detection_and_id(void) {
 void test_repeated_measurements_are_plausible_and_not_frozen(void) {
     TEST_ASSERT_TRUE_MESSAGE(sensor.begin(), "ISM330DL initialization failed");
 
-    ISM330DL::Vector3 previousAcceleration{};
-    ISM330DL::Vector3 previousGyroscope{};
+    SteamiISM330DL::Vector3 previousAcceleration{};
+    SteamiISM330DL::Vector3 previousGyroscope{};
     float temperature = 0.0F;
 
     readAndValidateSample(previousAcceleration, previousGyroscope, temperature);
@@ -131,8 +131,8 @@ void test_repeated_measurements_are_plausible_and_not_frozen(void) {
     for (uint8_t sample = 1; sample < SAMPLE_COUNT; ++sample) {
         delay(SAMPLE_INTERVAL_MS);
 
-        ISM330DL::Vector3 acceleration{};
-        ISM330DL::Vector3 gyroscope{};
+        SteamiISM330DL::Vector3 acceleration{};
+        SteamiISM330DL::Vector3 gyroscope{};
 
         readAndValidateSample(acceleration, gyroscope, temperature);
 
@@ -152,8 +152,8 @@ void test_repeated_measurements_are_plausible_and_not_frozen(void) {
 void test_power_off_on_cycle_restores_measurements(void) {
     TEST_ASSERT_TRUE_MESSAGE(sensor.begin(), "ISM330DL initialization failed");
 
-    ISM330DL::Vector3 acceleration{};
-    ISM330DL::Vector3 gyroscope{};
+    SteamiISM330DL::Vector3 acceleration{};
+    SteamiISM330DL::Vector3 gyroscope{};
     float temperature = 0.0F;
 
     readAndValidateSample(acceleration, gyroscope, temperature);

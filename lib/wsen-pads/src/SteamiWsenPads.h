@@ -4,11 +4,11 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-#include "WSEN_PADS_const.h"
+#include "SteamiWsenPads_const.h"
 
-class WSEN_PADS {
+class SteamiWsenPads {
    public:
-    WSEN_PADS(TwoWire& wire = Wire, uint8_t address = WSEN_PADS_I2C_DEFAULT_ADDR);
+    SteamiWsenPads(TwoWire& wire = Wire, uint8_t address = WSEN_PADS_I2C_DEFAULT_ADDR);
 
     // --- Lifecycle ---
     bool begin();

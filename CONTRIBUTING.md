@@ -101,9 +101,9 @@ lib/<component>/
 ├── library.properties        # Arduino Library Manager metadata
 ├── keywords.txt              # Arduino IDE syntax highlighting
 ├── src/
-│   ├── <DriverName>.h        # Public header
-│   ├── <DriverName>.cpp      # Implementation
-│   └── <DriverName>_const.h  # Register addresses, bit masks, mode values
+│   ├── Steami<Chip>.h        # Public header
+│   ├── Steami<Chip>.cpp      # Implementation
+│   └── Steami<Chip>_const.h  # Register addresses, bit masks, mode values
 └── examples/
     └── <example_name>/
         └── <example_name>.ino
@@ -121,8 +121,10 @@ The public header of a driver is `Steami<Chip>.h` (constants in `Steami<Chip>_co
   (`wsen-hids`, `wsen-pads` vs `daplink_flash`, `steami_config`) — pick
   whichever reads most naturally for the new driver and stay consistent
   within its own tree.
-- The class name is `PascalCase` (`WsenHids`, `Mcp23009e`) and lives in
-  `src/<DriverName>.h`.
+- The class bound to the STeaMi board is `Steami<Chip>` in `PascalCase`
+  (`SteamiWsenHids`, `SteamiMCP23009E`) and lives in `src/Steami<Chip>.h`
+  (see [Naming](#naming)). Generic classes meant for other boards
+  (`SSD1327_SPI`, `MCP23009Pin`…) keep their chip names.
 - Drivers are self-contained by default. When one driver does need to
   call into another's public API (e.g. the DAPLink family, where
   `daplink_flash` and `daplink_config` both speak through
@@ -175,7 +177,7 @@ The public header of a driver is `Steami<Chip>.h` (constants in `Steami<Chip>_co
 
 - **Naming**: `camelCase` for methods and variables, `UPPER_SNAKE_CASE`
   for constants, `PascalCase` for class names (and the driver's
-  header/source files that match the class, e.g. `WsenHids.h`), lower
+  header/source files that match the class, e.g. `SteamiWsenHids.h`), lower
   snake-case for example and test folders, and lowercase (with either
   hyphens or underscores) for driver folders.
 - **Constants**: `constexpr uint8_t` (preferred) or `#define` in
@@ -188,7 +190,7 @@ The public header of a driver is `Steami<Chip>.h` (constants in `Steami<Chip>_co
   `readRegs` zero-fills its buffer before the bus access so a short
   read leaves defined bytes.
 - **Constructor**:
-  `DriverName(TwoWire& wire = Wire, uint8_t address = <DRIVER>_DEFAULT_ADDRESS)`.
+  `Steami<Chip>(TwoWire& wire = Wire, uint8_t address = <DRIVER>_DEFAULT_ADDRESS)`.
 - **Attributes**: `_wire` for the I2C bus, `_address` for the device
   address. Store `_wire` as a pointer internally (`TwoWire* _wire`) so
   the class stays default-assignable — the public constructor still
@@ -252,7 +254,7 @@ data. Callers can detect with `isnan()`.
 ### Modes
 
 - `void setContinuous(uint8_t odr)` — continuous mode at the given
-  Output Data Rate. ODR values live in `<driver>_const.h` as named
+  Output Data Rate. ODR values live in `Steami<Chip>_const.h` as named
   constants (e.g. `WSEN_HIDS_ODR_1_HZ`).
 - `void triggerOneShot()` — non-blocking: kick a single conversion.
 - `ReadResult readOneShot()` — trigger + wait + return.

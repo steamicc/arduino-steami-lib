@@ -4,11 +4,11 @@
 //
 // Open the serial monitor at 115200 baud.
 
-#include <APDS9960.h>
+#include <SteamiAPDS9960.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-APDS9960 sensor(internalI2C);
+SteamiAPDS9960 sensor(internalI2C);
 
 static const uint32_t PRINT_PERIOD_MS = 250;
 uint32_t lastPrintMs = 0;

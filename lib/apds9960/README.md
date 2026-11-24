@@ -18,10 +18,10 @@ it to the driver:
 
 ```cpp
 #include <Wire.h>
-#include <APDS9960.h>
+#include <SteamiAPDS9960.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-APDS9960 sensor(internalI2C);
+SteamiAPDS9960 sensor(internalI2C);
 
 void setup() {
     Serial.begin(115200);
@@ -91,12 +91,12 @@ units only when required for clarity, and avoid redundant `read` /
 
 ### Lifecycle
 
-| Method                                                                       | Description                                                                                                                  |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `APDS9960(TwoWire& wire = Wire, uint8_t address = APDS9960_DEFAULT_ADDRESS)` | Construct the driver.                                                                                                        |
-| `bool begin()`                                                               | Probe the device, configure default registers and leave all engines disabled. Returns `false` if the sensor is not detected. |
-| `uint8_t deviceId()`                                                         | Read the device ID register.                                                                                                 |
-| `void powerOn()` / `void powerOff()`                                         | Enable or disable the sensor.                                                                                                |
+| Method                                                                             | Description                                                                                                                  |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `SteamiAPDS9960(TwoWire& wire = Wire, uint8_t address = APDS9960_DEFAULT_ADDRESS)` | Construct the driver.                                                                                                        |
+| `bool begin()`                                                                     | Probe the device, configure default registers and leave all engines disabled. Returns `false` if the sensor is not detected. |
+| `uint8_t deviceId()`                                                               | Read the device ID register.                                                                                                 |
+| `void powerOn()` / `void powerOff()`                                               | Enable or disable the sensor.                                                                                                |
 
 ### Ambient light and RGB
 
@@ -173,7 +173,7 @@ The driver exposes the most useful runtime configuration options:
 
 ## Register constants
 
-`APDS9960_const.h` exports register addresses, bit masks, default
+`SteamiAPDS9960_const.h` exports register addresses, bit masks, default
 configuration values and enumeration constants so applications can
 access advanced device features when required.
 

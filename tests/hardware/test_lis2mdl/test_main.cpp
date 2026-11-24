@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <Arduino.h>
-#include <LIS2MDL.h>
+#include <SteamiLIS2MDL.h>
 #include <Wire.h>
 #include <math.h>
 #include <unity.h>
@@ -9,7 +9,7 @@
 #include "driver_checks.h"
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-LIS2MDL sensor(internalI2C);
+SteamiLIS2MDL sensor(internalI2C);
 
 void setUp(void) {
     sensor.begin();
@@ -27,11 +27,11 @@ void test_lis2mdl_who_am_i() {
 }
 
 void test_lis2mdl_read_plausible_magnetic_field(void) {
-    check_read_plausible(sensor, &LIS2MDL::magnitudeUt, 5.0f, 300.0f);
+    check_read_plausible(sensor, &SteamiLIS2MDL::magnitudeUt, 5.0f, 300.0f);
 }
 
 void test_lis2mdl_read_plausible_temperature(void) {
-    check_read_plausible(sensor, &LIS2MDL::temperature, -40.0f, 95.0f);
+    check_read_plausible(sensor, &SteamiLIS2MDL::temperature, -40.0f, 95.0f);
 }
 
 void test_lis2mdl_magnitude_ut_plausible(void) {
@@ -51,7 +51,7 @@ void test_lis2mdl_magnitude_ut_plausible(void) {
 }
 
 void test_lis2mdl_heading_flat_only_in_range(void) {
-    check_read_plausible(sensor, &LIS2MDL::headingFlatOnly, 0.0f, 360.0f);
+    check_read_plausible(sensor, &SteamiLIS2MDL::headingFlatOnly, 0.0f, 360.0f);
 }
 
 void setup() {

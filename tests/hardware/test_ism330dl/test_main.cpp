@@ -14,7 +14,7 @@
  */
 
 #include <Arduino.h>
-#include <ISM330DL.h>
+#include <SteamiISM330DL.h>
 #include <Wire.h>
 #include <math.h>
 #include <unity.h>
@@ -22,7 +22,7 @@
 #include "driver_checks.h"
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-ISM330DL sensor(internalI2C);
+SteamiISM330DL sensor(internalI2C);
 
 void setUp(void) {
     TEST_ASSERT_TRUE_MESSAGE(sensor.begin(), "ISM330DL begin() failed");
@@ -39,7 +39,7 @@ void test_ism330dl_who_am_i(void) {
 }
 
 void test_ism330dl_acceleration_is_plausible(void) {
-    ISM330DL::Vector3 accel{};
+    SteamiISM330DL::Vector3 accel{};
     TEST_ASSERT_TRUE_MESSAGE(sensor.accelerationG(accel), "Acceleration read failed");
 
     TEST_ASSERT_FLOAT_WITHIN(2.2F, 0.0F, accel.x);
@@ -52,7 +52,7 @@ void test_ism330dl_acceleration_is_plausible(void) {
 }
 
 void test_ism330dl_gyroscope_is_plausible(void) {
-    ISM330DL::Vector3 gyro{};
+    SteamiISM330DL::Vector3 gyro{};
     TEST_ASSERT_TRUE_MESSAGE(sensor.gyroscopeDps(gyro), "Gyroscope read failed");
 
     TEST_ASSERT_FLOAT_WITHIN(250.0F, 0.0F, gyro.x);
@@ -91,25 +91,25 @@ void test_ism330dl_status_register_is_readable(void) {
 }
 
 void test_ism330dl_orientation_returns_valid_value(void) {
-    ISM330DL::Orientation orientation = ISM330DL::Orientation::MOVING;
+    SteamiISM330DL::Orientation orientation = SteamiISM330DL::Orientation::MOVING;
     TEST_ASSERT_TRUE_MESSAGE(sensor.orientation(orientation), "Orientation read failed");
 
     const uint8_t raw = static_cast<uint8_t>(orientation);
-    TEST_ASSERT_TRUE_MESSAGE(raw <= static_cast<uint8_t>(ISM330DL::Orientation::MOVING),
+    TEST_ASSERT_TRUE_MESSAGE(raw <= static_cast<uint8_t>(SteamiISM330DL::Orientation::MOVING),
                              "Orientation enum value is invalid");
 
-    TEST_ASSERT_NOT_NULL(ISM330DL::orientationToString(orientation));
+    TEST_ASSERT_NOT_NULL(SteamiISM330DL::orientationToString(orientation));
 }
 
 void test_ism330dl_motion_returns_valid_value(void) {
-    ISM330DL::Motion motion{};
+    SteamiISM330DL::Motion motion{};
     TEST_ASSERT_TRUE_MESSAGE(sensor.motion(motion), "Motion read failed");
 
     const uint8_t raw = static_cast<uint8_t>(motion.type);
-    TEST_ASSERT_TRUE_MESSAGE(raw <= static_cast<uint8_t>(ISM330DL::MotionType::STABLE),
+    TEST_ASSERT_TRUE_MESSAGE(raw <= static_cast<uint8_t>(SteamiISM330DL::MotionType::STABLE),
                              "Motion enum value is invalid");
 
-    TEST_ASSERT_NOT_NULL(ISM330DL::motionToString(motion.type));
+    TEST_ASSERT_NOT_NULL(SteamiISM330DL::motionToString(motion.type));
     TEST_ASSERT_TRUE_MESSAGE(motion.value >= 0.0F, "Motion magnitude must be non-negative");
 }
 
@@ -125,8 +125,8 @@ void test_ism330dl_power_cycle_restores_measurements(void) {
      * A measurement request must automatically restore the previous
      * accelerometer and gyroscope configuration through ensureData().
      */
-    ISM330DL::Vector3 accel{};
-    ISM330DL::Vector3 gyro{};
+    SteamiISM330DL::Vector3 accel{};
+    SteamiISM330DL::Vector3 gyro{};
 
     TEST_ASSERT_TRUE_MESSAGE(sensor.accelerationG(accel),
                              "Acceleration read failed after powerOff()");

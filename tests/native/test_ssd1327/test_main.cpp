@@ -4,7 +4,7 @@
 
 #include <cstdio>
 
-#include "SSD1327.h"
+#include "SteamiSSD1327.h"
 #include "Wire.h"
 #include "driver_checks.h"
 

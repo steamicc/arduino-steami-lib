@@ -85,7 +85,7 @@ class BuildPackageTest(unittest.TestCase):
         self.assertEqual(props["url"], "https://github.com/steamicc/arduino-steami-lib")
 
     def test_examples_grouped_by_component(self) -> None:
-        write(self.lib / "wsen-pads" / "src" / "WSEN_PADS.h")
+        write(self.lib / "wsen-pads" / "src" / "SteamiWsenPads.h")
         write(self.lib / "wsen-pads" / "examples" / "altitude" / "altitude.ino", "// a\n")
         write(self.lib / "ble" / "examples" / "BleBeacon" / "BleBeacon.ino", "// b\n")
         self.build()

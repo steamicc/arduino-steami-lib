@@ -2,8 +2,8 @@
 
 #include <unity.h>
 
-#include "WSEN_PADS.h"
-#include "WSEN_PADS_const.h"
+#include "SteamiWsenPads.h"
+#include "SteamiWsenPads_const.h"
 #include "Wire.h"
 #include "driver_checks.h"
 
@@ -37,12 +37,12 @@ static void preloadMeasurement(float tempC, float pressureHpa) {
     Wire.setRegister(ADDR, REG_STATUS, STATUS_P_DA | STATUS_T_DA);
 }
 
-WSEN_PADS sensor;
+SteamiWsenPads sensor;
 
 void setUp() {
     Wire = TwoWire();
     preloadDeviceId();
-    sensor = WSEN_PADS();
+    sensor = SteamiWsenPads();
 }
 
 void tearDown(void) {}
@@ -164,7 +164,7 @@ void test_calibrate_temperature_applies_correction(void) {
 void test_offset_stacks_on_top_of_calibration(void) {
     // Two-point calibration and the additive offset are independent —
     // setTemperatureOffset doesn't reset slope/intercept set by
-    // calibrateTemperature, and vice versa. Same contract as WsenHids.
+    // calibrateTemperature, and vice versa. Same contract as SteamiWsenHids.
     sensor.begin();
     sensor.setContinuous(ODR_1_HZ);
     sensor.calibrateTemperature(1.0f, 0.0f, 22.0f, 20.0f);  // slope = 1.05, offset = 1.0

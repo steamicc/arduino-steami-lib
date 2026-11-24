@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "LIS2MDL.h"
+#include "SteamiLIS2MDL.h"
 
 #include <math.h>
 #include <string.h>
@@ -15,8 +15,8 @@
 #define degrees(rad) ((rad) * 180.0f / M_PI)
 #endif
 
-LIS2MDL::LIS2MDL(TwoWire& wire, uint8_t address, uint8_t odrHz, bool tempComp, bool lowPower,
-                 bool drdyEnable)
+SteamiLIS2MDL::SteamiLIS2MDL(TwoWire& wire, uint8_t address, uint8_t odrHz, bool tempComp,
+                             bool lowPower, bool drdyEnable)
     : _wire(&wire),
       _address(address),
       _odrHz(odrHz),
@@ -29,7 +29,7 @@ LIS2MDL::LIS2MDL(TwoWire& wire, uint8_t address, uint8_t odrHz, bool tempComp, b
       _tempOffset(0.0f),
       _tempBaseOffset(static_cast<float>(LIS2MDL_TEMP_OFFSET)) {}
 
-bool LIS2MDL::begin() {
+bool SteamiLIS2MDL::begin() {
     if (deviceId() != LIS2MDL_WHO_AM_I_VAL) {
         return false;
     }
@@ -70,7 +70,7 @@ bool LIS2MDL::begin() {
 // -------------------- SET functions --------------------
 //--------------------------------------------------------
 
-void LIS2MDL::setMode(const char* mode) {
+void SteamiLIS2MDL::setMode(const char* mode) {
     uint8_t md = 0b00;
     if (strcmp(mode, "single") == 0) {
         md = 0b01;
@@ -83,7 +83,7 @@ void LIS2MDL::setMode(const char* mode) {
     writeReg(LIS2MDL_CFG_REG_A, reg);
 }
 
-void LIS2MDL::setOdr(int hz) {
+void SteamiLIS2MDL::setOdr(int hz) {
     uint8_t odrBits;
     switch (hz) {
         case 10:
@@ -108,16 +108,16 @@ void LIS2MDL::setOdr(int hz) {
     writeReg(LIS2MDL_CFG_REG_A, reg);
 }
 
-void LIS2MDL::setContinuous(uint8_t hz) {
+void SteamiLIS2MDL::setContinuous(uint8_t hz) {
     setOdr(hz);
     setMode("continuous");
 }
 
-void LIS2MDL::triggerOneShot() {
+void SteamiLIS2MDL::triggerOneShot() {
     setMode("single");
 }
 
-MagneticField LIS2MDL::readOneShot() {
+MagneticField SteamiLIS2MDL::readOneShot() {
     triggerOneShot();
     for (int i = 0; i < 50; i++) {
         if (dataReady())
@@ -127,7 +127,7 @@ MagneticField LIS2MDL::readOneShot() {
     return {0, 0, 0};
 }
 
-void LIS2MDL::setLowPower(bool enabled) {
+void SteamiLIS2MDL::setLowPower(bool enabled) {
     uint8_t reg = readReg(LIS2MDL_CFG_REG_A);
     if (enabled) {
         reg |= 1 << 4;
@@ -137,7 +137,7 @@ void LIS2MDL::setLowPower(bool enabled) {
     writeReg(LIS2MDL_CFG_REG_A, reg);
 }
 
-void LIS2MDL::setLowPass(bool enabled) {
+void SteamiLIS2MDL::setLowPass(bool enabled) {
     uint8_t reg = readReg(LIS2MDL_CFG_REG_B);
     if (enabled) {
         reg |= 1 << 0;
@@ -147,7 +147,7 @@ void LIS2MDL::setLowPass(bool enabled) {
     writeReg(LIS2MDL_CFG_REG_B, reg);
 }
 
-void LIS2MDL::setOffsetCancellation(bool enabled, bool oneShot) {
+void SteamiLIS2MDL::setOffsetCancellation(bool enabled, bool oneShot) {
     uint8_t reg = readReg(LIS2MDL_CFG_REG_B);
     if (enabled) {
         reg |= 1 << 1;
@@ -162,7 +162,7 @@ void LIS2MDL::setOffsetCancellation(bool enabled, bool oneShot) {
     writeReg(LIS2MDL_CFG_REG_B, reg);
 }
 
-void LIS2MDL::setBdu(bool enabled) {
+void SteamiLIS2MDL::setBdu(bool enabled) {
     uint8_t reg = readReg(LIS2MDL_CFG_REG_C);
     if (enabled) {
         reg |= 1 << 4;
@@ -172,7 +172,7 @@ void LIS2MDL::setBdu(bool enabled) {
     writeReg(LIS2MDL_CFG_REG_C, reg);
 }
 
-void LIS2MDL::setEndianness(bool bigEndian) {
+void SteamiLIS2MDL::setEndianness(bool bigEndian) {
     uint8_t reg = readReg(LIS2MDL_CFG_REG_C);
     if (bigEndian) {
         reg |= 1 << 3;
@@ -182,7 +182,7 @@ void LIS2MDL::setEndianness(bool bigEndian) {
     writeReg(LIS2MDL_CFG_REG_C, reg);
 }
 
-void LIS2MDL::useSpi4wire(bool enable) {
+void SteamiLIS2MDL::useSpi4wire(bool enable) {
     uint8_t reg = readReg(LIS2MDL_CFG_REG_C);
     if (enable) {
         reg |= 1 << 2;
@@ -192,15 +192,15 @@ void LIS2MDL::useSpi4wire(bool enable) {
     writeReg(LIS2MDL_CFG_REG_C, reg);
 }
 
-void LIS2MDL::setHeadingOffset(float deg) {
+void SteamiLIS2MDL::setHeadingOffset(float deg) {
     _headingOffsetDeg = deg;
 }
 
-void LIS2MDL::setDeclination(float deg) {
+void SteamiLIS2MDL::setDeclination(float deg) {
     _declinationDeg = deg;
 }
 
-void LIS2MDL::writeReg(uint8_t reg, uint8_t data) {
+void SteamiLIS2MDL::writeReg(uint8_t reg, uint8_t data) {
     _writeBuffer[0] = data;
     _wire->beginTransmission(_address);
     _wire->write(reg);
@@ -208,7 +208,7 @@ void LIS2MDL::writeReg(uint8_t reg, uint8_t data) {
     _wire->endTransmission();
 }
 
-void LIS2MDL::write16(uint8_t regL, int16_t value) {
+void SteamiLIS2MDL::write16(uint8_t regL, int16_t value) {
     _wire->beginTransmission(_address);
     _wire->write(regL);
     _wire->write(value & 0xFF);
@@ -216,7 +216,7 @@ void LIS2MDL::write16(uint8_t regL, int16_t value) {
     _wire->endTransmission();
 }
 
-void LIS2MDL::setHwOffsets(int16_t x, int16_t y, int16_t z) {
+void SteamiLIS2MDL::setHwOffsets(int16_t x, int16_t y, int16_t z) {
     write16(LIS2MDL_OFFSET_X_REG_L, x);
     write16(LIS2MDL_OFFSET_Y_REG_L, y);
     write16(LIS2MDL_OFFSET_Z_REG_L, z);
@@ -226,7 +226,7 @@ void LIS2MDL::setHwOffsets(int16_t x, int16_t y, int16_t z) {
 // -------------------- READ functions --------------------
 //--------------------------------------------------------
 
-bool LIS2MDL::ensureData() {
+bool SteamiLIS2MDL::ensureData() {
     // Trigger a single conversion if the sensor is in idle mode.
     if (isIdle()) {
         setMode("single");
@@ -240,26 +240,26 @@ bool LIS2MDL::ensureData() {
     return true;
 }
 
-MagneticField LIS2MDL::magneticFieldRaw() {
+MagneticField SteamiLIS2MDL::magneticFieldRaw() {
     // Reads the raw magnetic field (LSB). Same as magnetic_field(), but more explicit.
     return magneticField();
 }
 
-uint8_t LIS2MDL::status() {
+uint8_t SteamiLIS2MDL::status() {
     return readReg(LIS2MDL_STATUS_REG);
 }
 
-bool LIS2MDL::dataReady() {
+bool SteamiLIS2MDL::dataReady() {
     // True if a new XYZ triplet is ready (Zyxda bit).
     return (status() & (1 << 3)) != 0;
 }
 
-uint8_t LIS2MDL::readIntSource() {
+uint8_t SteamiLIS2MDL::readIntSource() {
     // Reads INT_SOURCE_REG (0x64): source of the interrupt.
     return readReg(LIS2MDL_INT_SOURCE_REG);
 }
 
-uint8_t LIS2MDL::readReg(uint8_t reg) {
+uint8_t SteamiLIS2MDL::readReg(uint8_t reg) {
     _wire->beginTransmission(_address);
     _wire->write(reg);
     _wire->endTransmission(false);
@@ -269,7 +269,7 @@ uint8_t LIS2MDL::readReg(uint8_t reg) {
     return 0;
 }
 
-MagneticFieldUt LIS2MDL::magneticFieldUt() {
+MagneticFieldUt SteamiLIS2MDL::magneticFieldUt() {
     // Reads the magnetic field in µT, uncalibrated (simple conversion from LSB).
     MagneticField raw = magneticField();
     MagneticFieldUt f;
@@ -279,7 +279,7 @@ MagneticFieldUt LIS2MDL::magneticFieldUt() {
     return f;
 }
 
-CalibratedField LIS2MDL::calibratedField() {
+CalibratedField SteamiLIS2MDL::calibratedField() {
     // Reads the calibrated field (offset/scale per axis), normalized (unitless, ~circle in XY).
     MagneticField raw = magneticField();
     CalibratedField f;
@@ -289,18 +289,18 @@ CalibratedField LIS2MDL::calibratedField() {
     return f;
 }
 
-float LIS2MDL::magnitudeUt() {
+float SteamiLIS2MDL::magnitudeUt() {
     // Total magnetic field strength (µT).
     MagneticFieldUt f = magneticFieldUt();
     return sqrt(f.x * f.x + f.y * f.y + f.z * f.z);
 }
 
-int16_t LIS2MDL::toInt16(uint16_t v) {
+int16_t SteamiLIS2MDL::toInt16(uint16_t v) {
     // Convert an unsigned 16-bit value to a signed 16-bit value.
     return (v & 0x8000) ? (int16_t)(v - 0x10000) : (int16_t)v;
 }
 
-MagneticField LIS2MDL::magneticField() {
+MagneticField SteamiLIS2MDL::magneticField() {
     // Read the raw magnetic field data (X, Y, Z) from the sensor.
     ensureData();
     MagneticField f;
@@ -310,7 +310,7 @@ MagneticField LIS2MDL::magneticField() {
     return f;
 }
 
-int16_t LIS2MDL::readTemperatureRaw() {
+int16_t SteamiLIS2MDL::readTemperatureRaw() {
     // Reads the raw temperature (LSB), 8 LSB/°C, absolute offset not guaranteed.
     ensureData();
     uint16_t lo = readReg(LIS2MDL_TEMP_OUT_L_REG);
@@ -318,7 +318,7 @@ int16_t LIS2MDL::readTemperatureRaw() {
     return toInt16((hi << 8) | lo);
 }
 
-float LIS2MDL::temperature() {
+float SteamiLIS2MDL::temperature() {
     /* Temperature in °C (8 LSB/°C + empirical offset).
 
         The LIS2MDL temperature sensor has no guaranteed absolute zero
@@ -332,7 +332,7 @@ float LIS2MDL::temperature() {
     return _tempGain * factory + _tempOffset;
 }
 
-void LIS2MDL::setTempOffset(float offset) {
+void SteamiLIS2MDL::setTempOffset(float offset) {
     /*Set a temperature offset in °C (gain remains 1.0).
 
         Args:
@@ -341,8 +341,8 @@ void LIS2MDL::setTempOffset(float offset) {
     _tempOffset = offset;
 }
 
-bool LIS2MDL::calibrateTemperature(float refLow, float measuredLow, float refHigh,
-                                   float measuredHigh) {
+bool SteamiLIS2MDL::calibrateTemperature(float refLow, float measuredLow, float refHigh,
+                                         float measuredHigh) {
     /*Two-point calibration from reference measurements.
 
         Computes gain and offset so that the sensor reading is adjusted
@@ -361,19 +361,19 @@ bool LIS2MDL::calibrateTemperature(float refLow, float measuredLow, float refHig
     return true;
 }
 
-uint8_t LIS2MDL::deviceId() {
+uint8_t SteamiLIS2MDL::deviceId() {
     // Reads WHO_AM_I (should be 0x40).
     return readReg(LIS2MDL_WHO_AM_I);
 }
 
-int16_t LIS2MDL::read16(uint8_t reg) {
+int16_t SteamiLIS2MDL::read16(uint8_t reg) {
     // Reads a signed 16-bit value from a _L (LSB) register.
     uint16_t lo = readReg(reg);
     uint16_t hi = readReg(reg + 1);
     return toInt16((hi << 8) | lo);
 }
 
-HwOffsets LIS2MDL::readHwOffsets() {
+HwOffsets SteamiLIS2MDL::readHwOffsets() {
     // Reads the hardware offsets (OFFSET_* registers).
     HwOffsets o;
     o.x = read16(LIS2MDL_OFFSET_X_REG_L);
@@ -382,7 +382,7 @@ HwOffsets LIS2MDL::readHwOffsets() {
     return o;
 }
 
-void LIS2MDL::readRegisters(uint8_t startAddr, uint8_t length, uint8_t* buffer) {
+void SteamiLIS2MDL::readRegisters(uint8_t startAddr, uint8_t length, uint8_t* buffer) {
     // Dump of consecutive registers (useful for debugging).
     for (uint8_t i = 0; i < length; i++) {
         buffer[i] = 0;
@@ -396,7 +396,7 @@ void LIS2MDL::readRegisters(uint8_t startAddr, uint8_t length, uint8_t* buffer) 
     }
 }
 
-ReadAll LIS2MDL::readAll() {
+ReadAll SteamiLIS2MDL::readAll() {
     // Grouped reading useful for debug & logs.
     ReadAll r;
     r.raw = magneticFieldRaw();
@@ -407,7 +407,7 @@ ReadAll LIS2MDL::readAll() {
     return r;
 }
 
-bool LIS2MDL::isIdle() {
+bool SteamiLIS2MDL::isIdle() {
     return (readReg(LIS2MDL_CFG_REG_A) & 0b11) == 0b11;
 }
 
@@ -415,8 +415,8 @@ bool LIS2MDL::isIdle() {
 // -------------------- CALIBRATIONS ---------------------
 //--------------------------------------------------------
 
-void LIS2MDL::setCalibrateStep(float xoff, float yoff, float zoff, float xscale, float yscale,
-                               float zscale) {
+void SteamiLIS2MDL::setCalibrateStep(float xoff, float yoff, float zoff, float xscale, float yscale,
+                                     float zscale) {
     // Set the calibration offsets and scales manually.
     xOff = xoff;
     yOff = yoff;
@@ -426,7 +426,7 @@ void LIS2MDL::setCalibrateStep(float xoff, float yoff, float zoff, float xscale,
     zScale = zscale;
 }
 
-void LIS2MDL::calibrateMinmax2d(uint16_t samples, uint16_t delayMs) {
+void SteamiLIS2MDL::calibrateMinmax2d(uint16_t samples, uint16_t delayMs) {
     /*MIN/MAX calibration while flat (XY only).
         Slowly rotate the board FLAT during acquisition.
         Updates x_off, y_off, x_scale, y_scale (leaves Z unchanged).*/
@@ -457,7 +457,7 @@ void LIS2MDL::calibrateMinmax2d(uint16_t samples, uint16_t delayMs) {
     yScale = (yScale != 0.0f) ? avg : 1.0f;
 }
 
-void LIS2MDL::calibrateMinmax3d(uint16_t samples, uint16_t delayMs) {
+void SteamiLIS2MDL::calibrateMinmax3d(uint16_t samples, uint16_t delayMs) {
     /*MIN/MAX calibration on 3 axes (rotate the board in ALL directions).
         Updates offsets + scales for X, Y, Z.*/
 
@@ -489,7 +489,7 @@ void LIS2MDL::calibrateMinmax3d(uint16_t samples, uint16_t delayMs) {
     zScale = (zmax - zmin) / 2.0f != 0.0f ? (zmax - zmin) / 2.0f : 1.0f;
 }
 
-CalibratedField LIS2MDL::calibrateApply(float x, float y, float z) {
+CalibratedField SteamiLIS2MDL::calibrateApply(float x, float y, float z) {
     /*Applies the current calibration (offset + scale per axis).
         Returns normalized ~unitless values.*/
     CalibratedField f;
@@ -499,7 +499,7 @@ CalibratedField LIS2MDL::calibrateApply(float x, float y, float z) {
     return f;
 }
 
-CalibrationQuality LIS2MDL::calibrateQuality(uint16_t samplesCheck, uint16_t delayMs) {
+CalibrationQuality SteamiLIS2MDL::calibrateQuality(uint16_t samplesCheck, uint16_t delayMs) {
     /* Evaluates the quality of the current calibration over a short sample.
         Returns a dict with useful metrics: center (mean), anisotropy, XY radius dispersion.
         (Move the board a bit while flat during the measurement.)*/
@@ -569,7 +569,7 @@ CalibrationQuality LIS2MDL::calibrateQuality(uint16_t samplesCheck, uint16_t del
     return q;
 }
 
-void LIS2MDL::calibrateReset() {
+void SteamiLIS2MDL::calibrateReset() {
     // Resets to a 'neutral' calibration (useful before re-calibrating).
     xOff = 0.0f;
     yOff = 0.0f;
@@ -579,7 +579,7 @@ void LIS2MDL::calibrateReset() {
     zScale = 1.0f;
 }
 
-void LIS2MDL::calibrateStep() {
+void SteamiLIS2MDL::calibrateStep() {
     calibrateMinmax3d();
 }
 
@@ -587,7 +587,7 @@ void LIS2MDL::calibrateStep() {
 // -------------------- Heading functions ----------------
 //--------------------------------------------------------
 
-void LIS2MDL::setHeadingFilter(float alpha) {
+void SteamiLIS2MDL::setHeadingFilter(float alpha) {
     /*alpha=0 -> no filtering. 0.1..0.3 = light/medium smoothing.
         Filter by averaging cos/sin to avoid artifacts at 0/360°.*/
     _hfAlpha = (alpha < 0.0f) ? 0.0f : (alpha > 1.0f) ? 1.0f : alpha;
@@ -595,17 +595,17 @@ void LIS2MDL::setHeadingFilter(float alpha) {
     _hfSin = 0.0f;
 }
 
-float LIS2MDL::normalizeDeg(float a) {
+float SteamiLIS2MDL::normalizeDeg(float a) {
     a = fmod(a, 360.0f);
     return a < 0.0f ? a + 360.0f : a;
 }
 
-float LIS2MDL::applyHeadingOffsets(float angleDeg) {
+float SteamiLIS2MDL::applyHeadingOffsets(float angleDeg) {
     angleDeg = angleDeg + _headingOffsetDeg + _declinationDeg;
     return normalizeDeg(angleDeg);
 }
 
-float LIS2MDL::filterHeading(float angleDeg) {
+float SteamiLIS2MDL::filterHeading(float angleDeg) {
     // Filters the angle via vector averaging; returns filtered angle (or raw if alpha=0).
     if (_hfAlpha <= 0.0f) {
         return angleDeg;
@@ -630,7 +630,7 @@ float LIS2MDL::filterHeading(float angleDeg) {
     return normalizeDeg(degrees(atan2(_hfSin, _hfCos)));
 }
 
-float LIS2MDL::headingFromVectors(float x, float y, float z, bool calibrated) {
+float SteamiLIS2MDL::headingFromVectors(float x, float y, float z, bool calibrated) {
     /*Computes the angle (0..360°) from a triplet.
         - calibrated=True: applies offset/scale per axis (recommended)
         - flat only (uses XY)*/
@@ -643,14 +643,14 @@ float LIS2MDL::headingFromVectors(float x, float y, float z, bool calibrated) {
     return filterHeading(angle);
 }
 
-float LIS2MDL::headingFlatOnly() {
+float SteamiLIS2MDL::headingFlatOnly() {
     /*Reads the sensor and returns the angle (0..360°) assuming the board is FLAT.
         Uses XY (no tilt compensation).*/
     MagneticField f = magneticField();
     return headingFromVectors(f.x, f.y, f.z, true);
 }
 
-float LIS2MDL::headingWithTiltCompensation(Vec3f (*readAccel)()) {
+float SteamiLIS2MDL::headingWithTiltCompensation(Vec3f (*readAccel)()) {
     /*Tilt-compensated compass (if an accelerometer is available).
         readAccel() must return (ax, ay, az) ~g.*/
     MagneticField raw = magneticField();
@@ -669,7 +669,7 @@ float LIS2MDL::headingWithTiltCompensation(Vec3f (*readAccel)()) {
     return filterHeading(angle);
 }
 
-const char* LIS2MDL::directionLabel(float angle) {
+const char* SteamiLIS2MDL::directionLabel(float angle) {
     // Returns N/NE/E/... ; if angle=-1, reads headingFlatOnly().
     if (angle < 0.0f) {
         angle = headingFlatOnly();
@@ -682,7 +682,7 @@ const char* LIS2MDL::directionLabel(float angle) {
 // -------------------- Power/reset functions ------------
 //--------------------------------------------------------
 
-const char* LIS2MDL::getMode() {
+const char* SteamiLIS2MDL::getMode() {
     uint8_t r = readReg(LIS2MDL_CFG_REG_A);
     uint8_t md = r & 0b11;
     if (md == 0b00)
@@ -692,14 +692,14 @@ const char* LIS2MDL::getMode() {
     return "idle";
 }
 
-void LIS2MDL::powerOff() {
+void SteamiLIS2MDL::powerOff() {
     // Switches to IDLE mode (low power).
     uint8_t r = readReg(LIS2MDL_CFG_REG_A);
     r = (r & ~0b11) | 0b11;
     writeReg(LIS2MDL_CFG_REG_A, r);
 }
 
-void LIS2MDL::powerOn(const char* mode) {
+void SteamiLIS2MDL::powerOn(const char* mode) {
     // Power on the sensor: 'continuous' (default) or 'single'.
     uint8_t md;
     if (mode != nullptr && strcmp(mode, "single") == 0) {
@@ -712,7 +712,7 @@ void LIS2MDL::powerOn(const char* mode) {
     writeReg(LIS2MDL_CFG_REG_A, r);
 }
 
-void LIS2MDL::softReset(uint16_t waitMs) {
+void SteamiLIS2MDL::softReset(uint16_t waitMs) {
     /*SOFT_RST (bit5) in CFG_REG_A.
         The bit auto-clears; after reset, the sensor returns to default values (idle mode expected).
         */
@@ -722,7 +722,7 @@ void LIS2MDL::softReset(uint16_t waitMs) {
     delay(waitMs);
 }
 
-void LIS2MDL::reboot(uint16_t waitMs) {
+void SteamiLIS2MDL::reboot(uint16_t waitMs) {
     /*REBOOT (bit6) in CFG_REG_A: reload internal registers.
         The bit auto-clears.
         */

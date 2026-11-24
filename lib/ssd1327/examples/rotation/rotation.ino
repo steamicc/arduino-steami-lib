@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 #include <Arduino.h>
-#include <SSD1327.h>
+#include <SteamiSSD1327.h>
 
 #ifndef DATA_COMMAND_DISPLAY
 #define DATA_COMMAND_DISPLAY SPI_INT_MISO
 #endif
 
-WS_OLED_128X128_STEAMI display;
+SteamiSSD1327 display;
 
 bool rotated = false;
 

@@ -4,11 +4,11 @@
 // The computed offsets/scales are printed and can be stored in steami_config later.
 
 #include <Arduino.h>
-#include <LIS2MDL.h>
+#include <SteamiLIS2MDL.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-LIS2MDL magnetometer(internalI2C);
+SteamiLIS2MDL magnetometer(internalI2C);
 
 static void printCalibration() {
     Serial.println("Calibration values:");

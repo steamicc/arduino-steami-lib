@@ -6,7 +6,7 @@
 # Datatypes (KEYWORD1)
 #######################################
 
-ISM330DL	KEYWORD1
+SteamiISM330DL	KEYWORD1
 AccelOdr	KEYWORD1
 AccelScale	KEYWORD1
 GyroOdr	KEYWORD1

@@ -30,7 +30,7 @@ Teachers and students program the STeaMi with the Arduino IDE. Today they instal
 ## Constraints
 
 - Library Manager requires `library.properties` at the **repository root** and one Git tag per release; `name` is permanent once indexed; `version` must change on every tag; no symlinks, no `.exe`, no `.development` file.
-- With the 1.5 recursive layout, only `src/` itself is on the include path: user sketches write `#include <LIS2MDL.h>`, so headers must sit at `src/` root.
+- With the 1.5 recursive layout, only `src/` itself is on the include path: user sketches write `#include <SteamiLIS2MDL.h>`, so headers must sit at `src/` root.
 - The release workflow authenticates with the `semantic-release-updater` GitHub App (installed on all `steamicc` repositories, `contents: write`). It already pushes directly to `main` here, so it is expected to bypass the organization ruleset on the new repository too (to confirm on the first release).
 - Pre-commit checks reject the phrases listed in `git-precommit-checks.config.js` in any file.
 

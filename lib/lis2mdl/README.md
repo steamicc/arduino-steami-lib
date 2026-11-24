@@ -16,10 +16,10 @@ global `Wire`). Spin up a dedicated `TwoWire` and hand it to the driver:
 
 ```cpp
 #include <Wire.h>
-#include <LIS2MDL.h>
+#include <SteamiLIS2MDL.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-LIS2MDL sensor(internalI2C);
+SteamiLIS2MDL sensor(internalI2C);
 
 void setup() {
     Serial.begin(115200);
@@ -87,7 +87,7 @@ in method names when they carry ambiguity, no `read` / `get` prefix.
 
 | Method | Description |
 |--------|-------------|
-| `LIS2MDL(TwoWire& wire = Wire, uint8_t address = LIS2MDL_I2C_ADDR, uint8_t odrHz = 10, bool tempComp = true, bool lowPower = false, bool drdyEnable = false)` | Construct. Defaults to global `Wire`, address `0x1E`, 10 Hz ODR, temperature compensation enabled. |
+| `SteamiLIS2MDL(TwoWire& wire = Wire, uint8_t address = LIS2MDL_I2C_ADDR, uint8_t odrHz = 10, bool tempComp = true, bool lowPower = false, bool drdyEnable = false)` | Construct. Defaults to global `Wire`, address `0x1E`, 10 Hz ODR, temperature compensation enabled. |
 | `bool begin()` | Probe `WHO_AM_I`, configure the sensor, leave it in continuous mode. Returns `false` if the sensor is not detected. |
 | `uint8_t deviceId()` | Reads `WHO_AM_I` (always `0x40`). |
 | `void softReset(uint16_t waitMs = 10)` | Software reset via `SOFT_RST` bit in `CFG_REG_A`. |
@@ -178,7 +178,7 @@ to adjust against a reference thermometer.
 
 ## Register constants
 
-`LIS2MDL_const.h` exports register addresses (`LIS2MDL_*_REG`), the
+`SteamiLIS2MDL_const.h` exports register addresses (`LIS2MDL_*_REG`), the
 expected `WHO_AM_I` value (`LIS2MDL_WHO_AM_I_VAL`), and temperature
 conversion constants (`LIS2MDL_TEMP_SENSITIVITY`, `LIS2MDL_TEMP_OFFSET`)
 so applications can access the part directly when needed.

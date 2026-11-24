@@ -6,7 +6,7 @@
 # Datatypes (KEYWORD1)
 #######################################
 
-MCP23009E	KEYWORD1
+SteamiMCP23009E	KEYWORD1
 MCP23009Config	KEYWORD1
 MCP23009Pin	KEYWORD1
 MCP23009ActiveLowPin	KEYWORD1

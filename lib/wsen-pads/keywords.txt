@@ -1,12 +1,12 @@
 #######################################
-# Syntax Coloring Map for WSEN_PADS
+# Syntax Coloring Map for WSEN-PADS
 #######################################
 
 #######################################
 # Class
 #######################################
 
-WSEN_PADS	KEYWORD1
+SteamiWsenPads	KEYWORD1
 
 #######################################
 # Public methods

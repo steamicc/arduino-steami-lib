@@ -11,12 +11,12 @@
 // serial monitor at 115200 baud.
 
 #include <Arduino.h>
+#include <SteamiWsenHids.h>
 #include <Wire.h>
-#include <WsenHids.h>
 #include <math.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-WsenHids sensor(internalI2C);
+SteamiWsenHids sensor(internalI2C);
 
 float computeDewPoint(float temperature, float humidity) {
     constexpr float A = 17.27f;

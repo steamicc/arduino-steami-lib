@@ -5,7 +5,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-#include "BQ27441_const.h"
+#include "SteamiBQ27441_const.h"
 
 namespace bq27441_detail {
 template <typename T>
@@ -20,7 +20,7 @@ inline T clamp(T x, T a, T b) {
 }
 }  // namespace bq27441_detail
 
-class BQ27441 {
+class SteamiBQ27441 {
    public:
     // Parameters for the current() function, to specify which current to read
     // current_measure types
@@ -61,8 +61,8 @@ class BQ27441 {
         INTERNAL_TEMP = 1  // Internal IC Temperature
     };
 
-    BQ27441(TwoWire& wire = Wire, uint16_t capacity_mAh = LIPO_BATTERY_CAPACITY,
-            uint8_t address = BQ27441_I2C_ADDRESS, int gpout_pin = -1);
+    SteamiBQ27441(TwoWire& wire = Wire, uint16_t capacity_mAh = LIPO_BATTERY_CAPACITY,
+                  uint8_t address = BQ27441_I2C_ADDRESS, int gpout_pin = -1);
 
     bool begin();
     void powerOn();

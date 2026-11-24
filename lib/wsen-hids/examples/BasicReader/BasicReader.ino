@@ -7,14 +7,14 @@
 // monitor at 115200 baud.
 
 #include <Arduino.h>
+#include <SteamiWsenHids.h>
 #include <Wire.h>
-#include <WsenHids.h>
 
 // The WSEN-HIDS hangs off the STeaMi internal I2C bus, not the default
 // global Wire. Spin up a dedicated TwoWire pointed at the variant pin
 // macros and hand it to the driver.
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-WsenHids sensor(internalI2C);
+SteamiWsenHids sensor(internalI2C);
 
 void setup() {
     Serial.begin(115200);

@@ -11,15 +11,15 @@
  */
 
 #include <Arduino.h>
+#include <SteamiWsenHids.h>
 #include <Wire.h>
-#include <WsenHids.h>
 #include <math.h>
 #include <unity.h>
 
 #include "driver_checks.h"
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-WsenHids sensor(internalI2C);
+SteamiWsenHids sensor(internalI2C);
 
 // Direct register read straight off the wire — bypasses the driver so
 // tests can assert what is actually present in the chip after a driver
@@ -65,11 +65,11 @@ void test_wsen_hids_who_am_i() {
 }
 
 void test_wsen_hids_read_plausible_temperature() {
-    check_read_plausible(sensor, &WsenHids::temperature, 0.0f, 50.0f);
+    check_read_plausible(sensor, &SteamiWsenHids::temperature, 0.0f, 50.0f);
 }
 
 void test_wsen_hids_read_plausible_humidity() {
-    check_read_plausible(sensor, &WsenHids::humidity, 10.0f, 90.0f);
+    check_read_plausible(sensor, &SteamiWsenHids::humidity, 10.0f, 90.0f);
 }
 
 // Validates the auto-bring-up path inside read() on real silicon: after

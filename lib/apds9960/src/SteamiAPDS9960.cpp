@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "APDS9960.h"
+#include "SteamiAPDS9960.h"
 
 #include <stdlib.h>
 
-APDS9960::APDS9960(TwoWire& wire, uint8_t address) : _wire(&wire), _address(address) {}
+SteamiAPDS9960::SteamiAPDS9960(TwoWire& wire, uint8_t address) : _wire(&wire), _address(address) {}
 
-bool APDS9960::begin() {
+bool SteamiAPDS9960::begin() {
     uint8_t id = deviceId();
     if (!validDeviceId(id)) {
         return false;
@@ -51,25 +51,25 @@ bool APDS9960::begin() {
     return true;
 }
 
-uint8_t APDS9960::deviceId() {
+uint8_t SteamiAPDS9960::deviceId() {
     uint8_t value = 0;
     readReg(APDS9960_REG_ID, value);
     return value;
 }
 
-uint8_t APDS9960::status() {
+uint8_t SteamiAPDS9960::status() {
     uint8_t value = 0;
     readReg(APDS9960_REG_STATUS, value);
     return value;
 }
 
-uint8_t APDS9960::mode() {
+uint8_t SteamiAPDS9960::mode() {
     uint8_t value = 0;
     readReg(APDS9960_REG_ENABLE, value);
     return value;
 }
 
-bool APDS9960::setMode(Mode selectedMode, bool enable) {
+bool SteamiAPDS9960::setMode(Mode selectedMode, bool enable) {
     uint8_t rawMode = static_cast<uint8_t>(selectedMode);
     if (rawMode > static_cast<uint8_t>(Mode::ALL)) {
         return false;
@@ -87,51 +87,51 @@ bool APDS9960::setMode(Mode selectedMode, bool enable) {
     return writeReg(APDS9960_REG_ENABLE, value);
 }
 
-void APDS9960::powerOn() {
+void SteamiAPDS9960::powerOn() {
     setMode(Mode::POWER, true);
 }
 
-void APDS9960::powerOff() {
+void SteamiAPDS9960::powerOff() {
     setMode(Mode::POWER, false);
 }
 
-bool APDS9960::dataReady() {
+bool SteamiAPDS9960::dataReady() {
     uint8_t value = status();
     return (value & (APDS9960_STATUS_AVALID | APDS9960_STATUS_PVALID)) ==
            (APDS9960_STATUS_AVALID | APDS9960_STATUS_PVALID);
 }
 
-bool APDS9960::lightReady() {
+bool SteamiAPDS9960::lightReady() {
     return (status() & APDS9960_STATUS_AVALID) != 0;
 }
 
-bool APDS9960::proximityReady() {
+bool SteamiAPDS9960::proximityReady() {
     return (status() & APDS9960_STATUS_PVALID) != 0;
 }
 
-void APDS9960::enableLightSensor(bool interrupts) {
+void SteamiAPDS9960::enableLightSensor(bool interrupts) {
     setAmbientLightInterrupt(interrupts);
     powerOn();
     setMode(Mode::AMBIENT_LIGHT, true);
 }
 
-void APDS9960::disableLightSensor() {
+void SteamiAPDS9960::disableLightSensor() {
     setAmbientLightInterrupt(false);
     setMode(Mode::AMBIENT_LIGHT, false);
 }
 
-void APDS9960::enableProximitySensor(bool interrupts) {
+void SteamiAPDS9960::enableProximitySensor(bool interrupts) {
     setProximityInterrupt(interrupts);
     powerOn();
     setMode(Mode::PROXIMITY, true);
 }
 
-void APDS9960::disableProximitySensor() {
+void SteamiAPDS9960::disableProximitySensor() {
     setProximityInterrupt(false);
     setMode(Mode::PROXIMITY, false);
 }
 
-void APDS9960::enableGestureSensor(bool interrupts) {
+void SteamiAPDS9960::enableGestureSensor(bool interrupts) {
     resetGestureParameters();
     writeReg(APDS9960_REG_WTIME, 0xFF);
     writeReg(APDS9960_REG_PPULSE, APDS9960_DEFAULT_GESTURE_PPULSE);
@@ -144,30 +144,30 @@ void APDS9960::enableGestureSensor(bool interrupts) {
     setMode(Mode::GESTURE, true);
 }
 
-void APDS9960::disableGestureSensor() {
+void SteamiAPDS9960::disableGestureSensor() {
     resetGestureParameters();
     setGestureInterrupt(false);
     setGestureMode(false);
     setMode(Mode::GESTURE, false);
 }
 
-bool APDS9960::ambientLight(uint16_t& value) {
+bool SteamiAPDS9960::ambientLight(uint16_t& value) {
     return readColorChannel(APDS9960_REG_CDATAL, value);
 }
 
-bool APDS9960::redLight(uint16_t& value) {
+bool SteamiAPDS9960::redLight(uint16_t& value) {
     return readColorChannel(APDS9960_REG_RDATAL, value);
 }
 
-bool APDS9960::greenLight(uint16_t& value) {
+bool SteamiAPDS9960::greenLight(uint16_t& value) {
     return readColorChannel(APDS9960_REG_GDATAL, value);
 }
 
-bool APDS9960::blueLight(uint16_t& value) {
+bool SteamiAPDS9960::blueLight(uint16_t& value) {
     return readColorChannel(APDS9960_REG_BDATAL, value);
 }
 
-bool APDS9960::proximity(uint8_t& value) {
+bool SteamiAPDS9960::proximity(uint8_t& value) {
     if (!ensureProximityEnabled()) {
         value = 0;
         return false;
@@ -175,12 +175,12 @@ bool APDS9960::proximity(uint8_t& value) {
     return readReg(APDS9960_REG_PDATA, value);
 }
 
-bool APDS9960::gestureAvailable() {
+bool SteamiAPDS9960::gestureAvailable() {
     uint8_t value = 0;
     return readReg(APDS9960_REG_GSTATUS, value) && (value & APDS9960_GSTATUS_GVALID) != 0;
 }
 
-APDS9960::Gesture APDS9960::readGesture(uint32_t timeoutMs) {
+SteamiAPDS9960::Gesture SteamiAPDS9960::readGesture(uint32_t timeoutMs) {
     if ((mode() & (APDS9960_ENABLE_PON | APDS9960_ENABLE_GEN)) !=
             (APDS9960_ENABLE_PON | APDS9960_ENABLE_GEN) ||
         !gestureAvailable()) {
@@ -231,7 +231,7 @@ APDS9960::Gesture APDS9960::readGesture(uint32_t timeoutMs) {
     return result;
 }
 
-void APDS9960::resetGestureParameters() {
+void SteamiAPDS9960::resetGestureParameters() {
     _gestureData = GestureData{};
     _gestureUdDelta = 0;
     _gestureLrDelta = 0;
@@ -243,216 +243,216 @@ void APDS9960::resetGestureParameters() {
     _gestureState = Gesture::NONE;
 }
 
-APDS9960::AmbientLightGain APDS9960::ambientLightGain() {
+SteamiAPDS9960::AmbientLightGain SteamiAPDS9960::ambientLightGain() {
     uint8_t value = 0;
     readReg(APDS9960_REG_CONTROL, value);
     return static_cast<AmbientLightGain>(value & APDS9960_CONTROL_AGAIN_MASK);
 }
 
-void APDS9960::setAmbientLightGain(AmbientLightGain gain) {
+void SteamiAPDS9960::setAmbientLightGain(AmbientLightGain gain) {
     updateRegister(APDS9960_REG_CONTROL, APDS9960_CONTROL_AGAIN_MASK, static_cast<uint8_t>(gain));
 }
 
-APDS9960::ProximityGain APDS9960::proximityGain() {
+SteamiAPDS9960::ProximityGain SteamiAPDS9960::proximityGain() {
     uint8_t value = 0;
     readReg(APDS9960_REG_CONTROL, value);
     return static_cast<ProximityGain>((value & APDS9960_CONTROL_PGAIN_MASK) >> 2);
 }
 
-void APDS9960::setProximityGain(ProximityGain gain) {
+void SteamiAPDS9960::setProximityGain(ProximityGain gain) {
     updateRegister(APDS9960_REG_CONTROL, APDS9960_CONTROL_PGAIN_MASK,
                    static_cast<uint8_t>(static_cast<uint8_t>(gain) << 2));
 }
 
-APDS9960::LedDrive APDS9960::ledDrive() {
+SteamiAPDS9960::LedDrive SteamiAPDS9960::ledDrive() {
     uint8_t value = 0;
     readReg(APDS9960_REG_CONTROL, value);
     return static_cast<LedDrive>((value & APDS9960_CONTROL_LDRIVE_MASK) >> 6);
 }
 
-void APDS9960::setLedDrive(LedDrive drive) {
+void SteamiAPDS9960::setLedDrive(LedDrive drive) {
     updateRegister(APDS9960_REG_CONTROL, APDS9960_CONTROL_LDRIVE_MASK,
                    static_cast<uint8_t>(static_cast<uint8_t>(drive) << 6));
 }
 
-APDS9960::LedBoost APDS9960::ledBoost() {
+SteamiAPDS9960::LedBoost SteamiAPDS9960::ledBoost() {
     uint8_t value = 0;
     readReg(APDS9960_REG_CONFIG2, value);
     return static_cast<LedBoost>((value & APDS9960_CONFIG2_LED_BOOST_MASK) >> 4);
 }
 
-void APDS9960::setLedBoost(LedBoost boost) {
+void SteamiAPDS9960::setLedBoost(LedBoost boost) {
     updateRegister(APDS9960_REG_CONFIG2, APDS9960_CONFIG2_LED_BOOST_MASK,
                    static_cast<uint8_t>(static_cast<uint8_t>(boost) << 4));
 }
 
-bool APDS9960::proximityGainCompensationEnabled() {
+bool SteamiAPDS9960::proximityGainCompensationEnabled() {
     uint8_t value = 0;
     readReg(APDS9960_REG_CONFIG3, value);
     return (value & APDS9960_CONFIG3_PCMP) != 0;
 }
 
-void APDS9960::setProximityGainCompensation(bool enable) {
+void SteamiAPDS9960::setProximityGainCompensation(bool enable) {
     updateRegister(APDS9960_REG_CONFIG3, APDS9960_CONFIG3_PCMP, enable ? APDS9960_CONFIG3_PCMP : 0);
 }
 
-uint8_t APDS9960::proximityPhotodiodeMask() {
+uint8_t SteamiAPDS9960::proximityPhotodiodeMask() {
     uint8_t value = 0;
     readReg(APDS9960_REG_CONFIG3, value);
     return value & APDS9960_CONFIG3_PMASK_MASK;
 }
 
-void APDS9960::setProximityPhotodiodeMask(uint8_t mask) {
+void SteamiAPDS9960::setProximityPhotodiodeMask(uint8_t mask) {
     updateRegister(APDS9960_REG_CONFIG3, APDS9960_CONFIG3_PMASK_MASK,
                    mask & APDS9960_CONFIG3_PMASK_MASK);
 }
 
-uint8_t APDS9960::gestureEnterThreshold() {
+uint8_t SteamiAPDS9960::gestureEnterThreshold() {
     uint8_t value = 0;
     readReg(APDS9960_REG_GPENTH, value);
     return value;
 }
 
-void APDS9960::setGestureEnterThreshold(uint8_t threshold) {
+void SteamiAPDS9960::setGestureEnterThreshold(uint8_t threshold) {
     writeReg(APDS9960_REG_GPENTH, threshold);
 }
 
-uint8_t APDS9960::gestureExitThreshold() {
+uint8_t SteamiAPDS9960::gestureExitThreshold() {
     uint8_t value = 0;
     readReg(APDS9960_REG_GEXTH, value);
     return value;
 }
 
-void APDS9960::setGestureExitThreshold(uint8_t threshold) {
+void SteamiAPDS9960::setGestureExitThreshold(uint8_t threshold) {
     writeReg(APDS9960_REG_GEXTH, threshold);
 }
 
-APDS9960::GestureGain APDS9960::gestureGain() {
+SteamiAPDS9960::GestureGain SteamiAPDS9960::gestureGain() {
     uint8_t value = 0;
     readReg(APDS9960_REG_GCONF2, value);
     return static_cast<GestureGain>((value & APDS9960_GCONF2_GGAIN_MASK) >> 5);
 }
 
-void APDS9960::setGestureGain(GestureGain gain) {
+void SteamiAPDS9960::setGestureGain(GestureGain gain) {
     updateRegister(APDS9960_REG_GCONF2, APDS9960_GCONF2_GGAIN_MASK,
                    static_cast<uint8_t>(static_cast<uint8_t>(gain) << 5));
 }
 
-APDS9960::LedDrive APDS9960::gestureLedDrive() {
+SteamiAPDS9960::LedDrive SteamiAPDS9960::gestureLedDrive() {
     uint8_t value = 0;
     readReg(APDS9960_REG_GCONF2, value);
     return static_cast<LedDrive>((value & APDS9960_GCONF2_GLDRIVE_MASK) >> 3);
 }
 
-void APDS9960::setGestureLedDrive(LedDrive drive) {
+void SteamiAPDS9960::setGestureLedDrive(LedDrive drive) {
     updateRegister(APDS9960_REG_GCONF2, APDS9960_GCONF2_GLDRIVE_MASK,
                    static_cast<uint8_t>(static_cast<uint8_t>(drive) << 3));
 }
 
-APDS9960::GestureWaitTime APDS9960::gestureWaitTime() {
+SteamiAPDS9960::GestureWaitTime SteamiAPDS9960::gestureWaitTime() {
     uint8_t value = 0;
     readReg(APDS9960_REG_GCONF2, value);
     return static_cast<GestureWaitTime>(value & APDS9960_GCONF2_GWTIME_MASK);
 }
 
-void APDS9960::setGestureWaitTime(GestureWaitTime waitTime) {
+void SteamiAPDS9960::setGestureWaitTime(GestureWaitTime waitTime) {
     updateRegister(APDS9960_REG_GCONF2, APDS9960_GCONF2_GWTIME_MASK,
                    static_cast<uint8_t>(waitTime));
 }
 
-uint16_t APDS9960::lightInterruptLowThreshold() {
+uint16_t SteamiAPDS9960::lightInterruptLowThreshold() {
     uint8_t bytes[2] = {};
     readRegs(APDS9960_REG_AILTL, bytes, 2);
     return static_cast<uint16_t>(bytes[0] | (static_cast<uint16_t>(bytes[1]) << 8));
 }
 
-void APDS9960::setLightInterruptLowThreshold(uint16_t threshold) {
+void SteamiAPDS9960::setLightInterruptLowThreshold(uint16_t threshold) {
     writeReg(APDS9960_REG_AILTL, static_cast<uint8_t>(threshold));
     writeReg(APDS9960_REG_AILTH, static_cast<uint8_t>(threshold >> 8));
 }
 
-uint16_t APDS9960::lightInterruptHighThreshold() {
+uint16_t SteamiAPDS9960::lightInterruptHighThreshold() {
     uint8_t bytes[2] = {};
     readRegs(APDS9960_REG_AIHTL, bytes, 2);
     return static_cast<uint16_t>(bytes[0] | (static_cast<uint16_t>(bytes[1]) << 8));
 }
 
-void APDS9960::setLightInterruptHighThreshold(uint16_t threshold) {
+void SteamiAPDS9960::setLightInterruptHighThreshold(uint16_t threshold) {
     writeReg(APDS9960_REG_AIHTL, static_cast<uint8_t>(threshold));
     writeReg(APDS9960_REG_AIHTH, static_cast<uint8_t>(threshold >> 8));
 }
 
-uint8_t APDS9960::proximityInterruptLowThreshold() {
+uint8_t SteamiAPDS9960::proximityInterruptLowThreshold() {
     uint8_t value = 0;
     readReg(APDS9960_REG_PILT, value);
     return value;
 }
 
-void APDS9960::setProximityInterruptLowThreshold(uint8_t threshold) {
+void SteamiAPDS9960::setProximityInterruptLowThreshold(uint8_t threshold) {
     writeReg(APDS9960_REG_PILT, threshold);
 }
 
-uint8_t APDS9960::proximityInterruptHighThreshold() {
+uint8_t SteamiAPDS9960::proximityInterruptHighThreshold() {
     uint8_t value = 0;
     readReg(APDS9960_REG_PIHT, value);
     return value;
 }
 
-void APDS9960::setProximityInterruptHighThreshold(uint8_t threshold) {
+void SteamiAPDS9960::setProximityInterruptHighThreshold(uint8_t threshold) {
     writeReg(APDS9960_REG_PIHT, threshold);
 }
 
-bool APDS9960::ambientLightInterruptEnabled() {
+bool SteamiAPDS9960::ambientLightInterruptEnabled() {
     return (mode() & APDS9960_ENABLE_AIEN) != 0;
 }
 
-void APDS9960::setAmbientLightInterrupt(bool enable) {
+void SteamiAPDS9960::setAmbientLightInterrupt(bool enable) {
     setMode(Mode::AMBIENT_LIGHT_INTERRUPT, enable);
 }
 
-bool APDS9960::proximityInterruptEnabled() {
+bool SteamiAPDS9960::proximityInterruptEnabled() {
     return (mode() & APDS9960_ENABLE_PIEN) != 0;
 }
 
-void APDS9960::setProximityInterrupt(bool enable) {
+void SteamiAPDS9960::setProximityInterrupt(bool enable) {
     setMode(Mode::PROXIMITY_INTERRUPT, enable);
 }
 
-bool APDS9960::gestureInterruptEnabled() {
+bool SteamiAPDS9960::gestureInterruptEnabled() {
     uint8_t value = 0;
     readReg(APDS9960_REG_GCONF4, value);
     return (value & APDS9960_GCONF4_GIEN) != 0;
 }
 
-void APDS9960::setGestureInterrupt(bool enable) {
+void SteamiAPDS9960::setGestureInterrupt(bool enable) {
     updateRegister(APDS9960_REG_GCONF4, APDS9960_GCONF4_GIEN, enable ? APDS9960_GCONF4_GIEN : 0);
 }
 
-void APDS9960::clearAmbientLightInterrupt() {
+void SteamiAPDS9960::clearAmbientLightInterrupt() {
     uint8_t ignored = 0;
     readReg(APDS9960_REG_AICLEAR, ignored);
 }
 
-void APDS9960::clearProximityInterrupt() {
+void SteamiAPDS9960::clearProximityInterrupt() {
     uint8_t ignored = 0;
     readReg(APDS9960_REG_PICLEAR, ignored);
 }
 
-bool APDS9960::gestureModeEnabled() {
+bool SteamiAPDS9960::gestureModeEnabled() {
     uint8_t value = 0;
     readReg(APDS9960_REG_GCONF4, value);
     return (value & APDS9960_GCONF4_GMODE) != 0;
 }
 
-void APDS9960::setGestureMode(bool enable) {
+void SteamiAPDS9960::setGestureMode(bool enable) {
     updateRegister(APDS9960_REG_GCONF4, APDS9960_GCONF4_GMODE, enable ? APDS9960_GCONF4_GMODE : 0);
 }
 
-bool APDS9960::validDeviceId(uint8_t id) const {
+bool SteamiAPDS9960::validDeviceId(uint8_t id) const {
     return id == APDS9960_DEVICE_ID_1 || id == APDS9960_DEVICE_ID_2 || id == APDS9960_DEVICE_ID_3;
 }
 
-bool APDS9960::waitForLight(uint32_t timeoutMs) {
+bool SteamiAPDS9960::waitForLight(uint32_t timeoutMs) {
     uint32_t started = millis();
     while (millis() - started < timeoutMs) {
         if (lightReady()) {
@@ -463,7 +463,7 @@ bool APDS9960::waitForLight(uint32_t timeoutMs) {
     return false;
 }
 
-bool APDS9960::waitForProximity(uint32_t timeoutMs) {
+bool SteamiAPDS9960::waitForProximity(uint32_t timeoutMs) {
     uint32_t started = millis();
     while (millis() - started < timeoutMs) {
         if (proximityReady()) {
@@ -474,7 +474,7 @@ bool APDS9960::waitForProximity(uint32_t timeoutMs) {
     return false;
 }
 
-bool APDS9960::ensureLightEnabled() {
+bool SteamiAPDS9960::ensureLightEnabled() {
     uint8_t enabled = mode();
 
     if ((enabled & APDS9960_ENABLE_PON) == 0) {
@@ -488,7 +488,7 @@ bool APDS9960::ensureLightEnabled() {
     return lightReady() || waitForLight();
 }
 
-bool APDS9960::ensureProximityEnabled() {
+bool SteamiAPDS9960::ensureProximityEnabled() {
     uint8_t enabled = mode();
 
     if ((enabled & APDS9960_ENABLE_PON) == 0) {
@@ -502,7 +502,7 @@ bool APDS9960::ensureProximityEnabled() {
     return proximityReady() || waitForProximity();
 }
 
-bool APDS9960::readColorChannel(uint8_t lowRegister, uint16_t& value) {
+bool SteamiAPDS9960::readColorChannel(uint8_t lowRegister, uint16_t& value) {
     value = 0;
     if (!ensureLightEnabled()) {
         return false;
@@ -517,7 +517,7 @@ bool APDS9960::readColorChannel(uint8_t lowRegister, uint16_t& value) {
     return true;
 }
 
-bool APDS9960::processGestureData() {
+bool SteamiAPDS9960::processGestureData() {
     if (_gestureData.total <= 4 || _gestureData.total > APDS9960_GESTURE_DATASETS_MAX) {
         return false;
     }
@@ -619,7 +619,7 @@ bool APDS9960::processGestureData() {
     return false;
 }
 
-bool APDS9960::decodeGesture() {
+bool SteamiAPDS9960::decodeGesture() {
     if (_gestureState == Gesture::NEAR || _gestureState == Gesture::FAR) {
         _gestureMotion = _gestureState;
         return true;
@@ -650,7 +650,7 @@ bool APDS9960::decodeGesture() {
     return true;
 }
 
-bool APDS9960::readReg(uint8_t reg, uint8_t& value) {
+bool SteamiAPDS9960::readReg(uint8_t reg, uint8_t& value) {
     value = 0;
     _wire->beginTransmission(_address);
     _wire->write(reg);
@@ -666,14 +666,14 @@ bool APDS9960::readReg(uint8_t reg, uint8_t& value) {
     return true;
 }
 
-bool APDS9960::writeReg(uint8_t reg, uint8_t value) {
+bool SteamiAPDS9960::writeReg(uint8_t reg, uint8_t value) {
     _wire->beginTransmission(_address);
     _wire->write(reg);
     _wire->write(value);
     return _wire->endTransmission() == 0;
 }
 
-size_t APDS9960::readRegs(uint8_t reg, uint8_t* buffer, size_t length) {
+size_t SteamiAPDS9960::readRegs(uint8_t reg, uint8_t* buffer, size_t length) {
     for (size_t i = 0; i < length; ++i) {
         buffer[i] = 0;
     }
@@ -694,7 +694,7 @@ size_t APDS9960::readRegs(uint8_t reg, uint8_t* buffer, size_t length) {
     return count;
 }
 
-void APDS9960::updateRegister(uint8_t reg, uint8_t mask, uint8_t value) {
+void SteamiAPDS9960::updateRegister(uint8_t reg, uint8_t mask, uint8_t value) {
     uint8_t current = 0;
     if (!readReg(reg, current)) {
         return;

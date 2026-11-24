@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "BQ27441.h"
+#include "SteamiBQ27441.h"
 
 #include <Arduino.h>
 #include <math.h>
 
-BQ27441::BQ27441(TwoWire& wire, uint16_t capacity_mAh, uint8_t address, int gpout_pin)
+SteamiBQ27441::SteamiBQ27441(TwoWire& wire, uint16_t capacity_mAh, uint8_t address, int gpout_pin)
     : _wire(wire), _capacity_mAh(capacity_mAh), _address(address), _gpout_pin(gpout_pin) {}
 
-bool BQ27441::begin() {
+bool SteamiBQ27441::begin() {
     // If a GPOUT pin is wired, the gauge may have been left in shutdown
     // (e.g. by a previous powerOff()) and will not ACK on I2C until it's
     // woken via the GPOUT line. Pulse the wake sequence before probing
@@ -36,7 +36,7 @@ bool BQ27441::begin() {
     return setCapacity(_capacity_mAh) != 0;
 }
 
-void BQ27441::configureGpoutInput() {
+void SteamiBQ27441::configureGpoutInput() {
 #ifdef Arduino_h
     if (_gpout_pin != -1) {
         pinMode(_gpout_pin, INPUT_PULLUP);
@@ -44,7 +44,7 @@ void BQ27441::configureGpoutInput() {
 #endif
 }
 
-void BQ27441::configureGpoutOutput() {
+void SteamiBQ27441::configureGpoutOutput() {
 #ifdef Arduino_h
     if (_gpout_pin != -1) {
         pinMode(_gpout_pin, OUTPUT);
@@ -52,30 +52,30 @@ void BQ27441::configureGpoutOutput() {
 #endif
 }
 
-void BQ27441::powerOn() {
+void SteamiBQ27441::powerOn() {
     // Wake up fuel gauge ic if in shutdown mode
     disableShutdownMode();
     delay(10);
     setCapacity(_capacity_mAh);
 }
 
-void BQ27441::powerOff() {
+void SteamiBQ27441::powerOff() {
     // Put fuel gauge ic in shutdown mode by sending shutdown i2c cmd
     enterShutdownMode();
 }
 
-void BQ27441::enableShutdownMode() {
+void SteamiBQ27441::enableShutdownMode() {
     executeControlWord(BQ27441_CONTROL_SHUTDOWN_ENABLE);
     _shutdown_en = true;
 }
 
-void BQ27441::enterShutdownMode() {
+void SteamiBQ27441::enterShutdownMode() {
     configureGpoutInput();
     enableShutdownMode();
     executeControlWord(BQ27441_CONTROL_SHUTDOWN);
 }
 
-void BQ27441::disableShutdownMode() {
+void SteamiBQ27441::disableShutdownMode() {
 #ifdef Arduino_h
     if (_gpout_pin != -1) {
         configureGpoutOutput();
@@ -88,12 +88,12 @@ void BQ27441::disableShutdownMode() {
 #endif
 }
 
-bool BQ27441::isValidDevice() {
+bool SteamiBQ27441::isValidDevice() {
     // Checks if device id returned matches bq27441
     return deviceId() == BQ27441_DEVICE_ID;
 }
 
-uint16_t BQ27441::setCapacity(uint16_t capacity) {
+uint16_t SteamiBQ27441::setCapacity(uint16_t capacity) {
     // Write to STATE subclass(82) of BQ27441 extended memory.
     // Offset 0x0A(10)Design capacity is a 2 - byte piece of data - MSB first
     uint8_t cap_msb = capacity >> 8;
@@ -103,37 +103,37 @@ uint16_t BQ27441::setCapacity(uint16_t capacity) {
     return writeExtendedData(BQ27441_ID_STATE, 10, capacity_data, 2);
 }
 
-int16_t BQ27441::currentAverage() {
+int16_t SteamiBQ27441::currentAverage() {
     // Return average current
     int16_t result = current(CurrentMeasureType::AVG);
     return result;
 }
 
-uint16_t BQ27441::capacityFull() {
+uint16_t SteamiBQ27441::capacityFull() {
     // Return full capacity (mAh)
     return capacity(CapacityMeasureType::FULL);
 }
 
-uint16_t BQ27441::capacityRemaining() {
+uint16_t SteamiBQ27441::capacityRemaining() {
     return capacity(CapacityMeasureType::REMAIN);
 }
 
-uint8_t BQ27441::stateOfCharge() {
+uint8_t SteamiBQ27441::stateOfCharge() {
     // Return remaining charge %
     return soc(SocMeasureType::FILTERED);
 }
 
-uint8_t BQ27441::stateOfHealth() {
+uint8_t SteamiBQ27441::stateOfHealth() {
     // Return state of health %
     return soh(SohMeasureType::PERCENT);
 }
 
-uint16_t BQ27441::voltageMv() {
+uint16_t SteamiBQ27441::voltageMv() {
     // Return current voltage
     return readWord(BQ27441_COMMAND_VOLTAGE);
 }
 
-int16_t BQ27441::current(CurrentMeasureType current_measure_type) {
+int16_t SteamiBQ27441::current(CurrentMeasureType current_measure_type) {
     int16_t result = 0;
     if (current_measure_type == CurrentMeasureType::AVG) {
         result = readWord(BQ27441_COMMAND_AVG_CURRENT);
@@ -148,7 +148,7 @@ int16_t BQ27441::current(CurrentMeasureType current_measure_type) {
     return result;
 }
 
-int16_t BQ27441::capacity(CapacityMeasureType capacity_measure_type) {
+int16_t SteamiBQ27441::capacity(CapacityMeasureType capacity_measure_type) {
     int16_t result = 0;
     if (capacity_measure_type == CapacityMeasureType::REMAIN) {
         return readWord(BQ27441_COMMAND_REM_CAPACITY);
@@ -181,11 +181,11 @@ int16_t BQ27441::capacity(CapacityMeasureType capacity_measure_type) {
     return result;
 }
 
-int16_t BQ27441::power() {
+int16_t SteamiBQ27441::power() {
     return readWord(BQ27441_COMMAND_AVG_POWER);
 }
 
-uint16_t BQ27441::soc(SocMeasureType soc_measure_type) {
+uint16_t SteamiBQ27441::soc(SocMeasureType soc_measure_type) {
     uint16_t soc_ret = 0;
     if (soc_measure_type == SocMeasureType::FILTERED) {
         soc_ret = readWord(BQ27441_COMMAND_SOC);
@@ -196,7 +196,7 @@ uint16_t BQ27441::soc(SocMeasureType soc_measure_type) {
     return soc_ret;
 }
 
-uint16_t BQ27441::soh(SohMeasureType soh_measure_type) {
+uint16_t SteamiBQ27441::soh(SohMeasureType soh_measure_type) {
     uint16_t soh_raw = readWord(BQ27441_COMMAND_SOH);
     uint16_t soh_status = soh_raw >> 8;
     uint16_t soh_percent = soh_raw & 0x00FF;
@@ -207,7 +207,7 @@ uint16_t BQ27441::soh(SohMeasureType soh_measure_type) {
     return soh_status;
 }
 
-uint16_t BQ27441::readTemperatureDk(TempMeasureType temp_measure_type) {
+uint16_t SteamiBQ27441::readTemperatureDk(TempMeasureType temp_measure_type) {
     if (temp_measure_type == TempMeasureType::BATTERY) {
         return readWord(BQ27441_COMMAND_TEMP);
     }
@@ -217,24 +217,24 @@ uint16_t BQ27441::readTemperatureDk(TempMeasureType temp_measure_type) {
     return 0;
 }
 
-float BQ27441::temperature(TempMeasureType temp_measure_type) {
+float SteamiBQ27441::temperature(TempMeasureType temp_measure_type) {
     return readTemperatureDk(temp_measure_type) / 10.0 - 273.15;
 }
 
-float BQ27441::temperatureK(TempMeasureType temp_measure_type) {
+float SteamiBQ27441::temperatureK(TempMeasureType temp_measure_type) {
     return readTemperatureDk(temp_measure_type) / 10.0;
 }
 
-uint16_t BQ27441::temperatureDk(TempMeasureType temp_measure_type) {
+uint16_t SteamiBQ27441::temperatureDk(TempMeasureType temp_measure_type) {
     return readTemperatureDk(temp_measure_type);
 }
 
-uint16_t BQ27441::gpoutPolarity() {
+uint16_t SteamiBQ27441::gpoutPolarity() {
     uint16_t op_config_register = opConfig();
     return op_config_register & BQ27441_OPCONFIG_GPIOPOL;
 }
 
-bool BQ27441::setGpoutPolarity(bool active_high) {
+bool SteamiBQ27441::setGpoutPolarity(bool active_high) {
     uint16_t old_op_config = opConfig();
 
     if ((active_high && (old_op_config & BQ27441_OPCONFIG_GPIOPOL)) ||
@@ -250,12 +250,12 @@ bool BQ27441::setGpoutPolarity(bool active_high) {
     return writeOpConfig(new_op_config);
 }
 
-uint16_t BQ27441::gpoutFunction() {
+uint16_t SteamiBQ27441::gpoutFunction() {
     uint16_t op_config_register = opConfig();
     return op_config_register & BQ27441_OPCONFIG_BATLOWEN;
 }
 
-bool BQ27441::setGpoutFunction(bool gpout_function) {
+bool SteamiBQ27441::setGpoutFunction(bool gpout_function) {
     uint16_t old_op_config = opConfig();
     if ((gpout_function && (old_op_config & BQ27441_OPCONFIG_BATLOWEN)) ||
         (!gpout_function && !(old_op_config & BQ27441_OPCONFIG_BATLOWEN))) {
@@ -270,59 +270,59 @@ bool BQ27441::setGpoutFunction(bool gpout_function) {
     return writeOpConfig(new_op_config);
 }
 
-uint16_t BQ27441::soc1SetThreshold() {
+uint16_t SteamiBQ27441::soc1SetThreshold() {
     return readExtendedData(BQ27441_ID_DISCHARGE, 0);
 }
 
-uint16_t BQ27441::setSoc1Thresholds(uint16_t set_soc, uint16_t clear_soc) {
+uint16_t SteamiBQ27441::setSoc1Thresholds(uint16_t set_soc, uint16_t clear_soc) {
     uint8_t thresholds[2] = {0, 0};
     thresholds[0] = bq27441_detail::clamp<uint8_t>(static_cast<uint8_t>(set_soc), 0, 100);
     thresholds[1] = bq27441_detail::clamp<uint8_t>(static_cast<uint8_t>(clear_soc), 0, 100);
     return writeExtendedData(BQ27441_ID_DISCHARGE, 0, thresholds, 2);
 }
 
-uint16_t BQ27441::socfSetThreshold() {
+uint16_t SteamiBQ27441::socfSetThreshold() {
     return readExtendedData(BQ27441_ID_DISCHARGE, 2);
 }
 
-uint16_t BQ27441::socfClearThreshold() {
+uint16_t SteamiBQ27441::socfClearThreshold() {
     return readExtendedData(BQ27441_ID_DISCHARGE, 3);
 }
 
-uint16_t BQ27441::setSocfThresholds(uint16_t set_socf, uint16_t clear_socf) {
+uint16_t SteamiBQ27441::setSocfThresholds(uint16_t set_socf, uint16_t clear_socf) {
     uint8_t thresholds[2] = {0, 0};
     thresholds[0] = bq27441_detail::clamp<uint8_t>(static_cast<uint8_t>(set_socf), 0, 100);
     thresholds[1] = bq27441_detail::clamp<uint8_t>(static_cast<uint8_t>(clear_socf), 0, 100);
     return writeExtendedData(BQ27441_ID_DISCHARGE, 2, thresholds, 2);
 }
 
-uint16_t BQ27441::socFlag() {
+uint16_t SteamiBQ27441::socFlag() {
     uint8_t flag_state = flags();
     return flag_state & BQ27441_FLAG_SOC1;
 }
 
-uint16_t BQ27441::sociDelta() {
+uint16_t SteamiBQ27441::sociDelta() {
     return readExtendedData(BQ27441_ID_STATE, 26);
 }
 
-uint16_t BQ27441::setSociDelta(uint16_t delta) {
+uint16_t SteamiBQ27441::setSociDelta(uint16_t delta) {
     uint8_t soci = bq27441_detail::clamp<uint8_t>(static_cast<uint8_t>(delta), 0, 100);
     return writeExtendedData(BQ27441_ID_STATE, 26, &soci, 1);
 }
 
-uint16_t BQ27441::pulseGpout() {
+uint16_t SteamiBQ27441::pulseGpout() {
     return executeControlWord(BQ27441_CONTROL_PULSE_SOC_INT);
 }
 
-uint16_t BQ27441::deviceId() {
+uint16_t SteamiBQ27441::deviceId() {
     return readControlWord(BQ27441_CONTROL_DEVICE_TYPE);
 }
 
-uint32_t BQ27441::TimeMs() {
+uint32_t SteamiBQ27441::TimeMs() {
     return millis();
 }
 
-bool BQ27441::enterConfig(bool user_control) {
+bool SteamiBQ27441::enterConfig(bool user_control) {
     if (user_control) {
         _user_config_control = true;
     }
@@ -355,7 +355,7 @@ bool BQ27441::enterConfig(bool user_control) {
     return false;
 }
 
-bool BQ27441::exitConfig(bool resim) {
+bool SteamiBQ27441::exitConfig(bool resim) {
     if (resim) {
         if (softReset()) {
             uint32_t start_ms = TimeMs();
@@ -385,20 +385,20 @@ bool BQ27441::exitConfig(bool resim) {
     return executeControlWord(BQ27441_CONTROL_EXIT_CFGUPDATE);
 }
 
-uint16_t BQ27441::flags() {
+uint16_t SteamiBQ27441::flags() {
     return readWord(BQ27441_COMMAND_FLAGS);
 }
 
-uint16_t BQ27441::controlStatus() {
+uint16_t SteamiBQ27441::controlStatus() {
     return readControlWord(BQ27441_CONTROL_STATUS);
 }
 
-bool BQ27441::sealed() {
+bool SteamiBQ27441::sealed() {
     uint16_t stat = controlStatus();
     return stat & BQ27441_STATUS_SS;
 }
 
-bool BQ27441::seal() {
+bool SteamiBQ27441::seal() {
     // SEALED is a write-only control command — the chip doesn't return
     // a meaningful data word in response, so using readControlWord
     // would always treat the 0 reply as failure. executeControlWord
@@ -407,7 +407,7 @@ bool BQ27441::seal() {
     return executeControlWord(BQ27441_CONTROL_SEALED) != 0;
 }
 
-bool BQ27441::unseal() {
+bool SteamiBQ27441::unseal() {
     // The TI BQ27441 expects the unseal key sent twice in succession.
     // The previous implementation used readControlWord and skipped the
     // second send if the first reply was 0 (legal — the chip doesn't
@@ -419,11 +419,11 @@ bool BQ27441::unseal() {
     return ok;
 }
 
-uint16_t BQ27441::opConfig() {
+uint16_t SteamiBQ27441::opConfig() {
     return readWord(BQ27441_EXTENDED_OPCONFIG);
 }
 
-uint16_t BQ27441::writeOpConfig(uint16_t value) {
+uint16_t SteamiBQ27441::writeOpConfig(uint16_t value) {
     uint8_t op_config_msb = value >> 8;
     uint8_t op_config_lsb = value & 0x00FF;
     uint8_t op_config_data[2] = {op_config_msb, op_config_lsb};
@@ -431,15 +431,15 @@ uint16_t BQ27441::writeOpConfig(uint16_t value) {
     return writeExtendedData(BQ27441_ID_REGISTERS, 0, op_config_data, 2);
 }
 
-uint16_t BQ27441::reset() {
+uint16_t SteamiBQ27441::reset() {
     return executeControlWord(BQ27441_CONTROL_RESET);
 }
 
-uint16_t BQ27441::softReset() {
+uint16_t SteamiBQ27441::softReset() {
     return executeControlWord(BQ27441_CONTROL_SOFT_RESET);
 }
 
-int16_t BQ27441::readWord(uint8_t sub_address) {
+int16_t SteamiBQ27441::readWord(uint8_t sub_address) {
     uint8_t data[2];
     if (!readReg(sub_address, data, 2)) {
         return 0;
@@ -447,7 +447,7 @@ int16_t BQ27441::readWord(uint8_t sub_address) {
     return (int16_t)(data[0] | (data[1] << 8));
 }
 
-uint16_t BQ27441::readControlWord(uint16_t function) {
+uint16_t SteamiBQ27441::readControlWord(uint16_t function) {
     uint16_t sub_command_msb = function >> 8;
     uint16_t sub_command_lsb = function & 0x00FF;
     uint8_t command[2] = {(uint8_t)sub_command_lsb, (uint8_t)sub_command_msb};
@@ -459,33 +459,33 @@ uint16_t BQ27441::readControlWord(uint16_t function) {
     return 0;
 }
 
-uint16_t BQ27441::executeControlWord(uint16_t function) {
+uint16_t SteamiBQ27441::executeControlWord(uint16_t function) {
     uint16_t sub_command_msb = function >> 8;
     uint16_t sub_command_lsb = function & 0x00FF;
     uint8_t command[2] = {(uint8_t)sub_command_lsb, (uint8_t)sub_command_msb};
     return bool(writeReg(0, command, 2));
 }
 
-uint16_t BQ27441::blockDataControl() {
+uint16_t SteamiBQ27441::blockDataControl() {
     uint8_t enable_byte = 0x00;
     return writeReg(BQ27441_EXTENDED_CONTROL, &enable_byte, 1);
 }
 
-uint16_t BQ27441::blockDataClass(uint16_t id) {
+uint16_t SteamiBQ27441::blockDataClass(uint16_t id) {
     uint8_t id_buf[1] = {(uint8_t)id};
     return writeReg(BQ27441_EXTENDED_DATACLASS, id_buf, 1);
 }
 
-bool BQ27441::blockDataOffset(uint16_t offset) {
+bool SteamiBQ27441::blockDataOffset(uint16_t offset) {
     uint8_t id_buf[1] = {(uint8_t)offset};
     return writeReg(BQ27441_EXTENDED_DATABLOCK, id_buf, 1);
 }
 
-bool BQ27441::blockDataChecksum(uint8_t& out) {
+bool SteamiBQ27441::blockDataChecksum(uint8_t& out) {
     return readReg(BQ27441_EXTENDED_CHECKSUM, &out, 1);
 }
 
-uint16_t BQ27441::readBlockData(uint16_t offset) {
+uint16_t SteamiBQ27441::readBlockData(uint16_t offset) {
     uint16_t address = offset + BQ27441_EXTENDED_BLOCKDATA;
     uint8_t ret[1];
     if (!readReg(address, ret, 1)) {
@@ -494,17 +494,17 @@ uint16_t BQ27441::readBlockData(uint16_t offset) {
     return ret[0];
 }
 
-uint16_t BQ27441::writeBlockData(uint16_t offset, uint16_t data) {
+uint16_t SteamiBQ27441::writeBlockData(uint16_t offset, uint16_t data) {
     uint16_t address = offset + BQ27441_EXTENDED_BLOCKDATA;
     uint8_t buf[1] = {(uint8_t)data};
     return writeReg(address, buf, 1);
 }
 
-uint16_t BQ27441::writeBlockChecksum(uint8_t csum) {
+uint16_t SteamiBQ27441::writeBlockChecksum(uint8_t csum) {
     return writeReg(BQ27441_EXTENDED_CHECKSUM, &csum, 1);
 }
 
-bool BQ27441::computeBlockChecksum(uint8_t& out) {
+bool SteamiBQ27441::computeBlockChecksum(uint8_t& out) {
     uint8_t data[32];
     if (!readReg(BQ27441_EXTENDED_BLOCKDATA, data, 32)) {
         return false;
@@ -517,7 +517,7 @@ bool BQ27441::computeBlockChecksum(uint8_t& out) {
     return true;
 }
 
-uint16_t BQ27441::readExtendedData(uint16_t class_id, uint16_t offset) {
+uint16_t SteamiBQ27441::readExtendedData(uint16_t class_id, uint16_t offset) {
     bool entered_config = false;
     if (!_user_config_control) {
         if (!enterConfig(false)) {
@@ -572,8 +572,8 @@ uint16_t BQ27441::readExtendedData(uint16_t class_id, uint16_t offset) {
     return ret_data;
 }
 
-uint16_t BQ27441::writeExtendedData(uint16_t class_id, uint16_t offset, const uint8_t* data,
-                                    uint16_t length) {
+uint16_t SteamiBQ27441::writeExtendedData(uint16_t class_id, uint16_t offset, const uint8_t* data,
+                                          uint16_t length) {
     if (length > 32) {
         return false;
     }
@@ -654,7 +654,7 @@ uint16_t BQ27441::writeExtendedData(uint16_t class_id, uint16_t offset, const ui
     return true;
 }
 
-bool BQ27441::readReg(uint8_t sub_address, uint8_t* buf, uint16_t count) {
+bool SteamiBQ27441::readReg(uint8_t sub_address, uint8_t* buf, uint16_t count) {
     _wire.beginTransmission(_address);
     _wire.write(sub_address);
     if (_wire.endTransmission(false) != 0)
@@ -679,7 +679,7 @@ bool BQ27441::readReg(uint8_t sub_address, uint8_t* buf, uint16_t count) {
     return true;
 }
 
-bool BQ27441::writeReg(uint8_t sub_address, const uint8_t* buf, uint16_t count) {
+bool SteamiBQ27441::writeReg(uint8_t sub_address, const uint8_t* buf, uint16_t count) {
     _wire.beginTransmission(_address);
     _wire.write(sub_address);
     for (uint16_t i = 0; i < count; i++) {
@@ -688,10 +688,10 @@ bool BQ27441::writeReg(uint8_t sub_address, const uint8_t* buf, uint16_t count) 
     return _wire.endTransmission() == 0;
 }
 
-uint16_t BQ27441::status() {
+uint16_t SteamiBQ27441::status() {
     return controlStatus();
 }
 
-bool BQ27441::dataReady() {
+bool SteamiBQ27441::dataReady() {
     return (status() & BQ27441_STATUS_INITCOMP) != 0;
 }

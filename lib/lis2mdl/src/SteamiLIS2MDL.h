@@ -5,7 +5,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-#include "LIS2MDL_const.h"
+#include "SteamiLIS2MDL_const.h"
 
 struct Vec3i {
     int16_t x, y, z;
@@ -35,7 +35,7 @@ struct ReadAll {
     uint8_t status;
 };
 
-class LIS2MDL {
+class SteamiLIS2MDL {
    public:
     float xOff = 0.0f;
     float yOff = 0.0f;
@@ -44,8 +44,8 @@ class LIS2MDL {
     float yScale = 1.0f;
     float zScale = 1.0f;
 
-    LIS2MDL(TwoWire& wire = Wire, uint8_t address = LIS2MDL_I2C_ADDR, uint8_t odrHz = 10,
-            bool tempComp = true, bool lowPower = false, bool drdyEnable = false);
+    SteamiLIS2MDL(TwoWire& wire = Wire, uint8_t address = LIS2MDL_I2C_ADDR, uint8_t odrHz = 10,
+                  bool tempComp = true, bool lowPower = false, bool drdyEnable = false);
 
     bool begin();
     void setMode(const char* mode);

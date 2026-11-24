@@ -18,10 +18,10 @@ driver:
 
 ```cpp
 #include <Wire.h>
-#include <WsenHids.h>
+#include <SteamiWsenHids.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-WsenHids sensor(internalI2C);
+SteamiWsenHids sensor(internalI2C);
 
 void setup() {
     Serial.begin(115200);
@@ -91,7 +91,7 @@ redundant `read` / `get` prefixes.
 
 | Method | Description |
 |--------|-------------|
-| `WsenHids(TwoWire& wire = Wire, uint8_t address = WSEN_HIDS_DEFAULT_ADDRESS)` | Construct. Defaults to the global `Wire` and address `0x5F`. |
+| `SteamiWsenHids(TwoWire& wire = Wire, uint8_t address = WSEN_HIDS_DEFAULT_ADDRESS)` | Construct. Defaults to the global `Wire` and address `0x5F`. |
 | `bool begin()` | Probe `WHO_AM_I`, load factory calibration, leave the part powered down. Returns `false` if the sensor is not detected. |
 | `uint8_t deviceId()` | Reads `WHO_AM_I` (always `0xBC`). |
 | `void softReset()` / `void reboot()` | Reload factory trimming via `CTRL2.BOOT`. |
@@ -135,7 +135,7 @@ one-shot trigger reliably (see also the matching MicroPython issue in
 
 ## Register constants
 
-`WsenHids_const.h` exports register addresses (`WSEN_HIDS_REG_*`), bit
+`SteamiWsenHids_const.h` exports register addresses (`WSEN_HIDS_REG_*`), bit
 masks (`WSEN_HIDS_CTRL1_*`, `WSEN_HIDS_STATUS_*`), and ODR values
 (`WSEN_HIDS_ODR_*`) so applications can poke the part directly if they
 need something outside the driver's API surface.

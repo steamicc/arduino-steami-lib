@@ -18,12 +18,12 @@
  */
 
 #include <Arduino.h>
-#include <MCP23009E.h>
+#include <SteamiMCP23009E.h>
 #include <Wire.h>
 #include <unity.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-MCP23009E expander(internalI2C, RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+SteamiMCP23009E expander(internalI2C, RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
 
 static constexpr uint32_t PRESS_TIMEOUT_MS = 5000;
 static constexpr uint32_t PROMPT_READ_TIME_MS = 1500;

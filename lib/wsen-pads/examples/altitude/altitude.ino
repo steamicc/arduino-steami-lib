@@ -10,12 +10,12 @@
 // local METAR / weather-station QNH value before flashing.
 
 #include <Arduino.h>
-#include <WSEN_PADS.h>
+#include <SteamiWsenPads.h>
 #include <Wire.h>
 #include <math.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-WSEN_PADS sensor(internalI2C);
+SteamiWsenPads sensor(internalI2C);
 
 // International Standard Atmosphere reference values.
 constexpr float seaLevelPressure = 1013.25f;  // hPa

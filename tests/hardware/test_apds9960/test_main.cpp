@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <APDS9960.h>
 #include <Arduino.h>
+#include <SteamiAPDS9960.h>
 #include <Wire.h>
 #include <unity.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-APDS9960 sensor(internalI2C);
+SteamiAPDS9960 sensor(internalI2C);
 
 static bool i2cDevicePresent(uint8_t address) {
     internalI2C.beginTransmission(address);

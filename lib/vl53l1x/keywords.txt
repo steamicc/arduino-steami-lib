@@ -6,7 +6,7 @@
 # Class
 #######################################
 
-VL53L1X	KEYWORD1
+SteamiVL53L1X	KEYWORD1
 
 #######################################
 # Public methods

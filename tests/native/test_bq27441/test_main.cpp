@@ -3,7 +3,7 @@
 #include <math.h>
 #include <unity.h>
 
-#include "BQ27441.h"
+#include "SteamiBQ27441.h"
 #include "Wire.h"
 
 constexpr uint8_t ADDR = BQ27441_I2C_ADDRESS;
@@ -23,7 +23,7 @@ static void preloadMeasurement(uint16_t voltage, int16_t current_avg, uint8_t so
     Wire.setRegister(ADDR, BQ27441_COMMAND_SOC + 1, 0x00);
 }
 
-BQ27441* sensor = nullptr;
+SteamiBQ27441* sensor = nullptr;
 void setUp(void) {
     Wire = TwoWire();
     millisClock() = 0xFFFFFFFF - 1;
@@ -36,7 +36,7 @@ void setUp(void) {
     // false (the fix that brought this dependency in).
     Wire.setRegister(ADDR, BQ27441_COMMAND_FLAGS, BQ27441_FLAG_CFGUPMODE & 0xFF);
     Wire.setRegister(ADDR, BQ27441_COMMAND_FLAGS + 1, (BQ27441_FLAG_CFGUPMODE >> 8) & 0xFF);
-    sensor = new BQ27441(Wire);
+    sensor = new SteamiBQ27441(Wire);
     preloadWhoAmI(true);
 }
 
@@ -85,7 +85,7 @@ void test_temperature_converts_decikelvin_to_celsius(void) {
 void test_temperature_internal_reads_correct_register(void) {
     Wire.setRegister(ADDR, BQ27441_COMMAND_INT_TEMP, 0x34);
     Wire.setRegister(ADDR, BQ27441_COMMAND_INT_TEMP + 1, 0x12);
-    float tempC = sensor->temperature(BQ27441::TempMeasureType::INTERNAL_TEMP);
+    float tempC = sensor->temperature(SteamiBQ27441::TempMeasureType::INTERNAL_TEMP);
     TEST_ASSERT_FLOAT_WITHIN(0.1, 4660 * 0.1 - 273.15, tempC);
 }
 
@@ -221,7 +221,7 @@ void test_begin_pulses_gpout_low_high_when_pin_wired(void) {
     gpioPinState().clear();
     gpioPinMode().clear();
     delete sensor;
-    sensor = new BQ27441(Wire, LIPO_BATTERY_CAPACITY, ADDR, kGpoutPin);
+    sensor = new SteamiBQ27441(Wire, LIPO_BATTERY_CAPACITY, ADDR, kGpoutPin);
 
     TEST_ASSERT_TRUE(sensor->begin());
 
