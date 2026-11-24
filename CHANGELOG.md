@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.26.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.25.1...v0.26.0) (2026-11-24)
+
+
+### Features
+
+* **bq27441:** Add battery_status and low_battery_alert examples. ([#188](https://github.com/steamicc/arduino-steami-lib/issues/188)) ([fa920df](https://github.com/steamicc/arduino-steami-lib/commit/fa920dfbaf6c07028205a80f38d0c1218304555c))
+
 ## [0.25.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.25.0...v0.25.1) (2026-11-24)
 
 
