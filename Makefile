@@ -126,6 +126,14 @@ build: .venv/bin/pio ## Build with PlatformIO
 upload: .venv/bin/pio ## Upload to board
 	$(PIO) run --target upload --upload-port $(PORT)
 
+# Version of the package: latest git tag without the leading "v", 0.0.0
+# when the repository has no tag.
+PACKAGE_VERSION := $(shell git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+
+.PHONY: package
+package: ## Build the Arduino Library Manager package into build/arduino-package
+	@python3 scripts/build-arduino-package.py --version "$(or $(PACKAGE_VERSION),0.0.0)" --out build/arduino-package
+
 # Discovered once at parse time. Each entry is "<driver>/<example>" and
 # becomes a `flash-<driver>/<example>` phony target via the foreach+eval
 # block below. Listed via $(shell) so adding an example only requires a
@@ -289,6 +297,10 @@ test/$(1): \
 endef
 $(foreach k,$(ALL_TEST_KEYS),$(eval $(call COMPOSITE_TEST_RULE,$(k))))
 
+.PHONY: test-tooling
+test-tooling: ## Run the Python tooling unit tests
+	@python3 -m unittest discover -s scripts/tests
+
 .PHONY: list-tests
 list-tests: ## List ready-to-run test targets
 	@for k in $(NATIVE_TEST_KEYS); do printf 'test-native/%s\n' "$$k"; done
@@ -328,7 +340,7 @@ $(foreach drv,$(QUALIFY_DRIVERS),$(eval $(call QUALIFY_template,$(drv))))
 # --- CI ---
 
 .PHONY: ci
-ci: lint build test-native test-examples ## Run all CI checks (lint + build + native tests + examples, no board required)
+ci: lint build test-native test-examples test-tooling ## Run all CI checks (lint + build + native tests + examples + tooling tests, no board required)
 
 # --- Utilities ---
 
