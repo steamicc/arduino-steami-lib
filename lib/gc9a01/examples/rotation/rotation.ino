@@ -6,6 +6,7 @@ GC9A01_STEAMI display;
 
 bool rotated = false;
 
+// Draw into the frame buffer only: the caller sends it.
 void drawScreen() {
     display.fill(GC9A01_BLACK);
     display.text(rotated ? "Rotated" : "Normal", rotated ? 99 : 102, 40, GC9A01_WHITE);
@@ -16,7 +17,6 @@ void drawScreen() {
     // red square on the left, blue square on the right
     display.fillRect(50, 140, 40, 40, GC9A01_RED);
     display.fillRect(150, 140, 40, 40, GC9A01_BLUE);
-    display.show();
 }
 
 void setup() {
@@ -31,13 +31,15 @@ void setup() {
     }
 
     drawScreen();
+    display.show();
 }
 
 void loop() {
     delay(2000);
     rotated = !rotated;
-    // rotate() resends the frame: no need to call show()
-    display.rotate(rotated);
     drawScreen();
+    // rotate() sends the frame buffer with the new orientation: one frame
+    // per toggle, no show() needed
+    display.rotate(rotated);
     Serial.println(rotated ? "Rotated 180 degrees" : "Normal orientation");
 }
