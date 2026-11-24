@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.30.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.29.0...v0.30.0) (2026-11-24)
+
+
+### Features
+
+* Prefix the drivers with Steami to avoid Library Manager clashes ([#242](https://github.com/steamicc/arduino-steami-lib/issues/242)). ([008b93d](https://github.com/steamicc/arduino-steami-lib/commit/008b93db908c6c439504ee541016586ecb958709))
+
 # [0.29.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.28.0...v0.29.0) (2026-11-24)
 
 
