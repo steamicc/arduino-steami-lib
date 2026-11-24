@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <stdio.h>
 #include <unity.h>
 
 #include <vector>
@@ -141,6 +142,82 @@ void test_gc9a01_begin_init_sequence(void) {
 
     // the first command unlocks the extended registers
     TEST_ASSERT_EQUAL_HEX8(GC9A01_CMD_INREGEN2, cmds[0].cmd);
+}
+
+// Command and parameter count of every init-table entry, in order. A wrong
+// length byte in the driver table changes the parameters sent with that
+// command and shifts every command after it.
+struct InitEntry {
+    uint8_t cmd;
+    size_t params;
+};
+
+static const InitEntry kExpectedInit[] = {
+    {GC9A01_CMD_INREGEN2, 0},
+    {0xEB, 1},
+    {GC9A01_CMD_INREGEN1, 0},
+    {GC9A01_CMD_INREGEN2, 0},
+    {0xEB, 1},
+    {0x84, 1},
+    {0x85, 1},
+    {0x86, 1},
+    {0x87, 1},
+    {0x88, 1},
+    {0x89, 1},
+    {0x8A, 1},
+    {0x8B, 1},
+    {0x8C, 1},
+    {0x8D, 1},
+    {0x8E, 1},
+    {0x8F, 1},
+    {GC9A01_CMD_DISP_FUNC_CTRL, 2},
+    {GC9A01_CMD_COLMOD, 1},
+    {0x90, 4},
+    {0xBD, 1},
+    {0xBC, 1},
+    {0xFF, 3},
+    {GC9A01_CMD_POWER2, 1},
+    {GC9A01_CMD_POWER3, 1},
+    {GC9A01_CMD_POWER4, 1},
+    {0xBE, 1},
+    {0xE1, 2},
+    {0xDF, 3},
+    {GC9A01_CMD_GAMMA1, 6},
+    {GC9A01_CMD_GAMMA2, 6},
+    {GC9A01_CMD_GAMMA3, 6},
+    {GC9A01_CMD_GAMMA4, 6},
+    {0xED, 2},
+    {0xAE, 1},
+    {0xCD, 1},
+    {0x70, 9},
+    {GC9A01_CMD_FRAME_RATE, 1},
+    {0x62, 12},
+    {0x63, 12},
+    {0x64, 7},
+    {0x66, 10},
+    {0x67, 10},
+    {0x74, 7},
+    {0x98, 2},
+    // set by initDisplay() after the table
+    {GC9A01_CMD_MADCTL, 1},
+    {GC9A01_CMD_INVON, 0},
+    {GC9A01_CMD_SLPOUT, 0},
+};
+
+void test_gc9a01_init_table_parameter_counts(void) {
+    display->begin();
+    const auto cmds = commands();
+    const size_t n = sizeof(kExpectedInit) / sizeof(kExpectedInit[0]);
+    for (size_t i = 0; i < n && i < cmds.size(); i++) {
+        char msg[48];
+        snprintf(msg, sizeof(msg), "init entry %u (command 0x%02X)", static_cast<unsigned>(i),
+                 kExpectedInit[i].cmd);
+        TEST_ASSERT_EQUAL_HEX8_MESSAGE(kExpectedInit[i].cmd, cmds[i].cmd, msg);
+        TEST_ASSERT_EQUAL_size_t_MESSAGE(kExpectedInit[i].params, cmds[i].params.size(), msg);
+    }
+    // the table ends where begin() starts clearing the display RAM
+    TEST_ASSERT_TRUE(cmds.size() > n);
+    TEST_ASSERT_EQUAL_HEX8(GC9A01_CMD_CASET, cmds[n].cmd);
 }
 
 void test_gc9a01_begin_clears_screen_before_display_on(void) {
@@ -462,6 +539,7 @@ int main() {
     RUN_TEST(test_gc9a01_begin_returns_true);
     RUN_TEST(test_gc9a01_begin_pulses_reset_and_releases_pins);
     RUN_TEST(test_gc9a01_begin_init_sequence);
+    RUN_TEST(test_gc9a01_init_table_parameter_counts);
     RUN_TEST(test_gc9a01_begin_clears_screen_before_display_on);
     RUN_TEST(test_gc9a01_every_byte_sent_with_cs_low_and_dc_output);
     RUN_TEST(test_gc9a01_spi_clock);
