@@ -89,6 +89,11 @@ constexpr uint32_t DAPLINK_BRIDGE_REG_TIMEOUT_MS = 100;
 // external flash.
 constexpr uint32_t DAPLINK_BRIDGE_PROBE_TIMEOUT_MS = 500;
 
+// Wait after the probe's READ_SECTOR before reading its result. The F103
+// runs it on its next 30 ms tick and stays busy one more tick: this leaves
+// a margin of a few ticks.
+constexpr uint32_t DAPLINK_BRIDGE_PROBE_SETTLE_MS = 150;
+
 // Settling delays after each config command, matching the MicroPython
 // driver. The F103 runs config commands from its main loop. The answer to
 // READ_CONFIG cannot be polled for, since reading STATUS replaces the

@@ -31,6 +31,7 @@ class DaplinkBridge {
 
    private:
     enum class ConfigZoneSupport : uint8_t { Unknown, Present, Absent };
+    enum class CommandResult : uint8_t { Ok, Failed, Unknown };
 
     TwoWire* _wire;
     uint8_t _address;
@@ -41,9 +42,9 @@ class DaplinkBridge {
     // I2C helpers
     bool isPresent();
     bool readReg(uint8_t reg, uint8_t& value);
-    void writeFrame(const uint8_t* data, size_t len);
+    bool writeFrame(const uint8_t* data, size_t len);
 
     // Status / error
-    bool noError();
+    CommandResult commandResult(uint32_t settleMs, uint32_t timeoutMs);
     bool waitNotBusy(uint32_t timeoutMs);
 };
