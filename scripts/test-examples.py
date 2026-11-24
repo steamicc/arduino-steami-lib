@@ -66,7 +66,7 @@ def compile_example(name: str) -> ExampleResult:
     src_dir = example_path(name)
 
     env = dict(os.environ)
-    env["PLATFORMIO_PLATFORMIO_SRC_DIR"] = str(src_dir)
+    env["PLATFORMIO_SRC_DIR"] = str(src_dir)
 
     result = subprocess.run(
         [str(PIO), "run", "-e", "steami"],

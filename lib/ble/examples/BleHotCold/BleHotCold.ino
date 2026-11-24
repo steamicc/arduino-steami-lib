@@ -44,6 +44,29 @@ static int rssiCount = 0;
 // === Mode selection ===
 static bool modeSelected = false;
 
+// === Types ===
+// Declared before any function: the Arduino builder inserts auto-generated
+// prototypes above the first function definition, so types used in
+// function signatures must come first.
+
+// Audio profile for a proximity zone. freq == 0 means silent.
+struct ZoneProfile {
+    const char* label;
+    int freq;     // Hz
+    int beepMs;   // sounding time per period
+    int pauseMs;  // silent time per period
+};
+
+// Non-blocking buzzer driven by the Arduino core's tone()/noTone(), which use
+// a hardware timer on STM32duino — neither call blocks the CPU. The state
+// machine flips on/off based on millis() so the caller's loop stays free to
+// poll BLE.
+struct BuzzerState {
+    bool on = false;
+    uint32_t transitionAtMs = 0;
+    int activeFreq = 0;
+};
+
 // =============================================================================
 // === HELPERS =================================================================
 // =============================================================================
@@ -67,14 +90,6 @@ int rssiToProximity(int rssi) {
     return (int)((float)(rssi - RSSI_FAR) / (RSSI_NEAR - RSSI_FAR) * 100);
 }
 
-// Audio profile for a proximity zone. freq == 0 means silent.
-struct ZoneProfile {
-    const char* label;
-    int freq;     // Hz
-    int beepMs;   // sounding time per period
-    int pauseMs;  // silent time per period
-};
-
 ZoneProfile zoneFor(int proximity) {
     if (proximity < 25)
         return {"COLD", 440, 80, 800};
@@ -84,16 +99,6 @@ ZoneProfile zoneFor(int proximity) {
         return {"HOT", 800, 80, 200};
     return {"BURNING!", 1200, 80, 80};
 }
-
-// Non-blocking buzzer driven by the Arduino core's tone()/noTone(), which use
-// a hardware timer on STM32duino — neither call blocks the CPU. The state
-// machine flips on/off based on millis() so the caller's loop stays free to
-// poll BLE.
-struct BuzzerState {
-    bool on = false;
-    uint32_t transitionAtMs = 0;
-    int activeFreq = 0;
-};
 
 void buzzerTick(BuzzerState& s, const ZoneProfile& z) {
     uint32_t now = millis();
