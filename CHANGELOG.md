@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.29.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.28.0...v0.29.0) (2026-11-24)
+
+
+### Features
+
+* **bme280:** Implement the Arduino driver for the V1c sensor ([#235](https://github.com/steamicc/arduino-steami-lib/issues/235)). ([b27c6dc](https://github.com/steamicc/arduino-steami-lib/commit/b27c6dcb0fabc153278aa2405be242bd3456febe))
+
 # [0.28.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.27.0...v0.28.0) (2026-11-24)
 
 
