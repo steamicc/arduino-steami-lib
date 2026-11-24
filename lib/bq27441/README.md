@@ -43,6 +43,16 @@ void loop() {
 }
 ```
 
+## Examples
+
+| Example | What it does |
+|---------|--------------|
+| [`battery_status`](examples/battery_status/) | Print voltage, state of charge, remaining capacity and state of health every 3 seconds. |
+| [`low_battery_alert`](examples/low_battery_alert/) | Blink the red LED below 20 % charge and sound the on-board `SPEAKER` below 5 %. |
+
+Flash one with `make flash-bq27441/<example>` (list them with
+`make list-examples DRIVER=bq27441`).
+
 ## API
 
 All methods follow the collection conventions: `camelCase`, units
