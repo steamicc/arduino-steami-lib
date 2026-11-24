@@ -32,9 +32,10 @@ object is created: a sketch that only includes the header pays nothing. `begin()
 ### SPI speed
 
 `show()` sets the address window once and streams the whole buffer in one transaction. The
-driver asks for 32 MHz; the STM32 core picks the fastest clock it can derive from the bus
-clock without exceeding it, which is 16 MHz on the STeaMi (the SPI1 maximum with
-PCLK2 = 32 MHz). A frame is 115 200 bytes, so `show()` takes at least 58 ms.
+driver asks for 16 MHz, the SPI1 maximum on the STeaMi (PCLK2 = 32 MHz divided by 2, the
+smallest prescaler). A frame is 115 200 bytes, so its theoretical transfer time at 16 MHz is
+about 58 ms (115 200 x 8 bits / 16 MHz); the real `show()` is a bit longer. The hardware test
+prints the measured duration (see [Testing](#testing)).
 
 ## Quick start
 

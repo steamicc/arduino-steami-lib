@@ -171,7 +171,7 @@ void test_gc9a01_every_byte_sent_with_cs_low_and_dc_output(void) {
 
 void test_gc9a01_spi_clock(void) {
     display->begin();
-    TEST_ASSERT_EQUAL_UINT32(32000000, spi.lastClock);
+    TEST_ASSERT_EQUAL_UINT32(16000000, spi.lastClock);
 }
 
 void test_gc9a01_show_sets_full_window_then_streams_buffer(void) {

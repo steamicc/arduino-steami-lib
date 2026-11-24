@@ -350,7 +350,7 @@ void GC9A01::text(const char* str, int16_t x, int16_t y, uint16_t color) {
 }
 
 GC9A01_SPI::GC9A01_SPI(SPIClass& spi, uint8_t dc, uint8_t rst, uint8_t cs)
-    : _spi(&spi), _dc(dc), _rst(rst), _cs(cs), _rate(32000000) {}
+    : _spi(&spi), _dc(dc), _rst(rst), _cs(cs), _rate(16000000) {}
 
 void GC9A01_SPI::reset() {
     pinMode(_cs, OUTPUT);
@@ -372,9 +372,9 @@ void GC9A01_SPI::reset() {
     delay(GC9A01_RESET_DELAY_MS);
 }
 
-// The SPI clock is the highest rate the core can derive from the bus clock
-// without exceeding _rate: on the STeaMi (PCLK2 = 32 MHz) SPI1 runs at
-// 16 MHz, its maximum.
+// 16 MHz is the SPI1 maximum on the STeaMi (PCLK2 = 32 MHz, smallest
+// prescaler /2). The core uses the fastest clock it can derive from the bus
+// clock without exceeding _rate.
 void GC9A01_SPI::beginWrite(bool data) {
     _spi->beginTransaction(SPISettings(_rate, MSBFIRST, SPI_MODE0));
     // On the STeaMi D/C is the internal SPI MISO pin: beginTransaction()
