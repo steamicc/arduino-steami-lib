@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.25.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.24.1...v0.25.0) (2026-11-24)
+
+
+### Features
+
+* **tooling:** Publish the drivers as one Arduino Library Manager package. ([#226](https://github.com/steamicc/arduino-steami-lib/issues/226)) ([9efdc10](https://github.com/steamicc/arduino-steami-lib/commit/9efdc101e7ec6678b829d0f5f47884ee0c398c58)), closes [#221](https://github.com/steamicc/arduino-steami-lib/issues/221)
+
 ## [0.24.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.24.0...v0.24.1) (2026-11-24)
 
 
