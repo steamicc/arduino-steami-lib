@@ -13,15 +13,15 @@
  */
 
 #include <Arduino.h>
-#include <DaplinkBridge.h>
 #include <SteamiConfig.h>
+#include <SteamiDaplinkBridge.h>
 #include <Wire.h>
 #include <unity.h>
 
 #include "config_zone_backup.h"
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-DaplinkBridge bridge(internalI2C);
+SteamiDaplinkBridge bridge(internalI2C);
 SteamiConfig config(bridge);
 ConfigZoneBackup backup;
 

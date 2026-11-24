@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-#include "DaplinkBridge.h"
+#include "SteamiDaplinkBridge.h"
 #include "SteamiDaplinkFlash_const.h"
 
 // User file stored by the DAPLink chip in the 8 MB external flash, and
@@ -15,7 +15,7 @@ class SteamiDaplinkFlash {
         char ext[DAPLINK_FLASH_EXT_LEN + 1];
     };
 
-    explicit SteamiDaplinkFlash(DaplinkBridge& bridge);
+    explicit SteamiDaplinkFlash(SteamiDaplinkBridge& bridge);
 
     bool begin();
 
@@ -34,5 +34,5 @@ class SteamiDaplinkFlash {
     size_t read(uint8_t* buf, size_t maxLen);
 
    private:
-    DaplinkBridge* _bridge;
+    SteamiDaplinkBridge* _bridge;
 };

@@ -12,7 +12,7 @@
 // lib/<component>/examples/ for driver usage.
 
 #include <Arduino.h>
-#include <DaplinkBridge.h>
+#include <SteamiDaplinkBridge.h>
 #include <WSEN_PADS.h>
 #include <Wire.h>
 #include <WsenHids.h>
@@ -25,7 +25,7 @@ TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 
 WsenHids wsen_hids(internalI2C);
 WSEN_PADS wsen_pads(internalI2C);
-DaplinkBridge daplink_bridge(internalI2C);
+SteamiDaplinkBridge daplink_bridge(internalI2C);
 
 void setup() {
     Serial.begin(115200);

@@ -14,14 +14,14 @@
  */
 
 #include <Arduino.h>
-#include <DaplinkBridge.h>
+#include <SteamiDaplinkBridge.h>
 #include <SteamiDaplinkFlash.h>
 #include <Wire.h>
 #include <string.h>
 #include <unity.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-DaplinkBridge bridge(internalI2C);
+SteamiDaplinkBridge bridge(internalI2C);
 SteamiDaplinkFlash flash(bridge);
 
 static constexpr size_t kBackupSize = 4096;

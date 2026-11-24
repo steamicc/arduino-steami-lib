@@ -1,12 +1,12 @@
 #######################################
-# Syntax Coloring Map for DaplinkBridge
+# Syntax Coloring Map for SteamiDaplinkBridge
 #######################################
 
 #######################################
 # Class
 #######################################
 
-DaplinkBridge	KEYWORD1
+SteamiDaplinkBridge	KEYWORD1
 
 #######################################
 # Public methods

@@ -46,7 +46,7 @@ void unpackField(const uint8_t* src, char* dst, size_t width) {
 
 }  // namespace
 
-SteamiDaplinkFlash::SteamiDaplinkFlash(DaplinkBridge& bridge) : _bridge(&bridge) {}
+SteamiDaplinkFlash::SteamiDaplinkFlash(SteamiDaplinkBridge& bridge) : _bridge(&bridge) {}
 
 bool SteamiDaplinkFlash::begin() {
     return _bridge->begin();

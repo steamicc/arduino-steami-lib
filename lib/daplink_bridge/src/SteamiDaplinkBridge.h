@@ -4,11 +4,11 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-#include "daplink_bridge_const.h"
+#include "SteamiDaplinkBridge_const.h"
 
-class DaplinkBridge {
+class SteamiDaplinkBridge {
    public:
-    DaplinkBridge(TwoWire& wire = Wire, uint8_t address = DAPLINK_BRIDGE_DEFAULT_ADDR);
+    SteamiDaplinkBridge(TwoWire& wire = Wire, uint8_t address = DAPLINK_BRIDGE_DEFAULT_ADDR);
 
     // --- Lifecycle ---
     bool begin();

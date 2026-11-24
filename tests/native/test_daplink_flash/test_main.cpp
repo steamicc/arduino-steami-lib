@@ -5,12 +5,12 @@
 #include <cstring>
 #include <string>
 
-#include "DaplinkBridge.h"
 #include "FakeDaplinkBridge.h"
+#include "SteamiDaplinkBridge.h"
 #include "SteamiDaplinkFlash.h"
 #include "Wire.h"
 
-DaplinkBridge bridge(Wire);
+SteamiDaplinkBridge bridge(Wire);
 SteamiDaplinkFlash flash(bridge);
 
 static FakeDaplinkBridge& attachFirmware() {
@@ -36,7 +36,7 @@ static std::string pattern(size_t length) {
 
 void setUp(void) {
     Wire = TwoWire();
-    bridge = DaplinkBridge(Wire);
+    bridge = SteamiDaplinkBridge(Wire);
     flash = SteamiDaplinkFlash(bridge);
 }
 

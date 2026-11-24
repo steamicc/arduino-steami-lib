@@ -18,10 +18,10 @@ board.
 
 ```cpp
 #include <Wire.h>
-#include <DaplinkBridge.h>
+#include <SteamiDaplinkBridge.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-DaplinkBridge bridge(internalI2C);
+SteamiDaplinkBridge bridge(internalI2C);
 
 void setup() {
     Serial.begin(115200);
@@ -48,7 +48,7 @@ void setup() {
 
 | Method | Description |
 |--------|-------------|
-| `DaplinkBridge(TwoWire& wire = Wire, uint8_t address = DAPLINK_BRIDGE_DEFAULT_ADDR)` | Construct. Defaults to the global `Wire` and address `0x3B`. |
+| `SteamiDaplinkBridge(TwoWire& wire = Wire, uint8_t address = DAPLINK_BRIDGE_DEFAULT_ADDR)` | Construct. Defaults to the global `Wire` and address `0x3B`. |
 | `bool begin()` | Probe the bridge by checking WHO_AM_I. Returns `false` if the device is not present or the identity register doesn't match. |
 | `uint8_t deviceId()` | Read the WHO_AM_I register (always `0x4C`). |
 
@@ -87,7 +87,7 @@ For drivers built on the bridge, such as
 
 ## Register constants
 
-`daplink_bridge_const.h` exports command codes (`DAPLINK_BRIDGE_CMD_*`),
+`SteamiDaplinkBridge_const.h` exports command codes (`DAPLINK_BRIDGE_CMD_*`),
 register addresses (`DAPLINK_BRIDGE_REG_*`), status / error bits, the
 `DAPLINK_BRIDGE_CONFIG_SIZE` constant, and the protocol's chunk-size and
 timeout limits. Applications can reach for them if they need something

@@ -10,14 +10,14 @@
  * The file is never erased here. To start over, call flash.clearFlash().
  */
 
-#include <DaplinkBridge.h>
+#include <SteamiDaplinkBridge.h>
 #include <SteamiDaplinkFlash.h>
 #include <Wire.h>
 
 static constexpr uint32_t PERIOD_MS = 10000;
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-DaplinkBridge bridge(internalI2C);
+SteamiDaplinkBridge bridge(internalI2C);
 SteamiDaplinkFlash flash(bridge);
 
 static uint8_t content[1024];

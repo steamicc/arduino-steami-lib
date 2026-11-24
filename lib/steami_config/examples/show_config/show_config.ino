@@ -9,12 +9,12 @@
 // bridge driver.
 
 #include <Arduino.h>
-#include <DaplinkBridge.h>
 #include <SteamiConfig.h>
+#include <SteamiDaplinkBridge.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-DaplinkBridge bridge(internalI2C);
+SteamiDaplinkBridge bridge(internalI2C);
 SteamiConfig config(bridge);
 
 const char* const TEMPERATURE_SENSORS[] = {

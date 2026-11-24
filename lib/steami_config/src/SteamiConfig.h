@@ -2,7 +2,7 @@
 #pragma once
 
 #include <Arduino.h>
-#include <DaplinkBridge.h>
+#include <SteamiDaplinkBridge.h>
 
 #include "SteamiConfig_const.h"
 
@@ -28,7 +28,7 @@ struct AccelerometerCalibration {
 
 class SteamiConfig {
    public:
-    explicit SteamiConfig(DaplinkBridge& bridge);
+    explicit SteamiConfig(SteamiDaplinkBridge& bridge);
 
     // --- Lifecycle / persistence ---
     bool begin();
@@ -100,7 +100,7 @@ class SteamiConfig {
         TemperatureCalibration calibration;
     };
 
-    DaplinkBridge* _bridge;
+    SteamiDaplinkBridge* _bridge;
 
     bool _hasBoardRevision = false;
     int32_t _boardRevision = 0;

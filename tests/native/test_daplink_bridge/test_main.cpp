@@ -4,8 +4,8 @@
 
 #include <cstring>
 
-#include "DaplinkBridge.h"
 #include "FakeDaplinkBridge.h"
+#include "SteamiDaplinkBridge.h"
 #include "Wire.h"
 #include "driver_checks.h"
 
@@ -23,14 +23,14 @@ static void preloadError(uint8_t value) {
     Wire.setRegister(ADDR, DAPLINK_BRIDGE_REG_ERROR, value);
 }
 
-DaplinkBridge bridge;
+SteamiDaplinkBridge bridge;
 
 void setUp(void) {
     Wire = TwoWire();
     preloadDeviceId();
     preloadStatus(false);
     preloadError(0);
-    bridge = DaplinkBridge();
+    bridge = SteamiDaplinkBridge();
 }
 
 void tearDown(void) {}

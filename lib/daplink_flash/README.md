@@ -22,12 +22,12 @@ computer then reads as a plain file.
 ## Quick start
 
 ```cpp
-#include <DaplinkBridge.h>
+#include <SteamiDaplinkBridge.h>
 #include <SteamiDaplinkFlash.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-DaplinkBridge bridge(internalI2C);
+SteamiDaplinkBridge bridge(internalI2C);
 SteamiDaplinkFlash flash(bridge);
 
 void setup() {
@@ -59,8 +59,8 @@ serial command), not on every start-up.
 
 | Method | Description |
 |--------|-------------|
-| `SteamiDaplinkFlash(DaplinkBridge& bridge)` | Use the given bridge. |
-| `bool begin()` | Check that the DAPLink bridge answers (`DaplinkBridge::begin()`). |
+| `SteamiDaplinkFlash(SteamiDaplinkBridge& bridge)` | Use the given bridge. |
+| `bool begin()` | Check that the DAPLink bridge answers (`SteamiDaplinkBridge::begin()`). |
 
 ### Filename
 

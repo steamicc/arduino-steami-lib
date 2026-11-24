@@ -1,24 +1,25 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include "DaplinkBridge.h"
+#include "SteamiDaplinkBridge.h"
 
 #include <string.h>
 
 #include <algorithm>
 
-DaplinkBridge::DaplinkBridge(TwoWire& wire, uint8_t address) : _wire(&wire), _address(address) {}
+SteamiDaplinkBridge::SteamiDaplinkBridge(TwoWire& wire, uint8_t address)
+    : _wire(&wire), _address(address) {}
 
 // ---------------------------------------------------------------------
 // Lifecycle
 // ---------------------------------------------------------------------
 
-bool DaplinkBridge::begin() {
+bool SteamiDaplinkBridge::begin() {
     if (!isPresent()) {
         return false;
     }
     return deviceId() == DAPLINK_BRIDGE_WHO_AM_I;
 }
 
-uint8_t DaplinkBridge::deviceId() {
+uint8_t SteamiDaplinkBridge::deviceId() {
     uint8_t id = 0;
     return readReg(DAPLINK_BRIDGE_CMD_WHO_AM_I, id) ? id : 0;
 }
@@ -27,7 +28,7 @@ uint8_t DaplinkBridge::deviceId() {
 // Status
 // ---------------------------------------------------------------------
 
-bool DaplinkBridge::busy() {
+bool SteamiDaplinkBridge::busy() {
     // A bridge that does not answer is not idle: treating a failed read as
     // "not busy" would let the next command race the current one.
     uint8_t status = 0;
@@ -39,14 +40,14 @@ bool DaplinkBridge::busy() {
 // Config zone
 // ---------------------------------------------------------------------
 
-bool DaplinkBridge::hasConfigZone() {
+bool SteamiDaplinkBridge::hasConfigZone() {
     if (_configZone == ConfigZoneSupport::Unknown) {
         _configZone = probeConfigZone();
     }
     return _configZone == ConfigZoneSupport::Present;
 }
 
-DaplinkBridge::ConfigZoneSupport DaplinkBridge::probeConfigZone() {
+SteamiDaplinkBridge::ConfigZoneSupport SteamiDaplinkBridge::probeConfigZone() {
     // Ask for flash sector 0, a harmless read that every firmware accepts
     // with its 2-byte sector number. Firmwares without the config zone
     // only handle a 1-byte sector number and flag the request as failed;
@@ -75,7 +76,7 @@ DaplinkBridge::ConfigZoneSupport DaplinkBridge::probeConfigZone() {
     }
 }
 
-bool DaplinkBridge::clearConfig() {
+bool SteamiDaplinkBridge::clearConfig() {
     if (!hasConfigZone()) {
         return false;
     }
@@ -91,7 +92,7 @@ bool DaplinkBridge::clearConfig() {
            CommandResult::Ok;
 }
 
-bool DaplinkBridge::writeConfig(const uint8_t* data, size_t length, uint16_t offset) {
+bool SteamiDaplinkBridge::writeConfig(const uint8_t* data, size_t length, uint16_t offset) {
     if (length == 0) {
         return true;
     }
@@ -143,14 +144,14 @@ bool DaplinkBridge::writeConfig(const uint8_t* data, size_t length, uint16_t off
     return true;
 }
 
-bool DaplinkBridge::writeConfig(const char* str, uint16_t offset) {
+bool SteamiDaplinkBridge::writeConfig(const char* str, uint16_t offset) {
     if (str == nullptr) {
         return false;
     }
     return writeConfig(reinterpret_cast<const uint8_t*>(str), strlen(str), offset);
 }
 
-size_t DaplinkBridge::readConfig(uint8_t* result, size_t maxLen) {
+size_t SteamiDaplinkBridge::readConfig(uint8_t* result, size_t maxLen) {
     if (result == nullptr || maxLen == 0 || !hasConfigZone()) {
         return 0;
     }
@@ -211,11 +212,11 @@ size_t DaplinkBridge::readConfig(uint8_t* result, size_t maxLen) {
 // Raw protocol
 // ---------------------------------------------------------------------
 
-bool DaplinkBridge::waitReady(uint32_t timeoutMs) {
+bool SteamiDaplinkBridge::waitReady(uint32_t timeoutMs) {
     return waitNotBusy(timeoutMs);
 }
 
-bool DaplinkBridge::sendCommand(uint8_t cmd, const uint8_t* args, size_t argLen) {
+bool SteamiDaplinkBridge::sendCommand(uint8_t cmd, const uint8_t* args, size_t argLen) {
     if (argLen > DAPLINK_BRIDGE_MAX_ARGS || (argLen > 0 && args == nullptr)) {
         return false;
     }
@@ -227,15 +228,15 @@ bool DaplinkBridge::sendCommand(uint8_t cmd, const uint8_t* args, size_t argLen)
     return writeFrame(frame, 1 + argLen);
 }
 
-bool DaplinkBridge::commandSucceeded(uint32_t settleMs, uint32_t timeoutMs) {
+bool SteamiDaplinkBridge::commandSucceeded(uint32_t settleMs, uint32_t timeoutMs) {
     return commandResult(settleMs, timeoutMs) == CommandResult::Ok;
 }
 
-bool DaplinkBridge::readError(uint8_t& error) {
+bool SteamiDaplinkBridge::readError(uint8_t& error) {
     return readReg(DAPLINK_BRIDGE_REG_ERROR, error);
 }
 
-size_t DaplinkBridge::readResponse(uint8_t* buf, size_t length) {
+size_t SteamiDaplinkBridge::readResponse(uint8_t* buf, size_t length) {
     if (buf == nullptr || length == 0) {
         return 0;
     }
@@ -259,12 +260,12 @@ size_t DaplinkBridge::readResponse(uint8_t* buf, size_t length) {
 // I2C helpers
 // ---------------------------------------------------------------------
 
-bool DaplinkBridge::isPresent() {
+bool SteamiDaplinkBridge::isPresent() {
     _wire->beginTransmission(_address);
     return _wire->endTransmission() == 0;
 }
 
-bool DaplinkBridge::readReg(uint8_t reg, uint8_t& value) {
+bool SteamiDaplinkBridge::readReg(uint8_t reg, uint8_t& value) {
     // Retry while the bridge refuses the request: the F103 answers reads
     // from its main loop and NACKs for a while after sending a block.
     // Once the bridge took the request, reading the error register has
@@ -290,7 +291,7 @@ bool DaplinkBridge::readReg(uint8_t reg, uint8_t& value) {
     }
 }
 
-bool DaplinkBridge::writeFrame(const uint8_t* data, size_t len) {
+bool SteamiDaplinkBridge::writeFrame(const uint8_t* data, size_t len) {
     _wire->beginTransmission(_address);
     _wire->write(data, len);
     return _wire->endTransmission() == 0;
@@ -300,7 +301,8 @@ bool DaplinkBridge::writeFrame(const uint8_t* data, size_t len) {
 // Status / error
 // ---------------------------------------------------------------------
 
-DaplinkBridge::CommandResult DaplinkBridge::commandResult(uint32_t settleMs, uint32_t timeoutMs) {
+SteamiDaplinkBridge::CommandResult SteamiDaplinkBridge::commandResult(uint32_t settleMs,
+                                                                      uint32_t timeoutMs) {
     // The firmware reports some failures only through the "last command
     // failed" bit of the error register, and clears that bit when it
     // receives the next command, a STATUS poll included. So send nothing
@@ -322,7 +324,7 @@ DaplinkBridge::CommandResult DaplinkBridge::commandResult(uint32_t settleMs, uin
     return err == 0 ? CommandResult::Ok : CommandResult::Failed;
 }
 
-bool DaplinkBridge::waitNotBusy(uint32_t timeoutMs) {
+bool SteamiDaplinkBridge::waitNotBusy(uint32_t timeoutMs) {
     const uint32_t start = millis();
     while (busy()) {
         if ((millis() - start) > timeoutMs) {

@@ -32,7 +32,7 @@ void appendFloat(String& out, float value) {
 
 }  // namespace
 
-SteamiConfig::SteamiConfig(DaplinkBridge& bridge) : _bridge(&bridge) {}
+SteamiConfig::SteamiConfig(SteamiDaplinkBridge& bridge) : _bridge(&bridge) {}
 
 // ---------------------------------------------------------------------
 // Lifecycle / persistence
