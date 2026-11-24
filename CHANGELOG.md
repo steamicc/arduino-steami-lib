@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.27.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.26.3...v0.27.0) (2026-11-24)
+
+
+### Features
+
+* **gc9a01:** Implement the Arduino driver for the V1c round TFT ([#234](https://github.com/steamicc/arduino-steami-lib/issues/234)). ([8d034e9](https://github.com/steamicc/arduino-steami-lib/commit/8d034e928249eb445fe1527e28b6328bc2e9fcc2)), closes [#15](https://github.com/steamicc/arduino-steami-lib/issues/15)
+
 ## [0.26.3](https://github.com/steamicc/arduino-steami-lib/compare/v0.26.2...v0.26.3) (2026-11-24)
 
 
