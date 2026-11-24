@@ -14,13 +14,13 @@
 // or less often.
 
 #include <Arduino.h>
-#include <BME280.h>
+#include <SteamiBME280.h>
 #include <Wire.h>
 
 constexpr uint32_t REPORT_PERIOD_MS = 10000;
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-BME280 sensor(internalI2C);
+SteamiBME280 sensor(internalI2C);
 
 float lastPressure = NAN;
 

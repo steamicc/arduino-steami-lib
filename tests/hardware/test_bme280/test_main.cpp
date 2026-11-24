@@ -10,7 +10,7 @@
  */
 
 #include <Arduino.h>
-#include <BME280.h>
+#include <SteamiBME280.h>
 #include <Wire.h>
 #include <math.h>
 #include <unity.h>
@@ -18,7 +18,7 @@
 #include "driver_checks.h"
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-BME280 sensor(internalI2C);
+SteamiBME280 sensor(internalI2C);
 
 // Direct register read straight off the wire — bypasses the driver so tests
 // assert what is actually present in the chip.
@@ -30,7 +30,7 @@ static uint8_t readRawRegister(uint8_t reg) {
     return internalI2C.available() ? static_cast<uint8_t>(internalI2C.read()) : 0;
 }
 
-static void checkPlausible(const BME280::ReadResult& r) {
+static void checkPlausible(const SteamiBME280::ReadResult& r) {
     TEST_ASSERT_FALSE_MESSAGE(isnan(r.temperature), "temperature is NaN");
     TEST_ASSERT_FALSE_MESSAGE(isnan(r.humidity), "humidity is NaN");
     TEST_ASSERT_FALSE_MESSAGE(isnan(r.pressure), "pressure is NaN");
@@ -64,15 +64,15 @@ void test_bme280_begin_leaves_chip_in_sleep_mode() {
 }
 
 void test_bme280_read_plausible_temperature() {
-    check_read_plausible(sensor, &BME280::temperature, 0.0f, 50.0f);
+    check_read_plausible(sensor, &SteamiBME280::temperature, 0.0f, 50.0f);
 }
 
 void test_bme280_read_plausible_humidity() {
-    check_read_plausible(sensor, &BME280::humidity, 5.0f, 95.0f);
+    check_read_plausible(sensor, &SteamiBME280::humidity, 5.0f, 95.0f);
 }
 
 void test_bme280_read_plausible_pressure() {
-    check_read_plausible(sensor, &BME280::pressureHpa, 800.0f, 1100.0f);
+    check_read_plausible(sensor, &SteamiBME280::pressureHpa, 800.0f, 1100.0f);
 }
 
 // From sleep mode, read() must auto-trigger a forced conversion.
@@ -139,7 +139,7 @@ void test_bme280_altitude_is_plausible() {
 
 void test_bme280_dew_point_is_below_temperature() {
     auto r = sensor.read();
-    float dewPoint = BME280::dewPointFrom(r.temperature, r.humidity);
+    float dewPoint = SteamiBME280::dewPointFrom(r.temperature, r.humidity);
     TEST_ASSERT_FALSE(isnan(dewPoint));
     TEST_ASSERT_LESS_OR_EQUAL_FLOAT(r.temperature + 0.5f, dewPoint);
 }

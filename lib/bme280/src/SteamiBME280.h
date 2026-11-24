@@ -5,7 +5,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-#include "BME280_const.h"
+#include "SteamiBME280_const.h"
 
 // BME280 — Bosch pressure + humidity + temperature sensor, I2C.
 //
@@ -13,7 +13,11 @@
 // WSEN-HIDS pair of the V1a/V1b boards. It sits on the internal I2C bus at
 // address 0x76. The API mirrors the rest of the STeaMi driver collection
 // and the MicroPython driver (steamicc/micropython-steami-lib, lib/bme280).
-class BME280 {
+//
+// The class and header carry a "Steami" prefix because the popular "BME280"
+// Library Manager library ships its own BME280.h and class BME280: with both
+// installed, #include <BME280.h> would resolve to that library.
+class SteamiBME280 {
    public:
     struct ReadResult {
         float temperature;  // Celsius
@@ -21,7 +25,7 @@ class BME280 {
         float pressure;     // hPa
     };
 
-    BME280(TwoWire& wire = Wire, uint8_t address = BME280_DEFAULT_ADDRESS);
+    SteamiBME280(TwoWire& wire = Wire, uint8_t address = BME280_DEFAULT_ADDRESS);
 
     // Probe the device, load the factory calibration and apply the default
     // configuration (oversampling x1, IIR filter off, sleep mode). Returns

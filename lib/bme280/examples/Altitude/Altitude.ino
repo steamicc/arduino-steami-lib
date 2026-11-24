@@ -14,14 +14,14 @@
 // the serial monitor at 115200 baud.
 
 #include <Arduino.h>
-#include <BME280.h>
+#include <SteamiBME280.h>
 #include <Wire.h>
 
 // Local sea-level pressure in hPa. 1013.25 is the standard atmosphere.
 constexpr float SEA_LEVEL_HPA = 1013.25f;
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-BME280 sensor(internalI2C);
+SteamiBME280 sensor(internalI2C);
 
 float startAltitude = 0.0f;
 
@@ -57,7 +57,7 @@ void loop() {
     if (isnan(pressure)) {
         Serial.println("BME280 read failed.");
     } else {
-        float altitude = BME280::altitudeFromPressure(pressure, SEA_LEVEL_HPA);
+        float altitude = SteamiBME280::altitudeFromPressure(pressure, SEA_LEVEL_HPA);
         Serial.print("P = ");
         Serial.print(pressure, 2);
         Serial.print(" hPa  |  altitude = ");

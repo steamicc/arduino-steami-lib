@@ -13,11 +13,11 @@
 // the serial monitor at 115200 baud.
 
 #include <Arduino.h>
-#include <BME280.h>
+#include <SteamiBME280.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-BME280 sensor(internalI2C);
+SteamiBME280 sensor(internalI2C);
 
 const char* classifyComfort(float temperature, float humidity) {
     if (temperature < 18.0f) {
@@ -64,7 +64,7 @@ void loop() {
         Serial.print(" C  |  H = ");
         Serial.print(reading.humidity, 1);
         Serial.print(" %  |  Td = ");
-        Serial.print(BME280::dewPointFrom(reading.temperature, reading.humidity), 1);
+        Serial.print(SteamiBME280::dewPointFrom(reading.temperature, reading.humidity), 1);
         Serial.print(" C  ->  ");
         Serial.println(classifyComfort(reading.temperature, reading.humidity));
     }

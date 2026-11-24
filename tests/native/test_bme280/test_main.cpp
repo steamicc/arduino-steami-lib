@@ -3,7 +3,7 @@
 #include <math.h>
 #include <unity.h>
 
-#include "BME280.h"
+#include "SteamiBME280.h"
 #include "Wire.h"
 #include "driver_checks.h"
 
@@ -95,14 +95,14 @@ static int writesTo(uint8_t r) {
     return n;
 }
 
-BME280 sensor;
+SteamiBME280 sensor;
 
 void setUp(void) {
     Wire = TwoWire();
     millisClock() = 0;
     preloadChipId(true);
     preloadCalibration(BOSCH_EXAMPLE);
-    sensor = BME280();
+    sensor = SteamiBME280();
 }
 
 void tearDown(void) {}
@@ -319,7 +319,7 @@ void test_read_returns_nan_on_timeout(void) {
     TEST_ASSERT_TRUE(isnan(r.pressure));
 }
 
-static void assertAllNan(const BME280::ReadResult& r) {
+static void assertAllNan(const SteamiBME280::ReadResult& r) {
     TEST_ASSERT_TRUE(isnan(r.temperature));
     TEST_ASSERT_TRUE(isnan(r.humidity));
     TEST_ASSERT_TRUE(isnan(r.pressure));
@@ -525,15 +525,15 @@ void test_measurement_time_with_skipped_channels(void) {
 // --- Derived quantities ---
 
 void test_altitude_at_sea_level_is_zero(void) {
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, BME280::altitudeFromPressure(1013.25f));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, SteamiBME280::altitudeFromPressure(1013.25f));
 }
 
 void test_altitude_from_pressure(void) {
-    TEST_ASSERT_FLOAT_WITHIN(0.5f, 988.67f, BME280::altitudeFromPressure(900.0f));
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 988.67f, SteamiBME280::altitudeFromPressure(900.0f));
 }
 
 void test_altitude_uses_given_sea_level_pressure(void) {
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, BME280::altitudeFromPressure(1020.0f, 1020.0f));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, SteamiBME280::altitudeFromPressure(1020.0f, 1020.0f));
 }
 
 void test_altitude_reads_pressure(void) {
@@ -544,27 +544,27 @@ void test_altitude_reads_pressure(void) {
 }
 
 void test_altitude_is_nan_without_data(void) {
-    TEST_ASSERT_TRUE(isnan(BME280::altitudeFromPressure(NAN)));
+    TEST_ASSERT_TRUE(isnan(SteamiBME280::altitudeFromPressure(NAN)));
 }
 
 void test_dew_point_reference_value(void) {
     // Magnus (17.625 / 243.04): 25 degC at 50 %RH -> 13.86 degC.
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 13.86f, BME280::dewPointFrom(25.0f, 50.0f));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 13.86f, SteamiBME280::dewPointFrom(25.0f, 50.0f));
 }
 
 void test_dew_point_at_saturation_equals_temperature(void) {
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 20.0f, BME280::dewPointFrom(20.0f, 100.0f));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 20.0f, SteamiBME280::dewPointFrom(20.0f, 100.0f));
 }
 
 void test_dew_point_survives_zero_humidity(void) {
-    TEST_ASSERT_FALSE(isnan(BME280::dewPointFrom(20.0f, 0.0f)));
+    TEST_ASSERT_FALSE(isnan(SteamiBME280::dewPointFrom(20.0f, 0.0f)));
 }
 
 void test_dew_point_reads_sensor(void) {
     sensor.begin();
     sensor.powerOn();
     preloadMeasurement();
-    float expected = BME280::dewPointFrom(25.08f, 55.3535f);
+    float expected = SteamiBME280::dewPointFrom(25.08f, 55.3535f);
     TEST_ASSERT_FLOAT_WITHIN(0.01f, expected, sensor.dewPoint());
 }
 

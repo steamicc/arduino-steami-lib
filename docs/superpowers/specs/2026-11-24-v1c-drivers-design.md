@@ -11,7 +11,8 @@ The STeaMi V1c replaces the WSEN-PADS / WSEN-HIDS / APDS-9960 sensors by a BME28
 ## BME280
 
 - Port of the MicroPython driver (`steamicc/micropython-steami-lib`, `lib/bme280`), following the Arduino conventions of this repository (see `lib/wsen-hids`, `lib/wsen-pads`, CONTRIBUTING.md).
-- Class `BME280`, headers `BME280.h` / `BME280_const.h`, constructor `BME280(TwoWire& wire = Wire, uint8_t address = 0x76)`.
+- Class `SteamiBME280`, headers `SteamiBME280.h` / `SteamiBME280_const.h`, constructor `SteamiBME280(TwoWire& wire = Wire, uint8_t address = 0x76)`. Register constants keep the `BME280_` prefix.
+- Why the prefix: the "BME280" Library Manager library (finitespace/BME280) installs a folder `BME280` with `src/BME280.h` and its own abstract `class BME280`. The Arduino include resolver prefers a library whose name and folder match the header, so with both installed `#include <BME280.h>` would pick that library over `STeaMi` and the sketch would fail with errors that never mention STeaMi. Many classroom PCs have it from earlier V1c workarounds.
 - API: `begin()`, `deviceId()`, `softReset()`, `powerOn()` / `powerOff()`, `temperature()`, `humidity()`, `pressureHpa()`, `read()` (struct with temperature, humidity, pressure), `dataReady()` and per-quantity `*Ready()`, `setContinuous(standby)`, `triggerOneShot()`, `readOneShot()`, oversampling and IIR filter setters, `altitude(seaLevelHpa)`, `dewPoint()`, `setTemperatureOffset()`, `calibrateTemperature()`.
 - Factory compensation formulas from the datasheet (as in the MicroPython driver).
 - Native unit tests with the existing I²C mock, hardware test, at least three examples, README, keywords.
@@ -28,6 +29,7 @@ The STeaMi V1c replaces the WSEN-PADS / WSEN-HIDS / APDS-9960 sensors by a BME28
 
 ## Shared
 
+- Naming rule: a public header must not share its name with the main header of a popular Library Manager library (`<Chip>.h`). When it would, the header and class take the `Steami` prefix (as `SteamiBME280`). The GC9A01 PR checks `GC9A01.h` against GFX Library for Arduino and the other GC9A01 libraries. `VL53L1X.h` already has the same pattern with Pololu's VL53L1X library: follow-up, not in scope.
 - One PR per driver. Hardware validation is done on a V1c by the maintainer's session after both build: each example is flashed by mass storage and checked (serial values for the BME280, visual check of the screen).
 - The package paragraph in `scripts/build-arduino-package.py` and the README component table are updated by each PR for its own component only.
 - Follow-up, not in scope: a high-level screen layer shared by SSD1327 and GC9A01 (like MicroPython `steami_screen`).

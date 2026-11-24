@@ -25,11 +25,11 @@ On the STeaMi board, the BME280 is routed to the **internal** I2C bus
 global `Wire`). Spin up a dedicated `TwoWire` and hand it to the driver:
 
 ```cpp
-#include <BME280.h>
+#include <SteamiBME280.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-BME280 sensor(internalI2C);
+SteamiBME280 sensor(internalI2C);
 
 void setup() {
     Serial.begin(115200);
@@ -53,8 +53,16 @@ void loop() {
 }
 ```
 
-With the `STeaMi` Library Manager package, `#include <BME280.h>` (or
+With the `STeaMi` Library Manager package, `#include <SteamiBME280.h>` (or
 `#include <STeaMi.h>`) is enough.
+
+The header and the class are called `SteamiBME280`, not `BME280`, on purpose:
+the "BME280" library by Tyler Glenn (and others) installs its own `BME280.h`
+with an unrelated `class BME280`. Many school computers already have it, and
+with both installed `#include <BME280.h>` would pick that library and fail with
+errors that never mention STeaMi. If you see errors about an abstract
+`BME280` class or a `BME280(TwoWire&)` constructor, check that the sketch
+includes `<SteamiBME280.h>` and uses `SteamiBME280`.
 
 ## Examples
 
@@ -89,7 +97,7 @@ names only when they carry ambiguity, no `read` / `get` prefixes.
 
 | Method | Description |
 |--------|-------------|
-| `BME280(TwoWire& wire = Wire, uint8_t address = BME280_DEFAULT_ADDRESS)` | Construct. Defaults to the global `Wire` and address `0x76`. |
+| `SteamiBME280(TwoWire& wire = Wire, uint8_t address = BME280_DEFAULT_ADDRESS)` | Construct. Defaults to the global `Wire` and address `0x76`. |
 | `bool begin()` | Probe the chip ID, wait for the NVM copy, load the factory calibration and apply the default configuration (oversampling x1, filter off, standby 0.5 ms, sleep mode). Returns `false` if the sensor is not detected. |
 | `uint8_t deviceId()` | Reads the chip ID register (always `0x60`). |
 | `void softReset()` | Software reset, then reloads the calibration and re-applies the default configuration. |
@@ -153,7 +161,7 @@ safe: the driver drops to sleep mode for the write (the chip may ignore
 
 ## Register constants
 
-`BME280_const.h` exports register addresses (`BME280_REG_*`), bit masks
+`SteamiBME280_const.h` exports register addresses (`BME280_REG_*`), bit masks
 (`BME280_STATUS_*`, `BME280_MODE_*`), and the oversampling, filter and
 standby values (`BME280_OSRS_*`, `BME280_FILTER_*`, `BME280_STANDBY_*`).
 

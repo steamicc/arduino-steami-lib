@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "BME280.h"
+#include "SteamiBME280.h"
 
 #include <math.h>
 
-BME280::BME280(TwoWire& wire, uint8_t address) : _wire(&wire), _address(address) {}
+SteamiBME280::SteamiBME280(TwoWire& wire, uint8_t address) : _wire(&wire), _address(address) {}
 
-bool BME280::begin() {
+bool SteamiBME280::begin() {
     _initialized = false;
     if (deviceId() != BME280_CHIP_ID_VALUE) {
         return false;
@@ -22,11 +22,11 @@ bool BME280::begin() {
     return true;
 }
 
-uint8_t BME280::deviceId() {
+uint8_t SteamiBME280::deviceId() {
     return readReg(BME280_REG_CHIP_ID);
 }
 
-void BME280::softReset() {
+void SteamiBME280::softReset() {
     writeReg(BME280_REG_SOFT_RESET, BME280_SOFT_RESET_CMD);
     delay(BME280_RESET_DELAY_MS);
     // A reset never makes a driver usable that begin() did not accept.
@@ -35,62 +35,62 @@ void BME280::softReset() {
     _initialized = _initialized && ok;
 }
 
-void BME280::powerOn() {
+void SteamiBME280::powerOn() {
     uint8_t ctrl = readReg(BME280_REG_CTRL_MEAS);
     writeReg(BME280_REG_CTRL_MEAS, (ctrl & ~BME280_MODE_MASK) | BME280_MODE_NORMAL);
     _oneShotPending = false;
 }
 
-void BME280::powerOff() {
+void SteamiBME280::powerOff() {
     uint8_t ctrl = readReg(BME280_REG_CTRL_MEAS);
     writeReg(BME280_REG_CTRL_MEAS, ctrl & ~BME280_MODE_MASK);
     _oneShotPending = false;
 }
 
-bool BME280::dataReady() {
+bool SteamiBME280::dataReady() {
     if (_oneShotPending) {
         return oneShotDone();
     }
     return conversionIdle();
 }
 
-bool BME280::temperatureReady() {
+bool SteamiBME280::temperatureReady() {
     return dataReady();
 }
 
-bool BME280::pressureReady() {
+bool SteamiBME280::pressureReady() {
     return dataReady();
 }
 
-bool BME280::humidityReady() {
+bool SteamiBME280::humidityReady() {
     return dataReady();
 }
 
-float BME280::temperature() {
+float SteamiBME280::temperature() {
     return read().temperature;
 }
 
-float BME280::humidity() {
+float SteamiBME280::humidity() {
     return read().humidity;
 }
 
-float BME280::pressureHpa() {
+float SteamiBME280::pressureHpa() {
     return read().pressure;
 }
 
-BME280::ReadResult BME280::read() {
+SteamiBME280::ReadResult SteamiBME280::read() {
     if (!_initialized || !ensureData()) {
         return {NAN, NAN, NAN};
     }
     return readData();
 }
 
-void BME280::setContinuous(uint8_t standby) {
+void SteamiBME280::setContinuous(uint8_t standby) {
     setStandby(standby);
     powerOn();
 }
 
-void BME280::triggerOneShot() {
+void SteamiBME280::triggerOneShot() {
     _oneShotDurationMs = measurementTimeMs();
     uint8_t ctrl = readReg(BME280_REG_CTRL_MEAS);
     writeReg(BME280_REG_CTRL_MEAS, (ctrl & ~BME280_MODE_MASK) | BME280_MODE_FORCED);
@@ -98,7 +98,7 @@ void BME280::triggerOneShot() {
     _oneShotPending = true;
 }
 
-BME280::ReadResult BME280::readOneShot() {
+SteamiBME280::ReadResult SteamiBME280::readOneShot() {
     if (!_initialized) {
         return {NAN, NAN, NAN};
     }
@@ -110,7 +110,7 @@ BME280::ReadResult BME280::readOneShot() {
     return readData();
 }
 
-void BME280::setOversampling(uint8_t temperature, uint8_t pressure, uint8_t humidity) {
+void SteamiBME280::setOversampling(uint8_t temperature, uint8_t pressure, uint8_t humidity) {
     if (humidity != BME280_OSRS_KEEP) {
         writeReg(BME280_REG_CTRL_HUM, humidity & BME280_OSRS_MASK);
     }
@@ -128,15 +128,15 @@ void BME280::setOversampling(uint8_t temperature, uint8_t pressure, uint8_t humi
     writeReg(BME280_REG_CTRL_MEAS, ctrl);
 }
 
-void BME280::setIirFilter(uint8_t coefficient) {
+void SteamiBME280::setIirFilter(uint8_t coefficient) {
     writeConfig(BME280_FILTER_MASK, BME280_FILTER_SHIFT, coefficient);
 }
 
-void BME280::setStandby(uint8_t standby) {
+void SteamiBME280::setStandby(uint8_t standby) {
     writeConfig(BME280_STANDBY_MASK, BME280_STANDBY_SHIFT, standby);
 }
 
-uint32_t BME280::measurementTimeMs() {
+uint32_t SteamiBME280::measurementTimeMs() {
     uint8_t ctrl = readReg(BME280_REG_CTRL_MEAS);
     uint8_t osrsT = (ctrl >> BME280_OSRS_T_SHIFT) & BME280_OSRS_MASK;
     uint8_t osrsP = (ctrl >> BME280_OSRS_P_SHIFT) & BME280_OSRS_MASK;
@@ -159,23 +159,23 @@ uint32_t BME280::measurementTimeMs() {
     return (us + 999) / 1000;
 }
 
-float BME280::altitude(float seaLevelHpa) {
+float SteamiBME280::altitude(float seaLevelHpa) {
     return altitudeFromPressure(pressureHpa(), seaLevelHpa);
 }
 
-float BME280::dewPoint() {
+float SteamiBME280::dewPoint() {
     ReadResult r = read();
     return dewPointFrom(r.temperature, r.humidity);
 }
 
-float BME280::altitudeFromPressure(float pressureHpa, float seaLevelHpa) {
+float SteamiBME280::altitudeFromPressure(float pressureHpa, float seaLevelHpa) {
     if (isnan(pressureHpa) || seaLevelHpa <= 0.0f) {
         return NAN;
     }
     return 44330.0f * (1.0f - powf(pressureHpa / seaLevelHpa, 0.1903f));
 }
 
-float BME280::dewPointFrom(float temperatureC, float humidityPct) {
+float SteamiBME280::dewPointFrom(float temperatureC, float humidityPct) {
     constexpr float A = 17.625f;
     constexpr float B = 243.04f;
     constexpr float MIN_HUMIDITY = 0.01f;
@@ -186,11 +186,12 @@ float BME280::dewPointFrom(float temperatureC, float humidityPct) {
     return (B * gamma) / (A - gamma);
 }
 
-void BME280::setTemperatureOffset(float offset) {
+void SteamiBME280::setTemperatureOffset(float offset) {
     _tempOffset = offset;
 }
 
-void BME280::calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh) {
+void SteamiBME280::calibrateTemperature(float refLow, float measLow, float refHigh,
+                                        float measHigh) {
     float span = measHigh - measLow;
     if (span == 0.0f) {
         _tempUserSlope = 1.0f;
@@ -201,20 +202,20 @@ void BME280::calibrateTemperature(float refLow, float measLow, float refHigh, fl
     _tempUserIntercept = refLow - _tempUserSlope * measLow;
 }
 
-uint8_t BME280::readReg(uint8_t reg) {
+uint8_t SteamiBME280::readReg(uint8_t reg) {
     uint8_t value = 0;
     readRegs(reg, &value, 1);
     return value;
 }
 
-void BME280::writeReg(uint8_t reg, uint8_t value) {
+void SteamiBME280::writeReg(uint8_t reg, uint8_t value) {
     _wire->beginTransmission(_address);
     _wire->write(reg);
     _wire->write(value);
     _wire->endTransmission();
 }
 
-bool BME280::readRegs(uint8_t reg, uint8_t* buf, size_t len) {
+bool SteamiBME280::readRegs(uint8_t reg, uint8_t* buf, size_t len) {
     // Zero-init up front so a short bus read leaves defined bytes in buf.
     for (size_t i = 0; i < len; ++i) {
         buf[i] = 0;
@@ -235,11 +236,11 @@ bool BME280::readRegs(uint8_t reg, uint8_t* buf, size_t len) {
     return received == len;
 }
 
-bool BME280::readStatus(uint8_t& value) {
+bool SteamiBME280::readStatus(uint8_t& value) {
     return readRegs(BME280_REG_STATUS, &value, 1);
 }
 
-bool BME280::waitBoot() {
+bool SteamiBME280::waitBoot() {
     for (uint8_t waited = 0; waited <= BME280_BOOT_TIMEOUT_MS; waited += 5) {
         uint8_t st;
         if (readStatus(st) && (st & BME280_STATUS_IM_UPDATE) == 0) {
@@ -250,7 +251,7 @@ bool BME280::waitBoot() {
     return false;
 }
 
-bool BME280::loadCalibration() {
+bool SteamiBME280::loadCalibration() {
     uint8_t tp[BME280_CALIB_TP_SIZE];
     uint8_t hum[BME280_CALIB_H_SIZE];
     if (!readRegs(BME280_REG_CALIB_TEMP_PRESS, tp, sizeof(tp)) ||
@@ -288,7 +289,7 @@ bool BME280::loadCalibration() {
     return true;
 }
 
-void BME280::configureDefault() {
+void SteamiBME280::configureDefault() {
     // Sleep first: CONFIG writes can be ignored while the chip is converting.
     writeReg(BME280_REG_CTRL_MEAS, BME280_MODE_SLEEP);
     writeReg(BME280_REG_CONFIG, 0x00);  // standby 0.5 ms, IIR filter off
@@ -299,7 +300,7 @@ void BME280::configureDefault() {
     _oneShotPending = false;
 }
 
-void BME280::writeConfig(uint8_t mask, uint8_t shift, uint8_t value) {
+void SteamiBME280::writeConfig(uint8_t mask, uint8_t shift, uint8_t value) {
     // The chip may ignore CONFIG writes in normal mode: drop to sleep for
     // the write and restore the previous CTRL_MEAS afterwards.
     uint8_t ctrl = readReg(BME280_REG_CTRL_MEAS);
@@ -315,18 +316,18 @@ void BME280::writeConfig(uint8_t mask, uint8_t shift, uint8_t value) {
     }
 }
 
-bool BME280::isSleeping() {
+bool SteamiBME280::isSleeping() {
     return (readReg(BME280_REG_CTRL_MEAS) & BME280_MODE_MASK) == BME280_MODE_SLEEP;
 }
 
-bool BME280::conversionIdle() {
+bool SteamiBME280::conversionIdle() {
     // A failed STATUS read is not "idle" (0x00 would read as idle): the
     // caller's poll then times out and the read returns NAN.
     uint8_t st;
     return readStatus(st) && (st & BME280_STATUS_MEASURING) == 0;
 }
 
-bool BME280::oneShotDone() {
+bool SteamiBME280::oneShotDone() {
     // MEASURING may lag the trigger, so an idle STATUS alone does not mean
     // the forced conversion is over. Also require the nominal duration to
     // have elapsed and the mode bits to be back to sleep: the chip clears
@@ -337,7 +338,7 @@ bool BME280::oneShotDone() {
     return conversionIdle() && isSleeping();
 }
 
-bool BME280::waitMeasurement(bool settle) {
+bool SteamiBME280::waitMeasurement(bool settle) {
     // Right after a trigger, let the conversion run for its nominal
     // duration before polling (the MEASURING flag may lag the trigger).
     // The poll has a 2x margin so slow oversampling settings never time
@@ -357,7 +358,7 @@ bool BME280::waitMeasurement(bool settle) {
     return false;
 }
 
-bool BME280::ensureData() {
+bool SteamiBME280::ensureData() {
     if (_oneShotPending) {
         // Sleep through what is left of the nominal conversion time, then
         // poll dataReady(), which still applies the one-shot conditions.
@@ -377,7 +378,7 @@ bool BME280::ensureData() {
     return true;
 }
 
-BME280::ReadResult BME280::readData() {
+SteamiBME280::ReadResult SteamiBME280::readData() {
     uint8_t d[BME280_DATA_BLOCK_SIZE];
     if (!readRegs(BME280_REG_DATA_START, d, sizeof(d))) {
         return {NAN, NAN, NAN};
@@ -410,7 +411,7 @@ BME280::ReadResult BME280::readData() {
 // versions, 64-bit for the pressure), as in the MicroPython driver.
 
 // Returns the temperature in hundredths of a degree Celsius and updates _tFine.
-int32_t BME280::compensateTemperature(int32_t rawTemp) {
+int32_t SteamiBME280::compensateTemperature(int32_t rawTemp) {
     int32_t t1 = static_cast<int32_t>(_digT1);
     int32_t var1 = (((rawTemp >> 3) - (t1 << 1)) * static_cast<int32_t>(_digT2)) >> 11;
     int32_t diff = (rawTemp >> 4) - t1;
@@ -420,7 +421,7 @@ int32_t BME280::compensateTemperature(int32_t rawTemp) {
 }
 
 // Returns the pressure in Pa as an unsigned Q24.8 fixed-point value.
-uint32_t BME280::compensatePressure(int32_t rawPress) {
+uint32_t SteamiBME280::compensatePressure(int32_t rawPress) {
     int64_t var1 = static_cast<int64_t>(_tFine) - 128000;
     int64_t var2 = var1 * var1 * _digP6;
     var2 = var2 + ((var1 * _digP5) << 17);
@@ -439,7 +440,7 @@ uint32_t BME280::compensatePressure(int32_t rawPress) {
 }
 
 // Returns the relative humidity in %RH as an unsigned Q22.10 fixed-point value.
-uint32_t BME280::compensateHumidity(int32_t rawHum) {
+uint32_t SteamiBME280::compensateHumidity(int32_t rawHum) {
     int32_t v = _tFine - 76800;
     v = (((((rawHum << 14) - (static_cast<int32_t>(_digH4) << 20) -
             (static_cast<int32_t>(_digH5) * v)) +
