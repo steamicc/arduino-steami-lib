@@ -93,7 +93,7 @@ The package version is the version computed by semantic-release for this reposit
 A `package` job (in `build.yml` or its own workflow) runs on every PR and on `main`:
 
 1. `make package`;
-2. `arduino/arduino-lint-action` on the output, `library-manager: submit` until the library is registered, then `update`, `compliance: strict` if it passes;
+2. `arduino/arduino-lint-action` on the output, `compliance: strict`, with `library-manager` chosen at run time from the Library Manager index (`scripts/library-manager-mode.sh`): `submit` while no library named exactly `STeaMi` is indexed, `update` once it is (submit would fail on LP017 and update on LP018 in the other case). If the index cannot be fetched or parsed the job fails rather than guess;
 3. install arduino-cli, the STM32duino core (cached) and STM32duinoBLE, copy the package into the sketchbook `libraries/`, and compile every example with FQBN `STMicroelectronics:stm32:STeaMi`.
 
 This also covers #62 (arduino-lint) and #224 (compile with the Arduino IDE toolchain) for everything users actually get.

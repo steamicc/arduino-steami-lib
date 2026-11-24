@@ -34,16 +34,26 @@ jobs:
           PACKAGE_VERSION: ${{ inputs.version }}
         run: python3 scripts/build-arduino-package.py --version "$PACKAGE_VERSION" --out build/arduino-package
 
+      - name: Install Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      # submit fails once the library is indexed (LP017, duplicate name) and
+      # update fails before that (LP018), so pick the mode from the index.
+      # The step fails if the index cannot be fetched or parsed.
+      - name: Choose the Library Manager lint mode
+        id: lint-mode
+        run: |
+          mode="$(scripts/library-manager-mode.sh STeaMi)"
+          echo "arduino-lint library-manager mode: $mode"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
       - name: Lint the package
         uses: arduino/arduino-lint-action@v2
         with:
           path: build/arduino-package
-          library-manager: submit
+          library-manager: ${{ steps.lint-mode.outputs.mode }}
           compliance: strict
           project-type: library
-
-      - name: Install Arduino CLI
-        uses: arduino/setup-arduino-cli@v2
 
       - name: Install the STM32 core
         run: |
