@@ -102,7 +102,7 @@ This also covers #62 (arduino-lint) and #224 (compile with the Arduino IDE toolc
 
 `release.yml` is unchanged. Publishing is a separate workflow, `publish-arduino-package.yml`, so it can be retried without re-running semantic-release:
 
-- **Triggers**: `push` of a `v*` tag (semantic-release pushes it with the App token, which does trigger workflows) and `workflow_dispatch` (with an optional `dry_run` input), for manual recovery: the workflow is run on the tag itself (`--ref vX.Y.Z`) and refuses any other ref, so the tested code is always the tagged code.
+- **Triggers**: `release` of type `published` (semantic-release creates the release with the App token, which does trigger workflows; a `push` of the tag would not, because the tag commit carries `[skip ci]`) and `workflow_dispatch` (with an optional `dry_run` input), for manual recovery: the workflow is run on the tag itself (`--ref vX.Y.Z`) and refuses any other ref, so the tested code is always the tagged code.
 - **Gate**: it checks out the tag, builds the package with the tag's version, runs arduino-lint and compiles every example with the Arduino IDE toolchain (same steps as the PR job). Nothing is published if any of this fails: the source release exists, the Library Manager does not get that version, and the fix ships in the next version. This is what guarantees "a release cannot publish a broken package", including when two PRs that pass separately break `main` together.
 - **Publish** (each step idempotent, so a re-run after a partial failure is safe):
   1. clone `steamicc/arduino-steami` with the App token; if tag `vX.Y.Z` already exists there, skip to step 3;

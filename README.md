@@ -49,7 +49,7 @@ pio run --target upload
 
 ### Arduino IDE
 
-All the drivers are published as one Arduino library named **STeaMi**, built from `lib/<component>/` and distributed from [steamicc/arduino-steami](https://github.com/steamicc/arduino-steami).
+All the drivers are published as one Arduino library named **STeaMi**, built from `lib/<component>/` and distributed from [steamicc/arduino-steami](https://github.com/steamicc/arduino-steami). It is published automatically each time a GitHub release is published.
 
 * Once the library is registered in the Arduino Library Manager: open **Sketch > Include Library > Manage Libraries...**, search for `STeaMi` and click Install.
 * Otherwise, download `STeaMi-X.Y.Z.zip` from the [releases](https://github.com/steamicc/arduino-steami-lib/releases) and use **Sketch > Include Library > Add .ZIP Library...**.

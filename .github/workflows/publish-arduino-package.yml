@@ -1,16 +1,20 @@
 name: Publish Arduino package
 
-# On each release tag, publish the STeaMi Arduino library to
+# When a GitHub release is published, publish the STeaMi Arduino library to
 # steamicc/arduino-steami (the repository registered in the Arduino Library
 # Manager) and attach STeaMi-X.Y.Z.zip to the release of this repository.
+#
+# It does not trigger on the tag push: semantic-release's tag commit carries
+# [skip ci], which GitHub applies to push events but not to release events.
+# A release event runs on the tag (github.ref_type is 'tag').
 #
 # Manual recovery: run the workflow on the tag itself, so the code that is
 # built and tested is the tagged code:
 #   gh workflow run publish-arduino-package.yml --ref v0.25.0 [-f dry_run=true]
 
 on:
-  push:
-    tags: ['v*']
+  release:
+    types: [published]
   workflow_dispatch:
     inputs:
       dry_run:
@@ -43,7 +47,7 @@ jobs:
           set -euo pipefail
           tag="$REF_NAME"
           if [ "$REF_TYPE" != "tag" ]; then
-            echo "::error::Run this workflow on a release tag (--ref vX.Y.Z), not on the $REF_TYPE '$tag'"
+            echo "::error::Run this workflow on a release tag (published release or --ref vX.Y.Z), not on the $REF_TYPE '$tag'"
             exit 1
           fi
           if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
