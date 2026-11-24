@@ -12,6 +12,7 @@
 // lib/<component>/examples/ for driver usage.
 
 #include <Arduino.h>
+#include <BME280.h>
 #include <SteamiDaplinkBridge.h>
 #include <WSEN_PADS.h>
 #include <Wire.h>
@@ -23,6 +24,7 @@
 // dedicated TwoWire and hand it to every on-board driver.
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 
+BME280 bme280(internalI2C);
 WsenHids wsen_hids(internalI2C);
 WSEN_PADS wsen_pads(internalI2C);
 SteamiDaplinkBridge daplink_bridge(internalI2C);
@@ -38,6 +40,23 @@ void setup() {
     pinMode(LED_BLUE, OUTPUT);
 
     internalI2C.begin();
+
+    // --- BME280 (pressure + humidity + temperature, V1c only) ---
+    if (bme280.begin()) {
+        Serial.print("BME280 detected, chip ID = 0x");
+        Serial.println(bme280.deviceId(), HEX);
+
+        auto r = bme280.read();
+        Serial.print("BME280 first read: T = ");
+        Serial.print(r.temperature, 2);
+        Serial.print(" C, H = ");
+        Serial.print(r.humidity, 1);
+        Serial.print(" %, P = ");
+        Serial.print(r.pressure, 2);
+        Serial.println(" hPa");
+    } else {
+        Serial.println("BME280 not detected");
+    }
 
     // --- WSEN-HIDS (humidity + temperature) ---
     if (wsen_hids.begin()) {
