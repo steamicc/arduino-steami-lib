@@ -3,6 +3,7 @@
 #include <unity.h>
 
 #include "DaplinkBridge.h"
+#include "FakeDaplinkBridge.h"
 #include "SteamiConfig.h"
 #include "Wire.h"
 
@@ -231,6 +232,144 @@ void test_clear_resets_all_in_memory_values(void) {
     TEST_ASSERT_FALSE(config.getAccelerometerCalibration(accelerometer));
 }
 
+// ---------------------------------------------------------------------
+// Persistence, against a model of the bridge firmware
+// ---------------------------------------------------------------------
+
+static FakeDaplinkBridge& attachFirmware() {
+    static FakeDaplinkBridge firmware;
+    firmware = FakeDaplinkBridge();
+    Wire.attachDevice(DAPLINK_BRIDGE_DEFAULT_ADDR, &firmware);
+    return firmware;
+}
+
+static String repeat(char c, size_t count) {
+    String text;
+    for (size_t i = 0; i < count; ++i) {
+        text += c;
+    }
+    return text;
+}
+
+void test_save_then_load_round_trip(void) {
+    attachFirmware();
+    TEST_ASSERT_TRUE(config.begin());
+
+    config.setBoardRevision(3);
+    config.setBoardName("STeaMi \"C1\"");
+    config.setTemperatureCalibration("wsen_hids", 1.02f, -0.75f);
+    config.setMagnetometerCalibration(10.5f, -3.25f, 0.0f, 1.1f, 0.9f, 1.0f);
+    config.setAccelerometerCalibration(0.01f, -0.02f, 0.03f);
+    config.setBootCount(12);
+    TEST_ASSERT_TRUE(config.save());
+
+    SteamiConfig reloaded(bridge);
+    TEST_ASSERT_TRUE(reloaded.load());
+
+    int32_t revision = 0;
+    String name;
+    uint32_t bootCount = 0;
+    TemperatureCalibration temperature;
+    MagnetometerCalibration magnetometer;
+    AccelerometerCalibration accelerometer;
+
+    TEST_ASSERT_TRUE(reloaded.boardRevision(revision));
+    TEST_ASSERT_EQUAL_INT32(3, revision);
+    TEST_ASSERT_TRUE(reloaded.boardName(name));
+    TEST_ASSERT_EQUAL_STRING("STeaMi \"C1\"", name.c_str());
+    TEST_ASSERT_TRUE(reloaded.getTemperatureCalibration("wsen_hids", temperature));
+    TEST_ASSERT_EQUAL_FLOAT(1.02f, temperature.gain);
+    TEST_ASSERT_EQUAL_FLOAT(-0.75f, temperature.offset);
+    TEST_ASSERT_FALSE(reloaded.getTemperatureCalibration("hts221", temperature));
+    TEST_ASSERT_TRUE(reloaded.getMagnetometerCalibration(magnetometer));
+    TEST_ASSERT_EQUAL_FLOAT(-3.25f, magnetometer.hardIronY);
+    TEST_ASSERT_EQUAL_FLOAT(0.9f, magnetometer.softIronY);
+    TEST_ASSERT_TRUE(reloaded.getAccelerometerCalibration(accelerometer));
+    TEST_ASSERT_EQUAL_FLOAT(-0.02f, accelerometer.offsetY);
+    TEST_ASSERT_TRUE(reloaded.bootCount(bootCount));
+    TEST_ASSERT_EQUAL_UINT32(12, bootCount);
+}
+
+void test_load_reads_micropython_json(void) {
+    // Same document as micropython-steami-lib's SteamiConfig.save(), so a
+    // board calibrated from MicroPython keeps its settings under Arduino.
+    FakeDaplinkBridge& firmware = attachFirmware();
+    firmware.store(
+        "{\"rev\":3,\"name\":\"STeaMi-01\",\"tc\":{\"hts\":{\"g\":1.0,\"o\":-0.5}},"
+        "\"cm\":{\"hx\":12.5,\"hy\":-4.0,\"hz\":0.5,\"sx\":1.0,\"sy\":1.0,\"sz\":1.0},"
+        "\"ca\":{\"ox\":0.01,\"oy\":0.0,\"oz\":-0.02},\"bc\":42}");
+
+    TEST_ASSERT_TRUE(config.load());
+
+    int32_t revision = 0;
+    String name;
+    uint32_t bootCount = 0;
+    TemperatureCalibration temperature;
+    MagnetometerCalibration magnetometer;
+
+    TEST_ASSERT_TRUE(config.boardRevision(revision));
+    TEST_ASSERT_EQUAL_INT32(3, revision);
+    TEST_ASSERT_TRUE(config.boardName(name));
+    TEST_ASSERT_EQUAL_STRING("STeaMi-01", name.c_str());
+    TEST_ASSERT_TRUE(config.getTemperatureCalibration("hts221", temperature));
+    TEST_ASSERT_EQUAL_FLOAT(-0.5f, temperature.offset);
+    TEST_ASSERT_TRUE(config.getMagnetometerCalibration(magnetometer));
+    TEST_ASSERT_EQUAL_FLOAT(12.5f, magnetometer.hardIronX);
+    TEST_ASSERT_TRUE(config.bootCount(bootCount));
+    TEST_ASSERT_EQUAL_UINT32(42, bootCount);
+}
+
+void test_save_and_load_config_longer_than_256_bytes(void) {
+    attachFirmware();
+    const String longName = repeat('n', 600);
+
+    config.setBoardName(longName);
+    config.setBootCount(7);
+    TEST_ASSERT_TRUE(config.save());
+
+    SteamiConfig reloaded(bridge);
+    TEST_ASSERT_TRUE(reloaded.load());
+
+    String name;
+    uint32_t bootCount = 0;
+    TEST_ASSERT_TRUE(reloaded.boardName(name));
+    TEST_ASSERT_TRUE(name == longName);
+    TEST_ASSERT_TRUE(reloaded.bootCount(bootCount));
+    TEST_ASSERT_EQUAL_UINT32(7, bootCount);
+}
+
+void test_save_rejects_config_larger_than_zone(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
+    firmware.store("{\"bc\":1}");
+
+    config.setBoardName(repeat('n', STEAMI_CONFIG_MAX_SIZE));
+    TEST_ASSERT_FALSE(config.save());
+
+    // The previous content is left untouched.
+    TEST_ASSERT_EQUAL_STRING_LEN("{\"bc\":1}", reinterpret_cast<const char*>(firmware.zone.data()),
+                                 8);
+}
+
+void test_load_rejects_truncated_json(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
+    firmware.store("{\"rev\":3,\"bc\":4");
+
+    TEST_ASSERT_FALSE(config.load());
+
+    int32_t revision = 0;
+    TEST_ASSERT_FALSE(config.boardRevision(revision));
+}
+
+void test_load_of_empty_zone_gives_empty_config(void) {
+    attachFirmware();
+    config.setBootCount(5);
+
+    TEST_ASSERT_TRUE(config.load());
+
+    uint32_t bootCount = 0;
+    TEST_ASSERT_FALSE(config.bootCount(bootCount));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_initial_config_is_empty);
@@ -247,5 +386,11 @@ int main(void) {
     RUN_TEST(test_apply_accelerometer_calibration_returns_false_when_missing);
     RUN_TEST(test_boot_counter_set_get_and_increment);
     RUN_TEST(test_clear_resets_all_in_memory_values);
+    RUN_TEST(test_save_then_load_round_trip);
+    RUN_TEST(test_load_reads_micropython_json);
+    RUN_TEST(test_save_and_load_config_longer_than_256_bytes);
+    RUN_TEST(test_save_rejects_config_larger_than_zone);
+    RUN_TEST(test_load_rejects_truncated_json);
+    RUN_TEST(test_load_of_empty_zone_gives_empty_config);
     return UNITY_END();
 }

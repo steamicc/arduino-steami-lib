@@ -3,11 +3,10 @@
 /*
  * Integration test for SteamiConfig persistence on a real STeaMi.
  *
- * WARNING: this test overwrites the DAPLink persistent configuration zone.
- *
  * It exercises repeated save -> clear RAM -> load cycles to verify that
- * configuration remains coherent across continued use. The serialized data is
- * deliberately kept below the current 255-byte Arduino/DAPLink read limit.
+ * configuration remains coherent across continued use. The zone content is
+ * saved first and written back at the end, so the board keeps its own
+ * configuration.
  *
  * The number of write cycles is intentionally small to avoid unnecessary flash
  * wear on the DAPLink STM32F103 config zone.
@@ -19,9 +18,12 @@
 #include <Wire.h>
 #include <unity.h>
 
+#include "config_zone_backup.h"
+
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 DaplinkBridge bridge(internalI2C);
 SteamiConfig config(bridge);
+ConfigZoneBackup backup;
 
 static constexpr uint32_t CYCLE_COUNT = 3;
 static constexpr float EXPECTED_GAIN = 1.015f;
@@ -91,13 +93,20 @@ void test_steami_config_persists_after_idle_period(void) {
     TEST_ASSERT_EQUAL_UINT32(77, count);
 }
 
+void test_steami_config_restore_board_config(void) {
+    TEST_ASSERT_TRUE(backup.restore(bridge));
+}
+
 void setup() {
     delay(2000);
     internalI2C.begin();
+    bridge.begin();
+    backup.take(bridge);
 
     UNITY_BEGIN();
     RUN_TEST(test_steami_config_repeated_persistence_cycles);
     RUN_TEST(test_steami_config_persists_after_idle_period);
+    RUN_TEST(test_steami_config_restore_board_config);
     UNITY_END();
 }
 

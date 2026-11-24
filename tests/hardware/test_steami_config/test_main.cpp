@@ -3,11 +3,9 @@
 /*
  * Hardware unit tests for SteamiConfig on a real STeaMi.
  *
- * WARNING: these tests overwrite the DAPLink persistent configuration zone.
- *
- * The stored test configuration is intentionally kept well below 255 bytes.
- * The current Arduino/DAPLink read path cannot reliably restore a serialized
- * configuration larger than 255 bytes.
+ * These tests write to the DAPLink persistent configuration zone. The
+ * zone content is saved before the first test and written back after the
+ * last one, so the board keeps its own configuration.
  */
 
 #include <Arduino.h>
@@ -16,9 +14,12 @@
 #include <Wire.h>
 #include <unity.h>
 
+#include "config_zone_backup.h"
+
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 DaplinkBridge bridge(internalI2C);
 SteamiConfig config(bridge);
+ConfigZoneBackup backup;
 
 void setUp(void) {
     config.clear();
@@ -112,9 +113,37 @@ void test_steami_config_mixed_small_config_round_trip(void) {
     TEST_ASSERT_EQUAL_UINT32(9, count);
 }
 
+void test_steami_config_long_config_round_trip(void) {
+    // Longer than one 256-byte READ_CONFIG block.
+    String name;
+    for (int i = 0; i < 400; ++i) {
+        name += static_cast<char>('a' + (i % 26));
+    }
+    config.setBoardName(name);
+    config.setBootCount(1234);
+
+    TEST_ASSERT_TRUE(config.save());
+
+    config.clear();
+    TEST_ASSERT_TRUE(config.load());
+
+    String loaded;
+    uint32_t count = 0;
+    TEST_ASSERT_TRUE(config.boardName(loaded));
+    TEST_ASSERT_EQUAL_STRING(name.c_str(), loaded.c_str());
+    TEST_ASSERT_TRUE(config.bootCount(count));
+    TEST_ASSERT_EQUAL_UINT32(1234, count);
+}
+
+void test_steami_config_restore_board_config(void) {
+    TEST_ASSERT_TRUE(backup.restore(bridge));
+}
+
 void setup() {
     delay(2000);
     internalI2C.begin();
+    bridge.begin();
+    backup.take(bridge);
 
     UNITY_BEGIN();
     RUN_TEST(test_steami_config_begin);
@@ -122,6 +151,8 @@ void setup() {
     RUN_TEST(test_steami_config_temperature_calibration_round_trip);
     RUN_TEST(test_steami_config_boot_counter_round_trip);
     RUN_TEST(test_steami_config_mixed_small_config_round_trip);
+    RUN_TEST(test_steami_config_long_config_round_trip);
+    RUN_TEST(test_steami_config_restore_board_config);
     UNITY_END();
 }
 

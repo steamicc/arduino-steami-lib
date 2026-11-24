@@ -6,11 +6,10 @@ Configuration data is stored as compact JSON in the 1 KB STM32F103 DAPLink
 config zone. It is intended for board information, sensor calibration values,
 and small persistent counters.
 
-# /!\ current 255-byte read limitation /!\
-
 ## Dependency
 
-- `DAPLink Bridge` — config-zone access over the STeaMi internal I2C bus.
+- `STeaMi DAPLink Bridge` — config-zone access over the STeaMi internal I2C
+  bus.
 
 ## Quick start
 
@@ -31,6 +30,7 @@ void setup() {
         Serial.println("DAPLink bridge not detected");
         return;
     }
+    config.load();  // keep what is already stored (calibrations...)
 
     config.setBoardRevision(3);
     config.setBoardName("STeaMi-01");
@@ -40,19 +40,25 @@ void setup() {
 void loop() {}
 ```
 
-`begin()` probes the DAPLink bridge and loads the stored configuration.
-Calling setters only changes the in-memory copy; call `save()` to persist it.
+`begin()` probes the DAPLink bridge; `load()` reads the stored
+configuration. Setters only change the in-memory copy, and `save()`
+replaces the whole zone with it: call `load()` before changing a value, or
+the other stored settings are lost.
 
 ## Persistence
 
 | Method | Description |
 |---|---|
-| `bool begin()` | Probe DAPLink and load configuration. |
-| `bool load()` | Reload the JSON configuration from the config zone. |
-| `bool save()` | Erase the config zone and write the current compact JSON. |
+| `bool begin()` | Probe the DAPLink bridge. |
+| `bool load()` | Load the JSON configuration from the config zone. An empty zone gives an empty configuration. |
+| `bool save()` | Erase the config zone and write the current compact JSON. Returns `false` if it does not fit. |
 | `void clear()` | Clear only the in-memory configuration. |
 
-Invalid JSON is discarded and leaves an empty in-memory configuration.
+Invalid JSON is discarded: `load()` returns `false` and leaves an empty
+in-memory configuration.
+
+The serialized JSON must stay under 1 KB (1023 bytes at most, the size of
+the DAPLink config zone minus its last byte).
 
 ## Board information
 
@@ -173,11 +179,11 @@ The format is compatible with the MicroPython sister library:
 
 Temperature sensor short keys are `hts`, `mag`, `ism`, `hid`, and `pad`.
 
-## Example
+## Examples
 
-| Example | Description |
-|---|---|
-| `show_config` | Load and print the stored board information and boot count. |
+| Example | What it does |
+|---------|--------------|
+| [`show_config`](examples/show_config/) | Load and print the stored board information, calibrations and boot count, without writing anything. |
 
 ## License
 
