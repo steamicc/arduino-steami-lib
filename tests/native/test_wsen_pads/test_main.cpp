@@ -164,7 +164,7 @@ void test_calibrate_temperature_applies_correction(void) {
 void test_offset_stacks_on_top_of_calibration(void) {
     // Two-point calibration and the additive offset are independent —
     // setTemperatureOffset doesn't reset slope/intercept set by
-    // calibrateTemperature, and vice versa. Same contract as HTS221.
+    // calibrateTemperature, and vice versa. Same contract as WsenHids.
     sensor.begin();
     sensor.setContinuous(ODR_1_HZ);
     sensor.calibrateTemperature(1.0f, 0.0f, 22.0f, 20.0f);  // slope = 1.05, offset = 1.0

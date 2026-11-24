@@ -14,7 +14,7 @@ phases:
       humidity_max: 90
 
   - name: Breathing
-    prompt: "Press Enter, then breathe directly on the HTS221 sensor for ~5 seconds."
+    prompt: "Press Enter, then breathe directly on the WSEN-HIDS sensor for ~5 seconds."
     capture_seconds: 5
     record:
       - humidity

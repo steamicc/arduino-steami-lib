@@ -19,7 +19,7 @@ The runner:
 
 Usage:
 
-    python scripts/qualify.py hts221
+    python scripts/qualify.py wsen-hids
 """
 
 from __future__ import annotations

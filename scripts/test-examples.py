@@ -5,8 +5,8 @@
 Usage:
 
     python3 scripts/test-examples.py
-    python3 scripts/test-examples.py --driver hts221
-    python3 scripts/test-examples.py --example hts221/dew_point
+    python3 scripts/test-examples.py --driver wsen-hids
+    python3 scripts/test-examples.py --example wsen-hids/DewPointMonitor
 """
 
 from __future__ import annotations

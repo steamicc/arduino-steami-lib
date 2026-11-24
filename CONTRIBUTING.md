@@ -6,7 +6,7 @@ one shape, one set of naming rules, one testing pattern — so that learning
 one driver teaches you the whole library.
 
 The source of truth for conventions is this document. When in doubt, take
-[`lib/hts221/`](lib/hts221/) as a reference implementation: it exercises
+[`lib/wsen-hids/`](lib/wsen-hids/) as a reference implementation: it exercises
 almost every rule listed below.
 
 ## Getting started
@@ -43,7 +43,7 @@ Two shapes are in use, and they reflect the underlying directory structure:
 
 * **Flat targets** (`build`, `lint`, `test-native`, `test-hardware`, `test-integration`, `setup`, …) are top-level actions that operate on the whole tree. The verb may be compound (`test-native`), but there's no sub-path.
 * **Hierarchical targets** use `verb/<path>` whenever the action drills into one specific item:
-  * `flash-<driver>/<example>` — flash one example (e.g. `flash-hts221/dew_point`).
+  * `flash-<driver>/<example>` — flash one example (e.g. `flash-wsen-hids/DewPointMonitor`).
   * `capture-<driver>/<example>` — same, but route serial through `scripts/capture-serial.py` instead of opening miniterm.
   * `test-native/<suite>` / `test-hardware/<suite>` / `test-integration/<suite>` — run one test suite from a single tier. The suite is the directory name under `tests/<tier>/test_*` and isn't always a driver — `wire` and `led` cover mocks and board features rather than lib drivers.
   * `test/<suite>` — composite: chains every tier that exists for that suite.
@@ -117,7 +117,7 @@ lib/<component>/
   (`wsen-hids`, `wsen-pads` vs `daplink_flash`, `steami_config`) — pick
   whichever reads most naturally for the new driver and stay consistent
   within its own tree.
-- The class name is `PascalCase` (`HTS221`, `Mcp23009e`) and lives in
+- The class name is `PascalCase` (`WsenHids`, `Mcp23009e`) and lives in
   `src/<DriverName>.h`.
 - Drivers are self-contained by default. When one driver does need to
   call into another's public API (e.g. the DAPLink family, where
@@ -171,7 +171,7 @@ lib/<component>/
 
 - **Naming**: `camelCase` for methods and variables, `UPPER_SNAKE_CASE`
   for constants, `PascalCase` for class names (and the driver's
-  header/source files that match the class, e.g. `HTS221.h`), lower
+  header/source files that match the class, e.g. `WsenHids.h`), lower
   snake-case for example and test folders, and lowercase (with either
   hyphens or underscores) for driver folders.
 - **Constants**: `constexpr uint8_t` (preferred) or `#define` in
@@ -249,7 +249,7 @@ data. Callers can detect with `isnan()`.
 
 - `void setContinuous(uint8_t odr)` — continuous mode at the given
   Output Data Rate. ODR values live in `<driver>_const.h` as named
-  constants (e.g. `HTS221_ODR_1_HZ`).
+  constants (e.g. `WSEN_HIDS_ODR_1_HZ`).
 - `void triggerOneShot()` — non-blocking: kick a single conversion.
 - `ReadResult readOneShot()` — trigger + wait + return.
 
@@ -283,7 +283,7 @@ Two complementary environments, both wired into PlatformIO:
 
 See [`tests/TESTING.md`](tests/TESTING.md) for the mock Wire API
 (`setRegister`, `getWrites`, `clearWrites`, per-address keying). The
-HTS221 suite ([`tests/native/test_hts221/`](tests/native/test_hts221/))
+WSEN-HIDS suite ([`tests/native/test_wsen_hids/`](tests/native/test_wsen_hids/))
 is a good reference.
 
 ## Commit messages
@@ -298,7 +298,7 @@ hook (and the `check-commits` workflow on every PR):
 **Types**: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `ci`,
 `build`, `chore`, `perf`, `revert`, `tooling`.
 
-**Scopes** (optional): driver names (`hts221`, `ism330dl`, `wsen-pads`, …)
+**Scopes** (optional): driver names (`wsen-hids`, `ism330dl`, `wsen-pads`, …)
 or domains (`ci`, `docs`, `style`, `tests`, `tooling`, `boards`). Recommended for
 driver-specific changes, omit for cross-cutting ones.
 
@@ -308,7 +308,7 @@ explain the *why*, not the *what* (the diff shows the what).
 ### Examples
 
 ```
-feat(hts221): Add driver with temperature and humidity reading.
+feat(wsen-hids): Add driver with temperature and humidity reading.
 fix(wsen-pads): Correct pressure conversion formula.
 docs: Update README driver table.
 test(mcp23009e): Add unit tests for GPIO read.
@@ -328,7 +328,7 @@ release/vX.Y.Z
 Uppercase, underscores, or other types will be rejected by the local
 pre-commit hook (`validate-branch-name`). Examples:
 
-- `feat/hts221-driver` ✓
+- `feat/wsen-hids-driver` ✓
 - `docs/add-gplv3-license` ✓
 - `build/platformio-steami` ✗ (`build` isn't in the branch-name
   whitelist even though it's a valid commit type)
@@ -366,7 +366,7 @@ All four need to go green before a merge.
 - Keep implementations simple and readable; the reference drivers
   deliberately skip clever tricks.
 - Follow the existing drivers — when a new situation isn't covered
-  here, look at how `hts221` handled the equivalent.
+  here, look at how `wsen-hids` handled the equivalent.
 - Every driver ships a README with an API table, at least one example
   sketch, and a `keywords.txt` for Arduino IDE syntax highlighting.
 - Match the MicroPython sister-library API wherever possible for

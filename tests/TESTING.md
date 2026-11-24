@@ -66,7 +66,7 @@ discoverable test target across the three tiers plus the composite.
 
 ```bash
 make test-native              # all native suites
-make test-native/hts221       # one suite — auto-discovered from tests/native/test_hts221/
+make test-native/wsen-hids       # one suite — auto-discovered from tests/native/test_wsen_hids/
 make test-native/led
 make test-native/wire
 ```
@@ -77,7 +77,7 @@ No hardware required. CI-friendly.
 
 ```bash
 make test-hardware            # all hardware suites
-make test-hardware/hts221     # one suite — auto-discovered from tests/hardware/test_hts221/
+make test-hardware/wsen-hids     # one suite — auto-discovered from tests/hardware/test_wsen_hids/
 make test-hardware/led
 ```
 
@@ -89,7 +89,7 @@ script that calls these without a board attached doesn't fail.
 
 ```bash
 make test-integration         # all integration suites
-make test-integration/hts221  # one suite — auto-discovered from tests/integration/test_hts221/
+make test-integration/wsen-hids  # one suite — auto-discovered from tests/integration/test_wsen_hids/
 ```
 
 Requires a board (same skip behaviour as hardware unit tests). Integration
@@ -123,12 +123,12 @@ make test-examples
 Compile all examples for one driver:
 
 ```bash
-make test-examples/hts221
+make test-examples/wsen-hids
 ```
 Compile one example:
 
 ```bash
-make test-example/hts221/dew_point
+make test-example/wsen-hids/DewPointMonitor
 ```
 
 Aggregate example validation continues after individual build failures and
@@ -139,8 +139,8 @@ PlatformIO output for every example, use:
 
 ```bash
 make test-examples VERBOSE=1
-make test-examples/hts221 VERBOSE=1
-make test-example/hts221/dew_point VERBOSE=1
+make test-examples/wsen-hids VERBOSE=1
+make test-example/wsen-hids/DewPointMonitor VERBOSE=1
 ```
 
 Example validation requires no connected STeaMi board and runs as part of make ci.
@@ -150,7 +150,7 @@ Example validation requires no connected STeaMi board and runs as part of make c
 `make test/<suite>` chains whichever tiers exist for that suite:
 
 ```bash
-make test/hts221              # native + hardware-unit + integration
+make test/wsen-hids              # native + hardware-unit + integration
 make test/led                 # native + hardware-unit
 make test/wire                # native only
 ```
@@ -309,7 +309,7 @@ Run available scenarios with:
 
 ```bash
 make list-qualification
-make qualify-hts221
+make qualify-wsen-hids
 ```
 ---
 
@@ -338,7 +338,7 @@ allowing each tier to use assertion ranges appropriate to its execution model.
 
 Integration tests intentionally do **not** use these helpers, because they
 validate multi-step runtime behaviour rather than single-call contracts. See
-`tests/integration/test_hts221/` for the reference shape.
+`tests/integration/test_wsen_hids/` for the reference shape.
 
 ---
 

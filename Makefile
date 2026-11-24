@@ -171,7 +171,7 @@ list-examples: ## List ready-to-run flash-/capture- targets, optionally filtered
 # Per-example flash targets. Pattern rules with `%` don't span `/` in
 # GNU Make, so we generate one explicit phony target per example via
 # foreach+eval — same shape as test-<scenario> in micropython-steami-lib.
-# Usage: `make flash-hts221/dew_point` (the value listed by list-examples).
+# Usage: `make flash-wsen-hids/DewPointMonitor` (the value listed by list-examples).
 define FLASH_RULE
 .PHONY: flash-$(1)
 flash-$(1): .venv/bin/pio

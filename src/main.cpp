@@ -13,7 +13,6 @@
 
 #include <Arduino.h>
 #include <DaplinkBridge.h>
-#include <HTS221.h>
 #include <WSEN_PADS.h>
 #include <Wire.h>
 #include <WsenHids.h>
@@ -24,7 +23,6 @@
 // dedicated TwoWire and hand it to every on-board driver.
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 
-HTS221 hts221(internalI2C);
 WsenHids wsen_hids(internalI2C);
 WSEN_PADS wsen_pads(internalI2C);
 DaplinkBridge daplink_bridge(internalI2C);
@@ -41,31 +39,7 @@ void setup() {
 
     internalI2C.begin();
 
-    // --- HTS221 (humidity + temperature) ---
-    if (hts221.begin()) {
-        Serial.print("HTS221 detected, WHO_AM_I = 0x");
-        Serial.println(hts221.deviceId(), HEX);
-
-        // Use continuous mode for the smoke read: the one-shot path on
-        // this silicon refuses to fire from a cold reset (see the
-        // matching MicroPython issue in steamicc/micropython-steami-lib).
-        hts221.setContinuous(HTS221_ODR_1_HZ);
-        delay(1200);
-
-        auto r = hts221.read();
-        Serial.print("HTS221 first read: T = ");
-        Serial.print(r.temperature, 2);
-        Serial.print(" C, H = ");
-        Serial.print(r.humidity, 1);
-        Serial.println(" %");
-    } else {
-        Serial.println("HTS221 not detected");
-    }
-
     // --- WSEN-HIDS (humidity + temperature) ---
-    // Same on-board die as HTS221 from the BOM's other supplier; same
-    // I2C address (0x5F) and WHO_AM_I (0xBC). Probing both keeps the
-    // driver linked regardless of which silicon variant is populated.
     if (wsen_hids.begin()) {
         Serial.print("WSEN-HIDS detected, WHO_AM_I = 0x");
         Serial.println(wsen_hids.deviceId(), HEX);

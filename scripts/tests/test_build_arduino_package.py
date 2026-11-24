@@ -59,11 +59,9 @@ class BuildPackageTest(unittest.TestCase):
         self.assertNotIn("ccc", (self.out / "src" / "STeaMi.h").read_text().lower())
 
     def test_excluded_driver_skipped(self) -> None:
-        write(self.lib / "hts221" / "src" / "HTS221.h")
-        write(self.lib / "hts221" / "examples" / "demo" / "demo.ino")
-        self.build()
-        self.assertFalse((self.out / "src" / "HTS221.h").exists())
-        self.assertFalse((self.out / "examples" / "HTS221").exists())
+        self.build(exclude=frozenset({"bbb"}))
+        self.assertTrue((self.out / "src" / "AAA.h").is_file())
+        self.assertFalse((self.out / "src" / "BBB.h").exists())
 
     def test_umbrella_header(self) -> None:
         self.build()

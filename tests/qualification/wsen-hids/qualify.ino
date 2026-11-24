@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <Arduino.h>
-#include <HTS221.h>
 #include <Wire.h>
+#include <WsenHids.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-HTS221 sensor(internalI2C);
+WsenHids sensor(internalI2C);
 
 void setup() {
     Serial.begin(115200);
@@ -20,7 +20,7 @@ void setup() {
         }
     }
 
-    sensor.setContinuous(HTS221_ODR_1_HZ);
+    sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
 
     Serial.println("ready=1");
 }
