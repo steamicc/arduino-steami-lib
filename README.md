@@ -18,7 +18,6 @@ Arduino/C++ driver library for the [STeaMi](https://www.steami.cc/) board. Each 
 | MCP23009E     | [`mcp23009e`](lib/mcp23009e/)           | `0x20`      | 8-bit I/O expander (D-PAD)            |
 | VL53L1X       | [`vl53l1x`](lib/vl53l1x/)               | `0x29`      | Time-of-Flight distance sensor        |
 | APDS-9960     | [`apds9960`](lib/apds9960/)             | `0x39`      | Proximity, gesture, color, light      |
-| HTS221        | [`hts221`](lib/hts221/)                 | `0x5F`      | Humidity + temperature                |
 | WSEN-HIDS     | [`wsen-hids`](lib/wsen-hids/)           | `0x5F`      | Humidity + temperature                |
 | WSEN-PADS     | [`wsen-pads`](lib/wsen-pads/)           | `0x5D`      | Pressure + temperature                |
 | ISM330DL      | [`ism330dl`](lib/ism330dl/)             | `0x6B`      | 6-axis IMU (accel + gyro)             |
@@ -67,16 +66,16 @@ make list-examples
 This prints one ready-to-run target per example, e.g.:
 
 ```
-flash-hts221/comfort_index
-flash-hts221/dew_point
-flash-hts221/read_temperature_humidity
-flash-hts221/temperature_alarm
+flash-wsen-hids/BasicReader
+flash-wsen-hids/ComfortZone
+flash-wsen-hids/DewPointMonitor
+flash-wsen-hids/HumidityAlert
 ```
 
 Filter by driver:
 
 ```bash
-make list-examples DRIVER=hts221
+make list-examples DRIVER=wsen-hids
 ```
 
 ### Flash an example
@@ -84,7 +83,7 @@ make list-examples DRIVER=hts221
 Copy any line from `make list-examples` and run it:
 
 ```bash
-make flash-hts221/dew_point
+make flash-wsen-hids/DewPointMonitor
 ```
 
 This builds the example, uploads it to the STeaMi board, and opens the serial monitor at 115200 baud on success.
@@ -94,19 +93,19 @@ This builds the example, uploads it to the STeaMi board, and opens the serial mo
 `make flash-…` opens an interactive monitor, which often misses the first lines printed at boot (the monitor finishes its handshake while the board has already moved past `setup()`). When you need those lines — e.g. to see whether `begin()` returned `false` — swap `flash-` for `capture-`:
 
 ```bash
-make capture-hts221/dew_point
+make capture-wsen-hids/DewPointMonitor
 ```
 
 This builds and uploads the example like `flash-…`, but instead of opening miniterm it opens the serial port first, asks OpenOCD to reset the board over CMSIS-DAP, and prints whatever the board sends on stdout for 10 seconds. The output is unbuffered and pipeable:
 
 ```bash
-make capture-hts221/dew_point | grep -i "HTS221"
+make capture-wsen-hids/DewPointMonitor | grep -i "WSEN-HIDS"
 ```
 
 Override the duration with `DURATION=N` (in seconds):
 
 ```bash
-make capture-hts221/dew_point DURATION=30
+make capture-wsen-hids/DewPointMonitor DURATION=30
 ```
 
 ## Development

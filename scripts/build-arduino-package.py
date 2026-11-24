@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 
-EXCLUDED_DRIVERS = frozenset({"hts221"})
+EXCLUDED_DRIVERS = frozenset()
 
 # Directory holding examples but no driver sources.
 EXAMPLES_ONLY = ("ble",)

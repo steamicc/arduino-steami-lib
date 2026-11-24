@@ -80,7 +80,7 @@ class MCP23009E {
 
    private:
     // Stored as a pointer (not a reference) so the class is
-    // default-assignable — matches the convention in HTS221 / WsenHids
+    // default-assignable — matches the convention in WsenHids / WSEN_PADS
     // and the CONTRIBUTING.md "Attributes" guidance. The public
     // constructor still takes a TwoWire& to keep the usual Arduino
     // I2C interface at the call site.

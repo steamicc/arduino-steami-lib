@@ -24,7 +24,7 @@ void test_expected_i2c_devices_respond() {
         0x39,  // APDS9960
         0x3B,  // DAPLink bridge
         0x5D,  // WSEN-PADS
-        0x5F,  // HTS221 / WSEN-HIDS
+        0x5F,  // WSEN-HIDS
         0x6B,  // ISM330DL
     };
 

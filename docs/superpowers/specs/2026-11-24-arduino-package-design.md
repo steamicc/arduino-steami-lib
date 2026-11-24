@@ -58,7 +58,7 @@ src/<every .h/.cpp of the included drivers, flattened>
 examples/<COMPONENT>/<Example>/<Example>.ino   (+ any other file of the sketch folder)
 ```
 
-- **Included drivers**: every `lib/<driver>/` whose `src/` contains sources, minus an exclude list kept in the build script. Initial exclude list: `hts221` (legacy sensor, mounted on no production board). Placeholders (empty `src/`) are skipped automatically.
+- **Included drivers**: every `lib/<driver>/` whose `src/` contains sources, minus an exclude list kept in the build script. Initial exclude list: `hts221` (legacy sensor, mounted on no production board). `hts221` was removed from the repository in #225, so the list is now empty; the mechanism is kept. Placeholders (empty `src/`) are skipped automatically.
 - **Examples**: every `lib/<driver>/examples/<Example>/` of the included drivers, plus `lib/ble/examples/` (no driver sources). `<COMPONENT>` is the upper-cased driver directory name (`ISM330DL`, `WSEN-PADS`, `MCP23009E`, `BLE`…).
 - The build fails on a file-name collision in `src/` or on an example whose folder and `.ino` names differ.
 
