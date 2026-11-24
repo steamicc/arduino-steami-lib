@@ -53,24 +53,26 @@ DaplinkBridge::ConfigZoneSupport DaplinkBridge::probeConfigZone() {
     // newer ones read the sector without error. Reading the error
     // register clears it, so start from a clean state.
     //
-    // Every read here must succeed: right after READ_SECTOR the bridge
-    // NACKs for a while, and mistaking that silence for "no error" would
-    // send config commands to a firmware that locks up on them.
-    uint8_t err = 0;
-    if (!waitNotBusy(DAPLINK_BRIDGE_PROBE_TIMEOUT_MS) || !readReg(DAPLINK_BRIDGE_REG_ERROR, err)) {
+    // Anything but a clean "no error" must keep the config commands away:
+    // the firmwares without the zone lock up on them.
+    uint8_t stale = 0;
+    if (!waitNotBusy(DAPLINK_BRIDGE_PROBE_TIMEOUT_MS) ||
+        !readReg(DAPLINK_BRIDGE_REG_ERROR, stale)) {
         return ConfigZoneSupport::Unknown;
     }
 
     const uint8_t frame[3] = {DAPLINK_BRIDGE_CMD_READ_SECTOR, 0x00, 0x00};
-    _wire->beginTransmission(_address);
-    _wire->write(frame, sizeof(frame));
-    if (_wire->endTransmission() != 0) {
+    if (!writeFrame(frame, sizeof(frame))) {
         return ConfigZoneSupport::Unknown;
     }
-    if (!waitNotBusy(DAPLINK_BRIDGE_PROBE_TIMEOUT_MS) || !readReg(DAPLINK_BRIDGE_REG_ERROR, err)) {
-        return ConfigZoneSupport::Unknown;
+    switch (commandResult(DAPLINK_BRIDGE_PROBE_SETTLE_MS, DAPLINK_BRIDGE_PROBE_TIMEOUT_MS)) {
+        case CommandResult::Ok:
+            return ConfigZoneSupport::Present;
+        case CommandResult::Failed:
+            return ConfigZoneSupport::Absent;
+        default:
+            return ConfigZoneSupport::Unknown;
     }
-    return err == 0 ? ConfigZoneSupport::Present : ConfigZoneSupport::Absent;
 }
 
 bool DaplinkBridge::clearConfig() {
@@ -81,15 +83,12 @@ bool DaplinkBridge::clearConfig() {
         return false;
     }
 
-    uint8_t cmd = DAPLINK_BRIDGE_CMD_CLEAR_CONFIG;
-    writeFrame(&cmd, 1);
-    delay(DAPLINK_BRIDGE_CLEAR_CONFIG_DELAY_MS);
-
-    if (!waitNotBusy(DAPLINK_BRIDGE_CLEAR_TIMEOUT_MS)) {
+    const uint8_t cmd = DAPLINK_BRIDGE_CMD_CLEAR_CONFIG;
+    if (!writeFrame(&cmd, 1)) {
         return false;
     }
-
-    return noError();
+    return commandResult(DAPLINK_BRIDGE_CLEAR_CONFIG_DELAY_MS, DAPLINK_BRIDGE_CLEAR_TIMEOUT_MS) ==
+           CommandResult::Ok;
 }
 
 bool DaplinkBridge::writeConfig(const uint8_t* data, size_t length, uint16_t offset) {
@@ -102,6 +101,9 @@ bool DaplinkBridge::writeConfig(const uint8_t* data, size_t length, uint16_t off
     if (!hasConfigZone()) {
         return false;
     }
+    if (!waitNotBusy(DAPLINK_BRIDGE_WRITE_TIMEOUT_MS)) {
+        return false;
+    }
 
     // Frame layout: [CMD | offsetHi | offsetLo | chunkLen | payload...]
     constexpr size_t kHeaderLen = 4;
@@ -110,10 +112,6 @@ bool DaplinkBridge::writeConfig(const uint8_t* data, size_t length, uint16_t off
     size_t pos = 0;
 
     while (pos < length) {
-        if (!waitNotBusy(DAPLINK_BRIDGE_WRITE_TIMEOUT_MS)) {
-            return false;
-        }
-
         const size_t remaining = length - pos;
 
         const uint8_t chunkLen =
@@ -132,15 +130,17 @@ bool DaplinkBridge::writeConfig(const uint8_t* data, size_t length, uint16_t off
 
         memcpy(&buf[kHeaderLen], &data[pos], chunkLen);
 
-        writeFrame(buf, sizeof(buf));
-        delay(DAPLINK_BRIDGE_WRITE_CONFIG_DELAY_MS);
+        // Check every chunk: a failure is only visible until the next
+        // command reaches the bridge.
+        if (!writeFrame(buf, sizeof(buf)) ||
+            commandResult(DAPLINK_BRIDGE_WRITE_CONFIG_DELAY_MS, DAPLINK_BRIDGE_WRITE_TIMEOUT_MS) !=
+                CommandResult::Ok) {
+            return false;
+        }
 
         pos += chunkLen;
     }
-    if (!waitNotBusy(DAPLINK_BRIDGE_WRITE_TIMEOUT_MS)) {
-        return false;
-    }
-    return noError();
+    return true;
 }
 
 bool DaplinkBridge::writeConfig(const char* str, uint16_t offset) {
@@ -217,14 +217,23 @@ bool DaplinkBridge::isPresent() {
 }
 
 bool DaplinkBridge::readReg(uint8_t reg, uint8_t& value) {
+    // Retry while the bridge refuses the request: the F103 answers reads
+    // from its main loop and NACKs for a while after sending a block.
+    // Once the bridge took the request, reading the error register has
+    // cleared it: a retry would only read the cleared value.
+    const bool retryRead = reg != DAPLINK_BRIDGE_REG_ERROR;
     const uint32_t start = millis();
     while (true) {
         _wire->beginTransmission(_address);
         _wire->write(reg);
-        if (_wire->endTransmission(false) == 0 &&
-            _wire->requestFrom(_address, static_cast<uint8_t>(1)) == 1 && _wire->available()) {
-            value = static_cast<uint8_t>(_wire->read());
-            return true;
+        if (_wire->endTransmission(false) == 0) {
+            if (_wire->requestFrom(_address, static_cast<uint8_t>(1)) == 1 && _wire->available()) {
+                value = static_cast<uint8_t>(_wire->read());
+                return true;
+            }
+            if (!retryRead) {
+                return false;
+            }
         }
         if ((millis() - start) > DAPLINK_BRIDGE_REG_TIMEOUT_MS) {
             return false;
@@ -233,22 +242,36 @@ bool DaplinkBridge::readReg(uint8_t reg, uint8_t& value) {
     }
 }
 
-void DaplinkBridge::writeFrame(const uint8_t* data, size_t len) {
+bool DaplinkBridge::writeFrame(const uint8_t* data, size_t len) {
     _wire->beginTransmission(_address);
-    for (size_t i = 0; i < len; ++i) {
-        _wire->write(data[i]);
-    }
-    _wire->endTransmission();
+    _wire->write(data, len);
+    return _wire->endTransmission() == 0;
 }
 
 // ---------------------------------------------------------------------
 // Status / error
 // ---------------------------------------------------------------------
 
-bool DaplinkBridge::noError() {
-    // Reading the error register clears it.
+DaplinkBridge::CommandResult DaplinkBridge::commandResult(uint32_t settleMs, uint32_t timeoutMs) {
+    // The firmware reports some failures only through the "last command
+    // failed" bit of the error register, and clears that bit when it
+    // receives the next command, a STATUS poll included. So send nothing
+    // until the command has run: wait, read the error register first, and
+    // only then check that the bridge is idle. Every command reports busy
+    // until it has run, so an idle bridge proves the error register was
+    // read after the command finished.
+    delay(settleMs);
     uint8_t err = 0;
-    return readReg(DAPLINK_BRIDGE_REG_ERROR, err) && err == 0;
+    uint8_t status = 0;
+    if (!readReg(DAPLINK_BRIDGE_REG_ERROR, err) || !readReg(DAPLINK_BRIDGE_REG_STATUS, status)) {
+        return CommandResult::Unknown;
+    }
+    if ((status & DAPLINK_BRIDGE_STATUS_BUSY) != 0) {
+        // Still running: its outcome can no longer be read.
+        waitNotBusy(timeoutMs);
+        return CommandResult::Unknown;
+    }
+    return err == 0 ? CommandResult::Ok : CommandResult::Failed;
 }
 
 bool DaplinkBridge::waitNotBusy(uint32_t timeoutMs) {
