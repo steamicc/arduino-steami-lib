@@ -2,7 +2,8 @@ name: Publish Arduino package
 
 # When a GitHub release is published, publish the STeaMi Arduino library to
 # steamicc/arduino-steami (the repository registered in the Arduino Library
-# Manager) and attach STeaMi-X.Y.Z.zip to the release of this repository.
+# Manager). No ZIP is built: the "Source code (zip)" of each arduino-steami
+# release has the library at its root and installs offline with Add .ZIP Library.
 #
 # It does not trigger on the tag push: semantic-release's tag commit carries
 # [skip ci], which GitHub applies to push events but not to release events.
@@ -68,8 +69,6 @@ jobs:
     name: Publish the package
     needs: [resolve, check]
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     env:
       TAG: ${{ needs.resolve.outputs.tag }}
       VERSION: ${{ needs.resolve.outputs.version }}
@@ -90,7 +89,7 @@ jobs:
           app_id: ${{ secrets.RELEASE_APP_ID }}
           private_key: ${{ secrets.RELEASE_APP_SECRET }}
           repositories: >-
-            ["arduino-steami", "arduino-steami-lib"]
+            ["arduino-steami"]
 
       - name: Push the package to the distribution repository
         env:
@@ -138,19 +137,8 @@ jobs:
               --notes "Arduino package of the STeaMi drivers. Release notes: https://github.com/${SOURCE_REPO}/releases/tag/${TAG}"
           fi
 
-      - name: Attach the ZIP to the release of this repository
-        if: env.DRY_RUN != 'true'
-        env:
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p zip/STeaMi
-          cp -a package/. zip/STeaMi/
-          (cd zip && zip -qr "../STeaMi-${VERSION}.zip" STeaMi)
-          gh release upload "$TAG" "STeaMi-${VERSION}.zip" --clobber -R "$SOURCE_REPO"
-
       - name: Dry run summary
         if: env.DRY_RUN == 'true'
         run: |
-          echo "Dry run: no commit, tag, release or ZIP was written."
-          echo "Would publish ${TAG} (version ${VERSION}) to ${DIST_REPO} and upload STeaMi-${VERSION}.zip to ${SOURCE_REPO}."
+          echo "Dry run: no commit, tag or release was written."
+          echo "Would publish ${TAG} (version ${VERSION}) to ${DIST_REPO}."

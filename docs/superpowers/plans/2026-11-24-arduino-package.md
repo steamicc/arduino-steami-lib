@@ -4,7 +4,7 @@
 
 **Goal:** Publish every implemented STeaMi driver as one `STeaMi` library in the Arduino Library Manager, built and checked in CI and pushed automatically to `steamicc/arduino-steami` on each release.
 
-**Architecture:** A stdlib-only Python script assembles the package from `lib/*/` into a directory. A reusable workflow builds it, lints it and compiles every example with arduino-cli; the PR CI and the publish workflow both call it. The publish workflow, triggered by a published release or by hand, pushes the checked package to the distribution repository and attaches a ZIP to the source release.
+**Architecture:** A stdlib-only Python script assembles the package from `lib/*/` into a directory. A reusable workflow builds it, lints it and compiles every example with arduino-cli; the PR CI and the publish workflow both call it. The publish workflow, triggered by a published release or by hand, pushes the checked package to the distribution repository; offline installation uses the "Source code (zip)" of its release.
 
 **Tech Stack:** Python 3 (stdlib, `unittest`), GNU Make, GitHub Actions (`arduino/arduino-lint-action@v2`, `arduino/setup-arduino-cli@v2`, `tibdex/github-app-token@v2`), arduino-cli, STM32duino core `STMicroelectronics:stm32`.
 
@@ -17,7 +17,7 @@
 - Example path in the package: `examples/<DRIVER DIR UPPER-CASED>/<Example>/`; BLE examples come from `lib/ble/examples/` as `examples/BLE/…`.
 - FQBN `STMicroelectronics:stm32:STeaMi`; board package URL `https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json`.
 - Distribution repository `steamicc/arduino-steami`, branch `main`, tag `vX.Y.Z`, commit message `Release vX.Y.Z`.
-- ZIP asset name `STeaMi-X.Y.Z.zip`, top-level folder `STeaMi/`.
+- No ZIP asset: offline installation uses the "Source code (zip)" of the `steamicc/arduino-steami` release (library at its root).
 - App token from secrets `RELEASE_APP_ID` / `RELEASE_APP_SECRET` (same as `release.yml`).
 - No file may contain the phrases rejected by `git-precommit-checks.config.js` (see its third rule).
 - Commit messages follow commitlint (`type(scope): Subject.`), English, ending with a period, like the existing history.
@@ -28,7 +28,7 @@
 2. An example folder holding extra files (`BleIndoorMap.md`, a local `.h`) → copied alongside the `.ino` (test `test_example_extra_files_copied`).
 3. A stray file directly in `examples/` (`lib/mcp23009e/examples/.gitkeep`) → ignored, not an example (test `test_stray_file_in_examples_ignored`).
 4. `--version v0.25.0` or an empty/garbled version → rejected with a clear error (test `test_version_must_be_semver`).
-5. Re-running the publish for a tag that already exists in `arduino-steami` → no new commit, no error, release and ZIP still ensured (checked by the `dry_run` manual run in Task 4).
+5. Re-running the publish for a tag that already exists in `arduino-steami` → no new commit, no error, release still ensured (checked by the `dry_run` manual run in Task 4).
 
 ---
 
@@ -166,17 +166,17 @@ Expected: the `arduino-package` check passes; arduino-lint reports no error. If 
 
 **Files:**
 - Create: `.github/workflows/publish-arduino-package.yml`
-- Modify: `README.md` (section "Arduino IDE": install from the Library Manager once registered; ZIP from the releases; `make package` for contributors)
+- Modify: `README.md` (section "Arduino IDE": install from the Library Manager once registered; offline install from the "Source code (zip)" of the `arduino-steami` release; `make package` for contributors)
 
 **Interfaces:**
 - Consumes: reusable workflow and artifact `arduino-package` from Task 3.
-- Produces: on each published release, the content of `steamicc/arduino-steami` at tag `vX.Y.Z`, its GitHub release, and the `STeaMi-X.Y.Z.zip` asset on this repository's release.
+- Produces: on each published release, the content of `steamicc/arduino-steami` at tag `vX.Y.Z`, its GitHub release.
 
 - [ ] **Step 1: Write the workflow**:
   - `on: release: types: [published]` and `workflow_dispatch` with input `dry_run` (boolean, default `false`). There is no `tag` input: manual recovery runs the workflow on the tag (`--ref vX.Y.Z`).
   - job `resolve`: output `tag` (`github.ref_name`, failing unless `github.ref_type == 'tag'`) and `version` (tag without `v`, validated `^v[0-9]+\.[0-9]+\.[0-9]+$`).
   - job `check`: `uses: ./.github/workflows/arduino-package-check.yml` with the resolved version. Note: the reusable workflow checks out the triggering ref, which is the tag, and has no `ref` input (CodeQL flags running code checked out from a dispatch input).
-  - job `publish` (`needs: [resolve, check]`, `permissions: contents: write`): download artifact; generate App token (`repositories: arduino-steami,arduino-steami-lib`); clone `steamicc/arduino-steami` (handle an empty repository: no `main` yet); if `git ls-remote --tags origin vX.Y.Z` finds it, skip the push; else replace all content but `.git` with the package, commit as `semantic-release-updater[bot]`, tag, push `main` and the tag (skipped when `dry_run`); `gh release view vX.Y.Z -R steamicc/arduino-steami || gh release create …` with notes linking `https://github.com/steamicc/arduino-steami-lib/releases/tag/vX.Y.Z`; build `STeaMi-X.Y.Z.zip` (top folder `STeaMi/`) and `gh release upload vX.Y.Z STeaMi-X.Y.Z.zip --clobber -R steamicc/arduino-steami-lib`. With `dry_run`, print what would be pushed and stop before any write.
+  - job `publish` (`needs: [resolve, check]`, `permissions: contents: read`): download artifact; generate App token (`repositories: arduino-steami`); clone `steamicc/arduino-steami` (handle an empty repository: no `main` yet); if `git ls-remote --tags origin vX.Y.Z` finds it, skip the push; else replace all content but `.git` with the package, commit as `semantic-release-updater[bot]`, tag, push `main` and the tag (skipped when `dry_run`); `gh release view vX.Y.Z -R steamicc/arduino-steami || gh release create …` with notes linking `https://github.com/steamicc/arduino-steami-lib/releases/tag/vX.Y.Z`. With `dry_run`, print what would be pushed and stop before any write.
 
 - [ ] **Step 2: Validate the YAML** (same command as Task 3 Step 3). Expected: no error.
 
@@ -194,7 +194,7 @@ git push
 
 The `feat(tooling)` commit makes the merge release `v0.25.0`, whose published release triggers the first real publication (the maintainer must have checked the ruleset bypass before merging).
 Run: `gh run list --workflow publish-arduino-package.yml --limit 1` until done, then `git ls-remote --tags https://github.com/steamicc/arduino-steami` and `gh release view v0.25.0 -R steamicc/arduino-steami-lib --json assets`.
-Expected: run green; tag `v0.25.0` in `arduino-steami`; asset `STeaMi-0.25.0.zip` attached.
+Expected: run green; tag `v0.25.0` in `arduino-steami`.
 Then run: `gh workflow run publish-arduino-package.yml --ref v0.25.0` and check that `arduino-steami` has no new commit and the run is green (Review Focus 5). `dry_run=true` remains available for later diagnosis.
 
 ---
@@ -205,4 +205,4 @@ Then run: `gh workflow run publish-arduino-package.yml --ref v0.25.0` and check 
 - Modify (wiki repository `steamicc/wiki_steami`): `docs/software/arduino/bibliotheques.md`, `docs/software/arduino/capteurs.md` (example paths **Fichier → Exemples → STeaMi → …**), via its own issue and PR.
 
 - [ ] **Step 1:** Maintainer opens the PR on `arduino/library-registry` adding `https://github.com/steamicc/arduino-steami` to `repositories.txt`.
-- [ ] **Step 2:** Once `arduino-cli lib search STeaMi` finds it, update the wiki: install from the Library Manager, ZIP as the offline alternative, remove the interim notice. Build the wiki (`npm run build`). Expected: success, no broken link.
+- [ ] **Step 2:** Once `arduino-cli lib search STeaMi` finds it, update the wiki: install from the Library Manager, "Source code (zip)" of the `arduino-steami` release as the offline alternative, remove the interim notice. Build the wiki (`npm run build`). Expected: success, no broken link.
