@@ -221,7 +221,9 @@ void test_gc9a01_pixel_row_major_offset(void) {
     display->pixel(3, 2, 0x5AA5);
     transfers.clear();
     display->show();
-    const auto& data = commands()[2].params;
+    // keep the commands alive: params is a reference into them
+    const auto cmds = commands();
+    const auto& data = cmds[2].params;
     const size_t offset = (2 * 240 + 3) * 2;
     TEST_ASSERT_EQUAL_HEX8(0x5A, data[offset]);
     TEST_ASSERT_EQUAL_HEX8(0xA5, data[offset + 1]);
