@@ -319,6 +319,40 @@ void test_read_returns_nan_on_timeout(void) {
     TEST_ASSERT_TRUE(isnan(r.pressure));
 }
 
+static void assertAllNan(const BME280::ReadResult& r) {
+    TEST_ASSERT_TRUE(isnan(r.temperature));
+    TEST_ASSERT_TRUE(isnan(r.humidity));
+    TEST_ASSERT_TRUE(isnan(r.pressure));
+}
+
+void test_begin_returns_false_on_i2c_nack(void) {
+    Wire.setEndTransmissionResult(2);
+    TEST_ASSERT_FALSE(sensor.begin());
+}
+
+void test_read_returns_nan_when_bus_fails_after_begin(void) {
+    TEST_ASSERT_TRUE(sensor.begin());
+    preloadMeasurement();
+    // Module unplugged or bus fault: every transfer is NACKed.
+    Wire.setEndTransmissionResult(2);
+    assertAllNan(sensor.read());
+    assertAllNan(sensor.readOneShot());
+    TEST_ASSERT_TRUE(isnan(sensor.temperature()));
+}
+
+void test_read_returns_nan_without_begin(void) {
+    preloadMeasurement();
+    assertAllNan(sensor.read());
+    assertAllNan(sensor.readOneShot());
+}
+
+void test_read_returns_nan_after_failed_begin(void) {
+    preloadChipId(false);  // e.g. a V1a/V1b board: no BME280 at 0x76
+    TEST_ASSERT_FALSE(sensor.begin());
+    preloadMeasurement();
+    assertAllNan(sensor.read());
+}
+
 void test_trigger_one_shot_sets_forced_mode(void) {
     sensor.begin();
     sensor.triggerOneShot();
@@ -589,6 +623,10 @@ int main(void) {
     RUN_TEST(test_read_auto_triggers_forced_mode_when_sleeping);
     RUN_TEST(test_read_does_not_trigger_in_normal_mode);
     RUN_TEST(test_read_returns_nan_on_timeout);
+    RUN_TEST(test_begin_returns_false_on_i2c_nack);
+    RUN_TEST(test_read_returns_nan_when_bus_fails_after_begin);
+    RUN_TEST(test_read_returns_nan_without_begin);
+    RUN_TEST(test_read_returns_nan_after_failed_begin);
     RUN_TEST(test_trigger_one_shot_sets_forced_mode);
     RUN_TEST(test_read_after_trigger_one_shot_does_not_retrigger);
     RUN_TEST(test_data_ready_waits_for_pending_one_shot);

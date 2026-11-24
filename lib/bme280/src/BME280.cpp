@@ -7,17 +7,18 @@
 BME280::BME280(TwoWire& wire, uint8_t address) : _wire(&wire), _address(address) {}
 
 bool BME280::begin() {
+    _initialized = false;
     if (deviceId() != BME280_CHIP_ID_VALUE) {
         return false;
     }
     // The chip is not power-cycled by an MCU reset: wait for the NVM copy,
     // then force a known configuration so nothing is inherited from the
     // sketch that ran before.
-    if (!waitBoot()) {
+    if (!waitBoot() || !loadCalibration()) {
         return false;
     }
-    loadCalibration();
     configureDefault();
+    _initialized = true;
     return true;
 }
 
@@ -28,9 +29,10 @@ uint8_t BME280::deviceId() {
 void BME280::softReset() {
     writeReg(BME280_REG_SOFT_RESET, BME280_SOFT_RESET_CMD);
     delay(BME280_RESET_DELAY_MS);
-    waitBoot();
-    loadCalibration();
+    // A reset never makes a driver usable that begin() did not accept.
+    bool ok = waitBoot() && loadCalibration();
     configureDefault();
+    _initialized = _initialized && ok;
 }
 
 void BME280::powerOn() {
@@ -77,7 +79,7 @@ float BME280::pressureHpa() {
 }
 
 BME280::ReadResult BME280::read() {
-    if (!ensureData()) {
+    if (!_initialized || !ensureData()) {
         return {NAN, NAN, NAN};
     }
     return readData();
@@ -97,6 +99,9 @@ void BME280::triggerOneShot() {
 }
 
 BME280::ReadResult BME280::readOneShot() {
+    if (!_initialized) {
+        return {NAN, NAN, NAN};
+    }
     triggerOneShot();
     _oneShotPending = false;
     if (!waitMeasurement()) {
@@ -196,19 +201,10 @@ void BME280::calibrateTemperature(float refLow, float measLow, float refHigh, fl
     _tempUserIntercept = refLow - _tempUserSlope * measLow;
 }
 
-uint8_t BME280::status() {
-    return readReg(BME280_REG_STATUS);
-}
-
 uint8_t BME280::readReg(uint8_t reg) {
-    _wire->beginTransmission(_address);
-    _wire->write(reg);
-    _wire->endTransmission(false);
-    _wire->requestFrom(_address, static_cast<uint8_t>(1));
-    if (_wire->available()) {
-        return static_cast<uint8_t>(_wire->read());
-    }
-    return 0;
+    uint8_t value = 0;
+    readRegs(reg, &value, 1);
+    return value;
 }
 
 void BME280::writeReg(uint8_t reg, uint8_t value) {
@@ -218,7 +214,7 @@ void BME280::writeReg(uint8_t reg, uint8_t value) {
     _wire->endTransmission();
 }
 
-void BME280::readRegs(uint8_t reg, uint8_t* buf, size_t len) {
+bool BME280::readRegs(uint8_t reg, uint8_t* buf, size_t len) {
     // Zero-init up front so a short bus read leaves defined bytes in buf.
     for (size_t i = 0; i < len; ++i) {
         buf[i] = 0;
@@ -226,16 +222,27 @@ void BME280::readRegs(uint8_t reg, uint8_t* buf, size_t len) {
 
     _wire->beginTransmission(_address);
     _wire->write(reg);
-    _wire->endTransmission(false);
-    _wire->requestFrom(_address, static_cast<uint8_t>(len));
-    for (size_t i = 0; i < len && _wire->available(); ++i) {
-        buf[i] = static_cast<uint8_t>(_wire->read());
+    if (_wire->endTransmission(false) != 0) {
+        return false;
     }
+    if (_wire->requestFrom(_address, static_cast<uint8_t>(len)) != len) {
+        return false;
+    }
+    size_t received = 0;
+    while (received < len && _wire->available()) {
+        buf[received++] = static_cast<uint8_t>(_wire->read());
+    }
+    return received == len;
+}
+
+bool BME280::readStatus(uint8_t& value) {
+    return readRegs(BME280_REG_STATUS, &value, 1);
 }
 
 bool BME280::waitBoot() {
     for (uint8_t waited = 0; waited <= BME280_BOOT_TIMEOUT_MS; waited += 5) {
-        if ((status() & BME280_STATUS_IM_UPDATE) == 0) {
+        uint8_t st;
+        if (readStatus(st) && (st & BME280_STATUS_IM_UPDATE) == 0) {
             return true;
         }
         delay(5);
@@ -243,9 +250,13 @@ bool BME280::waitBoot() {
     return false;
 }
 
-void BME280::loadCalibration() {
+bool BME280::loadCalibration() {
     uint8_t tp[BME280_CALIB_TP_SIZE];
-    readRegs(BME280_REG_CALIB_TEMP_PRESS, tp, sizeof(tp));
+    uint8_t hum[BME280_CALIB_H_SIZE];
+    if (!readRegs(BME280_REG_CALIB_TEMP_PRESS, tp, sizeof(tp)) ||
+        !readRegs(BME280_REG_CALIB_HUM, hum, sizeof(hum))) {
+        return false;
+    }
     auto u16 = [&tp](size_t i) -> uint16_t {
         return static_cast<uint16_t>(tp[i] | (tp[i + 1] << 8));
     };
@@ -264,8 +275,6 @@ void BME280::loadCalibration() {
     // tp[24] is reserved.
     _digH1 = tp[25];
 
-    uint8_t hum[BME280_CALIB_H_SIZE];
-    readRegs(BME280_REG_CALIB_HUM, hum, sizeof(hum));
     _digH2 = static_cast<int16_t>(hum[0] | (hum[1] << 8));
     _digH3 = hum[2];
     // H4 and H5 are 12-bit signed values that share register 0xE5.
@@ -276,6 +285,7 @@ void BME280::loadCalibration() {
     _digH6 = static_cast<int8_t>(hum[6]);
 
     _tFine = 0;
+    return true;
 }
 
 void BME280::configureDefault() {
@@ -310,7 +320,10 @@ bool BME280::isSleeping() {
 }
 
 bool BME280::conversionIdle() {
-    return (status() & BME280_STATUS_MEASURING) == 0;
+    // A failed STATUS read is not "idle" (0x00 would read as idle): the
+    // caller's poll then times out and the read returns NAN.
+    uint8_t st;
+    return readStatus(st) && (st & BME280_STATUS_MEASURING) == 0;
 }
 
 bool BME280::oneShotDone() {
@@ -366,7 +379,9 @@ bool BME280::ensureData() {
 
 BME280::ReadResult BME280::readData() {
     uint8_t d[BME280_DATA_BLOCK_SIZE];
-    readRegs(BME280_REG_DATA_START, d, sizeof(d));
+    if (!readRegs(BME280_REG_DATA_START, d, sizeof(d))) {
+        return {NAN, NAN, NAN};
+    }
 
     int32_t rawPress =
         (static_cast<int32_t>(d[0]) << 12) | (static_cast<int32_t>(d[1]) << 4) | (d[2] >> 4);

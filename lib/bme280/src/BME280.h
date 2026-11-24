@@ -54,8 +54,9 @@ class BME280 {
 
     // Single-channel reads. If the device is in sleep mode, the method
     // auto-triggers a forced (one-shot) conversion, waits for it and returns
-    // the result. They return NAN on timeout or when the channel is disabled
-    // (oversampling set to BME280_OSRS_SKIP).
+    // the result. They return NAN on timeout, on an I2C error, when begin()
+    // has not succeeded, or when the channel is disabled (oversampling set
+    // to BME280_OSRS_SKIP).
     float temperature();
     float humidity();
     float pressureHpa();
@@ -138,6 +139,9 @@ class BME280 {
     // Fine temperature shared by the pressure and humidity compensation.
     int32_t _tFine = 0;
 
+    // Set by a successful begin(): reads return NAN until then.
+    bool _initialized = false;
+
     // True between triggerOneShot() and the read that consumes its result.
     bool _oneShotPending = false;
     // When the pending one-shot was triggered and how long it should take.
@@ -149,13 +153,14 @@ class BME280 {
     float _tempUserSlope = 1.0f;
     float _tempUserIntercept = 0.0f;
 
-    uint8_t status();
+    // readReg() returns 0 on a bus error; readRegs() returns false.
     uint8_t readReg(uint8_t reg);
     void writeReg(uint8_t reg, uint8_t value);
-    void readRegs(uint8_t reg, uint8_t* buf, size_t len);
+    bool readRegs(uint8_t reg, uint8_t* buf, size_t len);
+    bool readStatus(uint8_t& value);
 
     bool waitBoot();
-    void loadCalibration();
+    bool loadCalibration();
     void configureDefault();
     void writeConfig(uint8_t mask, uint8_t shift, uint8_t value);
     bool isSleeping();

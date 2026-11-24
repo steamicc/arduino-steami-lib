@@ -100,8 +100,10 @@ names only when they carry ambiguity, no `read` / `get` prefixes.
 If the chip is in sleep mode when a read is requested (the state after
 `begin()` and `powerOff()`), the driver triggers one forced conversion, waits
 for it (bounded timeout) and returns the result. Callers do not have to
-manage modes to read a value. On timeout, the methods return `NAN`. A channel
-whose oversampling is `BME280_OSRS_SKIP` also reads as `NAN`.
+manage modes to read a value. On timeout, on an I2C error (module missing or
+bus fault) and when `begin()` has not succeeded, the methods return `NAN`, so
+`isnan()` catches every failure. A channel whose oversampling is
+`BME280_OSRS_SKIP` also reads as `NAN`.
 
 | Method | Description |
 |--------|-------------|
