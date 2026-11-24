@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.26.2](https://github.com/steamicc/arduino-steami-lib/compare/v0.26.1...v0.26.2) (2026-11-24)
+
+
+### Bug Fixes
+
+* **daplink_bridge:** Read the whole config zone, detect old firmwares ([#212](https://github.com/steamicc/arduino-steami-lib/issues/212)) ([337d138](https://github.com/steamicc/arduino-steami-lib/commit/337d138d1c53c84318740ce471b33724f965fac7))
+
 ## [0.26.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.26.0...v0.26.1) (2026-11-24)
 
 # [0.26.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.25.1...v0.26.0) (2026-11-24)
