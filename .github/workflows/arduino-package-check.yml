@@ -10,6 +10,11 @@ on:
         description: 'Package version, without the leading v (e.g. 0.25.0)'
         required: true
         type: string
+      ref:
+        description: 'Git ref to check out (default: the triggering ref)'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -25,12 +30,16 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
 
       - name: Test the packaging tooling
         run: python3 -m unittest discover -s scripts/tests
 
       - name: Build the package
-        run: python3 scripts/build-arduino-package.py --version "${{ inputs.version }}" --out build/arduino-package
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+        run: python3 scripts/build-arduino-package.py --version "$PACKAGE_VERSION" --out build/arduino-package
 
       - name: Lint the package
         uses: arduino/arduino-lint-action@v2
