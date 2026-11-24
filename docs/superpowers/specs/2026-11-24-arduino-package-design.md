@@ -108,7 +108,7 @@ This also covers #62 (arduino-lint) and #224 (compile with the Arduino IDE toolc
   1. clone `steamicc/arduino-steami` with the App token; if tag `vX.Y.Z` already exists there, skip to step 3;
   2. replace its whole content (except `.git`) by the package, commit `Release vX.Y.Z`, tag `vX.Y.Z`, push `main` and the tag;
   3. create the GitHub release `vX.Y.Z` in `arduino-steami` unless it exists;
-  4. upload `STeaMi-X.Y.Z.zip` to the release of this repository unless already attached (`gh release upload --clobber`), for offline installation with **Sketch → Include Library → Add .ZIP Library**.
+  No ZIP is uploaded to this repository's release (releases are immutable, so uploading after semantic-release publishes fails). For offline installation, the "Source code (zip)" of the `steamicc/arduino-steami` release has the library at its root and installs with **Sketch → Include Library → Add .ZIP Library**.
 - **Recovery**: if publishing fails (for example the ruleset blocks the App), fix the cause and run the workflow manually on the tag: `gh workflow run publish-arduino-package.yml --ref vX.Y.Z`. Skipping a version in the Library Manager is acceptable.
 
 Before merging, the maintainer checks that the `semantic-release-updater` App may push and tag on `arduino-steami` (organization ruleset bypass list), so the first release goes through.
@@ -116,7 +116,7 @@ Before merging, the maintainer checks that the `semantic-release-updater` App ma
 ### Registration and documentation
 
 - Once the first tag exists in `arduino-steami`, open a PR on `arduino/library-registry` adding `https://github.com/steamicc/arduino-steami` to `repositories.txt` (by the maintainer, under their account).
-- Once indexed, update the wiki page *Bibliothèques STeaMi*: install from the Library Manager, new example paths; keep the ZIP as the offline alternative.
+- Once indexed, update the wiki page *Bibliothèques STeaMi*: install from the Library Manager, new example paths; keep the "Source code (zip)" of the `arduino-steami` release as the offline alternative.
 
 ## Risks
 
