@@ -7,6 +7,20 @@
 #include <map>
 #include <vector>
 
+// Behavioural model of an I2C peripheral, for protocols the register map
+// below cannot express (command frames, response buffers...). Attach one
+// with TwoWire::attachDevice(); every transaction on its address then goes
+// to the model instead of the register map.
+class I2CDevice {
+   public:
+    virtual ~I2CDevice() = default;
+    // One complete write transaction (everything between beginTransmission
+    // and endTransmission). Return the Arduino endTransmission() status.
+    virtual uint8_t onWrite(const std::vector<uint8_t>& frame) = 0;
+    // One read transaction of `quantity` bytes.
+    virtual std::vector<uint8_t> onRead(size_t quantity) = 0;
+};
+
 class TwoWire {
    public:
     void begin() {}
@@ -33,6 +47,10 @@ class TwoWire {
         if (endTransmissionResult_ != 0) {
             txBuffer_.clear();
             return endTransmissionResult_;
+        }
+        auto device = devices_.find(currentAddress_);
+        if (device != devices_.end()) {
+            return device->second->onWrite(txBuffer_);
         }
         if (txBuffer_.size() >= 2) {
             // [reg, val0, val1, ...] — I2C auto-increment: each value lands at
@@ -75,6 +93,12 @@ class TwoWire {
 
     uint8_t requestFrom(uint8_t address, uint8_t quantity) {
         rxBuffer_.clear();
+        rxIndex_ = 0;
+        auto device = devices_.find(address);
+        if (device != devices_.end()) {
+            rxBuffer_ = device->second->onRead(quantity);
+            return static_cast<uint8_t>(rxBuffer_.size());
+        }
         uint16_t reg = currentRegisterByAddr_[address];
 
         if (reg == 0 && quantity == 2) {
@@ -114,6 +138,8 @@ class TwoWire {
     }
 
     // Host-side helpers — not part of the real Arduino TwoWire API.
+
+    void attachDevice(uint8_t address, I2CDevice* device) { devices_[address] = device; }
 
     void setRegister(uint8_t address, uint16_t reg, uint8_t value) {
         registers_[makeKey(address, reg)] = value;
@@ -156,6 +182,7 @@ class TwoWire {
     std::map<uint32_t, uint8_t> registers_;
     std::vector<WriteOp> writes_;
     uint8_t endTransmissionResult_ = 0;
+    std::map<uint8_t, I2CDevice*> devices_;
 };
 
 inline TwoWire Wire;

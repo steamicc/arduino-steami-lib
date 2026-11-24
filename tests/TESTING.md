@@ -406,6 +406,18 @@ Features:
 * multi-byte reads via `requestFrom(address, quantity)` then repeated `read()`.
 * registers are keyed by `(address, reg)`, so a single `TwoWire` instance can
   simulate several I2C peripherals on the same bus.
+* plug a behavioural model in place of the register map for peripherals that
+  speak a command protocol. The model derives from `I2CDevice` and receives
+  each write transaction (`onWrite(frame)`) and each read (`onRead(quantity)`):
+
+  ```cpp
+  FakeDaplinkBridge firmware;          // tests/native/helpers/FakeDaplinkBridge.h
+  Wire.attachDevice(DAPLINK_BRIDGE_DEFAULT_ADDR, &firmware);
+  ```
+
+  `FakeDaplinkBridge` reproduces the DAPLink F103 firmware: fixed 32-byte
+  `WRITE_CONFIG` frames, `READ_CONFIG` blocks of 256 bytes, and reads that
+  restart from the first byte of the bridge TX buffer.
 
 The contract is pinned by the `tests/native/test_wire/` suite; see it for the
 expected invocation sequence.
