@@ -36,6 +36,7 @@ void BME280::softReset() {
 void BME280::powerOn() {
     uint8_t ctrl = readReg(BME280_REG_CTRL_MEAS);
     writeReg(BME280_REG_CTRL_MEAS, (ctrl & ~BME280_MODE_MASK) | BME280_MODE_NORMAL);
+    _oneShotPending = false;
 }
 
 void BME280::powerOff() {
@@ -45,7 +46,10 @@ void BME280::powerOff() {
 }
 
 bool BME280::dataReady() {
-    return (status() & BME280_STATUS_MEASURING) == 0;
+    if (_oneShotPending) {
+        return oneShotDone();
+    }
+    return conversionIdle();
 }
 
 bool BME280::temperatureReady() {
@@ -85,18 +89,19 @@ void BME280::setContinuous(uint8_t standby) {
 }
 
 void BME280::triggerOneShot() {
+    _oneShotDurationMs = measurementTimeMs();
     uint8_t ctrl = readReg(BME280_REG_CTRL_MEAS);
     writeReg(BME280_REG_CTRL_MEAS, (ctrl & ~BME280_MODE_MASK) | BME280_MODE_FORCED);
+    _oneShotStartMs = millis();
     _oneShotPending = true;
 }
 
 BME280::ReadResult BME280::readOneShot() {
     triggerOneShot();
+    _oneShotPending = false;
     if (!waitMeasurement()) {
-        _oneShotPending = false;
         return {NAN, NAN, NAN};
     }
-    _oneShotPending = false;
     return readData();
 }
 
@@ -304,6 +309,21 @@ bool BME280::isSleeping() {
     return (readReg(BME280_REG_CTRL_MEAS) & BME280_MODE_MASK) == BME280_MODE_SLEEP;
 }
 
+bool BME280::conversionIdle() {
+    return (status() & BME280_STATUS_MEASURING) == 0;
+}
+
+bool BME280::oneShotDone() {
+    // MEASURING may lag the trigger, so an idle STATUS alone does not mean
+    // the forced conversion is over. Also require the nominal duration to
+    // have elapsed and the mode bits to be back to sleep: the chip clears
+    // them by itself at the end of a forced conversion.
+    if (millis() - _oneShotStartMs < _oneShotDurationMs) {
+        return false;
+    }
+    return conversionIdle() && isSleeping();
+}
+
 bool BME280::waitMeasurement(bool settle) {
     // Right after a trigger, let the conversion run for its nominal
     // duration before polling (the MEASURING flag may lag the trigger).
@@ -326,8 +346,15 @@ bool BME280::waitMeasurement(bool settle) {
 
 bool BME280::ensureData() {
     if (_oneShotPending) {
+        // Sleep through what is left of the nominal conversion time, then
+        // poll dataReady(), which still applies the one-shot conditions.
+        uint32_t elapsed = millis() - _oneShotStartMs;
+        if (elapsed < _oneShotDurationMs) {
+            delay(_oneShotDurationMs - elapsed);
+        }
+        bool ok = waitMeasurement(false);
         _oneShotPending = false;
-        return waitMeasurement(false);
+        return ok;
     }
     if (isSleeping()) {
         triggerOneShot();

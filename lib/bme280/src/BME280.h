@@ -41,8 +41,12 @@ class BME280 {
     void powerOn();
     void powerOff();
 
-    // Status. The BME280 has a single "measuring" flag, so the per-channel
-    // methods all report the same readiness as dataReady().
+    // Status. The BME280 has no "new data" flag, only a single "measuring"
+    // flag, so the per-channel methods all report the same as dataReady().
+    // After triggerOneShot(), dataReady() turns true only once that
+    // conversion is over (nominal time elapsed, chip back to sleep, flag
+    // clear). Otherwise (normal mode, or no pending one-shot) it means "no
+    // conversion in progress", not "new sample since the last read".
     bool dataReady();
     bool temperatureReady();
     bool pressureReady();
@@ -65,7 +69,7 @@ class BME280 {
 
     // Start a forced conversion without blocking. Poll dataReady(), then call
     // read() / temperature() / ... — the next read uses that conversion
-    // instead of starting a second one.
+    // instead of starting a second one (and waits for it if it is not over).
     void triggerOneShot();
 
     // Trigger a forced conversion, wait for it and return all channels.
@@ -136,6 +140,9 @@ class BME280 {
 
     // True between triggerOneShot() and the read that consumes its result.
     bool _oneShotPending = false;
+    // When the pending one-shot was triggered and how long it should take.
+    uint32_t _oneShotStartMs = 0;
+    uint32_t _oneShotDurationMs = 0;
 
     // User-applied temperature correction (on top of the factory compensation).
     float _tempOffset = 0.0f;
@@ -152,6 +159,8 @@ class BME280 {
     void configureDefault();
     void writeConfig(uint8_t mask, uint8_t shift, uint8_t value);
     bool isSleeping();
+    bool conversionIdle();
+    bool oneShotDone();
     bool waitMeasurement(bool settle = true);
     bool ensureData();
     ReadResult readData();

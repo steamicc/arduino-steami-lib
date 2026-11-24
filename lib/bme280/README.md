@@ -109,7 +109,7 @@ whose oversampling is `BME280_OSRS_SKIP` also reads as `NAN`.
 | `float humidity()` | %RH, clamped to `[0, 100]`. |
 | `float pressureHpa()` | hPa. |
 | `ReadResult read()` | All channels from a single conversion: `{temperature, humidity, pressure}`. |
-| `bool dataReady()` | `true` when no conversion is running (`STATUS.measuring` clear). |
+| `bool dataReady()` | After `triggerOneShot()`: `true` once that conversion is over (nominal time elapsed, chip back to sleep, `STATUS.measuring` clear). Otherwise `true` when no conversion is in progress. The BME280 has no "new sample" flag, so in normal mode this does not mean a new sample arrived since the last read: pace the loop with `delay()` instead. |
 | `bool temperatureReady()` / `pressureReady()` / `humidityReady()` | Same as `dataReady()`: the BME280 has a single flag for all channels. |
 
 ### Modes
@@ -117,7 +117,7 @@ whose oversampling is `BME280_OSRS_SKIP` also reads as `NAN`.
 | Method | Description |
 |--------|-------------|
 | `void setContinuous(uint8_t standby = BME280_STANDBY_1000_MS)` | Normal mode with the given standby time between conversions (`BME280_STANDBY_0_5_MS` ... `BME280_STANDBY_20_MS`). |
-| `void triggerOneShot()` | Non-blocking: start a forced conversion. Poll `dataReady()`, then call `read()`: it uses this conversion instead of starting another one. |
+| `void triggerOneShot()` | Non-blocking: start a forced conversion. Poll `dataReady()`, then call `read()`: it uses this conversion instead of starting another one, and waits for it if it is not over yet. |
 | `ReadResult readOneShot()` | Trigger + wait + return. |
 
 ### Configuration

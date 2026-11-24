@@ -339,6 +339,54 @@ void test_read_after_trigger_one_shot_does_not_retrigger(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.08f, r.temperature);
 }
 
+void test_data_ready_waits_for_pending_one_shot(void) {
+    sensor.begin();
+    uint32_t nominal = sensor.measurementTimeMs();
+    sensor.triggerOneShot();
+    // MEASURING may lag the trigger: STATUS still reads idle.
+    Wire.setRegister(ADDR, BME280_REG_STATUS, 0x00);
+
+    // Forced mode is still set: the conversion has not finished.
+    TEST_ASSERT_FALSE(sensor.dataReady());
+
+    // Back to sleep, but before the nominal conversion time: still not ready.
+    Wire.setRegister(ADDR, BME280_REG_CTRL_MEAS, 0x24);
+    TEST_ASSERT_FALSE(sensor.dataReady());
+
+    // Nominal time elapsed and chip back to sleep: the new sample is there.
+    delay(nominal);
+    TEST_ASSERT_TRUE(sensor.dataReady());
+}
+
+void test_read_after_trigger_one_shot_waits_for_conversion(void) {
+    sensor.begin();
+    preloadMeasurement();
+    uint32_t nominal = sensor.measurementTimeMs();
+    sensor.triggerOneShot();
+    // The chip is back to sleep once the conversion is over.
+    Wire.setRegister(ADDR, BME280_REG_CTRL_MEAS, 0x24);
+    uint32_t start = millis();
+
+    auto r = sensor.read();
+
+    TEST_ASSERT_TRUE(millis() - start >= nominal);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.08f, r.temperature);
+}
+
+void test_read_after_trigger_one_shot_times_out_while_forced(void) {
+    sensor.begin();
+    preloadMeasurement();
+    sensor.triggerOneShot();
+    // STATUS idle (flag lag) but CTRL_MEAS never returns to sleep.
+    Wire.setRegister(ADDR, BME280_REG_STATUS, 0x00);
+
+    auto r = sensor.read();
+
+    TEST_ASSERT_TRUE(isnan(r.temperature));
+    TEST_ASSERT_TRUE(isnan(r.humidity));
+    TEST_ASSERT_TRUE(isnan(r.pressure));
+}
+
 void test_read_one_shot_triggers_waits_and_returns(void) {
     sensor.begin();
     preloadMeasurement();
@@ -543,6 +591,9 @@ int main(void) {
     RUN_TEST(test_read_returns_nan_on_timeout);
     RUN_TEST(test_trigger_one_shot_sets_forced_mode);
     RUN_TEST(test_read_after_trigger_one_shot_does_not_retrigger);
+    RUN_TEST(test_data_ready_waits_for_pending_one_shot);
+    RUN_TEST(test_read_after_trigger_one_shot_waits_for_conversion);
+    RUN_TEST(test_read_after_trigger_one_shot_times_out_while_forced);
     RUN_TEST(test_read_one_shot_triggers_waits_and_returns);
     RUN_TEST(test_read_one_shot_returns_nan_on_timeout);
     RUN_TEST(test_set_continuous_writes_standby_then_normal_mode);

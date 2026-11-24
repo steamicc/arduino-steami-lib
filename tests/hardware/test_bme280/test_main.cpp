@@ -88,7 +88,13 @@ void test_bme280_read_one_shot() {
                            readRawRegister(BME280_REG_CTRL_MEAS) & BME280_MODE_MASK);
 }
 
+// The raw temperature is 0x80000 after a reset, so a read that does not
+// wait for the triggered conversion returns NaN instead of plausible values
+// left behind by a previous test.
 void test_bme280_trigger_one_shot_then_poll_data_ready() {
+    sensor.softReset();
+    TEST_ASSERT_EQUAL_HEX8_MESSAGE(0x80, readRawRegister(BME280_REG_DATA_START + 3),
+                                   "temperature registers not at their reset value");
     sensor.triggerOneShot();
     uint32_t start = millis();
     while (!sensor.dataReady() && millis() - start < 200) {
