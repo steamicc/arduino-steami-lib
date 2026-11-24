@@ -41,9 +41,7 @@ bool DaplinkBridge::clearConfig() {
 
     uint8_t cmd = DAPLINK_BRIDGE_CMD_CLEAR_CONFIG;
     writeFrame(&cmd, 1);
-
-    // Match the MicroPython implementation.
-    delay(100);
+    delay(DAPLINK_BRIDGE_CLEAR_CONFIG_DELAY_MS);
 
     if (!waitNotBusy(DAPLINK_BRIDGE_CLEAR_TIMEOUT_MS)) {
         return false;
@@ -78,7 +76,8 @@ bool DaplinkBridge::writeConfig(const uint8_t* data, size_t length, uint16_t off
 
         const uint16_t curOffset = static_cast<uint16_t>(offset + pos);
 
-        // MicroPython always sends a complete 32-byte frame.
+        // The firmware waits for a full 32-byte frame before running the
+        // command: pad the unused payload bytes with zeros.
         memset(buf, 0, sizeof(buf));
 
         buf[0] = DAPLINK_BRIDGE_CMD_WRITE_CONFIG;
@@ -88,10 +87,8 @@ bool DaplinkBridge::writeConfig(const uint8_t* data, size_t length, uint16_t off
 
         memcpy(&buf[kHeaderLen], &data[pos], chunkLen);
 
-        // Send the complete fixed-size frame, like MicroPython.
         writeFrame(buf, sizeof(buf));
-
-        delay(50);
+        delay(DAPLINK_BRIDGE_WRITE_CONFIG_DELAY_MS);
 
         pos += chunkLen;
     }
@@ -113,68 +110,55 @@ size_t DaplinkBridge::readConfig(uint8_t* result, size_t maxLen) {
         return 0;
     }
 
-    constexpr uint16_t kSectorSize = 256;
+    // Each READ_CONFIG loads 256 bytes from `offset` into the bridge TX
+    // buffer, and each I2C read returns that buffer from its first byte.
+    // Reads are capped at 255 bytes, so walk the zone with one READ_CONFIG
+    // per read. The offset may not pass CONFIG_SIZE - 256: near the end,
+    // ask for the last block and skip the bytes already returned. That
+    // reaches every byte but the very last one of the zone.
+    constexpr uint16_t kLastOffset = DAPLINK_BRIDGE_CONFIG_SIZE - DAPLINK_BRIDGE_READ_CONFIG_LEN;
+    const size_t limit = std::min<size_t>(maxLen, DAPLINK_BRIDGE_CONFIG_SIZE);
+    uint8_t chunk[DAPLINK_BRIDGE_MAX_READ_LEN];
 
     size_t produced = 0;
+    while (produced < limit) {
+        const uint16_t offset = static_cast<uint16_t>(std::min<size_t>(produced, kLastOffset));
+        const size_t skip = produced - offset;
+        if (skip >= DAPLINK_BRIDGE_MAX_READ_LEN) {
+            break;
+        }
+        const size_t want = std::min<size_t>(limit - produced, DAPLINK_BRIDGE_MAX_READ_LEN - skip);
+        const uint8_t length = static_cast<uint8_t>(skip + want);
 
-    for (uint16_t pageOffset = 0; pageOffset < DAPLINK_BRIDGE_CONFIG_SIZE && produced < maxLen;
-         pageOffset += kSectorSize) {
         if (!waitNotBusy(DAPLINK_BRIDGE_READ_TIMEOUT_MS)) {
-            return produced;
+            break;
         }
 
-        // READ_CONFIG frame:
-        // [CMD | offsetHi | offsetLo]
+        const uint8_t frame[3] = {DAPLINK_BRIDGE_CMD_READ_CONFIG,
+                                  static_cast<uint8_t>((offset >> 8) & 0xFF),
+                                  static_cast<uint8_t>(offset & 0xFF)};
         _wire->beginTransmission(_address);
-        _wire->write(DAPLINK_BRIDGE_CMD_READ_CONFIG);
-        _wire->write(static_cast<uint8_t>((pageOffset >> 8) & 0xFF));
-        _wire->write(static_cast<uint8_t>(pageOffset & 0xFF));
-
+        _wire->write(frame, sizeof(frame));
         if (_wire->endTransmission() != 0) {
-            return produced;
+            break;
+        }
+        delay(DAPLINK_BRIDGE_READ_CONFIG_DELAY_MS);
+
+        if (_wire->requestFrom(_address, length) != length) {
+            break;
+        }
+        for (uint8_t i = 0; i < length; ++i) {
+            chunk[i] = static_cast<uint8_t>(_wire->read());
         }
 
-        // Match the MicroPython implementation.
-        delay(100);
-
-        // STM32 Wire requestFrom length is uint8_t, so request 255 then 1.
-        uint16_t sectorRead = 0;
-
-        while (sectorRead < kSectorSize && produced < maxLen) {
-            const uint8_t chunk =
-                static_cast<uint8_t>(std::min<uint16_t>(255, kSectorSize - sectorRead));
-
-            const uint8_t received = _wire->requestFrom(_address, chunk);
-
-            if (received == 0) {
+        for (size_t i = skip; i < length; ++i) {
+            // 0xFF marks the first unused byte of the zone.
+            if (chunk[i] == 0xFF) {
                 return produced;
             }
-
-            for (uint8_t i = 0; i < received; ++i) {
-                if (!_wire->available()) {
-                    return produced;
-                }
-
-                const uint8_t value = static_cast<uint8_t>(_wire->read());
-
-                if (value == 0xFF) {
-                    return produced;
-                }
-
-                result[produced++] = value;
-                ++sectorRead;
-
-                if (produced == maxLen) {
-                    return produced;
-                }
-            }
-
-            if (received < chunk) {
-                return produced;
-            }
+            result[produced++] = chunk[i];
         }
     }
-
     return produced;
 }
 
@@ -196,19 +180,6 @@ uint8_t DaplinkBridge::readReg(uint8_t reg) {
         return static_cast<uint8_t>(_wire->read());
     }
     return 0;
-}
-
-void DaplinkBridge::readBlock(uint8_t reg, uint8_t* buf, uint8_t len) {
-    for (uint8_t i = 0; i < len; ++i) {
-        buf[i] = 0;
-    }
-    _wire->beginTransmission(_address);
-    _wire->write(reg);
-    _wire->endTransmission(false);
-    _wire->requestFrom(_address, len);
-    for (uint8_t i = 0; i < len && _wire->available(); ++i) {
-        buf[i] = static_cast<uint8_t>(_wire->read());
-    }
 }
 
 void DaplinkBridge::writeFrame(const uint8_t* data, size_t len) {

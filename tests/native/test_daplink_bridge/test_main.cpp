@@ -5,6 +5,7 @@
 #include <cstring>
 
 #include "DaplinkBridge.h"
+#include "FakeDaplinkBridge.h"
 #include "Wire.h"
 #include "driver_checks.h"
 
@@ -85,98 +86,137 @@ void test_write_config_rejects_payload_overflowing_zone(void) {
         bridge.writeConfig(payload, 2, static_cast<uint16_t>(DAPLINK_BRIDGE_CONFIG_SIZE - 1)));
 }
 
-void test_write_config_writes_framed_payload(void) {
-    bridge.begin();
-    Wire.clearWrites();
+// ---------------------------------------------------------------------
+// Config zone protocol, against a model of the bridge firmware
+// ---------------------------------------------------------------------
 
-    const char* payload = "hello";
-    TEST_ASSERT_TRUE(bridge.writeConfig(payload, 0));
-
-    // The frame is `[CMD_WRITE_CONFIG, off_hi, off_lo, len, h, e, l, l, o]`.
-    // The Wire mock treats the first byte as the register address and
-    // records one WriteOp per subsequent byte (so 8 entries for a 9-byte
-    // frame).
-    const auto& writes = Wire.getWrites();
-    TEST_ASSERT_EQUAL_INT(8, writes.size());
-    TEST_ASSERT_EQUAL_HEX8(0x00, writes[0].value);  // offset hi
-    TEST_ASSERT_EQUAL_HEX8(0x00, writes[1].value);  // offset lo
-    TEST_ASSERT_EQUAL_HEX8(0x05, writes[2].value);  // chunk length
-    TEST_ASSERT_EQUAL_HEX8('h', writes[3].value);
-    TEST_ASSERT_EQUAL_HEX8('e', writes[4].value);
-    TEST_ASSERT_EQUAL_HEX8('l', writes[5].value);
-    TEST_ASSERT_EQUAL_HEX8('l', writes[6].value);
-    TEST_ASSERT_EQUAL_HEX8('o', writes[7].value);
+static FakeDaplinkBridge& attachFirmware() {
+    static FakeDaplinkBridge firmware;
+    firmware = FakeDaplinkBridge();
+    Wire.attachDevice(ADDR, &firmware);
+    return firmware;
 }
 
-void test_write_config_chunked_when_payload_exceeds_max_chunk(void) {
+static void fillPattern(uint8_t* buf, size_t len) {
+    for (size_t i = 0; i < len; ++i) {
+        buf[i] = static_cast<uint8_t>('A' + (i % 26));
+    }
+}
+
+void test_write_config_sends_fixed_32_byte_frames(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
     bridge.begin();
-    Wire.clearWrites();
+
+    TEST_ASSERT_TRUE(bridge.writeConfig("hello", 0));
+
+    // The firmware only runs WRITE_CONFIG after 31 argument bytes: a
+    // shorter frame would be silently ignored.
+    TEST_ASSERT_EQUAL_INT(1, firmware.writeFrameLengths.size());
+    TEST_ASSERT_EQUAL_INT(32, firmware.writeFrameLengths[0]);
+    TEST_ASSERT_EQUAL_INT(0, firmware.ignoredFrames);
+    TEST_ASSERT_EQUAL_STRING_LEN("hello", reinterpret_cast<const char*>(firmware.zone.data()), 5);
+    TEST_ASSERT_EQUAL_HEX8(0xFF, firmware.zone[5]);
+}
+
+void test_write_config_chunks_long_payload(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
+    bridge.begin();
 
     constexpr size_t kPayloadLen = DAPLINK_BRIDGE_MAX_WRITE_CHUNK + 5;
     uint8_t payload[kPayloadLen];
-    for (size_t i = 0; i < kPayloadLen; ++i) {
-        payload[i] = static_cast<uint8_t>(i & 0xFF);
-    }
-    TEST_ASSERT_TRUE(bridge.writeConfig(payload, kPayloadLen, 0));
+    fillPattern(payload, kPayloadLen);
 
-    // Two frames: one MAX_WRITE_CHUNK long, one 5 bytes long.
-    int chunkLengthsSeen = 0;
-    for (const auto& w : Wire.getWrites()) {
-        // The third byte of each frame (offset 0, 1, 2, 3, ...) at register
-        // CMD_WRITE_CONFIG + 3 carries the chunk length. Two frames means
-        // the mock writes that "register" twice across the whole call.
-        if (w.reg == DAPLINK_BRIDGE_CMD_WRITE_CONFIG + 3) {
-            ++chunkLengthsSeen;
-        }
-    }
-    TEST_ASSERT_EQUAL_INT(2, chunkLengthsSeen);
+    TEST_ASSERT_TRUE(bridge.writeConfig(payload, kPayloadLen, 10));
+
+    TEST_ASSERT_EQUAL_INT(2, firmware.writeFrameLengths.size());
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(payload, firmware.zone.data() + 10, kPayloadLen);
+    TEST_ASSERT_EQUAL_HEX8(0xFF, firmware.zone[10 + kPayloadLen]);
 }
 
 void test_write_config_returns_false_on_device_error(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
     bridge.begin();
-    preloadError(DAPLINK_BRIDGE_ERROR_CMD_FAILED);
+    firmware.error = DAPLINK_BRIDGE_ERROR_CMD_FAILED;
     TEST_ASSERT_FALSE(bridge.writeConfig("x", 0));
 }
 
 void test_read_config_returns_data_until_first_0xff(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
     bridge.begin();
-
-    // The Wire mock auto-increments the register pointer on requestFrom,
-    // so loading consecutive registers under CMD_READ_CONFIG mimics a
-    // bridge that streams 5 payload bytes then 0xFF as end-of-data.
-    const char* expected = "hello";
-    for (size_t i = 0; i < 5; ++i) {
-        Wire.setRegister(ADDR, DAPLINK_BRIDGE_CMD_READ_CONFIG + i,
-                         static_cast<uint8_t>(expected[i]));
-    }
-    Wire.setRegister(ADDR, DAPLINK_BRIDGE_CMD_READ_CONFIG + 5, 0xFF);
+    firmware.store("hello");
 
     uint8_t buf[32] = {0};
-    size_t len = bridge.readConfig(buf, sizeof(buf));
-    TEST_ASSERT_EQUAL_INT(5, len);
-    TEST_ASSERT_EQUAL_STRING_LEN(expected, reinterpret_cast<char*>(buf), 5);
+    TEST_ASSERT_EQUAL_INT(5, bridge.readConfig(buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL_STRING_LEN("hello", reinterpret_cast<char*>(buf), 5);
 }
 
-void test_read_config_returns_zero_on_immediate_0xff(void) {
+void test_read_config_returns_zero_on_empty_zone(void) {
+    attachFirmware();
     bridge.begin();
-    Wire.setRegister(ADDR, DAPLINK_BRIDGE_CMD_READ_CONFIG, 0xFF);
 
     uint8_t buf[32] = {0};
     TEST_ASSERT_EQUAL_INT(0, bridge.readConfig(buf, sizeof(buf)));
 }
 
 void test_read_config_truncates_to_max_len(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
     bridge.begin();
-    // Fill enough registers that readConfig would otherwise keep reading.
-    for (size_t i = 0; i < 10; ++i) {
-        Wire.setRegister(ADDR, DAPLINK_BRIDGE_CMD_READ_CONFIG + i, 'a');
-    }
-    // No 0xFF sentinel: readConfig must stop at maxLen.
+    firmware.store("aaaaaaaaaa");
+
     uint8_t buf[3] = {0};
     TEST_ASSERT_EQUAL_INT(3, bridge.readConfig(buf, sizeof(buf)));
     TEST_ASSERT_EQUAL_HEX8('a', buf[0]);
-    TEST_ASSERT_EQUAL_HEX8('a', buf[1]);
     TEST_ASSERT_EQUAL_HEX8('a', buf[2]);
+}
+
+void test_read_config_reads_past_256_bytes(void) {
+    // Regression: each I2C read restarts at the first byte of the bridge
+    // TX buffer, so a second read of the same READ_CONFIG block returned
+    // byte 0 again instead of byte 255.
+    FakeDaplinkBridge& firmware = attachFirmware();
+    bridge.begin();
+    fillPattern(firmware.zone.data(), 600);
+
+    uint8_t buf[DAPLINK_BRIDGE_CONFIG_SIZE] = {0};
+    TEST_ASSERT_EQUAL_INT(600, bridge.readConfig(buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(firmware.zone.data(), buf, 600);
+    TEST_ASSERT_LESS_OR_EQUAL(DAPLINK_BRIDGE_MAX_READ_LEN, firmware.largestRead);
+}
+
+void test_read_config_reaches_end_of_zone(void) {
+    // Only offsets up to CONFIG_SIZE - 256 are valid: the tail of the zone
+    // is read from the last block, never from an out-of-range offset.
+    FakeDaplinkBridge& firmware = attachFirmware();
+    bridge.begin();
+    fillPattern(firmware.zone.data(), DAPLINK_BRIDGE_CONFIG_SIZE);
+
+    uint8_t buf[DAPLINK_BRIDGE_CONFIG_SIZE] = {0};
+    TEST_ASSERT_EQUAL_INT(DAPLINK_BRIDGE_CONFIG_SIZE - 1, bridge.readConfig(buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(firmware.zone.data(), buf, DAPLINK_BRIDGE_CONFIG_SIZE - 1);
+    TEST_ASSERT_EQUAL_HEX8(0, firmware.error);
+}
+
+void test_config_round_trip_of_1000_bytes(void) {
+    attachFirmware();
+    bridge.begin();
+
+    uint8_t payload[1000];
+    fillPattern(payload, sizeof(payload));
+    TEST_ASSERT_TRUE(bridge.writeConfig(payload, sizeof(payload), 0));
+
+    uint8_t buf[DAPLINK_BRIDGE_CONFIG_SIZE] = {0};
+    TEST_ASSERT_EQUAL_INT(sizeof(payload), bridge.readConfig(buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(payload, buf, sizeof(payload));
+}
+
+void test_read_config_returns_zero_on_i2c_error(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
+    bridge.begin();
+    firmware.store("hello");
+    Wire.setEndTransmissionResult(2);
+
+    uint8_t buf[32] = {0};
+    TEST_ASSERT_EQUAL_INT(0, bridge.readConfig(buf, sizeof(buf)));
 }
 
 int main(void) {
@@ -189,11 +229,15 @@ int main(void) {
     RUN_TEST(test_clear_config_returns_false_on_device_error);
     RUN_TEST(test_write_config_rejects_offset_at_or_past_end);
     RUN_TEST(test_write_config_rejects_payload_overflowing_zone);
-    RUN_TEST(test_write_config_writes_framed_payload);
-    RUN_TEST(test_write_config_chunked_when_payload_exceeds_max_chunk);
+    RUN_TEST(test_write_config_sends_fixed_32_byte_frames);
+    RUN_TEST(test_write_config_chunks_long_payload);
     RUN_TEST(test_write_config_returns_false_on_device_error);
     RUN_TEST(test_read_config_returns_data_until_first_0xff);
-    RUN_TEST(test_read_config_returns_zero_on_immediate_0xff);
+    RUN_TEST(test_read_config_returns_zero_on_empty_zone);
     RUN_TEST(test_read_config_truncates_to_max_len);
+    RUN_TEST(test_read_config_reads_past_256_bytes);
+    RUN_TEST(test_read_config_reaches_end_of_zone);
+    RUN_TEST(test_config_round_trip_of_1000_bytes);
+    RUN_TEST(test_read_config_returns_zero_on_i2c_error);
     return UNITY_END();
 }

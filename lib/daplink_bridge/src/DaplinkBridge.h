@@ -30,7 +30,6 @@ class DaplinkBridge {
     // I2C helpers
     bool isPresent();
     uint8_t readReg(uint8_t reg);
-    void readBlock(uint8_t reg, uint8_t* buf, uint8_t len);
     void writeFrame(const uint8_t* data, size_t len);
 
     // Status / error
