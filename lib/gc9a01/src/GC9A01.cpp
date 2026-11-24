@@ -116,8 +116,12 @@ bool GC9A01::begin() {
     }
     reset();
     initDisplay();
+    // Clear the display RAM before DISPON, so its power-on content never
+    // shows up at boot.
     fill(GC9A01_BLACK);
     show();
+    writeCmd(GC9A01_CMD_DISPON);
+    delay(20);
     return true;
 }
 
@@ -143,10 +147,9 @@ void GC9A01::initDisplay() {
     // on, so invert(false) sends INVON.
     writeCmd(_inverted ? GC9A01_CMD_INVOFF : GC9A01_CMD_INVON);
 
+    // The display stays off: begin() turns it on once the RAM is cleared.
     writeCmd(GC9A01_CMD_SLPOUT);
     delay(GC9A01_SLEEP_DELAY_MS);
-    writeCmd(GC9A01_CMD_DISPON);
-    delay(20);
 }
 
 void GC9A01::setWindow(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {

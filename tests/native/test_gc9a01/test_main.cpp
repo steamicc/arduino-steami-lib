@@ -136,15 +136,22 @@ void test_gc9a01_begin_init_sequence(void) {
     const int dispon = indexOf(cmds, GC9A01_CMD_DISPON);
     TEST_ASSERT_TRUE(slpout >= 0);
     TEST_ASSERT_TRUE(dispon > slpout);
+    // the display is turned on last, once its RAM is cleared
+    TEST_ASSERT_EQUAL(static_cast<int>(cmds.size()) - 1, dispon);
 
     // the first command unlocks the extended registers
     TEST_ASSERT_EQUAL_HEX8(GC9A01_CMD_INREGEN2, cmds[0].cmd);
 }
 
-void test_gc9a01_begin_clears_screen(void) {
+void test_gc9a01_begin_clears_screen_before_display_on(void) {
     display->begin();
     const auto cmds = commands();
-    assertFullFrame(cmds.back(), GC9A01_BLACK);
+    const int ramwr = indexOf(cmds, GC9A01_CMD_RAMWR);
+    const int dispon = indexOf(cmds, GC9A01_CMD_DISPON);
+    TEST_ASSERT_TRUE(ramwr >= 0);
+    // the power-on content of the display RAM is never shown
+    TEST_ASSERT_TRUE(dispon > ramwr);
+    assertFullFrame(cmds[ramwr], GC9A01_BLACK);
 }
 
 void test_gc9a01_every_byte_sent_with_cs_low_and_dc_output(void) {
@@ -455,7 +462,7 @@ int main() {
     RUN_TEST(test_gc9a01_begin_returns_true);
     RUN_TEST(test_gc9a01_begin_pulses_reset_and_releases_pins);
     RUN_TEST(test_gc9a01_begin_init_sequence);
-    RUN_TEST(test_gc9a01_begin_clears_screen);
+    RUN_TEST(test_gc9a01_begin_clears_screen_before_display_on);
     RUN_TEST(test_gc9a01_every_byte_sent_with_cs_low_and_dc_output);
     RUN_TEST(test_gc9a01_spi_clock);
     RUN_TEST(test_gc9a01_show_sets_full_window_then_streams_buffer);

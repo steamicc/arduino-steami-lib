@@ -27,7 +27,8 @@ class GC9A01 {
     GC9A01& operator=(const GC9A01&) = delete;
 
     // Allocate the frame buffer (115 200 bytes), reset and initialise the
-    // controller, clear the screen. Returns false if the allocation fails.
+    // controller, clear the screen, then turn the display on. Returns false
+    // if the allocation fails.
     virtual bool begin();
     void show();
     void fill(uint16_t color);

@@ -135,7 +135,7 @@ make flash-gc9a01/rotating_3d_cube
 |--------|-------------|
 | `GC9A01_STEAMI()` | Construct the built-in STeaMi V1c display using the internal SPI bus and board pin mapping. |
 | `GC9A01_SPI(SPIClass& spi, uint8_t dc, uint8_t rst, uint8_t cs)` | Construct a display on any SPI bus. `rst` may be `GC9A01_PIN_NONE`. |
-| `bool begin()` | Allocate the frame buffer, reset and initialise the controller, clear the screen. Returns `false` if the frame buffer cannot be allocated. |
+| `bool begin()` | Allocate the frame buffer, reset and initialise the controller, clear the screen, then turn the display on (the uninitialised display RAM is never shown). Returns `false` if the frame buffer cannot be allocated. |
 | `void show()` | Send the frame buffer to the display. |
 | `void powerOn()` / `void powerOff()` | Leave or enter sleep mode (display off). Each call waits 120 ms, as the controller requires. |
 
