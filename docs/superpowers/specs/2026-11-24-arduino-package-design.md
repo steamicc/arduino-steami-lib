@@ -102,14 +102,14 @@ This also covers #62 (arduino-lint) and #224 (compile with the Arduino IDE toolc
 
 `release.yml` is unchanged. Publishing is a separate workflow, `publish-arduino-package.yml`, so it can be retried without re-running semantic-release:
 
-- **Triggers**: `push` of a `v*` tag (semantic-release pushes it with the App token, which does trigger workflows) and `workflow_dispatch` with a `tag` input, for manual recovery.
+- **Triggers**: `push` of a `v*` tag (semantic-release pushes it with the App token, which does trigger workflows) and `workflow_dispatch` (with an optional `dry_run` input), for manual recovery: the workflow is run on the tag itself (`--ref vX.Y.Z`) and refuses any other ref, so the tested code is always the tagged code.
 - **Gate**: it checks out the tag, builds the package with the tag's version, runs arduino-lint and compiles every example with the Arduino IDE toolchain (same steps as the PR job). Nothing is published if any of this fails: the source release exists, the Library Manager does not get that version, and the fix ships in the next version. This is what guarantees "a release cannot publish a broken package", including when two PRs that pass separately break `main` together.
 - **Publish** (each step idempotent, so a re-run after a partial failure is safe):
   1. clone `steamicc/arduino-steami` with the App token; if tag `vX.Y.Z` already exists there, skip to step 3;
   2. replace its whole content (except `.git`) by the package, commit `Release vX.Y.Z`, tag `vX.Y.Z`, push `main` and the tag;
   3. create the GitHub release `vX.Y.Z` in `arduino-steami` unless it exists;
   4. upload `STeaMi-X.Y.Z.zip` to the release of this repository unless already attached (`gh release upload --clobber`), for offline installation with **Sketch → Include Library → Add .ZIP Library**.
-- **Recovery**: if publishing fails (for example the ruleset blocks the App), fix the cause and run the workflow manually with the tag. Skipping a version in the Library Manager is acceptable.
+- **Recovery**: if publishing fails (for example the ruleset blocks the App), fix the cause and run the workflow manually on the tag: `gh workflow run publish-arduino-package.yml --ref vX.Y.Z`. Skipping a version in the Library Manager is acceptable.
 
 Before merging, the maintainer checks that the `semantic-release-updater` App may push and tag on `arduino-steami` (organization ruleset bypass list), so the first release goes through.
 

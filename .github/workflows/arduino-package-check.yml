@@ -10,11 +10,6 @@ on:
         description: 'Package version, without the leading v (e.g. 0.25.0)'
         required: true
         type: string
-      ref:
-        description: 'Git ref to check out (default: the triggering ref)'
-        required: false
-        type: string
-        default: ''
 
 permissions:
   contents: read
@@ -30,8 +25,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.ref }}
 
       - name: Test the packaging tooling
         run: python3 -m unittest discover -s scripts/tests

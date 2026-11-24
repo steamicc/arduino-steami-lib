@@ -173,9 +173,9 @@ Expected: the `arduino-package` check passes; arduino-lint reports no error. If 
 - Produces: on each `v*` tag, the content of `steamicc/arduino-steami` at tag `vX.Y.Z`, its GitHub release, and the `STeaMi-X.Y.Z.zip` asset on this repository's release.
 
 - [ ] **Step 1: Write the workflow**:
-  - `on: push: tags: ['v*']` and `workflow_dispatch` with inputs `tag` (string, required) and `dry_run` (boolean, default `false`).
-  - job `resolve`: output `tag` (`inputs.tag` or `github.ref_name`) and `version` (tag without `v`, validated `^[0-9]+\.[0-9]+\.[0-9]+$`).
-  - job `check`: `uses: ./.github/workflows/arduino-package-check.yml` with the resolved version. Note: on `workflow_dispatch` the reusable workflow checks out the dispatch ref — pass `ref: <tag>` through a second input `ref` added to the reusable workflow (default `''` = triggering ref).
+  - `on: push: tags: ['v*']` and `workflow_dispatch` with input `dry_run` (boolean, default `false`). There is no `tag` input: manual recovery runs the workflow on the tag (`--ref vX.Y.Z`).
+  - job `resolve`: output `tag` (`github.ref_name`, failing unless `github.ref_type == 'tag'`) and `version` (tag without `v`, validated `^v[0-9]+\.[0-9]+\.[0-9]+$`).
+  - job `check`: `uses: ./.github/workflows/arduino-package-check.yml` with the resolved version. Note: the reusable workflow checks out the triggering ref, which is the tag, and has no `ref` input (CodeQL flags running code checked out from a dispatch input).
   - job `publish` (`needs: [resolve, check]`, `permissions: contents: write`): download artifact; generate App token (`repositories: arduino-steami,arduino-steami-lib`); clone `steamicc/arduino-steami` (handle an empty repository: no `main` yet); if `git ls-remote --tags origin vX.Y.Z` finds it, skip the push; else replace all content but `.git` with the package, commit as `semantic-release-updater[bot]`, tag, push `main` and the tag (skipped when `dry_run`); `gh release view vX.Y.Z -R steamicc/arduino-steami || gh release create …` with notes linking `https://github.com/steamicc/arduino-steami-lib/releases/tag/vX.Y.Z`; build `STeaMi-X.Y.Z.zip` (top folder `STeaMi/`) and `gh release upload vX.Y.Z STeaMi-X.Y.Z.zip --clobber -R steamicc/arduino-steami-lib`. With `dry_run`, print what would be pushed and stop before any write.
 
 - [ ] **Step 2: Validate the YAML** (same command as Task 3 Step 3). Expected: no error.
@@ -195,7 +195,7 @@ git push
 The `feat(tooling)` commit makes the merge release `v0.25.0`, whose tag triggers the first real publication (the maintainer must have checked the ruleset bypass before merging).
 Run: `gh run list --workflow publish-arduino-package.yml --limit 1` until done, then `git ls-remote --tags https://github.com/steamicc/arduino-steami` and `gh release view v0.25.0 -R steamicc/arduino-steami-lib --json assets`.
 Expected: run green; tag `v0.25.0` in `arduino-steami`; asset `STeaMi-0.25.0.zip` attached.
-Then run: `gh workflow run publish-arduino-package.yml -f tag=v0.25.0` and check that `arduino-steami` has no new commit and the run is green (Review Focus 5). `dry_run=true` remains available for later diagnosis.
+Then run: `gh workflow run publish-arduino-package.yml --ref v0.25.0` and check that `arduino-steami` has no new commit and the run is green (Review Focus 5). `dry_run=true` remains available for later diagnosis.
 
 ---
 

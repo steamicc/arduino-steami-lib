@@ -3,16 +3,16 @@ name: Publish Arduino package
 # On each release tag, publish the STeaMi Arduino library to
 # steamicc/arduino-steami (the repository registered in the Arduino Library
 # Manager) and attach STeaMi-X.Y.Z.zip to the release of this repository.
+#
+# Manual recovery: run the workflow on the tag itself, so the code that is
+# built and tested is the tagged code:
+#   gh workflow run publish-arduino-package.yml --ref v0.25.0 [-f dry_run=true]
 
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Release tag to publish (e.g. v0.25.0)'
-        required: true
-        type: string
       dry_run:
         description: 'Print what would be pushed and stop before any write'
         required: false
@@ -37,11 +37,15 @@ jobs:
       - name: Resolve and validate the tag
         id: resolve
         env:
-          INPUT_TAG: ${{ inputs.tag }}
+          REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          tag="${INPUT_TAG:-$REF_NAME}"
+          tag="$REF_NAME"
+          if [ "$REF_TYPE" != "tag" ]; then
+            echo "::error::Run this workflow on a release tag (--ref vX.Y.Z), not on the $REF_TYPE '$tag'"
+            exit 1
+          fi
           if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::Invalid tag '$tag': expected vX.Y.Z"
             exit 1
@@ -55,7 +59,6 @@ jobs:
     uses: ./.github/workflows/arduino-package-check.yml
     with:
       version: ${{ needs.resolve.outputs.version }}
-      ref: refs/tags/${{ needs.resolve.outputs.tag }}
 
   publish:
     name: Publish the package
