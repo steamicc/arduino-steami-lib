@@ -56,7 +56,7 @@ void setup() {
 
 | Method | Description |
 |--------|-------------|
-| `bool busy()` | Read `STATUS.BUSY`. The bridge is busy while erasing or writing flash. |
+| `bool busy()` | Read `STATUS.BUSY`. The bridge is busy while erasing or writing flash. Also `true` when the bridge does not answer, as it does for a short while after sending a block. |
 
 ### Config zone
 
@@ -66,6 +66,7 @@ matching the erased-flash state.
 
 | Method | Description |
 |--------|-------------|
+| `bool hasConfigZone()` | `true` when the DAPLink firmware provides the config zone. Older firmwares (e.g. the 2024 `release_letssteam` builds) lock up, until the board is unplugged, when they receive a config command: every config method checks this first and fails without sending anything. The result of the first check is kept; when the bridge does not answer, the answer is `false` and the check runs again next time. |
 | `bool clearConfig()` | Erase the entire 1 KB config zone. Waits for the busy bit to clear and returns `false` if the device reports an error. |
 | `bool writeConfig(const uint8_t* data, size_t length, uint16_t offset = 0)` | Write raw bytes to the zone starting at `offset`. The driver chunks the payload into fixed 32-byte frames carrying at most `DAPLINK_BRIDGE_MAX_WRITE_CHUNK` (28) bytes each, and waits for the busy bit between chunks. Returns `false` if the range overflows the zone or the device reports an error. |
 | `bool writeConfig(const char* str, uint16_t offset = 0)` | Convenience overload for null-terminated strings. |

@@ -56,22 +56,6 @@ void test_busy_reflects_status_register(void) {
     TEST_ASSERT_FALSE(bridge.busy());
 }
 
-void test_clear_config_returns_true_on_no_error(void) {
-    // The Wire mock only records writes whose transmission carries a
-    // payload byte (reg + value). A single-byte command write (just
-    // `[CMD_CLEAR_CONFIG]`) leaves no entry in getWrites(), so we
-    // exercise the negative path (test below) to prove the driver
-    // really sends the command and reads back the error register.
-    bridge.begin();
-    TEST_ASSERT_TRUE(bridge.clearConfig());
-}
-
-void test_clear_config_returns_false_on_device_error(void) {
-    bridge.begin();
-    preloadError(DAPLINK_BRIDGE_ERROR_CMD_FAILED);
-    TEST_ASSERT_FALSE(bridge.clearConfig());
-}
-
 void test_write_config_rejects_offset_at_or_past_end(void) {
     bridge.begin();
     const uint8_t payload[1] = {0x42};
@@ -136,8 +120,90 @@ void test_write_config_chunks_long_payload(void) {
 void test_write_config_returns_false_on_device_error(void) {
     FakeDaplinkBridge& firmware = attachFirmware();
     bridge.begin();
-    firmware.error = DAPLINK_BRIDGE_ERROR_CMD_FAILED;
+    firmware.failWrites = true;
     TEST_ASSERT_FALSE(bridge.writeConfig("x", 0));
+}
+
+void test_clear_config_erases_zone(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
+    bridge.begin();
+    firmware.store("hello");
+
+    TEST_ASSERT_TRUE(bridge.clearConfig());
+    TEST_ASSERT_EQUAL_HEX8(0xFF, firmware.zone[0]);
+}
+
+void test_clear_config_returns_false_on_device_error(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
+    bridge.begin();
+    firmware.failWrites = true;
+    TEST_ASSERT_FALSE(bridge.clearConfig());
+}
+
+// ---------------------------------------------------------------------
+// Firmwares without the config zone
+// ---------------------------------------------------------------------
+
+void test_has_config_zone_on_current_firmware(void) {
+    attachFirmware();
+    bridge.begin();
+    TEST_ASSERT_TRUE(bridge.hasConfigZone());
+}
+
+void test_config_zone_probe_runs_once(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
+    bridge.begin();
+    firmware.store("hello");
+
+    uint8_t buf[8] = {0};
+    TEST_ASSERT_TRUE(bridge.hasConfigZone());
+    TEST_ASSERT_EQUAL_INT(5, bridge.readConfig(buf, sizeof(buf)));
+    TEST_ASSERT_TRUE(bridge.writeConfig("x", 10));
+    TEST_ASSERT_EQUAL_INT(1, firmware.readSectorCommands);
+}
+
+void test_stale_device_error_does_not_hide_config_zone(void) {
+    // The probe reads (and so clears) the error register before asking
+    // for the sector: a stale error must not pass for an old firmware.
+    FakeDaplinkBridge& firmware = attachFirmware();
+    bridge.begin();
+    firmware.error = DAPLINK_BRIDGE_ERROR_CMD_FAILED;
+    TEST_ASSERT_TRUE(bridge.hasConfigZone());
+}
+
+void test_legacy_firmware_has_no_config_zone(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
+    firmware.legacyFirmware = true;
+    TEST_ASSERT_TRUE(bridge.begin());
+    TEST_ASSERT_FALSE(bridge.hasConfigZone());
+}
+
+void test_legacy_firmware_never_receives_config_commands(void) {
+    // Sending READ_CONFIG or WRITE_CONFIG to these firmwares locks the
+    // F103 up until the board is unplugged.
+    FakeDaplinkBridge& firmware = attachFirmware();
+    firmware.legacyFirmware = true;
+    bridge.begin();
+
+    uint8_t buf[32] = {0};
+    TEST_ASSERT_EQUAL_INT(0, bridge.readConfig(buf, sizeof(buf)));
+    TEST_ASSERT_FALSE(bridge.writeConfig("hello", 0));
+    TEST_ASSERT_FALSE(bridge.clearConfig());
+
+    TEST_ASSERT_EQUAL_INT(0, firmware.configCommandsOnLegacy);
+    TEST_ASSERT_FALSE(firmware.hung);
+    TEST_ASSERT_EQUAL_HEX8(DAPLINK_BRIDGE_WHO_AM_I, bridge.deviceId());
+}
+
+void test_config_zone_probe_retried_after_i2c_error(void) {
+    attachFirmware();
+    bridge.begin();
+
+    Wire.setEndTransmissionResult(2);
+    TEST_ASSERT_FALSE(bridge.hasConfigZone());
+
+    Wire.setEndTransmissionResult(0);
+    TEST_ASSERT_TRUE(bridge.hasConfigZone());
 }
 
 void test_read_config_returns_data_until_first_0xff(void) {
@@ -209,6 +275,51 @@ void test_config_round_trip_of_1000_bytes(void) {
     TEST_ASSERT_EQUAL_HEX8_ARRAY(payload, buf, sizeof(payload));
 }
 
+void test_busy_when_bridge_does_not_answer(void) {
+    // A silent bridge must not look idle, or the next command would race
+    // the one it is still running.
+    FakeDaplinkBridge& firmware = attachFirmware();
+    firmware.hung = true;
+    TEST_ASSERT_TRUE(bridge.busy());
+}
+
+void test_device_id_retries_while_bridge_nacks(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
+    firmware.nackAfterReadSector = 5;
+    TEST_ASSERT_TRUE(bridge.hasConfigZone());
+    TEST_ASSERT_EQUAL_HEX8(DAPLINK_BRIDGE_WHO_AM_I, bridge.deviceId());
+}
+
+void test_config_zone_found_when_bridge_nacks_after_probe(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
+    firmware.nackAfterReadSector = 10;
+    bridge.begin();
+    TEST_ASSERT_TRUE(bridge.hasConfigZone());
+}
+
+void test_legacy_firmware_detected_when_bridge_nacks_after_probe(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
+    firmware.legacyFirmware = true;
+    firmware.nackAfterReadSector = 10;
+    bridge.begin();
+    TEST_ASSERT_FALSE(bridge.hasConfigZone());
+}
+
+void test_silent_bridge_never_reads_as_config_zone(void) {
+    // Regression: failed reads used to return 0, which the probe took for
+    // "no error", so a legacy bridge that stopped answering was reported
+    // as having a config zone and then sent READ_CONFIG, which locks it up.
+    FakeDaplinkBridge& firmware = attachFirmware();
+    firmware.legacyFirmware = true;
+    firmware.nackAfterReadSector = 100000;
+    bridge.begin();
+
+    TEST_ASSERT_FALSE(bridge.hasConfigZone());
+    uint8_t buf[16] = {0};
+    TEST_ASSERT_EQUAL_INT(0, bridge.readConfig(buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL_INT(0, firmware.configCommandsOnLegacy);
+}
+
 void test_read_config_returns_zero_on_i2c_error(void) {
     FakeDaplinkBridge& firmware = attachFirmware();
     bridge.begin();
@@ -225,19 +336,30 @@ int main(void) {
     RUN_TEST(test_begin_rejects_wrong_who_am_i);
     RUN_TEST(test_device_id_returns_who_am_i);
     RUN_TEST(test_busy_reflects_status_register);
-    RUN_TEST(test_clear_config_returns_true_on_no_error);
-    RUN_TEST(test_clear_config_returns_false_on_device_error);
     RUN_TEST(test_write_config_rejects_offset_at_or_past_end);
     RUN_TEST(test_write_config_rejects_payload_overflowing_zone);
     RUN_TEST(test_write_config_sends_fixed_32_byte_frames);
     RUN_TEST(test_write_config_chunks_long_payload);
     RUN_TEST(test_write_config_returns_false_on_device_error);
+    RUN_TEST(test_clear_config_erases_zone);
+    RUN_TEST(test_clear_config_returns_false_on_device_error);
+    RUN_TEST(test_has_config_zone_on_current_firmware);
+    RUN_TEST(test_config_zone_probe_runs_once);
+    RUN_TEST(test_stale_device_error_does_not_hide_config_zone);
+    RUN_TEST(test_legacy_firmware_has_no_config_zone);
+    RUN_TEST(test_legacy_firmware_never_receives_config_commands);
+    RUN_TEST(test_config_zone_probe_retried_after_i2c_error);
     RUN_TEST(test_read_config_returns_data_until_first_0xff);
     RUN_TEST(test_read_config_returns_zero_on_empty_zone);
     RUN_TEST(test_read_config_truncates_to_max_len);
     RUN_TEST(test_read_config_reads_past_256_bytes);
     RUN_TEST(test_read_config_reaches_end_of_zone);
     RUN_TEST(test_config_round_trip_of_1000_bytes);
+    RUN_TEST(test_busy_when_bridge_does_not_answer);
+    RUN_TEST(test_device_id_retries_while_bridge_nacks);
+    RUN_TEST(test_config_zone_found_when_bridge_nacks_after_probe);
+    RUN_TEST(test_legacy_firmware_detected_when_bridge_nacks_after_probe);
+    RUN_TEST(test_silent_bridge_never_reads_as_config_zone);
     RUN_TEST(test_read_config_returns_zero_on_i2c_error);
     return UNITY_END();
 }

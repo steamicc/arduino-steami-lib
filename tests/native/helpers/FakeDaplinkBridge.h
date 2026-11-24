@@ -17,10 +17,21 @@
 // - every read transaction sends the TX buffer from its first byte, and
 //   the master sees 0xFF past its end;
 // - READ_CONFIG loads 256 bytes of the 1 KB zone from the given offset,
-//   and fails when offset + 256 runs past the zone.
+//   and fails when offset + 256 runs past the zone;
+// - reading the error register clears it.
+//
+// With `legacyFirmware` set, it models the builds that predate the config
+// zone (release_letssteam, 2024): config commands are unknown, READ_SECTOR
+// rejects its 2-byte sector number, and an unknown command followed by
+// argument bytes locks the F103 up (`hung`: every later transaction fails).
+//
+// `nackAfterReadSector` models the real bridge right after READ_SECTOR:
+// it starts sending the 256-byte sector to whatever read comes next, and
+// NACKs the following transactions until that transfer is over.
 class FakeDaplinkBridge : public I2CDevice {
    public:
     static constexpr uint8_t WHO_AM_I = 0x01;
+    static constexpr uint8_t READ_SECTOR = 0x20;
     static constexpr uint8_t WRITE_CONFIG = 0x30;
     static constexpr uint8_t READ_CONFIG = 0x31;
     static constexpr uint8_t CLEAR_CONFIG = 0x32;
@@ -37,12 +48,29 @@ class FakeDaplinkBridge : public I2CDevice {
     FakeDaplinkBridge() : zone(ZONE_SIZE, 0xFF) {}
 
     uint8_t onWrite(const std::vector<uint8_t>& frame) override {
+        if (hung) {
+            return 2;  // NACK: the F103 no longer answers
+        }
+        if (nackPending > 0) {
+            nackPending--;
+            silent = true;
+            return 3;  // NACK on data: still busy sending the last block
+        }
+        silent = false;
         tx.clear();
         if (frame.empty()) {
             return 0;  // address probe
         }
         const uint8_t cmd = frame[0];
         const std::vector<uint8_t> args(frame.begin() + 1, frame.end());
+
+        if (legacyFirmware && (cmd == WRITE_CONFIG || cmd == READ_CONFIG || cmd == CLEAR_CONFIG)) {
+            configCommandsOnLegacy++;
+            if (!args.empty()) {
+                hung = true;
+            }
+            return 0;
+        }
 
         switch (cmd) {
             case WHO_AM_I:
@@ -53,8 +81,26 @@ class FakeDaplinkBridge : public I2CDevice {
                 break;
             case ERROR_STATUS:
                 tx = {error};
+                error = 0;
+                break;
+            case READ_SECTOR:
+                if (args.size() < 2) {
+                    ignoredFrames++;
+                    break;
+                }
+                readSectorCommands++;
+                nackPending = nackAfterReadSector;
+                if (legacyFirmware) {
+                    error |= ERROR_CMD_FAILED;  // expects a 1-byte sector number
+                } else {
+                    tx.assign(READ_CONFIG_LEN, 0xFF);
+                }
                 break;
             case CLEAR_CONFIG:
+                if (failWrites) {
+                    error = ERROR_CMD_FAILED;
+                    break;
+                }
                 std::fill(zone.begin(), zone.end(), 0xFF);
                 break;
             case READ_CONFIG:
@@ -79,6 +125,9 @@ class FakeDaplinkBridge : public I2CDevice {
     }
 
     std::vector<uint8_t> onRead(size_t quantity) override {
+        if (hung || silent) {
+            return {};  // the master gets no byte at all
+        }
         largestRead = std::max(largestRead, quantity);
         std::vector<uint8_t> out(quantity, 0xFF);
         std::copy_n(tx.begin(), std::min(quantity, tx.size()), out.begin());
@@ -93,6 +142,12 @@ class FakeDaplinkBridge : public I2CDevice {
 
     std::vector<uint8_t> zone;
     uint8_t error = 0;
+    bool legacyFirmware = false;
+    bool failWrites = false;
+    bool hung = false;
+    size_t nackAfterReadSector = 0;
+    size_t readSectorCommands = 0;
+    size_t configCommandsOnLegacy = 0;
     size_t readConfigCommands = 0;
     size_t largestRead = 0;
     size_t ignoredFrames = 0;
@@ -115,7 +170,7 @@ class FakeDaplinkBridge : public I2CDevice {
             error = ERROR_BAD_PARAM;
             return;
         }
-        if (offset + length > ZONE_SIZE) {
+        if (failWrites || offset + length > ZONE_SIZE) {
             error = ERROR_CMD_FAILED;
             return;
         }
@@ -123,4 +178,6 @@ class FakeDaplinkBridge : public I2CDevice {
     }
 
     std::vector<uint8_t> tx;
+    size_t nackPending = 0;
+    bool silent = false;
 };

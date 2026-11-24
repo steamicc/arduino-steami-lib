@@ -18,6 +18,7 @@ constexpr uint8_t DAPLINK_BRIDGE_WHO_AM_I = 0x4C;
 // ============================================================================
 
 constexpr uint8_t DAPLINK_BRIDGE_CMD_WHO_AM_I = 0x01;
+constexpr uint8_t DAPLINK_BRIDGE_CMD_READ_SECTOR = 0x20;
 constexpr uint8_t DAPLINK_BRIDGE_CMD_WRITE_CONFIG = 0x30;
 constexpr uint8_t DAPLINK_BRIDGE_CMD_READ_CONFIG = 0x31;
 constexpr uint8_t DAPLINK_BRIDGE_CMD_CLEAR_CONFIG = 0x32;
@@ -78,6 +79,15 @@ constexpr uint32_t DAPLINK_BRIDGE_WRITE_TIMEOUT_MS = 100;
 
 // Worst-case read latency.
 constexpr uint32_t DAPLINK_BRIDGE_READ_TIMEOUT_MS = 50;
+
+// How long a register read keeps retrying. The F103 answers reads from its
+// 30 ms main loop, and it NACKs for about one loop after it starts sending
+// a 256-byte block (READ_SECTOR, READ_CONFIG) that the host cut short.
+constexpr uint32_t DAPLINK_BRIDGE_REG_TIMEOUT_MS = 100;
+
+// READ_SECTOR keeps the bridge busy for about 100 ms while it reads the
+// external flash.
+constexpr uint32_t DAPLINK_BRIDGE_PROBE_TIMEOUT_MS = 500;
 
 // Settling delays after each config command, matching the MicroPython
 // driver. The F103 runs config commands from its main loop. The answer to

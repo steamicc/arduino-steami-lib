@@ -18,6 +18,7 @@ busy	KEYWORD2
 clearConfig	KEYWORD2
 writeConfig	KEYWORD2
 readConfig	KEYWORD2
+hasConfigZone	KEYWORD2
 
 #######################################
 # Public constants
