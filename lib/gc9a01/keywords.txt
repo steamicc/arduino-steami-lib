@@ -1,0 +1,57 @@
+#######################################
+# Syntax Coloring Map for GC9A01
+#######################################
+
+#######################################
+# Classes
+#######################################
+
+GC9A01	KEYWORD1
+GC9A01_SPI	KEYWORD1
+SteamiGC9A01	KEYWORD1
+
+#######################################
+# Public methods
+#######################################
+
+begin	KEYWORD2
+show	KEYWORD2
+powerOn	KEYWORD2
+powerOff	KEYWORD2
+
+fill	KEYWORD2
+pixel	KEYWORD2
+line	KEYWORD2
+fillRect	KEYWORD2
+scroll	KEYWORD2
+text	KEYWORD2
+width	KEYWORD2
+height	KEYWORD2
+color565	KEYWORD2
+
+invert	KEYWORD2
+rotate	KEYWORD2
+
+#######################################
+# Public constants
+#######################################
+
+GC9A01_WIDTH	LITERAL1
+GC9A01_HEIGHT	LITERAL1
+GC9A01_PIN_NONE	LITERAL1
+GC9A01_BLACK	LITERAL1
+GC9A01_NAVY	LITERAL1
+GC9A01_DARKGREEN	LITERAL1
+GC9A01_PURPLE	LITERAL1
+GC9A01_DARKGREY	LITERAL1
+GC9A01_GREY	LITERAL1
+GC9A01_LIGHTGREY	LITERAL1
+GC9A01_BLUE	LITERAL1
+GC9A01_GREEN	LITERAL1
+GC9A01_CYAN	LITERAL1
+GC9A01_RED	LITERAL1
+GC9A01_MAGENTA	LITERAL1
+GC9A01_ORANGE	LITERAL1
+GC9A01_YELLOW	LITERAL1
+GC9A01_PINK	LITERAL1
+GC9A01_WHITE	LITERAL1
