@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.28.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.27.0...v0.28.0) (2026-11-24)
+
+
+### Features
+
+* **daplink_flash:** Add the user file driver on the DAPLink bridge ([#167](https://github.com/steamicc/arduino-steami-lib/issues/167)). ([6513c3c](https://github.com/steamicc/arduino-steami-lib/commit/6513c3c3858eb75b2ba7bad33765c77cf960f67d)), closes [#12](https://github.com/steamicc/arduino-steami-lib/issues/12) [#32](https://github.com/steamicc/arduino-steami-lib/issues/32) [#177](https://github.com/steamicc/arduino-steami-lib/issues/177)
+
 # [0.27.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.26.3...v0.27.0) (2026-11-24)
 
 
