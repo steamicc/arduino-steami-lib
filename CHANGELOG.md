@@ -3,6 +3,28 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.25.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.25.0...v0.25.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **ci:** Publish the Arduino package on published releases. ([#228](https://github.com/steamicc/arduino-steami-lib/issues/228)) ([484fd4b](https://github.com/steamicc/arduino-steami-lib/commit/484fd4bc9bbe6b87b86ddc4e4db5511ef5901d31)), closes [#227](https://github.com/steamicc/arduino-steami-lib/issues/227)
+
+# [0.25.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.24.1...v0.25.0) (2026-11-24)
+
+
+### Features
+
+* **tooling:** Publish the drivers as one Arduino Library Manager package. ([#226](https://github.com/steamicc/arduino-steami-lib/issues/226)) ([9efdc10](https://github.com/steamicc/arduino-steami-lib/commit/9efdc101e7ec6678b829d0f5f47884ee0c398c58)), closes [#221](https://github.com/steamicc/arduino-steami-lib/issues/221)
+
+## [0.24.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.24.0...v0.24.1) (2026-11-24)
+
+
+### Bug Fixes
+
+* **mcp23009e:** Rename example sketches and fix broken example links ([#218](https://github.com/steamicc/arduino-steami-lib/issues/218)). ([2ffc8ca](https://github.com/steamicc/arduino-steami-lib/commit/2ffc8caaa9b5c634fc13cd3fcc671a58b49730ff)), closes [#217](https://github.com/steamicc/arduino-steami-lib/issues/217) [#194](https://github.com/steamicc/arduino-steami-lib/issues/194) [#217](https://github.com/steamicc/arduino-steami-lib/issues/217)
+* **tooling:** Really compile the examples in test-examples.py ([#223](https://github.com/steamicc/arduino-steami-lib/issues/223)). ([9f1bb72](https://github.com/steamicc/arduino-steami-lib/commit/9f1bb725a7e3d42ea0507e94ae419dae89b5280a)), closes [#222](https://github.com/steamicc/arduino-steami-lib/issues/222)
+
 # [0.24.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.23.0...v0.24.0) (2026-09-16)
 
 

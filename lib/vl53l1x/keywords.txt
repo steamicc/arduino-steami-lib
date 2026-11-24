@@ -1,0 +1,32 @@
+#######################################
+# Syntax Coloring Map for VL53L1X
+#######################################
+
+#######################################
+# Class
+#######################################
+
+VL53L1X	KEYWORD1
+
+#######################################
+# Public methods
+#######################################
+
+begin	KEYWORD2
+deviceId	KEYWORD2
+reset	KEYWORD2
+powerOn	KEYWORD2
+powerOff	KEYWORD2
+
+startRanging	KEYWORD2
+stopRanging	KEYWORD2
+dataReady	KEYWORD2
+distanceMm	KEYWORD2
+read	KEYWORD2
+
+#######################################
+# Public constants
+#######################################
+
+VL53L1X_I2C_DEFAULT_ADDR	LITERAL1
+DEFAULT_CONFIG	LITERAL1

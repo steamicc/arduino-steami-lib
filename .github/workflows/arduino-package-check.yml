@@ -1,0 +1,74 @@
+name: Arduino package check
+
+# Reusable workflow: build the STeaMi Arduino Library Manager package,
+# lint it and compile every example with arduino-cli.
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: 'Package version, without the leading v (e.g. 0.25.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  STM32_CORE_VERSION: '3.1.0'
+  ARDUINO_BOARD_MANAGER_ADDITIONAL_URLS: https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json
+
+jobs:
+  arduino-package:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test the packaging tooling
+        run: python3 -m unittest discover -s scripts/tests
+
+      - name: Build the package
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+        run: python3 scripts/build-arduino-package.py --version "$PACKAGE_VERSION" --out build/arduino-package
+
+      - name: Install Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      # submit fails once the library is indexed (LP017, duplicate name) and
+      # update fails before that (LP018), so pick the mode from the index.
+      # The step fails if the index cannot be fetched or parsed.
+      - name: Choose the Library Manager lint mode
+        id: lint-mode
+        run: |
+          mode="$(scripts/library-manager-mode.sh STeaMi)"
+          echo "arduino-lint library-manager mode: $mode"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+      - name: Lint the package
+        uses: arduino/arduino-lint-action@v2
+        with:
+          path: build/arduino-package
+          library-manager: ${{ steps.lint-mode.outputs.mode }}
+          compliance: strict
+          project-type: library
+
+      - name: Install the STM32 core
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install "STMicroelectronics:stm32@${STM32_CORE_VERSION}"
+
+      - name: Install library dependencies
+        run: arduino-cli lib install STM32duinoBLE
+
+      - name: Compile every example
+        run: scripts/compile-package-examples.sh build/arduino-package
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: arduino-package
+          path: build/arduino-package
+          if-no-files-found: error

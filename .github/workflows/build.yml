@@ -39,3 +39,6 @@ jobs:
 
       - name: Build project
         run: make build
+
+      - name: Compile examples
+        run: make test-examples

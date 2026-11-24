@@ -1,20 +1,24 @@
 # HTS221
 
 Arduino/C++ driver for the ST HTS221 capacitive digital humidity and
-temperature sensor on the STeaMi board.
+temperature sensor.
+
+> **Legacy sensor.** The HTS221 is not mounted on any production STeaMi
+> board: V1a/V1b carry a WSEN-HIDS (see [`wsen-hids`](../wsen-hids/)) and
+> V1c a BME280. This driver is kept for boards or modules that still use
+> an HTS221.
 
 ## Hardware
 
-* I2C sensor, default 7-bit address `0x5F` (SA0 pulled low on the STeaMi
-  board).
+* I2C sensor, 7-bit address `0x5F` (same address as the WSEN-HIDS).
 * Factory-calibrated — the driver loads the calibration block from the
   part itself and applies it on every reading.
 
 ## Quick start
 
-On the STeaMi board, the HTS221 is routed to the **internal** I2C bus
-(pins `I2C_INT_SDA` / `I2C_INT_SCL` from the variant, not the default
-global `Wire`). Spin up a dedicated `TwoWire` and hand it to the driver:
+When the HTS221 sits on the STeaMi **internal** I2C bus (pins
+`I2C_INT_SDA` / `I2C_INT_SCL` from the variant, not the default global
+`Wire`), spin up a dedicated `TwoWire` and hand it to the driver:
 
 ```cpp
 #include <Wire.h>

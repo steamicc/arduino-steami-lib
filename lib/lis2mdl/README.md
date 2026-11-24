@@ -45,7 +45,7 @@ void loop() {
 }
 ```
 
-See [examples/read_magnetic_field/](examples/read_magnetic_field/)
+See [examples/BasicReader/](examples/BasicReader/)
 for the full sketch.
 
 ## Examples

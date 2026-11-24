@@ -63,7 +63,7 @@ void loop() {
 ```
 
 See
-[`examples/read_imu/`](examples/read_imu/)
+[`examples/BasicReader/`](examples/BasicReader/)
 for the complete example.
 
 ---

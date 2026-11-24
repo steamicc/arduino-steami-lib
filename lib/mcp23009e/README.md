@@ -161,10 +161,11 @@ make test-native
 
 | Example | What it does |
 |---------|--------------|
-| [`simon_game`](examples/simon_game/) | Memory game inspired by *Simon Says*. The board flashes an increasingly long sequence using the on-board LEDs and the player must reproduce it using the D-PAD. Score is printed to the serial monitor. |
-| [`reaction_timer`](examples/reaction_timer/) | Reaction-time trainer. After a random delay, the red LED lights up and the player must press the UP button as quickly as possible. The measured reaction time is printed in milliseconds. |
-| [`music_player`](examples/music_player/) | Turn the D-PAD into a mini jukebox. Each direction plays a different 8-bit melody on the on-board speaker (Tetris, Mario, Zelda, or Pokémon). |
-| [`morse_code`](examples/morse_code/) | Enter Morse code using the D-PAD. Short and long presses on the UP button generate dots and dashes, while the DOWN button decodes the current sequence and prints the matching letter. |
+| [`dpad_reader`](examples/dpad_reader/) | Print which D-PAD button is currently pressed on the serial monitor. A good first sketch to check the expander and its pull-ups. |
+| [`SimonGame`](examples/SimonGame/) | Memory game inspired by *Simon Says*. The board flashes an increasingly long sequence using the on-board LEDs and the player must reproduce it using the D-PAD. Score is printed to the serial monitor. |
+| [`ReactionTimer`](examples/ReactionTimer/) | Reaction-time trainer. After a random delay, the red LED lights up and the player must press the UP button as quickly as possible. The measured reaction time is printed in milliseconds. |
+| [`MusicPlayer`](examples/MusicPlayer/) | Turn the D-PAD into a mini jukebox. Each direction plays a different 8-bit melody on the on-board speaker (Tetris, Mario, Zelda, or Pokémon). |
+| [`MorseCode`](examples/MorseCode/) | Enter Morse code using the D-PAD. Short and long presses on the UP button generate dots and dashes, while the DOWN button decodes the current sequence and prints the matching letter. |
 
 ### Building an example
 
