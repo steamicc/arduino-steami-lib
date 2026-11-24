@@ -1,0 +1,124 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/*
+ * Integration test for SteamiConfig persistence on a real STeaMi.
+ *
+ * It exercises repeated save -> clear RAM -> load cycles to verify that
+ * configuration remains coherent across continued use. The zone content is
+ * saved first and written back at the end, so the board keeps its own
+ * configuration.
+ *
+ * The number of write cycles is intentionally small to avoid unnecessary flash
+ * wear on the DAPLink STM32F103 config zone.
+ */
+
+#include <Arduino.h>
+#include <DaplinkBridge.h>
+#include <SteamiConfig.h>
+#include <Wire.h>
+#include <unity.h>
+
+#include "config_zone_backup.h"
+
+TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
+DaplinkBridge bridge(internalI2C);
+SteamiConfig config(bridge);
+ConfigZoneBackup backup;
+
+static constexpr uint32_t CYCLE_COUNT = 3;
+static constexpr float EXPECTED_GAIN = 1.015f;
+static constexpr float EXPECTED_OFFSET = -0.35f;
+
+void test_steami_config_repeated_persistence_cycles(void) {
+    TEST_ASSERT_TRUE(config.begin());
+
+    config.clear();
+    config.setBoardRevision(3);
+    config.setBoardName("STeaMi-INT");
+    TEST_ASSERT_TRUE(config.setTemperatureCalibration("hts221", EXPECTED_GAIN, EXPECTED_OFFSET));
+    config.setBootCount(0);
+
+    for (uint32_t cycle = 1; cycle <= CYCLE_COUNT; ++cycle) {
+        TEST_ASSERT_EQUAL_UINT32(cycle, config.incrementBootCount());
+        TEST_ASSERT_TRUE_MESSAGE(config.save(), "save() failed during persistence cycle");
+
+        // Simulate loss of all runtime state while keeping persistent storage.
+        config.clear();
+
+        TEST_ASSERT_TRUE_MESSAGE(config.load(), "load() failed during persistence cycle");
+
+        int32_t revision = 0;
+        String name;
+        TemperatureCalibration calibration;
+        uint32_t count = 0;
+
+        TEST_ASSERT_TRUE(config.boardRevision(revision));
+        TEST_ASSERT_EQUAL_INT32(3, revision);
+
+        TEST_ASSERT_TRUE(config.boardName(name));
+        TEST_ASSERT_EQUAL_STRING("STeaMi-INT", name.c_str());
+
+        TEST_ASSERT_TRUE(config.getTemperatureCalibration("hts221", calibration));
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, EXPECTED_GAIN, calibration.gain);
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, EXPECTED_OFFSET, calibration.offset);
+
+        TEST_ASSERT_TRUE(config.bootCount(count));
+        TEST_ASSERT_EQUAL_UINT32(cycle, count);
+
+        delay(250);
+    }
+}
+
+void test_steami_config_persists_after_idle_period(void) {
+    config.clear();
+    config.setBoardName("STeaMi-IDLE");
+    config.setBootCount(77);
+
+    TEST_ASSERT_TRUE(config.save());
+
+    // Exercise persistence across a longer idle period without touching the
+    // config object or DAPLink storage.
+    delay(3000);
+
+    config.clear();
+    TEST_ASSERT_TRUE(config.load());
+
+    String name;
+    uint32_t count = 0;
+
+    TEST_ASSERT_TRUE(config.boardName(name));
+    TEST_ASSERT_EQUAL_STRING("STeaMi-IDLE", name.c_str());
+
+    TEST_ASSERT_TRUE(config.bootCount(count));
+    TEST_ASSERT_EQUAL_UINT32(77, count);
+}
+
+void test_steami_config_restore_board_config(void) {
+    TEST_ASSERT_TRUE(backup.restore(bridge));
+}
+
+void test_daplink_firmware_has_config_zone(void) {
+    TEST_FAIL_MESSAGE("DAPLink firmware without config zone: update it to run this suite.");
+}
+
+void setup() {
+    delay(2000);
+    internalI2C.begin();
+    bridge.begin();
+
+    UNITY_BEGIN();
+    if (!bridge.hasConfigZone()) {
+        // Never send config commands to such a firmware: it locks up.
+        RUN_TEST(test_daplink_firmware_has_config_zone);
+        UNITY_END();
+        return;
+    }
+    backup.take(bridge);
+
+    RUN_TEST(test_steami_config_repeated_persistence_cycles);
+    RUN_TEST(test_steami_config_persists_after_idle_period);
+    RUN_TEST(test_steami_config_restore_board_config);
+    UNITY_END();
+}
+
+void loop() {}

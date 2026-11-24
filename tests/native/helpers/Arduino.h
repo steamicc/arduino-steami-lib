@@ -6,6 +6,8 @@
 #include <functional>
 #include <map>
 
+#include "WString.h"
+
 // Mirror the include-guard symbol the real Arduino.h advertises.
 // Driver code uses `#ifdef Arduino_h` to gate pin operations; without
 // this define those bodies would compile out in native tests and make

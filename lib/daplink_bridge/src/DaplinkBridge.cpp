@@ -19,7 +19,8 @@ bool DaplinkBridge::begin() {
 }
 
 uint8_t DaplinkBridge::deviceId() {
-    return readReg(DAPLINK_BRIDGE_CMD_WHO_AM_I);
+    uint8_t id = 0;
+    return readReg(DAPLINK_BRIDGE_CMD_WHO_AM_I, id) ? id : 0;
 }
 
 // ---------------------------------------------------------------------
@@ -27,23 +28,68 @@ uint8_t DaplinkBridge::deviceId() {
 // ---------------------------------------------------------------------
 
 bool DaplinkBridge::busy() {
-    return (status() & DAPLINK_BRIDGE_STATUS_BUSY) != 0;
+    // A bridge that does not answer is not idle: treating a failed read as
+    // "not busy" would let the next command race the current one.
+    uint8_t status = 0;
+    return !readReg(DAPLINK_BRIDGE_REG_STATUS, status) ||
+           (status & DAPLINK_BRIDGE_STATUS_BUSY) != 0;
 }
 
 // ---------------------------------------------------------------------
 // Config zone
 // ---------------------------------------------------------------------
 
+bool DaplinkBridge::hasConfigZone() {
+    if (_configZone == ConfigZoneSupport::Unknown) {
+        _configZone = probeConfigZone();
+    }
+    return _configZone == ConfigZoneSupport::Present;
+}
+
+DaplinkBridge::ConfigZoneSupport DaplinkBridge::probeConfigZone() {
+    // Ask for flash sector 0, a harmless read that every firmware accepts
+    // with its 2-byte sector number. Firmwares without the config zone
+    // only handle a 1-byte sector number and flag the request as failed;
+    // newer ones read the sector without error. Reading the error
+    // register clears it, so start from a clean state.
+    //
+    // Every read here must succeed: right after READ_SECTOR the bridge
+    // NACKs for a while, and mistaking that silence for "no error" would
+    // send config commands to a firmware that locks up on them.
+    uint8_t err = 0;
+    if (!waitNotBusy(DAPLINK_BRIDGE_PROBE_TIMEOUT_MS) || !readReg(DAPLINK_BRIDGE_REG_ERROR, err)) {
+        return ConfigZoneSupport::Unknown;
+    }
+
+    const uint8_t frame[3] = {DAPLINK_BRIDGE_CMD_READ_SECTOR, 0x00, 0x00};
+    _wire->beginTransmission(_address);
+    _wire->write(frame, sizeof(frame));
+    if (_wire->endTransmission() != 0) {
+        return ConfigZoneSupport::Unknown;
+    }
+    if (!waitNotBusy(DAPLINK_BRIDGE_PROBE_TIMEOUT_MS) || !readReg(DAPLINK_BRIDGE_REG_ERROR, err)) {
+        return ConfigZoneSupport::Unknown;
+    }
+    return err == 0 ? ConfigZoneSupport::Present : ConfigZoneSupport::Absent;
+}
+
 bool DaplinkBridge::clearConfig() {
+    if (!hasConfigZone()) {
+        return false;
+    }
     if (!waitNotBusy(DAPLINK_BRIDGE_WRITE_TIMEOUT_MS)) {
         return false;
     }
+
     uint8_t cmd = DAPLINK_BRIDGE_CMD_CLEAR_CONFIG;
     writeFrame(&cmd, 1);
+    delay(DAPLINK_BRIDGE_CLEAR_CONFIG_DELAY_MS);
+
     if (!waitNotBusy(DAPLINK_BRIDGE_CLEAR_TIMEOUT_MS)) {
         return false;
     }
-    return error() == 0;
+
+    return noError();
 }
 
 bool DaplinkBridge::writeConfig(const uint8_t* data, size_t length, uint16_t offset) {
@@ -53,35 +99,48 @@ bool DaplinkBridge::writeConfig(const uint8_t* data, size_t length, uint16_t off
     if (offset >= DAPLINK_BRIDGE_CONFIG_SIZE || length > DAPLINK_BRIDGE_CONFIG_SIZE - offset) {
         return false;
     }
+    if (!hasConfigZone()) {
+        return false;
+    }
 
     // Frame layout: [CMD | offsetHi | offsetLo | chunkLen | payload...]
     constexpr size_t kHeaderLen = 4;
     uint8_t buf[kHeaderLen + DAPLINK_BRIDGE_MAX_WRITE_CHUNK];
 
     size_t pos = 0;
+
     while (pos < length) {
         if (!waitNotBusy(DAPLINK_BRIDGE_WRITE_TIMEOUT_MS)) {
             return false;
         }
+
         const size_t remaining = length - pos;
+
         const uint8_t chunkLen =
             static_cast<uint8_t>(std::min<size_t>(DAPLINK_BRIDGE_MAX_WRITE_CHUNK, remaining));
+
         const uint16_t curOffset = static_cast<uint16_t>(offset + pos);
+
+        // The firmware waits for a full 32-byte frame before running the
+        // command: pad the unused payload bytes with zeros.
+        memset(buf, 0, sizeof(buf));
 
         buf[0] = DAPLINK_BRIDGE_CMD_WRITE_CONFIG;
         buf[1] = static_cast<uint8_t>((curOffset >> 8) & 0xFF);
         buf[2] = static_cast<uint8_t>(curOffset & 0xFF);
         buf[3] = chunkLen;
+
         memcpy(&buf[kHeaderLen], &data[pos], chunkLen);
 
-        writeFrame(buf, kHeaderLen + chunkLen);
+        writeFrame(buf, sizeof(buf));
+        delay(DAPLINK_BRIDGE_WRITE_CONFIG_DELAY_MS);
+
         pos += chunkLen;
     }
-
     if (!waitNotBusy(DAPLINK_BRIDGE_WRITE_TIMEOUT_MS)) {
         return false;
     }
-    return error() == 0;
+    return noError();
 }
 
 bool DaplinkBridge::writeConfig(const char* str, uint16_t offset) {
@@ -92,31 +151,57 @@ bool DaplinkBridge::writeConfig(const char* str, uint16_t offset) {
 }
 
 size_t DaplinkBridge::readConfig(uint8_t* result, size_t maxLen) {
-    if (result == nullptr || maxLen == 0) {
+    if (result == nullptr || maxLen == 0 || !hasConfigZone()) {
         return 0;
     }
 
+    // Each READ_CONFIG loads 256 bytes from `offset` into the bridge TX
+    // buffer, and each I2C read returns that buffer from its first byte.
+    // Reads are capped at 255 bytes, so walk the zone with one READ_CONFIG
+    // per read. The offset may not pass CONFIG_SIZE - 256: near the end,
+    // ask for the last block and skip the bytes already returned. That
+    // reaches every byte but the very last one of the zone.
+    constexpr uint16_t kLastOffset = DAPLINK_BRIDGE_CONFIG_SIZE - DAPLINK_BRIDGE_READ_CONFIG_LEN;
+    const size_t limit = std::min<size_t>(maxLen, DAPLINK_BRIDGE_CONFIG_SIZE);
+    uint8_t chunk[DAPLINK_BRIDGE_MAX_READ_LEN];
+
     size_t produced = 0;
-    while (produced < maxLen) {
+    while (produced < limit) {
+        const uint16_t offset = static_cast<uint16_t>(std::min<size_t>(produced, kLastOffset));
+        const size_t skip = produced - offset;
+        if (skip >= DAPLINK_BRIDGE_MAX_READ_LEN) {
+            break;
+        }
+        const size_t want = std::min<size_t>(limit - produced, DAPLINK_BRIDGE_MAX_READ_LEN - skip);
+        const uint8_t length = static_cast<uint8_t>(skip + want);
+
         if (!waitNotBusy(DAPLINK_BRIDGE_READ_TIMEOUT_MS)) {
-            return produced;
+            break;
         }
 
-        uint8_t chunk[DAPLINK_BRIDGE_MAX_READ_CHUNK];
-        const uint8_t want = static_cast<uint8_t>(
-            std::min<size_t>(DAPLINK_BRIDGE_MAX_READ_CHUNK, maxLen - produced));
-        readBlock(DAPLINK_BRIDGE_CMD_READ_CONFIG, chunk, want);
+        const uint8_t frame[3] = {DAPLINK_BRIDGE_CMD_READ_CONFIG,
+                                  static_cast<uint8_t>((offset >> 8) & 0xFF),
+                                  static_cast<uint8_t>(offset & 0xFF)};
+        _wire->beginTransmission(_address);
+        _wire->write(frame, sizeof(frame));
+        if (_wire->endTransmission() != 0) {
+            break;
+        }
+        delay(DAPLINK_BRIDGE_READ_CONFIG_DELAY_MS);
 
-        for (uint8_t i = 0; i < want; ++i) {
-            // 0xFF marks the first unused byte in the config zone — treat
-            // it as end-of-string and stop returning data to the caller.
+        if (_wire->requestFrom(_address, length) != length) {
+            break;
+        }
+        for (uint8_t i = 0; i < length; ++i) {
+            chunk[i] = static_cast<uint8_t>(_wire->read());
+        }
+
+        for (size_t i = skip; i < length; ++i) {
+            // 0xFF marks the first unused byte of the zone.
             if (chunk[i] == 0xFF) {
                 return produced;
             }
             result[produced++] = chunk[i];
-            if (produced == maxLen) {
-                return produced;
-            }
         }
     }
     return produced;
@@ -131,27 +216,20 @@ bool DaplinkBridge::isPresent() {
     return _wire->endTransmission() == 0;
 }
 
-uint8_t DaplinkBridge::readReg(uint8_t reg) {
-    _wire->beginTransmission(_address);
-    _wire->write(reg);
-    _wire->endTransmission(false);
-    _wire->requestFrom(_address, static_cast<uint8_t>(1));
-    if (_wire->available()) {
-        return static_cast<uint8_t>(_wire->read());
-    }
-    return 0;
-}
-
-void DaplinkBridge::readBlock(uint8_t reg, uint8_t* buf, uint8_t len) {
-    for (uint8_t i = 0; i < len; ++i) {
-        buf[i] = 0;
-    }
-    _wire->beginTransmission(_address);
-    _wire->write(reg);
-    _wire->endTransmission(false);
-    _wire->requestFrom(_address, len);
-    for (uint8_t i = 0; i < len && _wire->available(); ++i) {
-        buf[i] = static_cast<uint8_t>(_wire->read());
+bool DaplinkBridge::readReg(uint8_t reg, uint8_t& value) {
+    const uint32_t start = millis();
+    while (true) {
+        _wire->beginTransmission(_address);
+        _wire->write(reg);
+        if (_wire->endTransmission(false) == 0 &&
+            _wire->requestFrom(_address, static_cast<uint8_t>(1)) == 1 && _wire->available()) {
+            value = static_cast<uint8_t>(_wire->read());
+            return true;
+        }
+        if ((millis() - start) > DAPLINK_BRIDGE_REG_TIMEOUT_MS) {
+            return false;
+        }
+        delay(2);
     }
 }
 
@@ -167,12 +245,10 @@ void DaplinkBridge::writeFrame(const uint8_t* data, size_t len) {
 // Status / error
 // ---------------------------------------------------------------------
 
-uint8_t DaplinkBridge::status() {
-    return readReg(DAPLINK_BRIDGE_REG_STATUS);
-}
-
-uint8_t DaplinkBridge::error() {
-    return readReg(DAPLINK_BRIDGE_REG_ERROR);
+bool DaplinkBridge::noError() {
+    // Reading the error register clears it.
+    uint8_t err = 0;
+    return readReg(DAPLINK_BRIDGE_REG_ERROR, err) && err == 0;
 }
 
 bool DaplinkBridge::waitNotBusy(uint32_t timeoutMs) {
