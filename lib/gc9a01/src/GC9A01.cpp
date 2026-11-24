@@ -66,8 +66,9 @@ static const uint8_t kInitSequence[] = {
     0x8D, 1, 0x01,
     0x8E, 1, 0xFF,
     0x8F, 1, 0xFF,
-    // gate scan direction (GS): with MADCTL = BGR it gives the expected
-    // orientation on the STeaMi V1c
+    // 2nd parameter 0x20 sets SS (bit 5, source output scan direction
+    // S360 -> S1; GS is bit 6): with MADCTL = BGR it gives the expected
+    // orientation on the STeaMi V1c. The 1st parameter is ignored.
     GC9A01_CMD_DISP_FUNC_CTRL, 2, 0x00, 0x20,
     GC9A01_CMD_COLMOD, 1, GC9A01_COLMOD_RGB565,
     0x90, 4, 0x08, 0x08, 0x08, 0x08,
