@@ -52,12 +52,6 @@ jobs:
       - name: Install Arduino CLI
         uses: arduino/setup-arduino-cli@v2
 
-      - name: Cache the Arduino data directory
-        uses: actions/cache@v4
-        with:
-          path: ~/.arduino15
-          key: arduino15-${{ runner.os }}-stm32-${{ env.STM32_CORE_VERSION }}
-
       - name: Install the STM32 core
         run: |
           arduino-cli core update-index
