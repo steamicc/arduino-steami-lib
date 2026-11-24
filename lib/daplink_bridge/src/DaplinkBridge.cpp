@@ -208,6 +208,54 @@ size_t DaplinkBridge::readConfig(uint8_t* result, size_t maxLen) {
 }
 
 // ---------------------------------------------------------------------
+// Raw protocol
+// ---------------------------------------------------------------------
+
+bool DaplinkBridge::waitReady(uint32_t timeoutMs) {
+    return waitNotBusy(timeoutMs);
+}
+
+bool DaplinkBridge::sendCommand(uint8_t cmd, const uint8_t* args, size_t argLen) {
+    if (argLen > DAPLINK_BRIDGE_MAX_ARGS || (argLen > 0 && args == nullptr)) {
+        return false;
+    }
+    uint8_t frame[1 + DAPLINK_BRIDGE_MAX_ARGS];
+    frame[0] = cmd;
+    if (argLen > 0) {
+        memcpy(&frame[1], args, argLen);
+    }
+    return writeFrame(frame, 1 + argLen);
+}
+
+bool DaplinkBridge::commandSucceeded(uint32_t settleMs, uint32_t timeoutMs) {
+    return commandResult(settleMs, timeoutMs) == CommandResult::Ok;
+}
+
+bool DaplinkBridge::readError(uint8_t& error) {
+    return readReg(DAPLINK_BRIDGE_REG_ERROR, error);
+}
+
+size_t DaplinkBridge::readResponse(uint8_t* buf, size_t length) {
+    if (buf == nullptr || length == 0) {
+        return 0;
+    }
+#if defined(STM32_CORE_VERSION_MAJOR) && (STM32_CORE_VERSION_MAJOR < 3)
+    // STM32duino 2.x reads at most 255 bytes at once.
+    if (length > DAPLINK_BRIDGE_MAX_READ_LEN) {
+        return 0;
+    }
+    const size_t got = _wire->requestFrom(_address, static_cast<uint8_t>(length));
+#else
+    const size_t got = _wire->requestFrom(_address, length);
+#endif
+    size_t n = 0;
+    while (n < got && _wire->available()) {
+        buf[n++] = static_cast<uint8_t>(_wire->read());
+    }
+    return n;
+}
+
+// ---------------------------------------------------------------------
 // I2C helpers
 // ---------------------------------------------------------------------
 

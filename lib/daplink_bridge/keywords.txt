@@ -19,6 +19,11 @@ clearConfig	KEYWORD2
 writeConfig	KEYWORD2
 readConfig	KEYWORD2
 hasConfigZone	KEYWORD2
+waitReady	KEYWORD2
+sendCommand	KEYWORD2
+commandSucceeded	KEYWORD2
+readError	KEYWORD2
+readResponse	KEYWORD2
 
 #######################################
 # Public constants

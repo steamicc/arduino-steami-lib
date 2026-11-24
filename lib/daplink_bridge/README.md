@@ -72,6 +72,19 @@ matching the erased-flash state.
 | `bool writeConfig(const char* str, uint16_t offset = 0)` | Convenience overload for null-terminated strings. |
 | `size_t readConfig(uint8_t* result, size_t maxLen)` | Read up to `maxLen` bytes from the start of the zone, stopping at the first `0xFF` (end-of-data sentinel) or when the buffer is full. Returns the number of bytes copied. Reads the whole zone but its last byte (1023 bytes at most). |
 
+### Raw protocol
+
+For drivers built on the bridge, such as
+[`daplink_flash`](../daplink_flash/README.md).
+
+| Method | Description |
+|--------|-------------|
+| `bool waitReady(uint32_t timeoutMs)` | Wait until the bridge is idle. `false` after `timeoutMs`. |
+| `bool sendCommand(uint8_t cmd, const uint8_t* args = nullptr, size_t argLen = 0)` | Send `[cmd | args...]`. The firmware runs a command only once it has received all its argument bytes: pass exactly the count it expects (at most `DAPLINK_BRIDGE_MAX_ARGS`, 31). |
+| `bool commandSucceeded(uint32_t settleMs, uint32_t timeoutMs)` | Wait `settleMs` for the command just sent to run, then return `true` only if it is known to have succeeded. Send nothing in between: the firmware clears the "last command failed" error bit as soon as it receives another command, `STATUS` polls included. |
+| `bool readError(uint8_t& error)` | Read the error register, which clears it. `false` if the bridge did not answer. |
+| `size_t readResponse(uint8_t* buf, size_t length)` | Read `length` bytes of the answer the last command left in the bridge TX buffer, from its first byte. Reading `STATUS` or `ERROR` replaces that answer: wait with `delay()`, not `waitReady()`, before calling it. Blocks of 256 bytes need STM32duino 3.x. |
+
 ## Register constants
 
 `daplink_bridge_const.h` exports command codes (`DAPLINK_BRIDGE_CMD_*`),
