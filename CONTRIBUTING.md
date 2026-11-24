@@ -109,6 +109,10 @@ lib/<component>/
         └── <example_name>.ino
 ```
 
+### Naming
+
+The public header of a driver is `Steami<Chip>.h` (constants in `Steami<Chip>_const.h`) and the main class bound to the STeaMi board is `Steami<Chip>`, for example `SteamiBME280`. Several chips have a homonym in the Arduino Library Manager (BME280, APDS9960, MCP23009E, ssd1327, VL53L1X), and the Arduino resolver prefers a library whose name matches the header: the prefix avoids compiling the wrong library. A generic class that drives the chip on another board keeps the chip name (`GC9A01_SPI`). Register constants, enums and structs keep their chip prefix. The folder under `lib/` keeps the plain component name.
+
 ### Requirements
 
 - The directory name is lowercase, using either hyphens or underscores
