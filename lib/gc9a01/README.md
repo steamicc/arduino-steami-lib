@@ -138,7 +138,7 @@ make flash-gc9a01/rotating_3d_cube
 | `GC9A01_SPI(SPIClass& spi, uint8_t dc, uint8_t rst, uint8_t cs)` | Construct a display on any SPI bus. `rst` may be `GC9A01_PIN_NONE`. |
 | `bool begin()` | Allocate the frame buffer, reset and initialise the controller, clear the screen, then turn the display on (the uninitialised display RAM is never shown). Returns `false` if the frame buffer cannot be allocated. |
 | `void show()` | Send the frame buffer to the display. |
-| `void powerOn()` / `void powerOff()` | Leave or enter sleep mode (display off). Each call waits 120 ms, as the controller requires. |
+| `void powerOn()` / `void powerOff()` | Leave or enter sleep mode (display off). Each call waits 120 ms, as the controller requires. `powerOff()` does not switch the backlight off: on the STeaMi V1c it is wired to +3V3 and stays lit. |
 
 ### Drawing
 
