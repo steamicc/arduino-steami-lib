@@ -91,13 +91,14 @@ class TwoWire {
     // code (1 = data too long, 2 = NACK on addr, 3 = NACK on data, 4 = other).
     void setEndTransmissionResult(uint8_t result) { endTransmissionResult_ = result; }
 
-    uint8_t requestFrom(uint8_t address, uint8_t quantity) {
+    // Same signature as STM32duino 3.x: reads of 256 bytes and more.
+    size_t requestFrom(uint8_t address, size_t quantity) {
         rxBuffer_.clear();
         rxIndex_ = 0;
         auto device = devices_.find(address);
         if (device != devices_.end()) {
             rxBuffer_ = device->second->onRead(quantity);
-            return static_cast<uint8_t>(rxBuffer_.size());
+            return rxBuffer_.size();
         }
         uint16_t reg = currentRegisterByAddr_[address];
 
@@ -114,8 +115,8 @@ class TwoWire {
             }
         }
 
-        for (uint8_t i = 0; i < quantity; ++i) {
-            rxBuffer_.push_back(registers_[makeKey(address, reg + i)]);
+        for (size_t i = 0; i < quantity; ++i) {
+            rxBuffer_.push_back(registers_[makeKey(address, static_cast<uint16_t>(reg + i))]);
         }
         rxIndex_ = 0;
         return quantity;

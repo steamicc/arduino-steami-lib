@@ -10,7 +10,7 @@ and small persistent counters.
 
 The config zone needs a recent DAPLink firmware on the board. Older
 firmwares lock up when they receive a config command, so the driver checks
-for the zone first (`DaplinkBridge::hasConfigZone()`): on such a board,
+for the zone first (`SteamiDaplinkBridge::hasConfigZone()`): on such a board,
 `begin()`, `load()` and `save()` return `false` without touching it.
 
 ## Dependency
@@ -22,11 +22,11 @@ for the zone first (`DaplinkBridge::hasConfigZone()`): on such a board,
 
 ```cpp
 #include <Wire.h>
-#include <DaplinkBridge.h>
+#include <SteamiDaplinkBridge.h>
 #include <SteamiConfig.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-DaplinkBridge bridge(internalI2C);
+SteamiDaplinkBridge bridge(internalI2C);
 SteamiConfig config(bridge);
 
 void setup() {

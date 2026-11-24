@@ -64,6 +64,9 @@ constexpr uint16_t DAPLINK_BRIDGE_READ_CONFIG_LEN = 256;
 // full 256-byte block at once.
 constexpr uint8_t DAPLINK_BRIDGE_MAX_READ_LEN = 255;
 
+// Most argument bytes a command takes (WRITE_DATA, WRITE_CONFIG).
+constexpr uint8_t DAPLINK_BRIDGE_MAX_ARGS = 31;
+
 // 1 KB persistent config zone (in F103 internal flash).
 constexpr uint16_t DAPLINK_BRIDGE_CONFIG_SIZE = 1024;
 

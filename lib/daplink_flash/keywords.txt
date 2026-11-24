@@ -1,0 +1,32 @@
+#######################################
+# Syntax Coloring Map for SteamiDaplinkFlash
+#######################################
+
+#######################################
+# Class
+#######################################
+
+SteamiDaplinkFlash	KEYWORD1
+
+#######################################
+# Public methods
+#######################################
+
+begin	KEYWORD2
+setFilename	KEYWORD2
+getFilename	KEYWORD2
+clearFlash	KEYWORD2
+write	KEYWORD2
+writeLine	KEYWORD2
+readSector	KEYWORD2
+read	KEYWORD2
+
+#######################################
+# Public constants
+#######################################
+
+DAPLINK_FLASH_SECTOR_SIZE	LITERAL1
+DAPLINK_FLASH_MAX_SECTORS	LITERAL1
+DAPLINK_FLASH_FILE_SIZE	LITERAL1
+DAPLINK_FLASH_FILENAME_LEN	LITERAL1
+DAPLINK_FLASH_EXT_LEN	LITERAL1

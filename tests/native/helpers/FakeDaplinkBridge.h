@@ -35,12 +35,23 @@
 // rejects its 2-byte sector number, and an unknown command followed by
 // argument bytes locks the F103 up (`hung`: every later transaction fails).
 //
+// The user file lives in `flash` (the external W25Q64, shortened): it runs
+// from byte 0 to the first 0xFF. SET_FILENAME (11 bytes) and GET_FILENAME
+// handle its 8.3 name, WRITE_DATA appends ([len | data | padding], always
+// 31 argument bytes), CLEAR_FLASH erases it and READ_SECTOR returns 256
+// bytes of it. These tasks keep the bridge busy one more tick while the
+// flash finishes.
+//
 // `nackAfterReadSector` models the real bridge right after READ_SECTOR:
 // it starts sending the 256-byte sector to whatever read comes next, and
 // NACKs the following transactions until that transfer is over.
 class FakeDaplinkBridge : public I2CDevice {
    public:
     static constexpr uint8_t WHO_AM_I = 0x01;
+    static constexpr uint8_t SET_FILENAME = 0x03;
+    static constexpr uint8_t GET_FILENAME = 0x04;
+    static constexpr uint8_t CLEAR_FLASH = 0x10;
+    static constexpr uint8_t WRITE_DATA = 0x11;
     static constexpr uint8_t READ_SECTOR = 0x20;
     static constexpr uint8_t WRITE_CONFIG = 0x30;
     static constexpr uint8_t READ_CONFIG = 0x31;
@@ -50,14 +61,20 @@ class FakeDaplinkBridge : public I2CDevice {
 
     static constexpr uint8_t STATUS_BUSY = 0x80;
     static constexpr uint8_t ERROR_BAD_PARAM = 0x01;
+    static constexpr uint8_t ERROR_BAD_FILENAME = 0x02;
+    static constexpr uint8_t ERROR_FILE_FULL = 0x04;
     static constexpr uint8_t ERROR_CMD_FAILED = 0x80;
 
     static constexpr size_t ZONE_SIZE = 1024;
     static constexpr size_t READ_CONFIG_LEN = 256;
     static constexpr size_t WRITE_CONFIG_ARGS = 31;
+    static constexpr size_t WRITE_DATA_ARGS = 31;
+    static constexpr size_t FILENAME_ARGS = 11;
+    static constexpr size_t SECTOR_SIZE = 256;
+    static constexpr size_t FLASH_SIZE = 4096;
     static constexpr uint32_t TICK_MS = 30;
 
-    FakeDaplinkBridge() : zone(ZONE_SIZE, 0xFF) {}
+    FakeDaplinkBridge() : zone(ZONE_SIZE, 0xFF), flash(FLASH_SIZE, 0xFF), filename(11, 0xFF) {}
 
     uint8_t onWrite(const std::vector<uint8_t>& frame) override {
         if (hung) {
@@ -121,6 +138,23 @@ class FakeDaplinkBridge : public I2CDevice {
                 schedule(cmd, args);
                 break;
             case CLEAR_CONFIG:
+            case GET_FILENAME:
+            case CLEAR_FLASH:
+                schedule(cmd, args);
+                break;
+            case SET_FILENAME:
+                if (args.size() < FILENAME_ARGS) {
+                    ignoredFrames++;  // firmware keeps waiting for 11 bytes
+                    break;
+                }
+                schedule(cmd, args);
+                break;
+            case WRITE_DATA:
+                writeFrameLengths.push_back(frame.size());
+                if (args.size() < WRITE_DATA_ARGS) {
+                    ignoredFrames++;  // firmware keeps waiting for 31 bytes
+                    break;
+                }
                 schedule(cmd, args);
                 break;
             default:
@@ -142,6 +176,18 @@ class FakeDaplinkBridge : public I2CDevice {
         return out;
     }
 
+    // Current user file: the flash content up to its first 0xFF.
+    std::vector<uint8_t> file() const {
+        auto end = std::find(flash.begin(), flash.end(), 0xFF);
+        return std::vector<uint8_t>(flash.begin(), end);
+    }
+
+    void storeFile(const char* text) {
+        for (size_t i = 0; text[i] != '\0' && i < FLASH_SIZE; ++i) {
+            flash[i] = static_cast<uint8_t>(text[i]);
+        }
+    }
+
     void store(const char* text, size_t offset = 0) {
         for (size_t i = 0; text[i] != '\0' && offset + i < ZONE_SIZE; ++i) {
             zone[offset + i] = static_cast<uint8_t>(text[i]);
@@ -149,7 +195,10 @@ class FakeDaplinkBridge : public I2CDevice {
     }
 
     std::vector<uint8_t> zone;
+    std::vector<uint8_t> flash;
+    std::vector<uint8_t> filename;
     uint8_t error = 0;
+    size_t clearFlashCommands = 0;
     bool legacyFirmware = false;
     bool failWrites = false;
     bool hung = false;
@@ -190,15 +239,45 @@ class FakeDaplinkBridge : public I2CDevice {
 
     void runTask() {
         switch (taskCmd) {
-            case READ_SECTOR:
-                if (legacyFirmware) {
-                    error |= ERROR_CMD_FAILED;  // expects a 1-byte sector number
+            case READ_SECTOR: {
+                const size_t sector = (static_cast<size_t>(taskArgs[0]) << 8) | taskArgs[1];
+                if (legacyFirmware || sector >= FLASH_SIZE / SECTOR_SIZE) {
+                    // Legacy builds expect a 1-byte sector number.
+                    error |= ERROR_CMD_FAILED;
                 } else {
-                    tx.assign(READ_CONFIG_LEN, 0xFF);
+                    tx.assign(flash.begin() + sector * SECTOR_SIZE,
+                              flash.begin() + (sector + 1) * SECTOR_SIZE);
                 }
-                // TASK_WAIT_FLASH_BUSY: idle again on the following tick.
-                waitPending = true;
-                waitDue = taskDue + TICK_MS;
+                waitFlash();
+                break;
+            }
+            case SET_FILENAME:
+                if (!filenameValid(taskArgs)) {
+                    error |= ERROR_BAD_FILENAME;
+                    break;
+                }
+                if (failWrites) {
+                    error |= ERROR_CMD_FAILED;
+                    break;
+                }
+                filename.assign(taskArgs.begin(), taskArgs.begin() + FILENAME_ARGS);
+                waitFlash();
+                break;
+            case GET_FILENAME:
+                tx = filename;
+                waitFlash();
+                break;
+            case CLEAR_FLASH: {
+                clearFlashCommands++;
+                const size_t size = file().size();
+                std::fill(flash.begin(), flash.begin() + size, 0xFF);
+                error &= static_cast<uint8_t>(~ERROR_FILE_FULL);
+                waitFlash();
+                break;
+            }
+            case WRITE_DATA:
+                appendData(taskArgs);
+                waitFlash();
                 break;
             case READ_CONFIG:
                 readConfig((static_cast<uint16_t>(taskArgs[0]) << 8) | taskArgs[1]);
@@ -215,6 +294,49 @@ class FakeDaplinkBridge : public I2CDevice {
                 break;
             default:
                 break;
+        }
+    }
+
+    // TASK_WAIT_FLASH_BUSY: idle again on the following tick.
+    void waitFlash() {
+        waitPending = true;
+        waitDue = taskDue + TICK_MS;
+    }
+
+    // DAPLink filename_valid(): no lower case, no control character, none
+    // of "*+,./:;<=>?[\]|, and no space first.
+    static bool filenameValid(const std::vector<uint8_t>& name) {
+        static const char kInvalid[] = "\"*+,./:;<=>?[\\]|";
+        if (name[0] == ' ' || name[0] == 0x00 || name[0] == 0xE5) {
+            return false;
+        }
+        for (size_t i = 0; i < FILENAME_ARGS; ++i) {
+            const uint8_t c = name[i];
+            if ((c >= 'a' && c <= 'z') || c < 0x20) {
+                return false;
+            }
+            for (const char* p = kInvalid; *p != '\0'; ++p) {
+                if (c == static_cast<uint8_t>(*p)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    void appendData(const std::vector<uint8_t>& args) {
+        if (failWrites) {
+            error |= ERROR_CMD_FAILED;
+            return;
+        }
+        size_t size = file().size();
+        if (size == FLASH_SIZE) {
+            error |= ERROR_FILE_FULL;
+            return;
+        }
+        const size_t length = std::min<size_t>(args[0], args.size() - 1);
+        for (size_t i = 0; i < length && size < FLASH_SIZE; ++i) {
+            flash[size++] = args[1 + i];
         }
     }
 

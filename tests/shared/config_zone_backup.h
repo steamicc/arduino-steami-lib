@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <DaplinkBridge.h>
+#include <SteamiDaplinkBridge.h>
 
 // Keeps a copy of the DAPLink config zone so that a test suite writing to
 // it can put the board's own configuration (calibrations, name...) back
@@ -11,9 +11,9 @@ struct ConfigZoneBackup {
     uint8_t data[DAPLINK_BRIDGE_CONFIG_SIZE] = {0};
     size_t length = 0;
 
-    void take(DaplinkBridge& bridge) { length = bridge.readConfig(data, sizeof(data)); }
+    void take(SteamiDaplinkBridge& bridge) { length = bridge.readConfig(data, sizeof(data)); }
 
-    bool restore(DaplinkBridge& bridge) const {
+    bool restore(SteamiDaplinkBridge& bridge) const {
         if (!bridge.clearConfig()) {
             return false;
         }

@@ -2,12 +2,12 @@
 
 #include <unity.h>
 
-#include "DaplinkBridge.h"
 #include "FakeDaplinkBridge.h"
 #include "SteamiConfig.h"
+#include "SteamiDaplinkBridge.h"
 #include "Wire.h"
 
-DaplinkBridge bridge(Wire);
+SteamiDaplinkBridge bridge(Wire);
 SteamiConfig config(bridge);
 
 struct FakeTemperatureSensor {
@@ -43,7 +43,7 @@ struct FakeAccelerometer {
 
 void setUp(void) {
     Wire = TwoWire();
-    bridge = DaplinkBridge(Wire);
+    bridge = SteamiDaplinkBridge(Wire);
     config = SteamiConfig(bridge);
 }
 
