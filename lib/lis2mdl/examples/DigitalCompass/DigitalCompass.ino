@@ -1,42 +1,37 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // DigitalCompass.ino
-// Flat compass using the LIS2MDL. Prints heading and cardinal direction to Serial.
-// If the SSD1327 display library is available, it also displays the heading on OLED.
+// Flat compass using the LIS2MDL. Prints the heading and cardinal direction
+// to Serial and shows them on the on-board SSD1327 OLED display.
+//
+// Board revisions: the SSD1327 OLED is only fitted on STeaMi V1a and V1b.
+// V1c has a GC9A01 colour display instead, which this sketch does not
+// drive: on V1c, read the heading on the serial monitor (115200 baud).
 
 #include <Arduino.h>
 #include <LIS2MDL.h>
-#include <Wire.h>
-
-#if __has_include(<SSD1327.h>)
 #include <SSD1327.h>
-#define HAS_STEAMI_OLED 1
-#else
-#define HAS_STEAMI_OLED 0
-#endif
+#include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 LIS2MDL magnetometer(internalI2C);
+WS_OLED_128X128_STEAMI display;
 
-#if HAS_STEAMI_OLED
-// Adjust this constructor if your SSD1327 driver exposes a different STeaMi preset.
-SSD1327 display;
-#endif
+static bool hasDisplay = false;
 
-static void showOnOled(float headingDeg, const char* direction) {
-#if HAS_STEAMI_OLED
+static void showOnDisplay(float headingDeg, const char* direction) {
+    if (!hasDisplay) {
+        return;
+    }
+
+    // String(float, decimals) avoids printf("%f"), which newlib-nano
+    // does not support by default.
+    String line = String(headingDeg, 1) + " deg";
+
     display.fill(0);
-    display.setCursor(0, 10);
-    display.print("Compass");
-    display.setCursor(0, 35);
-    display.print(headingDeg, 1);
-    display.print(" deg");
-    display.setCursor(0, 60);
-    display.print(direction);
+    display.text("Compass", 36, 24, 15);
+    display.text(line.c_str(), 28, 56, 12);
+    display.text(direction, 56, 88, 15);
     display.show();
-#else
-    (void)headingDeg;
-    (void)direction;
-#endif
 }
 
 void setup() {
@@ -46,13 +41,15 @@ void setup() {
 
     internalI2C.begin();
 
-#if HAS_STEAMI_OLED
-    display.begin();
-    display.fill(0);
-    display.setCursor(0, 0);
-    display.print("Starting compass...");
-    display.show();
-#endif
+    hasDisplay = display.begin();
+    if (hasDisplay) {
+        display.fill(0);
+        display.text("Starting", 32, 48, 15);
+        display.text("compass...", 24, 64, 15);
+        display.show();
+    } else {
+        Serial.println("SSD1327 display not found, serial output only.");
+    }
 
     if (!magnetometer.begin()) {
         Serial.println("LIS2MDL not detected. Check the internal I2C bus.");
@@ -67,6 +64,12 @@ void setup() {
     delay(1000);
 
     Serial.println("Rotate the board flat in a full circle for calibration for 30 seconds...");
+    if (hasDisplay) {
+        display.fill(0);
+        display.text("Calibrating", 20, 48, 15);
+        display.text("rotate flat", 20, 64, 12);
+        display.show();
+    }
     magnetometer.calibrateMinmax2d(1000, 20);
     Serial.println("Calibration done.");
 
@@ -82,6 +85,6 @@ void loop() {
     Serial.print(',');
     Serial.println(direction);
 
-    showOnOled(heading, direction);
+    showOnDisplay(heading, direction);
     delay(250);
 }
