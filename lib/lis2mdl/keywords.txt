@@ -6,7 +6,7 @@
 # Class
 #######################################
 
-LIS2MDL	KEYWORD1
+SteamiLIS2MDL	KEYWORD1
 
 #######################################
 # Public methods

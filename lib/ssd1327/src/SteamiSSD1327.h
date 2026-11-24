@@ -10,7 +10,7 @@
 #include "SPI.h"
 #endif
 
-#include "SSD1327_const.h"
+#include "SteamiSSD1327_const.h"
 
 class SSD1327 {
    public:
@@ -85,9 +85,9 @@ class WS_OLED_128X128_SPI : public SSD1327_SPI {
 };
 
 #ifdef ARDUINO
-class WS_OLED_128X128_STEAMI : public SSD1327_SPI {
+class SteamiSSD1327 : public SSD1327_SPI {
    public:
-    WS_OLED_128X128_STEAMI();
+    SteamiSSD1327();
     bool begin();
 
    private:

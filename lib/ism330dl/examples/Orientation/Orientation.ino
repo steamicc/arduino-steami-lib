@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-#include <ISM330DL.h>
+#include <SteamiISM330DL.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-ISM330DL imu(internalI2C);
+SteamiISM330DL imu(internalI2C);
 
-ISM330DL::Orientation lastOrientation = ISM330DL::Orientation::MOVING;
+SteamiISM330DL::Orientation lastOrientation = SteamiISM330DL::Orientation::MOVING;
 
 void setup() {
     Serial.begin(115200);
@@ -27,13 +27,13 @@ void setup() {
 }
 
 void loop() {
-    ISM330DL::Orientation orientation;
+    SteamiISM330DL::Orientation orientation;
 
     if (imu.orientation(orientation) && orientation != lastOrientation) {
         lastOrientation = orientation;
 
         Serial.print("Orientation: ");
-        Serial.println(ISM330DL::orientationToString(orientation));
+        Serial.println(SteamiISM330DL::orientationToString(orientation));
     }
 
     delay(300);

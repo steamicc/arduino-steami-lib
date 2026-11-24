@@ -14,9 +14,9 @@
 #include <Arduino.h>
 #include <SteamiBME280.h>
 #include <SteamiDaplinkBridge.h>
-#include <WSEN_PADS.h>
+#include <SteamiWsenHids.h>
+#include <SteamiWsenPads.h>
 #include <Wire.h>
-#include <WsenHids.h>
 
 // The STeaMi routes its on-board I2C peripherals to an internal bus
 // (pins PB8/PB9, exported as I2C_INT_SCL / I2C_INT_SDA by the variant).
@@ -25,8 +25,8 @@
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 
 SteamiBME280 bme280(internalI2C);
-WsenHids wsen_hids(internalI2C);
-WSEN_PADS wsen_pads(internalI2C);
+SteamiWsenHids wsen_hids(internalI2C);
+SteamiWsenPads wsen_pads(internalI2C);
 SteamiDaplinkBridge daplink_bridge(internalI2C);
 
 void setup() {

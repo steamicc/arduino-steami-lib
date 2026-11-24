@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "MCP23009E.h"
+#include "SteamiMCP23009E.h"
 
 #include <math.h>
 
@@ -79,10 +79,10 @@ uint8_t MCP23009Config::getRegisterValue() const {
     return _reg;
 }
 
-MCP23009E::MCP23009E(TwoWire& wire, uint8_t resetPin, uint8_t address, int interruptPin)
+SteamiMCP23009E::SteamiMCP23009E(TwoWire& wire, uint8_t resetPin, uint8_t address, int interruptPin)
     : _wire(&wire), _resetPin(resetPin), _address(address), _interruptPin(interruptPin) {}
 
-bool MCP23009E::begin() {
+bool SteamiMCP23009E::begin() {
     pinMode(_resetPin, OUTPUT);
 
     if (_interruptPin != -1) {
@@ -110,7 +110,7 @@ bool MCP23009E::begin() {
     return _wire->endTransmission() == 0;
 }
 
-uint8_t MCP23009E::setBit(uint8_t reg, uint8_t bit, uint8_t value) {
+uint8_t SteamiMCP23009E::setBit(uint8_t reg, uint8_t bit, uint8_t value) {
     if (value == 0) {
         reg &= ~(1 << bit);
     } else {
@@ -119,11 +119,11 @@ uint8_t MCP23009E::setBit(uint8_t reg, uint8_t bit, uint8_t value) {
     return reg;
 }
 
-uint8_t MCP23009E::getBit(uint8_t reg, uint8_t bit) {
+uint8_t SteamiMCP23009E::getBit(uint8_t reg, uint8_t bit) {
     return (reg & (1 << bit)) ? 1 : 0;
 }
 
-void MCP23009E::reset() {
+void SteamiMCP23009E::reset() {
     // Effectue un reset hardware du MCP23009E
     digitalWrite(_resetPin, LOW);
     delay(5);
@@ -131,16 +131,16 @@ void MCP23009E::reset() {
     delay(5);
 }
 
-void MCP23009E::powerOff() {
+void SteamiMCP23009E::powerOff() {
     digitalWrite(_resetPin, LOW);
 }
 
-void MCP23009E::powerOn() {
+void SteamiMCP23009E::powerOn() {
     digitalWrite(_resetPin, HIGH);
     delay(10);
 }
 
-void MCP23009E::softReset() {
+void SteamiMCP23009E::softReset() {
     // Réinitialise le composant avec les valeurs par défaut
     writeReg(MCP23009_IODIR, 0xFF);
     writeReg(MCP23009_GPPU, 0x00);
@@ -148,7 +148,7 @@ void MCP23009E::softReset() {
     writeReg(MCP23009_GPINTEN, 0x00);
 }
 
-void MCP23009E::setup(uint8_t gpx, uint8_t direction, uint8_t pullup, uint8_t polarity) {
+void SteamiMCP23009E::setup(uint8_t gpx, uint8_t direction, uint8_t pullup, uint8_t polarity) {
     /*Configure un GPIO
 
     Args:
@@ -174,7 +174,7 @@ void MCP23009E::setup(uint8_t gpx, uint8_t direction, uint8_t pullup, uint8_t po
     writeReg(MCP23009_IPOL, ipol);
 }
 
-void MCP23009E::setLevel(uint8_t gpx, uint8_t level) {
+void SteamiMCP23009E::setLevel(uint8_t gpx, uint8_t level) {
     // Drive the output level on a pin configured as output. The RMW
     // reads OLAT (the output latch) — reading GPIO would return the
     // physical pin states, which on a mixed input/output port could
@@ -196,7 +196,7 @@ void MCP23009E::setLevel(uint8_t gpx, uint8_t level) {
     writeReg(MCP23009_OLAT, olat);
 }
 
-uint8_t MCP23009E::getLevel(uint8_t gpx) {
+uint8_t SteamiMCP23009E::getLevel(uint8_t gpx) {
     /*Lit le niveau logique d'un GPIO
 
         Args:
@@ -216,7 +216,7 @@ uint8_t MCP23009E::getLevel(uint8_t gpx) {
     return getBit(readReg(MCP23009_GPIO), gpx);
 }
 
-void MCP23009E::writeReg(uint8_t reg, uint8_t value) {
+void SteamiMCP23009E::writeReg(uint8_t reg, uint8_t value) {
     // Écrit une valeur dans un registre
     _wire->beginTransmission(_address);
     _wire->write(reg);
@@ -224,7 +224,7 @@ void MCP23009E::writeReg(uint8_t reg, uint8_t value) {
     _wire->endTransmission();
 }
 
-uint8_t MCP23009E::readReg(uint8_t reg) {
+uint8_t SteamiMCP23009E::readReg(uint8_t reg) {
     _wire->beginTransmission(_address);
     _wire->write(reg);
     _wire->endTransmission(false);
@@ -240,57 +240,57 @@ uint8_t MCP23009E::readReg(uint8_t reg) {
     return static_cast<uint8_t>(_wire->read());
 }
 
-void MCP23009E::setIodir(uint8_t value) {
+void SteamiMCP23009E::setIodir(uint8_t value) {
     // Définit le registre IODIR (Input/Output Direction)
     writeReg(MCP23009_IODIR, value);
 }
 
-uint8_t MCP23009E::getIodir() {
+uint8_t SteamiMCP23009E::getIodir() {
     // Lit le registre IODIR (Input/Output Direction)
     return readReg(MCP23009_IODIR);
 }
 
-void MCP23009E::setIpol(uint8_t value) {
+void SteamiMCP23009E::setIpol(uint8_t value) {
     // Définit le registre IPOL (Input Polarity)
     writeReg(MCP23009_IPOL, value);
 }
 
-uint8_t MCP23009E::getIpol() {
+uint8_t SteamiMCP23009E::getIpol() {
     // Lit le registre IPOL (Input Polarity)
     return readReg(MCP23009_IPOL);
 }
 
-void MCP23009E::setGpinten(uint8_t value) {
+void SteamiMCP23009E::setGpinten(uint8_t value) {
     // Définit le registre GPINTEN (GPIO Interrupt Enable)
     writeReg(MCP23009_GPINTEN, value);
 }
 
-uint8_t MCP23009E::getGpinten() {
+uint8_t SteamiMCP23009E::getGpinten() {
     // Lit le registre GPINTEN (GPIO Interrupt Enable)
     return readReg(MCP23009_GPINTEN);
 }
 
-void MCP23009E::setDefval(uint8_t value) {
+void SteamiMCP23009E::setDefval(uint8_t value) {
     // Définit le registre DEFVAL (Default Value)
     writeReg(MCP23009_DEFVAL, value);
 }
 
-uint8_t MCP23009E::getDefval() {
+uint8_t SteamiMCP23009E::getDefval() {
     // Lit le registre DEFVAL (Default Value)
     return readReg(MCP23009_DEFVAL);
 }
 
-void MCP23009E::setIntcon(uint8_t value) {
+void SteamiMCP23009E::setIntcon(uint8_t value) {
     // Définit le registre INTCON (Interrupt Control)
     writeReg(MCP23009_INTCON, value);
 }
 
-uint8_t MCP23009E::getIntcon() {
+uint8_t SteamiMCP23009E::getIntcon() {
     // Lit le registre INTCON (Interrupt Control)
     return readReg(MCP23009_INTCON);
 }
 
-void MCP23009E::setIocon(MCP23009Config config) {
+void SteamiMCP23009E::setIocon(MCP23009Config config) {
     /*Définit le registre IOCON (I/O Configuration)
 
         Args:
@@ -298,7 +298,7 @@ void MCP23009E::setIocon(MCP23009Config config) {
     writeReg(MCP23009_IOCON, config.getRegisterValue());
 }
 
-MCP23009Config MCP23009E::getIocon() {
+MCP23009Config SteamiMCP23009E::getIocon() {
     /*Lit le registre IOCON (I/O Configuration)
 
             Returns:
@@ -307,47 +307,47 @@ MCP23009Config MCP23009E::getIocon() {
     return MCP23009Config(readReg(MCP23009_IOCON));
 }
 
-void MCP23009E::setGppu(uint8_t value) {
+void SteamiMCP23009E::setGppu(uint8_t value) {
     // Définit le registre GPPU (GPIO Pull-Up)
     writeReg(MCP23009_GPPU, value);
 }
 
-uint8_t MCP23009E::getGppu() {
+uint8_t SteamiMCP23009E::getGppu() {
     // Lit le registre GPPU (GPIO Pull-Up)
     return readReg(MCP23009_GPPU);
 }
 
-uint8_t MCP23009E::getIntf() {
+uint8_t SteamiMCP23009E::getIntf() {
     // Lit le registre INTF (Interrupt Flag)
     return readReg(MCP23009_INTF);
 }
 
-uint8_t MCP23009E::getIntcap() {
+uint8_t SteamiMCP23009E::getIntcap() {
     // Lit le registre INTCAP (Interrupt Captured value)
     return readReg(MCP23009_INTCAP);
 }
 
-void MCP23009E::setGpio(uint8_t value) {
+void SteamiMCP23009E::setGpio(uint8_t value) {
     // Définit le registre GPIO
     writeReg(MCP23009_GPIO, value);
 }
 
-uint8_t MCP23009E::getGpio() {
+uint8_t SteamiMCP23009E::getGpio() {
     // Lit le registre GPIO
     return readReg(MCP23009_GPIO);
 }
 
-void MCP23009E::setOlat(uint8_t value) {
+void SteamiMCP23009E::setOlat(uint8_t value) {
     // Définit le registre OLAT (Output Latch)
     writeReg(MCP23009_OLAT, value);
 }
 
-uint8_t MCP23009E::getOlat() {
+uint8_t SteamiMCP23009E::getOlat() {
     // Lit le registre OLAT (Output Latch)
     return readReg(MCP23009_OLAT);
 }
 
-void MCP23009E::sendEnableInterrupt(uint8_t gpx) {
+void SteamiMCP23009E::sendEnableInterrupt(uint8_t gpx) {
     /* Active l'interruption pour un GPIO spécifique
 
         Args:
@@ -363,7 +363,7 @@ void MCP23009E::sendEnableInterrupt(uint8_t gpx) {
     writeReg(MCP23009_INTCON, intcon);
 }
 
-void MCP23009E::sendDisableInterrupt(uint8_t gpx) {
+void SteamiMCP23009E::sendDisableInterrupt(uint8_t gpx) {
     /* Désactive l'interruption pour un GPIO spécifique
 
         Args:
@@ -382,7 +382,7 @@ void MCP23009E::sendDisableInterrupt(uint8_t gpx) {
     writeReg(MCP23009_DEFVAL, defval);
 }
 
-void MCP23009E::interruptOnChange(uint8_t gpx, std::function<void(uint8_t)> callback) {
+void SteamiMCP23009E::interruptOnChange(uint8_t gpx, std::function<void(uint8_t)> callback) {
     /* Active et enregistre un callback pour les changements d'état d'un GPIO
 
         Args:
@@ -398,7 +398,7 @@ void MCP23009E::interruptOnChange(uint8_t gpx, std::function<void(uint8_t)> call
     _eventsChange[gpx] = std::move(callback);
 }
 
-void MCP23009E::interruptOnFalling(uint8_t gpx, std::function<void()> callback) {
+void SteamiMCP23009E::interruptOnFalling(uint8_t gpx, std::function<void()> callback) {
     /*Active et enregistre un callback pour les fronts descendants d'un GPIO
 
         Args:
@@ -412,7 +412,7 @@ void MCP23009E::interruptOnFalling(uint8_t gpx, std::function<void()> callback) 
     _eventsFall[gpx] = std::move(callback);
 }
 
-void MCP23009E::interruptOnRaising(uint8_t gpx, std::function<void()> callback) {
+void SteamiMCP23009E::interruptOnRaising(uint8_t gpx, std::function<void()> callback) {
     /*Active et enregistre un callback pour les fronts montants d'un GPIO
 
         Args:
@@ -427,7 +427,7 @@ void MCP23009E::interruptOnRaising(uint8_t gpx, std::function<void()> callback) 
     _eventsRise[gpx] = std::move(callback);
 }
 
-void MCP23009E::disableInterrupt(uint8_t gpx) {
+void SteamiMCP23009E::disableInterrupt(uint8_t gpx) {
     /*Désactive et désenregistre tous les callbacks pour un GPIO
 
         Args:
@@ -444,7 +444,7 @@ void MCP23009E::disableInterrupt(uint8_t gpx) {
     _eventsRise[gpx] = nullptr;
 }
 
-void MCP23009E::irqHandler() {
+void SteamiMCP23009E::irqHandler() {
     // STM32duino calls this from ISR context. Doing I2C transactions
     // or running user-provided callbacks here can deadlock (Wire uses
     // interrupts internally) or block real-time work. Just flag and
@@ -452,7 +452,7 @@ void MCP23009E::irqHandler() {
     _irqPending = true;
 }
 
-void MCP23009E::poll() {
+void SteamiMCP23009E::poll() {
     // Non-ISR dispatcher. Call this from loop() (or any non-interrupt
     // context) — it picks up the pending flag set by irqHandler() and
     // runs interruptEvent() with the bus + callback rules of normal
@@ -463,7 +463,7 @@ void MCP23009E::poll() {
     }
 }
 
-void MCP23009E::interruptEvent() {
+void SteamiMCP23009E::interruptEvent() {
     // Reads which pins fired (INTF) and which value they had at the
     // moment of the event (INTCAP — the captured snapshot, not the
     // current GPIO state, so a bounce or follow-up edge can't
@@ -493,7 +493,7 @@ void MCP23009E::interruptEvent() {
     }
 }
 
-MCP23009Pin::MCP23009Pin(MCP23009E& mcp, uint8_t pinNumber, uint8_t mode, uint8_t pull,
+MCP23009Pin::MCP23009Pin(SteamiMCP23009E& mcp, uint8_t pinNumber, uint8_t mode, uint8_t pull,
                          uint8_t value)
     : _mcp(mcp), _pinNumber(pinNumber), _mode(mode), _pull(pull), _value(value) {
     if (_mode != 0xFF) {
@@ -640,7 +640,7 @@ uint8_t MCP23009Pin::pull(uint8_t pull) {
     return _pull;
 }
 
-MCP23009ActiveLowPin::MCP23009ActiveLowPin(MCP23009E& mcp, uint8_t pinNumber, uint8_t mode,
+MCP23009ActiveLowPin::MCP23009ActiveLowPin(SteamiMCP23009E& mcp, uint8_t pinNumber, uint8_t mode,
                                            uint8_t pull, uint8_t value)
     : _mcp(mcp),
       _pinNumber(pinNumber),

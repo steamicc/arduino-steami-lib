@@ -7,7 +7,7 @@
 
 #include <functional>
 
-#include "MCP23009E_const.h"
+#include "SteamiMCP23009E_const.h"
 
 class MCP23009Config {
    public:
@@ -31,10 +31,10 @@ class MCP23009Config {
     uint8_t _reg;
 };
 
-class MCP23009E {
+class SteamiMCP23009E {
    public:
-    MCP23009E(TwoWire& wire, uint8_t resetPin, uint8_t address = MCP23009_I2C_ADDR,
-              int interruptPin = -1);
+    SteamiMCP23009E(TwoWire& wire, uint8_t resetPin, uint8_t address = MCP23009_I2C_ADDR,
+                    int interruptPin = -1);
 
     bool begin();
     void reset();
@@ -80,7 +80,7 @@ class MCP23009E {
 
    private:
     // Stored as a pointer (not a reference) so the class is
-    // default-assignable — matches the convention in WsenHids / WSEN_PADS
+    // default-assignable — matches the convention in SteamiWsenHids / SteamiWsenPads
     // and the CONTRIBUTING.md "Attributes" guidance. The public
     // constructor still takes a TwoWire& to keep the usual Arduino
     // I2C interface at the call site.
@@ -115,13 +115,13 @@ class MCP23009Pin {
     static constexpr uint8_t IRQ_FALLING = 1;
     static constexpr uint8_t IRQ_RISING = 2;
 
-    MCP23009Pin(MCP23009E& mcp, uint8_t pinNumber, uint8_t mode = 0xFF, uint8_t pull = 0xFF,
+    MCP23009Pin(SteamiMCP23009E& mcp, uint8_t pinNumber, uint8_t mode = 0xFF, uint8_t pull = 0xFF,
                 uint8_t value = 0xFF);
 
     // Unregisters any irq() callback this Pin had set on the parent
     // expander so a dispatched interrupt can't invoke a destroyed
     // object. Stack-allocated Pin lifetimes therefore no longer leak
-    // dangling lambdas into MCP23009E::_eventsChange/Fall/Rise.
+    // dangling lambdas into SteamiMCP23009E::_eventsChange/Fall/Rise.
     ~MCP23009Pin();
 
     // Disable copy/move — a copied Pin would share the parent's
@@ -143,7 +143,7 @@ class MCP23009Pin {
     uint8_t pull(uint8_t pull = 0xff);
 
    private:
-    MCP23009E& _mcp;
+    SteamiMCP23009E& _mcp;
     uint8_t _pinNumber;
     uint8_t _mode;
     uint8_t _pull;
@@ -160,7 +160,7 @@ class MCP23009ActiveLowPin {
     static constexpr uint8_t IRQ_FALLING = MCP23009Pin::IRQ_FALLING;
     static constexpr uint8_t IRQ_RISING = MCP23009Pin::IRQ_RISING;
 
-    MCP23009ActiveLowPin(MCP23009E& mcp, uint8_t pinNumber, uint8_t mode = 0xFF,
+    MCP23009ActiveLowPin(SteamiMCP23009E& mcp, uint8_t pinNumber, uint8_t mode = 0xFF,
                          uint8_t pull = 0xFF, uint8_t value = 0xFF);
 
     void init(uint8_t mode = 0xFF, uint8_t pull = 0xFF, uint8_t value = 0xFF);
@@ -174,7 +174,7 @@ class MCP23009ActiveLowPin {
     uint8_t pinNumber();
 
    private:
-    MCP23009E& _mcp;
+    SteamiMCP23009E& _mcp;
     uint8_t _pinNumber;
     uint8_t _mode;
     uint8_t _pull;

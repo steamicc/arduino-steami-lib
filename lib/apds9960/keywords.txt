@@ -6,7 +6,7 @@
 # Datatypes (KEYWORD1)
 #######################################
 
-APDS9960	KEYWORD1
+SteamiAPDS9960	KEYWORD1
 Gesture	KEYWORD1
 Mode	KEYWORD1
 AmbientLightGain	KEYWORD1

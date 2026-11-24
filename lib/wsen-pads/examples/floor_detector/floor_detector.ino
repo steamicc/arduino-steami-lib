@@ -10,12 +10,12 @@
 // 2.7–3.0 m; offices closer to 3.5–4.0 m.
 
 #include <Arduino.h>
-#include <WSEN_PADS.h>
+#include <SteamiWsenPads.h>
 #include <Wire.h>
 #include <math.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-WSEN_PADS sensor(internalI2C);
+SteamiWsenPads sensor(internalI2C);
 
 constexpr float seaLevelPressure = 1013.25f;
 constexpr float seaLevelTemp = 288.15f;

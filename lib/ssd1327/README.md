@@ -22,9 +22,9 @@ Arduino/C++ driver for the SSD1327 128x128 grayscale OLED display used on the ST
 Use this preset when targeting the built-in STeaMi OLED. It creates and starts the internal SPI bus automatically.
 
 ```cpp
-#include <SSD1327.h>
+#include <SteamiSSD1327.h>
 
-WS_OLED_128X128_STEAMI display;
+SteamiSSD1327 display;
 
 void setup() {
     display.begin();
@@ -40,7 +40,7 @@ void loop() {}
 
 ```cpp
 #include <Wire.h>
-#include <SSD1327.h>
+#include <SteamiSSD1327.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
 WS_OLED_128X128_I2C display(internalI2C);
@@ -66,7 +66,7 @@ For custom SPI wiring, pass the SPI bus and display control pins explicitly.
 
 ```cpp
 #include <SPI.h>
-#include <SSD1327.h>
+#include <SteamiSSD1327.h>
 
 #ifndef DATA_COMMAND_DISPLAY
 #define DATA_COMMAND_DISPLAY SPI_INT_MISO
@@ -127,7 +127,7 @@ make capture-ssd1327/rotating_3d_cube
 | Method | Description |
 |--------|-------------|
 | `SSD1327(uint8_t width = 128, uint8_t height = 128)` | Base framebuffer/display class. Usually used through one of the concrete subclasses below. |
-| `WS_OLED_128X128_STEAMI()` | Construct the built-in STeaMi OLED using the internal SPI bus and board pin mapping. |
+| `SteamiSSD1327()` | Construct the built-in STeaMi OLED using the internal SPI bus and board pin mapping. |
 | `WS_OLED_128X128_I2C(TwoWire& wire = Wire, uint8_t address = 0x3C)` | Construct a 128x128 I2C display instance. |
 | `WS_OLED_128X128_SPI(SPIClass& spi, uint8_t dc, uint8_t res, uint8_t cs)` | Construct a 128x128 SPI display instance. |
 | `bool begin()` | Initialise the controller, clear the framebuffer, and power on the display. |
@@ -160,7 +160,7 @@ Colors are 4-bit grayscale values: `0` = black, `15` = white.
 
 ## Register constants
 
-`SSD1327_const.h` exports command bytes such as `SET_COL_ADDR`, `SET_CONTRAST`,
+`SteamiSSD1327_const.h` exports command bytes such as `SET_COL_ADDR`, `SET_CONTRAST`,
 `SET_DISP`, `SET_DISP_MODE_NORMAL`, `SET_DISP_MODE_INVERSE`, and control register
 values such as `REG_CMD` and `REG_DATA` for low-level use.
 

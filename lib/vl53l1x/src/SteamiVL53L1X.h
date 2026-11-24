@@ -5,11 +5,11 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-#include "VL53L1X_const.h"
+#include "SteamiVL53L1X_const.h"
 
-class VL53L1X {
+class SteamiVL53L1X {
    public:
-    VL53L1X(TwoWire& wire = Wire, uint8_t address = VL53L1X_I2C_DEFAULT_ADDR);
+    SteamiVL53L1X(TwoWire& wire = Wire, uint8_t address = VL53L1X_I2C_DEFAULT_ADDR);
 
     bool begin();
     uint16_t deviceId();

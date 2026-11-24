@@ -3,8 +3,8 @@
 #include <math.h>
 #include <unity.h>
 
+#include "SteamiWsenHids.h"
 #include "Wire.h"
-#include "WsenHids.h"
 #include "driver_checks.h"
 
 // The driver uses bit 7 of the sub-address as the ST auto-increment flag for
@@ -70,13 +70,13 @@ static void preloadMeasurement(float tempC, float humidityPct) {
     Wire.setRegister(ADDR, WSEN_HIDS_REG_STATUS, WSEN_HIDS_STATUS_H_DA | WSEN_HIDS_STATUS_T_DA);
 }
 
-WsenHids sensor;
+SteamiWsenHids sensor;
 
 void setUp(void) {
     Wire = TwoWire();
     preloadWhoAmI(true);
     preloadFactoryCalibration();
-    sensor = WsenHids();
+    sensor = SteamiWsenHids();
 }
 
 void tearDown(void) {}
@@ -143,7 +143,7 @@ void test_temperature_is_plausible(void) {
     sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
     preloadMeasurement(21.5f, 42.0f);
 
-    check_read_plausible(sensor, &WsenHids::temperature, -40.0f, 120.0f);
+    check_read_plausible(sensor, &SteamiWsenHids::temperature, -40.0f, 120.0f);
 }
 
 void test_humidity_is_plausible(void) {
@@ -151,7 +151,7 @@ void test_humidity_is_plausible(void) {
     sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
     preloadMeasurement(21.5f, 42.0f);
 
-    check_read_plausible(sensor, &WsenHids::humidity, 0.0f, 100.0f);
+    check_read_plausible(sensor, &SteamiWsenHids::humidity, 0.0f, 100.0f);
 }
 
 void test_read_returns_calibrated_values(void) {

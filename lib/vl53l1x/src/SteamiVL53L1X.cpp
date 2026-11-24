@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "VL53L1X.h"
+#include "SteamiVL53L1X.h"
 
 #include <math.h>
 
-const uint8_t VL53L1X::DEFAULT_CONFIG[] = {
+const uint8_t SteamiVL53L1X::DEFAULT_CONFIG[] = {
     0x00,  // 0x2d : fast plus mode disabled
     0x00,  // 0x2e : bit 0 if I2C pulled up at 1.8V
     0x00,  // 0x2f : bit 0 if GPIO pulled up at 1.8V
@@ -98,9 +98,9 @@ const uint8_t VL53L1X::DEFAULT_CONFIG[] = {
     0x40,  // 0x87 : start ranging
 };
 
-VL53L1X::VL53L1X(TwoWire& wire, uint8_t address) : _wire(&wire), _address(address) {}
+SteamiVL53L1X::SteamiVL53L1X(TwoWire& wire, uint8_t address) : _wire(&wire), _address(address) {}
 
-bool VL53L1X::begin() {
+bool SteamiVL53L1X::begin() {
     reset();
     delay(100);
 
@@ -114,7 +114,7 @@ bool VL53L1X::begin() {
     return true;
 }
 
-void VL53L1X::writeReg(uint16_t reg, uint8_t value) {
+void SteamiVL53L1X::writeReg(uint16_t reg, uint8_t value) {
     _wire->beginTransmission(_address);
     _wire->write((reg >> 8) & 0xFF);
     _wire->write(reg & 0xFF);
@@ -122,7 +122,7 @@ void VL53L1X::writeReg(uint16_t reg, uint8_t value) {
     _wire->endTransmission();
 }
 
-void VL53L1X::writeReg16(uint16_t reg, uint16_t value) {
+void SteamiVL53L1X::writeReg16(uint16_t reg, uint16_t value) {
     _wire->beginTransmission(_address);
     _wire->write((reg >> 8) & 0xFF);
     _wire->write(reg & 0xFF);
@@ -131,7 +131,7 @@ void VL53L1X::writeReg16(uint16_t reg, uint16_t value) {
     _wire->endTransmission();
 }
 
-uint8_t VL53L1X::readReg(uint16_t reg) {
+uint8_t SteamiVL53L1X::readReg(uint16_t reg) {
     _wire->beginTransmission(_address);
     _wire->write((reg >> 8) & 0xFF);
     _wire->write(reg & 0xFF);
@@ -143,7 +143,7 @@ uint8_t VL53L1X::readReg(uint16_t reg) {
     return 0;
 }
 
-uint16_t VL53L1X::readReg16(uint16_t reg) {
+uint16_t SteamiVL53L1X::readReg16(uint16_t reg) {
     _wire->beginTransmission(_address);
     _wire->write((reg >> 8) & 0xFF);
     _wire->write(reg & 0xFF);
@@ -157,7 +157,7 @@ uint16_t VL53L1X::readReg16(uint16_t reg) {
     return 0;
 }
 
-void VL53L1X::writeRegBytes(uint16_t reg, const uint8_t* data, size_t len) {
+void SteamiVL53L1X::writeRegBytes(uint16_t reg, const uint8_t* data, size_t len) {
     constexpr size_t MAX_DATA_PER_FRAME = 30;
     size_t offset = 0;
     while (offset < len) {
@@ -174,44 +174,44 @@ void VL53L1X::writeRegBytes(uint16_t reg, const uint8_t* data, size_t len) {
     }
 }
 
-uint16_t VL53L1X::deviceId() {
+uint16_t SteamiVL53L1X::deviceId() {
     return readReg16(REG_MODEL_ID);
 }
 
-void VL53L1X::reset() {
+void SteamiVL53L1X::reset() {
     writeReg(REG_SOFT_RESET, SOFT_RESET_ASSERT);
     delay(100);
     writeReg(REG_SOFT_RESET, SOFT_RESET_RELEASE);
 }
 
-void VL53L1X::powerOff() {
+void SteamiVL53L1X::powerOff() {
     writeReg(REG_SOFT_RESET, SOFT_RESET_ASSERT);
 }
 
-void VL53L1X::powerOn() {
+void SteamiVL53L1X::powerOn() {
     writeReg(REG_SOFT_RESET, SOFT_RESET_RELEASE);
     delay(100);
 }
 
-void VL53L1X::startRanging() {
+void SteamiVL53L1X::startRanging() {
     writeReg(REG_SYSTEM_START, RANGING_START);
 }
 
-void VL53L1X::stopRanging() {
+void SteamiVL53L1X::stopRanging() {
     writeReg(REG_SYSTEM_START, RANGING_STOP);
 }
 
-bool VL53L1X::dataReady() {
+bool SteamiVL53L1X::dataReady() {
     bool polarity = (readReg(REG_GPIO_HV_MUX_CTRL) & GPIO_HV_MUX_CTRL_POLARITY) != 0;
     uint8_t readyVal = polarity ? 0 : 1;
     return (readReg(REG_GPIO_TIO_HV_STATUS) & GPIO_TIO_HV_STATUS_DATA_READY) == readyVal;
 }
 
-void VL53L1X::clearInterrupt() {
+void SteamiVL53L1X::clearInterrupt() {
     writeReg(REG_SYSTEM_INTERRUPT_CLEAR, INTERRUPT_CLEAR);
 }
 
-bool VL53L1X::ensureData() {
+bool SteamiVL53L1X::ensureData() {
     if (!dataReady()) {
         startRanging();
         for (uint16_t i = 0; i < 100; i++) {
@@ -225,7 +225,7 @@ bool VL53L1X::ensureData() {
     return true;
 }
 
-uint16_t VL53L1X::distanceMm() {
+uint16_t SteamiVL53L1X::distanceMm() {
     if (!ensureData()) {
         return 0;
     }
@@ -244,6 +244,6 @@ uint16_t VL53L1X::distanceMm() {
     return distance;
 }
 
-uint16_t VL53L1X::read() {
+uint16_t SteamiVL53L1X::read() {
     return distanceMm();
 }

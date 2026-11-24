@@ -8,11 +8,11 @@
 // driver. Open the serial monitor at 115200 baud to see the live readings.
 
 #include <Arduino.h>
-#include <BQ27441.h>
+#include <SteamiBQ27441.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-BQ27441 fuelGauge(internalI2C);
+SteamiBQ27441 fuelGauge(internalI2C);
 
 constexpr uint32_t REFRESH_PERIOD_MS = 3000;
 

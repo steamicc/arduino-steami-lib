@@ -5,7 +5,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-#include "WsenHids_const.h"
+#include "SteamiWsenHids_const.h"
 
 // WSEN-HIDS — Würth Elektronik capacitive humidity + temperature sensor, I2C.
 //
@@ -13,14 +13,14 @@
 // collection (begin / deviceId / powerOn / powerOff / softReset / reboot /
 // setContinuous / triggerOneShot / temperature / humidity / read) so
 // consumers learn one shape and reuse it across sensors.
-class WsenHids {
+class SteamiWsenHids {
    public:
     struct ReadResult {
         float temperature;  // Celsius
         float humidity;     // %RH
     };
 
-    WsenHids(TwoWire& wire = Wire, uint8_t address = WSEN_HIDS_DEFAULT_ADDRESS);
+    SteamiWsenHids(TwoWire& wire = Wire, uint8_t address = WSEN_HIDS_DEFAULT_ADDRESS);
 
     // Probe the device and load calibration. Returns false if WHO_AM_I
     // does not match WSEN_HIDS_WHO_AM_I_VALUE.

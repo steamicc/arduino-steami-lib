@@ -3,7 +3,7 @@
 #include <math.h>
 #include <unity.h>
 
-#include "LIS2MDL.h"
+#include "SteamiLIS2MDL.h"
 #include "Wire.h"
 #include "driver_checks.h"
 
@@ -13,12 +13,12 @@ static void preloadWhoAmI(bool valid = true) {
     Wire.setRegister(ADDR, LIS2MDL_WHO_AM_I, valid ? LIS2MDL_WHO_AM_I_VAL : 0x00);
 }
 
-LIS2MDL sensor;
+SteamiLIS2MDL sensor;
 
 void setUp(void) {
     Wire = TwoWire();
     preloadWhoAmI(true);
-    sensor = LIS2MDL(Wire, ADDR);
+    sensor = SteamiLIS2MDL(Wire, ADDR);
 }
 
 void tearDown(void) {}

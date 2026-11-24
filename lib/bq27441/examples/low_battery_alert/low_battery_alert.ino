@@ -9,11 +9,11 @@
 // driver.
 
 #include <Arduino.h>
-#include <BQ27441.h>
+#include <SteamiBQ27441.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-BQ27441 fuelGauge(internalI2C);
+SteamiBQ27441 fuelGauge(internalI2C);
 
 // Tune to the use case: the LED warns early, the buzzer only when the
 // board is about to shut down.

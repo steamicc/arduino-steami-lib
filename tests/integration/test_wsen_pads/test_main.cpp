@@ -4,8 +4,8 @@
 #include <Wire.h>
 #include <unity.h>
 
-#include "WSEN_PADS.h"
-#include "WSEN_PADS_const.h"
+#include "SteamiWsenPads.h"
+#include "SteamiWsenPads_const.h"
 
 namespace {
 
@@ -19,7 +19,7 @@ constexpr float MIN_TEMPERATURE_C = -40.0f;
 constexpr float MAX_TEMPERATURE_C = 85.0f;
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-WSEN_PADS sensor(internalI2C);
+SteamiWsenPads sensor(internalI2C);
 
 bool waitForDataReady(uint32_t timeoutMs = DATA_READY_TIMEOUT_MS) {
     const uint32_t start = millis();
@@ -34,7 +34,7 @@ bool waitForDataReady(uint32_t timeoutMs = DATA_READY_TIMEOUT_MS) {
     return false;
 }
 
-void assertPlausible(const WSEN_PADS::ReadResult& reading) {
+void assertPlausible(const SteamiWsenPads::ReadResult& reading) {
     TEST_ASSERT_FALSE_MESSAGE(isnan(reading.pressure), "Pressure reading is NaN");
     TEST_ASSERT_FALSE_MESSAGE(isnan(reading.temperature), "Temperature reading is NaN");
 
@@ -73,7 +73,7 @@ void test_repeated_measurements_are_plausible(void) {
     for (uint8_t sample = 0; sample < SAMPLE_COUNT; ++sample) {
         TEST_ASSERT_TRUE_MESSAGE(waitForDataReady(), "Timed out waiting for a WSEN-PADS sample");
 
-        const WSEN_PADS::ReadResult reading = sensor.read();
+        const SteamiWsenPads::ReadResult reading = sensor.read();
         assertPlausible(reading);
 
         // At 1 Hz, wait before polling for the next acquisition.

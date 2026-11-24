@@ -2,13 +2,13 @@
 
 #include <unity.h>
 
-#include "APDS9960.h"
+#include "SteamiAPDS9960.h"
 #include "Wire.h"
 #include "driver_checks.h"
 
 constexpr uint8_t ADDR = APDS9960_DEFAULT_ADDRESS;
 
-APDS9960 sensor(Wire, ADDR);
+SteamiAPDS9960 sensor(Wire, ADDR);
 
 static void preloadDeviceId(uint8_t id = APDS9960_DEVICE_ID_1) {
     Wire.setRegister(ADDR, APDS9960_REG_ID, id);
@@ -42,7 +42,7 @@ static void preload16(uint8_t lowRegister, uint16_t value) {
 void setUp(void) {
     Wire = TwoWire();
     preloadDeviceId();
-    sensor = APDS9960(Wire, ADDR);
+    sensor = SteamiAPDS9960(Wire, ADDR);
 }
 
 void tearDown(void) {}
@@ -93,23 +93,23 @@ void test_begin_writes_default_configuration(void) {
 void test_set_mode_sets_and_clears_requested_bit(void) {
     Wire.setRegister(ADDR, APDS9960_REG_ENABLE, 0x00);
 
-    TEST_ASSERT_TRUE(sensor.setMode(APDS9960::Mode::AMBIENT_LIGHT, true));
+    TEST_ASSERT_TRUE(sensor.setMode(SteamiAPDS9960::Mode::AMBIENT_LIGHT, true));
     TEST_ASSERT_EQUAL_HEX8(APDS9960_ENABLE_AEN, Wire.getRegister(ADDR, APDS9960_REG_ENABLE));
 
-    TEST_ASSERT_TRUE(sensor.setMode(APDS9960::Mode::AMBIENT_LIGHT, false));
+    TEST_ASSERT_TRUE(sensor.setMode(SteamiAPDS9960::Mode::AMBIENT_LIGHT, false));
     TEST_ASSERT_EQUAL_HEX8(0x00, Wire.getRegister(ADDR, APDS9960_REG_ENABLE));
 }
 
 void test_set_mode_all_controls_all_enable_bits(void) {
-    TEST_ASSERT_TRUE(sensor.setMode(APDS9960::Mode::ALL, true));
+    TEST_ASSERT_TRUE(sensor.setMode(SteamiAPDS9960::Mode::ALL, true));
     TEST_ASSERT_EQUAL_HEX8(0x7F, Wire.getRegister(ADDR, APDS9960_REG_ENABLE));
 
-    TEST_ASSERT_TRUE(sensor.setMode(APDS9960::Mode::ALL, false));
+    TEST_ASSERT_TRUE(sensor.setMode(SteamiAPDS9960::Mode::ALL, false));
     TEST_ASSERT_EQUAL_HEX8(0x00, Wire.getRegister(ADDR, APDS9960_REG_ENABLE));
 }
 
 void test_set_mode_rejects_invalid_enum_value(void) {
-    APDS9960::Mode invalid = static_cast<APDS9960::Mode>(8);
+    SteamiAPDS9960::Mode invalid = static_cast<SteamiAPDS9960::Mode>(8);
     TEST_ASSERT_FALSE(sensor.setMode(invalid, true));
 }
 
@@ -246,31 +246,31 @@ void test_gesture_available_reflects_gvalid(void) {
 void test_read_gesture_returns_none_when_engine_is_disabled(void) {
     Wire.setRegister(ADDR, APDS9960_REG_ENABLE, 0x00);
     Wire.setRegister(ADDR, APDS9960_REG_GSTATUS, APDS9960_GSTATUS_GVALID);
-    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(APDS9960::Gesture::NONE),
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(SteamiAPDS9960::Gesture::NONE),
                             static_cast<uint8_t>(sensor.readGesture(0)));
 }
 
 void test_control_field_getters_and_setters_preserve_other_bits(void) {
     Wire.setRegister(ADDR, APDS9960_REG_CONTROL, 0x00);
 
-    sensor.setAmbientLightGain(APDS9960::AmbientLightGain::X64);
-    sensor.setProximityGain(APDS9960::ProximityGain::X8);
-    sensor.setLedDrive(APDS9960::LedDrive::MA_12_5);
+    sensor.setAmbientLightGain(SteamiAPDS9960::AmbientLightGain::X64);
+    sensor.setProximityGain(SteamiAPDS9960::ProximityGain::X8);
+    sensor.setLedDrive(SteamiAPDS9960::LedDrive::MA_12_5);
 
-    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(APDS9960::AmbientLightGain::X64),
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(SteamiAPDS9960::AmbientLightGain::X64),
                             static_cast<uint8_t>(sensor.ambientLightGain()));
-    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(APDS9960::ProximityGain::X8),
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(SteamiAPDS9960::ProximityGain::X8),
                             static_cast<uint8_t>(sensor.proximityGain()));
-    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(APDS9960::LedDrive::MA_12_5),
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(SteamiAPDS9960::LedDrive::MA_12_5),
                             static_cast<uint8_t>(sensor.ledDrive()));
     TEST_ASSERT_EQUAL_HEX8(0xCF, Wire.getRegister(ADDR, APDS9960_REG_CONTROL));
 }
 
 void test_led_boost_roundtrip_preserves_config2_other_bits(void) {
     Wire.setRegister(ADDR, APDS9960_REG_CONFIG2, 0xC1);
-    sensor.setLedBoost(APDS9960::LedBoost::PERCENT_200);
+    sensor.setLedBoost(SteamiAPDS9960::LedBoost::PERCENT_200);
 
-    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(APDS9960::LedBoost::PERCENT_200),
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(SteamiAPDS9960::LedBoost::PERCENT_200),
                             static_cast<uint8_t>(sensor.ledBoost()));
     TEST_ASSERT_EQUAL_HEX8(0xE1, Wire.getRegister(ADDR, APDS9960_REG_CONFIG2));
 }
@@ -289,15 +289,15 @@ void test_config3_fields_roundtrip(void) {
 void test_gesture_configuration_fields_roundtrip(void) {
     Wire.setRegister(ADDR, APDS9960_REG_GCONF2, 0x80);
 
-    sensor.setGestureGain(APDS9960::GestureGain::X8);
-    sensor.setGestureLedDrive(APDS9960::LedDrive::MA_25);
-    sensor.setGestureWaitTime(APDS9960::GestureWaitTime::MS_22_4);
+    sensor.setGestureGain(SteamiAPDS9960::GestureGain::X8);
+    sensor.setGestureLedDrive(SteamiAPDS9960::LedDrive::MA_25);
+    sensor.setGestureWaitTime(SteamiAPDS9960::GestureWaitTime::MS_22_4);
 
-    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(APDS9960::GestureGain::X8),
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(SteamiAPDS9960::GestureGain::X8),
                             static_cast<uint8_t>(sensor.gestureGain()));
-    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(APDS9960::LedDrive::MA_25),
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(SteamiAPDS9960::LedDrive::MA_25),
                             static_cast<uint8_t>(sensor.gestureLedDrive()));
-    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(APDS9960::GestureWaitTime::MS_22_4),
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(SteamiAPDS9960::GestureWaitTime::MS_22_4),
                             static_cast<uint8_t>(sensor.gestureWaitTime()));
     TEST_ASSERT_EQUAL_HEX8(0xF5, Wire.getRegister(ADDR, APDS9960_REG_GCONF2));
 }

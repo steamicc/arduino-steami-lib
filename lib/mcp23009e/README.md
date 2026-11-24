@@ -17,10 +17,10 @@ Spin up a dedicated `TwoWire` and hand it to the driver:
 
 ```cpp
 #include <Wire.h>
-#include <MCP23009E.h>
+#include <SteamiMCP23009E.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-MCP23009E expander(internalI2C, RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+SteamiMCP23009E expander(internalI2C, RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
 
 void setup() {
     Serial.begin(115200);
@@ -53,7 +53,7 @@ in method names only where they carry ambiguity.
 
 | Method | Description |
 |--------|-------------|
-| `MCP23009E(TwoWire& wire, uint8_t resetPin, uint8_t address = 0x20, int interruptPin = -1)` | Construct. Pass the reset pin number; interrupt pin is optional. |
+| `SteamiMCP23009E(TwoWire& wire, uint8_t resetPin, uint8_t address = 0x20, int interruptPin = -1)` | Construct. Pass the reset pin number; interrupt pin is optional. |
 | `bool begin()` | Configure the reset pin, attach the interrupt handler if provided, perform a hardware reset, then probe the I2C bus. Returns `false` if the expander doesn't ACK. |
 | `void reset()` | Toggle the reset pin LOW then HIGH to perform a hardware reset. |
 | `void powerOn()` | Drive the reset pin HIGH. |
@@ -141,7 +141,7 @@ Both classes share the same interface: `on()`, `off()`, `toggle()`,
 
 ## Register constants
 
-`MCP23009E_const.h` exports register addresses (`MCP23009_IODIR`, …),
+`SteamiMCP23009E_const.h` exports register addresses (`MCP23009_IODIR`, …),
 bit masks (`MCP23009_IOCON_*`), direction/level/polarity values, interrupt
 enable constants, and the GPIO-to-D-PAD button mappings
 (`MCP23009_BTN_UP`, …) so applications can access the IC directly if they

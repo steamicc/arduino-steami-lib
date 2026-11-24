@@ -6,16 +6,16 @@
 
 #include <new>
 
-#include "ISM330DL.h"
+#include "SteamiISM330DL.h"
 #include "Wire.h"
 
 constexpr uint8_t ADDR = ISM330DL_DEFAULT_ADDRESS;
 
-ISM330DL sensor(Wire);
+SteamiISM330DL sensor(Wire);
 
 static void reconstructSensor() {
-    sensor.~ISM330DL();
-    new (&sensor) ISM330DL(Wire);
+    sensor.~SteamiISM330DL();
+    new (&sensor) SteamiISM330DL(Wire);
 }
 
 static void preloadWhoAmI(bool valid = true) {
@@ -79,74 +79,75 @@ void test_begin_rejects_wrong_who_am_i(void) {
 }
 
 void test_configure_accel_writes_expected_register(void) {
-    TEST_ASSERT_TRUE(sensor.configureAccel(ISM330DL::AccelOdr::HZ_208, ISM330DL::AccelScale::G_8));
+    TEST_ASSERT_TRUE(
+        sensor.configureAccel(SteamiISM330DL::AccelOdr::HZ_208, SteamiISM330DL::AccelScale::G_8));
 
     TEST_ASSERT_EQUAL_HEX8(0x5C, Wire.getRegister(ADDR, ISM330DL_REG_CTRL1_XL));
 }
 
 void test_configure_accel_supports_all_scales(void) {
     struct Case {
-        ISM330DL::AccelScale scale;
+        SteamiISM330DL::AccelScale scale;
         uint8_t expected;
     };
 
     const Case cases[] = {
-        {ISM330DL::AccelScale::G_2, 0x40},
-        {ISM330DL::AccelScale::G_16, 0x44},
-        {ISM330DL::AccelScale::G_4, 0x48},
-        {ISM330DL::AccelScale::G_8, 0x4C},
+        {SteamiISM330DL::AccelScale::G_2, 0x40},
+        {SteamiISM330DL::AccelScale::G_16, 0x44},
+        {SteamiISM330DL::AccelScale::G_4, 0x48},
+        {SteamiISM330DL::AccelScale::G_8, 0x4C},
     };
 
     for (const auto& item : cases) {
-        TEST_ASSERT_TRUE(sensor.configureAccel(ISM330DL::AccelOdr::HZ_104, item.scale));
+        TEST_ASSERT_TRUE(sensor.configureAccel(SteamiISM330DL::AccelOdr::HZ_104, item.scale));
         TEST_ASSERT_EQUAL_HEX8(item.expected, Wire.getRegister(ADDR, ISM330DL_REG_CTRL1_XL));
     }
 }
 
 void test_configure_accel_rejects_invalid_values(void) {
-    const auto badOdr = static_cast<ISM330DL::AccelOdr>(0x09);
-    const auto badScale = static_cast<ISM330DL::AccelScale>(3);
+    const auto badOdr = static_cast<SteamiISM330DL::AccelOdr>(0x09);
+    const auto badScale = static_cast<SteamiISM330DL::AccelScale>(3);
 
-    TEST_ASSERT_FALSE(sensor.configureAccel(badOdr, ISM330DL::AccelScale::G_2));
-    TEST_ASSERT_FALSE(sensor.configureAccel(ISM330DL::AccelOdr::HZ_104, badScale));
+    TEST_ASSERT_FALSE(sensor.configureAccel(badOdr, SteamiISM330DL::AccelScale::G_2));
+    TEST_ASSERT_FALSE(sensor.configureAccel(SteamiISM330DL::AccelOdr::HZ_104, badScale));
 }
 
 void test_configure_gyro_writes_expected_register(void) {
     TEST_ASSERT_TRUE(
-        sensor.configureGyro(ISM330DL::GyroOdr::HZ_416, ISM330DL::GyroScale::DPS_1000));
+        sensor.configureGyro(SteamiISM330DL::GyroOdr::HZ_416, SteamiISM330DL::GyroScale::DPS_1000));
 
     TEST_ASSERT_EQUAL_HEX8(0x68, Wire.getRegister(ADDR, ISM330DL_REG_CTRL2_G));
 }
 
 void test_configure_gyro_supports_all_scales(void) {
     struct Case {
-        ISM330DL::GyroScale scale;
+        SteamiISM330DL::GyroScale scale;
         uint8_t expected;
     };
 
     const Case cases[] = {
-        {ISM330DL::GyroScale::DPS_125, 0x42},  {ISM330DL::GyroScale::DPS_250, 0x40},
-        {ISM330DL::GyroScale::DPS_500, 0x44},  {ISM330DL::GyroScale::DPS_1000, 0x48},
-        {ISM330DL::GyroScale::DPS_2000, 0x4C},
+        {SteamiISM330DL::GyroScale::DPS_125, 0x42},  {SteamiISM330DL::GyroScale::DPS_250, 0x40},
+        {SteamiISM330DL::GyroScale::DPS_500, 0x44},  {SteamiISM330DL::GyroScale::DPS_1000, 0x48},
+        {SteamiISM330DL::GyroScale::DPS_2000, 0x4C},
     };
 
     for (const auto& item : cases) {
-        TEST_ASSERT_TRUE(sensor.configureGyro(ISM330DL::GyroOdr::HZ_104, item.scale));
+        TEST_ASSERT_TRUE(sensor.configureGyro(SteamiISM330DL::GyroOdr::HZ_104, item.scale));
         TEST_ASSERT_EQUAL_HEX8(item.expected, Wire.getRegister(ADDR, ISM330DL_REG_CTRL2_G));
     }
 }
 
 void test_configure_gyro_rejects_invalid_values(void) {
-    const auto badOdr = static_cast<ISM330DL::GyroOdr>(0x09);
-    const auto badScale = static_cast<ISM330DL::GyroScale>(333);
+    const auto badOdr = static_cast<SteamiISM330DL::GyroOdr>(0x09);
+    const auto badScale = static_cast<SteamiISM330DL::GyroScale>(333);
 
-    TEST_ASSERT_FALSE(sensor.configureGyro(badOdr, ISM330DL::GyroScale::DPS_250));
-    TEST_ASSERT_FALSE(sensor.configureGyro(ISM330DL::GyroOdr::HZ_104, badScale));
+    TEST_ASSERT_FALSE(sensor.configureGyro(badOdr, SteamiISM330DL::GyroScale::DPS_250));
+    TEST_ASSERT_FALSE(sensor.configureGyro(SteamiISM330DL::GyroOdr::HZ_104, badScale));
 }
 
 void test_raw_measurements_decode_little_endian_signed_values(void) {
-    ISM330DL::RawVector accel{};
-    ISM330DL::RawVector gyro{};
+    SteamiISM330DL::RawVector accel{};
+    SteamiISM330DL::RawVector gyro{};
     int16_t temperature = 0;
 
     TEST_ASSERT_TRUE(sensor.accelerationRaw(accel));
@@ -165,10 +166,10 @@ void test_raw_measurements_decode_little_endian_signed_values(void) {
 }
 
 void test_acceleration_g_uses_selected_scale(void) {
-    sensor.configureAccel(ISM330DL::AccelOdr::HZ_104, ISM330DL::AccelScale::G_4);
+    sensor.configureAccel(SteamiISM330DL::AccelOdr::HZ_104, SteamiISM330DL::AccelScale::G_4);
     preloadVector(ISM330DL_REG_OUTX_L_XL, 1000, -2000, 4000);
 
-    ISM330DL::Vector3 value{};
+    SteamiISM330DL::Vector3 value{};
     TEST_ASSERT_TRUE(sensor.accelerationG(value));
 
     TEST_ASSERT_FLOAT_WITHIN(0.0001F, 0.122F, value.x);
@@ -177,10 +178,10 @@ void test_acceleration_g_uses_selected_scale(void) {
 }
 
 void test_acceleration_ms2_converts_from_g(void) {
-    sensor.configureAccel(ISM330DL::AccelOdr::HZ_104, ISM330DL::AccelScale::G_2);
+    sensor.configureAccel(SteamiISM330DL::AccelOdr::HZ_104, SteamiISM330DL::AccelScale::G_2);
     preloadVector(ISM330DL_REG_OUTX_L_XL, 1000, 0, -1000);
 
-    ISM330DL::Vector3 value{};
+    SteamiISM330DL::Vector3 value{};
     TEST_ASSERT_TRUE(sensor.accelerationMs2(value));
 
     const float expected = 0.061F * ISM330DL_STANDARD_GRAVITY;
@@ -190,16 +191,16 @@ void test_acceleration_ms2_converts_from_g(void) {
 }
 
 void test_accel_offset_is_stored_and_applied(void) {
-    sensor.configureAccel(ISM330DL::AccelOdr::HZ_104, ISM330DL::AccelScale::G_2);
+    sensor.configureAccel(SteamiISM330DL::AccelOdr::HZ_104, SteamiISM330DL::AccelScale::G_2);
     preloadVector(ISM330DL_REG_OUTX_L_XL, 1000, 2000, 3000);
     sensor.setAccelOffset(0.010F, 0.020F, 0.030F);
 
-    const ISM330DL::Vector3 offset = sensor.accelOffset();
+    const SteamiISM330DL::Vector3 offset = sensor.accelOffset();
     TEST_ASSERT_FLOAT_WITHIN(0.0001F, 0.010F, offset.x);
     TEST_ASSERT_FLOAT_WITHIN(0.0001F, 0.020F, offset.y);
     TEST_ASSERT_FLOAT_WITHIN(0.0001F, 0.030F, offset.z);
 
-    ISM330DL::Vector3 value{};
+    SteamiISM330DL::Vector3 value{};
     TEST_ASSERT_TRUE(sensor.accelerationG(value));
     TEST_ASSERT_FLOAT_WITHIN(0.0001F, 0.051F, value.x);
     TEST_ASSERT_FLOAT_WITHIN(0.0001F, 0.102F, value.y);
@@ -207,10 +208,10 @@ void test_accel_offset_is_stored_and_applied(void) {
 }
 
 void test_gyroscope_dps_uses_selected_scale(void) {
-    sensor.configureGyro(ISM330DL::GyroOdr::HZ_104, ISM330DL::GyroScale::DPS_500);
+    sensor.configureGyro(SteamiISM330DL::GyroOdr::HZ_104, SteamiISM330DL::GyroScale::DPS_500);
     preloadVector(ISM330DL_REG_OUTX_L_G, 1000, -2000, 3000);
 
-    ISM330DL::Vector3 value{};
+    SteamiISM330DL::Vector3 value{};
     TEST_ASSERT_TRUE(sensor.gyroscopeDps(value));
 
     TEST_ASSERT_FLOAT_WITHIN(0.001F, 17.5F, value.x);
@@ -219,10 +220,10 @@ void test_gyroscope_dps_uses_selected_scale(void) {
 }
 
 void test_gyroscope_rads_converts_from_dps(void) {
-    sensor.configureGyro(ISM330DL::GyroOdr::HZ_104, ISM330DL::GyroScale::DPS_250);
+    sensor.configureGyro(SteamiISM330DL::GyroOdr::HZ_104, SteamiISM330DL::GyroScale::DPS_250);
     preloadVector(ISM330DL_REG_OUTX_L_G, 1000, 0, -1000);
 
-    ISM330DL::Vector3 value{};
+    SteamiISM330DL::Vector3 value{};
     TEST_ASSERT_TRUE(sensor.gyroscopeRads(value));
 
     const float expected = 8.75F * ISM330DL_DEG_TO_RAD;
@@ -289,9 +290,10 @@ void test_power_off_clears_accel_and_gyro_ctrl_registers(void) {
 }
 
 void test_power_on_restores_last_non_power_down_configuration(void) {
-    TEST_ASSERT_TRUE(sensor.configureAccel(ISM330DL::AccelOdr::HZ_208, ISM330DL::AccelScale::G_8));
     TEST_ASSERT_TRUE(
-        sensor.configureGyro(ISM330DL::GyroOdr::HZ_416, ISM330DL::GyroScale::DPS_1000));
+        sensor.configureAccel(SteamiISM330DL::AccelOdr::HZ_208, SteamiISM330DL::AccelScale::G_8));
+    TEST_ASSERT_TRUE(
+        sensor.configureGyro(SteamiISM330DL::GyroOdr::HZ_416, SteamiISM330DL::GyroScale::DPS_1000));
     TEST_ASSERT_TRUE(sensor.powerOff());
     TEST_ASSERT_TRUE(sensor.powerOn());
 
@@ -304,7 +306,7 @@ void test_read_after_power_off_restores_configuration(void) {
     preloadStatus(ISM330DL_STATUS_ALL_READY);
     preloadVector(ISM330DL_REG_OUTX_L_XL, 1000, 0, 0);
 
-    ISM330DL::RawVector value{};
+    SteamiISM330DL::RawVector value{};
     TEST_ASSERT_TRUE(sensor.accelerationRaw(value));
     TEST_ASSERT_EQUAL_INT16(1000, value.x);
     TEST_ASSERT_EQUAL_HEX8(0x40, Wire.getRegister(ADDR, ISM330DL_REG_CTRL1_XL));
@@ -316,23 +318,23 @@ void test_orientation_detects_each_static_axis(void) {
         int16_t x;
         int16_t y;
         int16_t z;
-        ISM330DL::Orientation expected;
+        SteamiISM330DL::Orientation expected;
     };
 
     // At ±2 g, approximately 1 g = 16384 LSB.
     const Case cases[] = {
-        {0, 0, 16384, ISM330DL::Orientation::SCREEN_DOWN},
-        {0, 0, -16384, ISM330DL::Orientation::SCREEN_UP},
-        {16384, 0, 0, ISM330DL::Orientation::TOP_EDGE_DOWN},
-        {-16384, 0, 0, ISM330DL::Orientation::BOTTOM_EDGE_DOWN},
-        {0, 16384, 0, ISM330DL::Orientation::RIGHT_EDGE_DOWN},
-        {0, -16384, 0, ISM330DL::Orientation::LEFT_EDGE_DOWN},
-        {100, 100, 100, ISM330DL::Orientation::MOVING},
+        {0, 0, 16384, SteamiISM330DL::Orientation::SCREEN_DOWN},
+        {0, 0, -16384, SteamiISM330DL::Orientation::SCREEN_UP},
+        {16384, 0, 0, SteamiISM330DL::Orientation::TOP_EDGE_DOWN},
+        {-16384, 0, 0, SteamiISM330DL::Orientation::BOTTOM_EDGE_DOWN},
+        {0, 16384, 0, SteamiISM330DL::Orientation::RIGHT_EDGE_DOWN},
+        {0, -16384, 0, SteamiISM330DL::Orientation::LEFT_EDGE_DOWN},
+        {100, 100, 100, SteamiISM330DL::Orientation::MOVING},
     };
 
     for (const auto& item : cases) {
         preloadVector(ISM330DL_REG_OUTX_L_XL, item.x, item.y, item.z);
-        ISM330DL::Orientation value = ISM330DL::Orientation::MOVING;
+        SteamiISM330DL::Orientation value = SteamiISM330DL::Orientation::MOVING;
         TEST_ASSERT_TRUE(sensor.orientation(value));
         TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(item.expected), static_cast<uint8_t>(value));
     }
@@ -343,23 +345,23 @@ void test_motion_classifies_rotation_and_tilt(void) {
         int16_t x;
         int16_t y;
         int16_t z;
-        ISM330DL::MotionType expected;
+        SteamiISM330DL::MotionType expected;
     };
 
     // Default sensitivity is 8.75 mdps/LSB. 2000 LSB = 17.5 dps.
     const Case cases[] = {
-        {0, 0, 2000, ISM330DL::MotionType::TURNING_RIGHT},
-        {0, 0, -2000, ISM330DL::MotionType::TURNING_LEFT},
-        {2000, 0, 0, ISM330DL::MotionType::TILTING_LEFT},
-        {-2000, 0, 0, ISM330DL::MotionType::TILTING_RIGHT},
-        {0, 2000, 0, ISM330DL::MotionType::TILTING_DOWN},
-        {0, -2000, 0, ISM330DL::MotionType::TILTING_UP},
-        {100, 100, 100, ISM330DL::MotionType::STABLE},
+        {0, 0, 2000, SteamiISM330DL::MotionType::TURNING_RIGHT},
+        {0, 0, -2000, SteamiISM330DL::MotionType::TURNING_LEFT},
+        {2000, 0, 0, SteamiISM330DL::MotionType::TILTING_LEFT},
+        {-2000, 0, 0, SteamiISM330DL::MotionType::TILTING_RIGHT},
+        {0, 2000, 0, SteamiISM330DL::MotionType::TILTING_DOWN},
+        {0, -2000, 0, SteamiISM330DL::MotionType::TILTING_UP},
+        {100, 100, 100, SteamiISM330DL::MotionType::STABLE},
     };
 
     for (const auto& item : cases) {
         preloadVector(ISM330DL_REG_OUTX_L_G, item.x, item.y, item.z);
-        ISM330DL::Motion value{};
+        SteamiISM330DL::Motion value{};
         TEST_ASSERT_TRUE(sensor.motion(value));
         TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(item.expected),
                                 static_cast<uint8_t>(value.type));
@@ -367,13 +369,14 @@ void test_motion_classifies_rotation_and_tilt(void) {
 }
 
 void test_orientation_and_motion_string_helpers(void) {
-    TEST_ASSERT_EQUAL_STRING("SCREEN_UP",
-                             ISM330DL::orientationToString(ISM330DL::Orientation::SCREEN_UP));
-    TEST_ASSERT_EQUAL_STRING("MOVING",
-                             ISM330DL::orientationToString(ISM330DL::Orientation::MOVING));
-    TEST_ASSERT_EQUAL_STRING("TURNING_RIGHT",
-                             ISM330DL::motionToString(ISM330DL::MotionType::TURNING_RIGHT));
-    TEST_ASSERT_EQUAL_STRING("STABLE", ISM330DL::motionToString(ISM330DL::MotionType::STABLE));
+    TEST_ASSERT_EQUAL_STRING(
+        "SCREEN_UP", SteamiISM330DL::orientationToString(SteamiISM330DL::Orientation::SCREEN_UP));
+    TEST_ASSERT_EQUAL_STRING(
+        "MOVING", SteamiISM330DL::orientationToString(SteamiISM330DL::Orientation::MOVING));
+    TEST_ASSERT_EQUAL_STRING(
+        "TURNING_RIGHT", SteamiISM330DL::motionToString(SteamiISM330DL::MotionType::TURNING_RIGHT));
+    TEST_ASSERT_EQUAL_STRING("STABLE",
+                             SteamiISM330DL::motionToString(SteamiISM330DL::MotionType::STABLE));
 }
 
 int main(void) {

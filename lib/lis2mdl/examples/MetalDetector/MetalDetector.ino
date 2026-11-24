@@ -3,7 +3,7 @@
 // Calibrate a local magnetic baseline, then buzz when the field magnitude changes.
 
 #include <Arduino.h>
-#include <LIS2MDL.h>
+#include <SteamiLIS2MDL.h>
 #include <Wire.h>
 
 #ifndef SPEAKER
@@ -11,7 +11,7 @@
 #endif
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-LIS2MDL magnetometer(internalI2C);
+SteamiLIS2MDL magnetometer(internalI2C);
 
 static float baselineUt = 0.0f;
 static float triggerDeltaUt = 20.0f;

@@ -5,9 +5,9 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-#include "ISM330DL_const.h"
+#include "SteamiISM330DL_const.h"
 
-class ISM330DL {
+class SteamiISM330DL {
    public:
     enum class AccelOdr : uint8_t {
         POWER_DOWN = 0x00,
@@ -85,7 +85,7 @@ class ISM330DL {
         float value;
     };
 
-    explicit ISM330DL(TwoWire& wire = Wire, uint8_t address = ISM330DL_DEFAULT_ADDRESS);
+    explicit SteamiISM330DL(TwoWire& wire = Wire, uint8_t address = ISM330DL_DEFAULT_ADDRESS);
 
     bool begin();
     uint8_t deviceId();

@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "WsenHids.h"
+#include "SteamiWsenHids.h"
 
 #include <math.h>
 
-WsenHids::WsenHids(TwoWire& wire, uint8_t address) : _wire(&wire), _address(address) {}
+SteamiWsenHids::SteamiWsenHids(TwoWire& wire, uint8_t address) : _wire(&wire), _address(address) {}
 
-bool WsenHids::begin() {
+bool SteamiWsenHids::begin() {
     if (deviceId() != WSEN_HIDS_WHO_AM_I_VALUE) {
         return false;
     }
@@ -24,11 +24,11 @@ bool WsenHids::begin() {
     return true;
 }
 
-uint8_t WsenHids::deviceId() {
+uint8_t SteamiWsenHids::deviceId() {
     return readReg(WSEN_HIDS_REG_WHO_AM_I);
 }
 
-void WsenHids::reboot() {
+void SteamiWsenHids::reboot() {
     writeReg(WSEN_HIDS_REG_CTRL2, WSEN_HIDS_CTRL2_BOOT);
     // BOOT clears itself when the reload completes. Poll with a bounded
     // timeout so a stuck bus doesn't hang the caller.
@@ -40,42 +40,42 @@ void WsenHids::reboot() {
     }
 }
 
-void WsenHids::softReset() {
+void SteamiWsenHids::softReset() {
     reboot();
 }
 
-void WsenHids::powerOn() {
+void SteamiWsenHids::powerOn() {
     uint8_t ctrl1 = readReg(WSEN_HIDS_REG_CTRL1);
     writeReg(WSEN_HIDS_REG_CTRL1, ctrl1 | WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU);
 }
 
-void WsenHids::powerOff() {
+void SteamiWsenHids::powerOff() {
     uint8_t ctrl1 = readReg(WSEN_HIDS_REG_CTRL1);
     writeReg(WSEN_HIDS_REG_CTRL1, ctrl1 & ~WSEN_HIDS_CTRL1_PD);
 }
 
-bool WsenHids::dataReady() {
+bool SteamiWsenHids::dataReady() {
     return (status() & (WSEN_HIDS_STATUS_H_DA | WSEN_HIDS_STATUS_T_DA)) ==
            (WSEN_HIDS_STATUS_H_DA | WSEN_HIDS_STATUS_T_DA);
 }
 
-bool WsenHids::temperatureReady() {
+bool SteamiWsenHids::temperatureReady() {
     return (status() & WSEN_HIDS_STATUS_T_DA) != 0;
 }
 
-bool WsenHids::humidityReady() {
+bool SteamiWsenHids::humidityReady() {
     return (status() & WSEN_HIDS_STATUS_H_DA) != 0;
 }
 
-float WsenHids::temperature() {
+float SteamiWsenHids::temperature() {
     return read().temperature;
 }
 
-float WsenHids::humidity() {
+float SteamiWsenHids::humidity() {
     return read().humidity;
 }
 
-WsenHids::ReadResult WsenHids::read() {
+SteamiWsenHids::ReadResult SteamiWsenHids::read() {
     if (!isPoweredOn()) {
         // Auto-trigger via continuous mode at 12.5 Hz rather than the
         // CTRL2.ONE_SHOT path. The one-shot mechanism is unreliable on
@@ -105,19 +105,19 @@ WsenHids::ReadResult WsenHids::read() {
     return {computeTemperature(tempRaw), computeHumidity(humRaw)};
 }
 
-void WsenHids::setContinuous(uint8_t odr) {
+void SteamiWsenHids::setContinuous(uint8_t odr) {
     uint8_t ctrl1 = WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU | (odr & WSEN_HIDS_CTRL1_ODR_MASK);
     writeReg(WSEN_HIDS_REG_CTRL1, ctrl1);
 }
 
-void WsenHids::triggerOneShot() {
+void SteamiWsenHids::triggerOneShot() {
     // Must be powered on at ODR=one-shot for the ONE_SHOT bit to matter.
     writeReg(WSEN_HIDS_REG_CTRL1,
              WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU | WSEN_HIDS_ODR_ONE_SHOT);
     writeReg(WSEN_HIDS_REG_CTRL2, WSEN_HIDS_CTRL2_ONE_SHOT);
 }
 
-WsenHids::ReadResult WsenHids::readOneShot() {
+SteamiWsenHids::ReadResult SteamiWsenHids::readOneShot() {
     triggerOneShot();
     if (!waitForDataReady()) {
         return {NAN, NAN};
@@ -125,18 +125,19 @@ WsenHids::ReadResult WsenHids::readOneShot() {
     return read();
 }
 
-void WsenHids::setAveraging(uint8_t humidityAvg, uint8_t temperatureAvg) {
+void SteamiWsenHids::setAveraging(uint8_t humidityAvg, uint8_t temperatureAvg) {
     uint8_t value = static_cast<uint8_t>(humidityAvg & WSEN_HIDS_AV_CONF_AVGH_MASK) |
                     static_cast<uint8_t>((temperatureAvg << WSEN_HIDS_AV_CONF_AVGT_SHIFT) &
                                          WSEN_HIDS_AV_CONF_AVGT_MASK);
     writeReg(WSEN_HIDS_REG_AV_CONF, value);
 }
 
-void WsenHids::setTemperatureOffset(float offset) {
+void SteamiWsenHids::setTemperatureOffset(float offset) {
     _tempOffset = offset;
 }
 
-void WsenHids::calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh) {
+void SteamiWsenHids::calibrateTemperature(float refLow, float measLow, float refHigh,
+                                          float measHigh) {
     float span = measHigh - measLow;
     if (span == 0.0f) {
         _tempUserSlope = 1.0f;
@@ -147,11 +148,11 @@ void WsenHids::calibrateTemperature(float refLow, float measLow, float refHigh, 
     _tempUserIntercept = refLow - _tempUserSlope * measLow;
 }
 
-uint8_t WsenHids::status() {
+uint8_t SteamiWsenHids::status() {
     return readReg(WSEN_HIDS_REG_STATUS);
 }
 
-uint8_t WsenHids::readReg(uint8_t reg) {
+uint8_t SteamiWsenHids::readReg(uint8_t reg) {
     _wire->beginTransmission(_address);
     _wire->write(reg);
     _wire->endTransmission(false);
@@ -162,14 +163,14 @@ uint8_t WsenHids::readReg(uint8_t reg) {
     return 0;
 }
 
-void WsenHids::writeReg(uint8_t reg, uint8_t value) {
+void SteamiWsenHids::writeReg(uint8_t reg, uint8_t value) {
     _wire->beginTransmission(_address);
     _wire->write(reg);
     _wire->write(value);
     _wire->endTransmission();
 }
 
-void WsenHids::readRegs(uint8_t reg, uint8_t* buf, size_t len) {
+void SteamiWsenHids::readRegs(uint8_t reg, uint8_t* buf, size_t len) {
     // Zero-init up front so a short bus read leaves defined bytes in buf
     // rather than whatever was on the stack — callers assume every slot
     // was written.
@@ -186,7 +187,7 @@ void WsenHids::readRegs(uint8_t reg, uint8_t* buf, size_t len) {
     }
 }
 
-void WsenHids::loadCalibration() {
+void SteamiWsenHids::loadCalibration() {
     uint8_t block[16];
     readRegs(WSEN_HIDS_REG_H0_RH_X2, block, 16);
 
@@ -220,11 +221,11 @@ void WsenHids::loadCalibration() {
     }
 }
 
-bool WsenHids::isPoweredOn() {
+bool SteamiWsenHids::isPoweredOn() {
     return (readReg(WSEN_HIDS_REG_CTRL1) & WSEN_HIDS_CTRL1_PD) != 0;
 }
 
-bool WsenHids::waitForDataReady(uint32_t timeoutMs) {
+bool SteamiWsenHids::waitForDataReady(uint32_t timeoutMs) {
     uint32_t start = millis();
     while (millis() - start < timeoutMs) {
         if (dataReady()) {
@@ -235,12 +236,12 @@ bool WsenHids::waitForDataReady(uint32_t timeoutMs) {
     return false;
 }
 
-float WsenHids::computeTemperature(int16_t raw) {
+float SteamiWsenHids::computeTemperature(int16_t raw) {
     float factory = _tempIntercept + _tempSlope * static_cast<float>(raw);
     return _tempUserSlope * factory + _tempUserIntercept + _tempOffset;
 }
 
-float WsenHids::computeHumidity(int16_t raw) {
+float SteamiWsenHids::computeHumidity(int16_t raw) {
     float value = _humIntercept + _humSlope * static_cast<float>(raw);
     if (value < 0.0f)
         return 0.0f;

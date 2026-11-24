@@ -9,11 +9,11 @@
 // driver. Open the serial monitor at 115200 baud to see your results.
 
 #include <Arduino.h>
-#include <MCP23009E.h>
+#include <SteamiMCP23009E.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-MCP23009E expander(internalI2C, RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+SteamiMCP23009E expander(internalI2C, RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
 
 void setup() {
     Serial.begin(115200);

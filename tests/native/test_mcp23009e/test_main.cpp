@@ -5,19 +5,19 @@
 
 #include <cstdio>
 
-#include "MCP23009E.h"
+#include "SteamiMCP23009E.h"
 #include "Wire.h"
 
 constexpr uint8_t RESET_PIN = 5;
 constexpr uint8_t ADDR = MCP23009_I2C_ADDR;
 
-MCP23009E* mcp = nullptr;
+SteamiMCP23009E* mcp = nullptr;
 
 void setUp(void) {
     Wire = TwoWire();
     gpioPinState().clear();
     gpioPinMode().clear();
-    mcp = new MCP23009E(Wire, RESET_PIN, ADDR);
+    mcp = new SteamiMCP23009E(Wire, RESET_PIN, ADDR);
 }
 
 void tearDown(void) {

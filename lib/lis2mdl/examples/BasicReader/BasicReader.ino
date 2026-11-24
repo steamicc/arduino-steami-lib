@@ -3,11 +3,11 @@
 // Read LIS2MDL magnetic field XYZ and temperature, then print to Serial.
 
 #include <Arduino.h>
-#include <LIS2MDL.h>
+#include <SteamiLIS2MDL.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-LIS2MDL magnetometer(internalI2C);
+SteamiLIS2MDL magnetometer(internalI2C);
 
 void setup() {
     Serial.begin(115200);

@@ -19,10 +19,10 @@ On the STeaMi board, the WSEN-PADS is routed to the **internal** I2C bus
 
 ```cpp
 #include <Wire.h>
-#include <WSEN_PADS.h>
+#include <SteamiWsenPads.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-WSEN_PADS sensor(internalI2C);
+SteamiWsenPads sensor(internalI2C);
 
 void setup() {
     Serial.begin(115200);
@@ -56,7 +56,7 @@ combined struct reading.
 
 | Method | Description |
 |--------|-------------|
-| `WSEN_PADS(TwoWire& wire = Wire, uint8_t address = WSEN_PADS_I2C_DEFAULT_ADDR)` | Construct. Defaults to the global `Wire` and address `0x5D`. |
+| `SteamiWsenPads(TwoWire& wire = Wire, uint8_t address = WSEN_PADS_I2C_DEFAULT_ADDR)` | Construct. Defaults to the global `Wire` and address `0x5D`. |
 | `bool begin()` | Wait for boot, probe `DEVICE_ID`, apply default config (BDU + auto-increment, ODR=power-down). Returns `false` if the sensor is not detected. |
 | `uint8_t deviceId()` | Reads `DEVICE_ID` (always `0xB3`). |
 | `void softReset()` / `void reboot()` | Software reset or memory reboot via `CTRL2.SWRESET` / `CTRL2.BOOT`. Both re-apply the default config afterwards. |
@@ -121,7 +121,7 @@ make flash-wsen-pads/altitude
 
 ## Register constants
 
-`WSEN_PADS_const.h` exports register addresses (`REG_*`), bit masks
+`SteamiWsenPads_const.h` exports register addresses (`REG_*`), bit masks
 (`CTRL1_*`, `CTRL2_*`, `STATUS_*`, `INT_SOURCE_*`), ODR values (`ODR_*`),
 and conversion constants (`PRESSURE_HPA_PER_DIGIT`,
 `TEMPERATURE_C_PER_DIGIT`, etc.) so applications can poke the part

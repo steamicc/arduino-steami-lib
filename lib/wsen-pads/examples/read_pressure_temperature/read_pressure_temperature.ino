@@ -6,11 +6,11 @@
 // check.
 
 #include <Arduino.h>
-#include <WSEN_PADS.h>
+#include <SteamiWsenPads.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-WSEN_PADS sensor(internalI2C);
+SteamiWsenPads sensor(internalI2C);
 
 void setup() {
     Serial.begin(115200);

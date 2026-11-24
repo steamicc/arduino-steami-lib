@@ -6,7 +6,7 @@
 # Datatypes (KEYWORD1)
 #######################################
 
-BQ27441	KEYWORD1
+SteamiBQ27441	KEYWORD1
 CurrentMeasureType	KEYWORD1
 CapacityMeasureType	KEYWORD1
 SocMeasureType	KEYWORD1

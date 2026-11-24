@@ -11,13 +11,13 @@
  */
 
 #include <Arduino.h>
+#include <SteamiWsenHids.h>
 #include <Wire.h>
-#include <WsenHids.h>
 #include <math.h>
 #include <unity.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-WsenHids sensor(internalI2C);
+SteamiWsenHids sensor(internalI2C);
 
 static constexpr int SAMPLE_COUNT = 10;
 static constexpr float MIN_TEMP = 0.0f;

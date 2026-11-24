@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include "SSD1327.h"
+#include "SteamiSSD1327.h"
 
 #include <math.h>
 
@@ -353,15 +353,15 @@ void SSD1327_SPI::writeData(const uint8_t* data, size_t len) {
 }
 
 #ifdef ARDUINO
-SPIClass& WS_OLED_128X128_STEAMI::internalSpi() {
+SPIClass& SteamiSSD1327::internalSpi() {
     static SPIClass spi(SPI_INT_MOSI, SPI_INT_MISO, SPI_INT_SCK);
     return spi;
 }
 
-WS_OLED_128X128_STEAMI::WS_OLED_128X128_STEAMI()
+SteamiSSD1327::SteamiSSD1327()
     : SSD1327_SPI(128, 128, internalSpi(), SPI_INT_MISO, RST_DISPLAY, CS_DISPLAY) {}
 
-bool WS_OLED_128X128_STEAMI::begin() {
+bool SteamiSSD1327::begin() {
     internalSpi().begin();
     return SSD1327::begin();
 }

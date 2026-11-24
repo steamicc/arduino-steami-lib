@@ -8,13 +8,13 @@
 // drive: on V1c, read the heading on the serial monitor (115200 baud).
 
 #include <Arduino.h>
-#include <LIS2MDL.h>
-#include <SSD1327.h>
+#include <SteamiLIS2MDL.h>
+#include <SteamiSSD1327.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-LIS2MDL magnetometer(internalI2C);
-WS_OLED_128X128_STEAMI display;
+SteamiLIS2MDL magnetometer(internalI2C);
+SteamiSSD1327 display;
 
 static bool hasDisplay = false;
 

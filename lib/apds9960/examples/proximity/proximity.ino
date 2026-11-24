@@ -4,11 +4,11 @@
 //
 // Open the serial monitor at 115200 baud.
 
-#include <APDS9960.h>
+#include <SteamiAPDS9960.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-APDS9960 sensor(internalI2C);
+SteamiAPDS9960 sensor(internalI2C);
 
 static const uint8_t NEAR_THRESHOLD = 80;
 static const uint32_t PRINT_PERIOD_MS = 100;
@@ -33,9 +33,9 @@ void setup() {
     }
 
     // Conservative settings to avoid saturating the proximity channel.
-    sensor.setLedDrive(APDS9960::LedDrive::MA_25);
-    sensor.setLedBoost(APDS9960::LedBoost::PERCENT_100);
-    sensor.setProximityGain(APDS9960::ProximityGain::X1);
+    sensor.setLedDrive(SteamiAPDS9960::LedDrive::MA_25);
+    sensor.setLedBoost(SteamiAPDS9960::LedBoost::PERCENT_100);
+    sensor.setProximityGain(SteamiAPDS9960::ProximityGain::X1);
     sensor.enableProximitySensor(false);
 
     Serial.println("=======================");

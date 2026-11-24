@@ -13,11 +13,11 @@
 // serial monitor at 115200 baud.
 
 #include <Arduino.h>
+#include <SteamiWsenHids.h>
 #include <Wire.h>
-#include <WsenHids.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-WsenHids sensor(internalI2C);
+SteamiWsenHids sensor(internalI2C);
 
 const char* classifyComfort(float temperature, float humidity) {
     if (temperature < 18.0f) {

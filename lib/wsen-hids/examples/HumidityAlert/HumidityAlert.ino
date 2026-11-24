@@ -8,11 +8,11 @@
 // driver. Open the serial monitor at 115200 baud to see the live readings.
 
 #include <Arduino.h>
+#include <SteamiWsenHids.h>
 #include <Wire.h>
-#include <WsenHids.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-WsenHids sensor(internalI2C);
+SteamiWsenHids sensor(internalI2C);
 
 constexpr float HUMIDITY_THRESHOLD = 70.0f;  // %RH — mold risk above this
 

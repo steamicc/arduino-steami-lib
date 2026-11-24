@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-#include <ISM330DL.h>
+#include <SteamiISM330DL.h>
 #include <Wire.h>
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-ISM330DL imu(internalI2C);
+SteamiISM330DL imu(internalI2C);
 
 void setup() {
     Serial.begin(115200);
@@ -26,8 +26,8 @@ void setup() {
 }
 
 void loop() {
-    ISM330DL::Vector3 accel;
-    ISM330DL::Vector3 gyro;
+    SteamiISM330DL::Vector3 accel;
+    SteamiISM330DL::Vector3 gyro;
     float temperature;
 
     if (imu.accelerationG(accel) && imu.gyroscopeDps(gyro) && imu.temperature(temperature)) {

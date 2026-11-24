@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <Arduino.h>
-#include <VL53L1X.h>
+#include <SteamiVL53L1X.h>
 #include <Wire.h>
 #include <unity.h>
 
 #include "driver_checks.h"
 
 TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-VL53L1X sensor(internalI2C);
+SteamiVL53L1X sensor(internalI2C);
 
 void setUp(void) {
     sensor.begin();
@@ -25,7 +25,7 @@ void test_vl53l1x_device_id(void) {
 }
 
 void test_vl53l1x_read_plausible_distance(void) {
-    check_read_plausible(sensor, &VL53L1X::distanceMm, (uint16_t)1, (uint16_t)4000);
+    check_read_plausible(sensor, &SteamiVL53L1X::distanceMm, (uint16_t)1, (uint16_t)4000);
 }
 
 void setup() {
