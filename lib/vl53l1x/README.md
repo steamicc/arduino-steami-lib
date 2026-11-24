@@ -14,15 +14,20 @@ starting ranging operations, and reading distance measurements over I2C.
 
 ## Quick start
 
+On the STeaMi board, the VL53L1X is routed to the **internal** I2C bus
+(pins `I2C_INT_SDA` / `I2C_INT_SCL` from the variant, not the default
+global `Wire`). Spin up a dedicated `TwoWire` and hand it to the driver:
+
 ```cpp
 #include <Wire.h>
 #include <VL53L1X.h>
 
-VL53L1X sensor;
+TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
+VL53L1X sensor(internalI2C);
 
 void setup() {
     Serial.begin(115200);
-    Wire.begin();
+    internalI2C.begin();
 
     if (!sensor.begin()) {
         Serial.println("VL53L1X not detected");
@@ -45,43 +50,12 @@ void loop() {
 }
 ```
 
-See [examples/read_distance/](examples/read_distance/) for the complete
-example sketch.
-
 ## Examples
 
-| Example | What it does |
-|---------|--------------|
-| [`read_distance`](examples/read_distance/) | Continuously reads and prints the measured distance in millimeters. |
-| [`distance_alarm`](examples/distance_alarm/) | Triggers an alert when an object comes closer than a configurable threshold. |
-| [`power_cycle`](examples/power_cycle/) | Demonstrates sensor power control using `powerOff()` and `powerOn()`. |
-| [`continuous_ranging`](examples/continuous_ranging/) | Runs continuous ranging and prints measurements as soon as data becomes available. |
-
-### Building an example
-
-List available examples:
-
-```bash
-make list-examples
-```
-
-Flash an example:
-
-```bash
-make flash-vl53l1x/read_distance
-```
-
-Capture boot logs reliably:
-
-```bash
-make capture-vl53l1x/read_distance
-```
-
-Longer capture session:
-
-```bash
-make capture-vl53l1x/read_distance DURATION=30
-```
+No example sketch has been merged for this driver yet; practical examples
+are tracked in [#194](https://github.com/steamicc/arduino-steami-lib/issues/194).
+Once they land, `make list-examples DRIVER=vl53l1x` lists the ready-to-run
+`flash-vl53l1x/<example>` targets.
 
 ## API
 
