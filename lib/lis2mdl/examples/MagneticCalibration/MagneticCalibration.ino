@@ -4,11 +4,10 @@
 // The computed offsets/scales are printed and can be stored in steami_config later.
 
 #include <Arduino.h>
+#include <SteamiBoard.h>
 #include <SteamiLIS2MDL.h>
-#include <Wire.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiLIS2MDL magnetometer(internalI2C);
+SteamiLIS2MDL magnetometer(Steami.wire());  // the board's internal I2C bus
 
 static void printCalibration() {
     Serial.println("Calibration values:");
@@ -48,8 +47,6 @@ void setup() {
     Serial.begin(115200);
     while (!Serial && millis() < 4000) {
     }
-
-    internalI2C.begin();
 
     if (!magnetometer.begin()) {
         Serial.println("LIS2MDL not detected. Check the internal I2C bus.");
