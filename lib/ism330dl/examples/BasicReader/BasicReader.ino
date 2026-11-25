@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <SteamiBoard.h>
 #include <SteamiISM330DL.h>
-#include <Wire.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiISM330DL imu(internalI2C);
+SteamiISM330DL imu(Steami.wire());  // the board's internal I2C bus
 
 void setup() {
     Serial.begin(115200);
@@ -12,8 +11,6 @@ void setup() {
         // Wait up to 2 s for a connected monitor — on the STeaMi USB CDC
         // !Serial stays true until the host enumerates.
     }
-
-    internalI2C.begin();
 
     if (!imu.begin()) {
         Serial.println("ISM330DL not detected.");
