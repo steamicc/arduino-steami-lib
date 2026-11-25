@@ -442,6 +442,7 @@ class TestDisplay : public SteamiDisplay {
    public:
     explicit TestDisplay(SteamiBoard& b) : SteamiDisplay(b, "SteamiTestDisplay") {}
     using SteamiDisplay::strokeCircle;
+    using SteamiDisplay::glyph;
     using SteamiDisplay::strokeLine;
     using SteamiDisplay::textSmall;
     using SteamiDisplay::textSmallWidth;
@@ -1412,6 +1413,183 @@ static void test_extreme_arcs(void) {  // Review Focus 1; UBSan under native_asa
     forEachPanel(extremeArcsCheck);
 }
 
+// ---- Text ----
+
+/// The bounding box of the lit pixels; false when nothing is lit.
+struct Box {
+    int16_t x0, y0, x1, y1;
+};
+static bool litBox(const SteamiMemoryBackend& mem, int16_t w, int16_t h, Box& box) {
+    box = {w, h, -1, -1};
+    for (int16_t y = 0; y < h; y++) {
+        for (int16_t x = 0; x < w; x++) {
+            if (mem.lit(x, y)) {
+                box.x0 = x < box.x0 ? x : box.x0;
+                box.y0 = y < box.y0 ? y : box.y0;
+                box.x1 = x > box.x1 ? x : box.x1;
+                box.y1 = y > box.y1 ? y : box.y1;
+            }
+        }
+    }
+    return box.x1 >= 0;
+}
+
+static void glyphSizeCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    for (uint8_t s = 1; s <= 4; s++) {
+        d.clear();
+        mem.clearCounters();
+        d.text("A", 10, 10, kInk, s);
+        Box box;
+        TEST_ASSERT_TRUE(litBox(mem, mem.width(), mem.height(), box));
+        TEST_ASSERT_EQUAL_INT16(10 + s, box.x0);
+        TEST_ASSERT_EQUAL_INT16(10 + 7 * s - 1, box.x1);
+        TEST_ASSERT_EQUAL_INT16(10, box.y0);
+        TEST_ASSERT_EQUAL_INT16(10 + 7 * s - 1, box.y1);
+        TEST_ASSERT_EQUAL_size_t(28u * s * s, mem.litCount());
+        TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+    }
+}
+static void test_glyph_size_at_scales_1_to_4(void) {
+    forEachPanel(glyphSizeCheck);
+}
+
+static void test_text_width_counts_glyphs(void) {
+    TestDisplay d(board);
+    TEST_ASSERT_EQUAL_INT16(16, d.textWidth("\xC2\xB0" "C"));
+    TEST_ASSERT_EQUAL_INT16(32, d.textWidth("\xC2\xB0" "C", 2));
+    TEST_ASSERT_EQUAL_INT16(88, d.textWidth("Temp\xC3\xA9rature"));
+    TEST_ASSERT_EQUAL_INT16(0, d.textWidth(""));
+    TEST_ASSERT_EQUAL_INT16(0, d.textWidth(nullptr));
+    const std::string many(5000, 'W');
+    TEST_ASSERT_EQUAL_INT16(32767, d.textWidth(many.c_str(), 255));
+}
+
+static void expectSameText(SteamiMemoryBackend& mem, TestDisplay& d, const char* a, const char* b) {
+    d.clear();
+    d.text(a, 10, 10, kInk);
+    const std::vector<uint16_t> first = snapshot(mem);
+    d.clear();
+    d.text(b, 10, 10, kInk);
+    TEST_ASSERT_TRUE(first == snapshot(mem));
+}
+
+static void accentsCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    expectSameText(mem, d, "\xC3\xA9", "e");
+    expectSameText(mem, d, "\xC3\x89", "E");
+    expectSameText(mem, d, "\xC5\xB8", "Y");
+    d.clear();
+    d.text("\xC2\xB0", 10, 10, kInk);
+    Box box;
+    TEST_ASSERT_TRUE(litBox(mem, mem.width(), mem.height(), box));
+    TEST_ASSERT_EQUAL_INT16(11, box.x0);
+    TEST_ASSERT_EQUAL_INT16(14, box.x1);
+    TEST_ASSERT_EQUAL_INT16(10, box.y0);
+    TEST_ASSERT_EQUAL_INT16(13, box.y1);
+}
+static void test_accents_fold_when_drawn(void) {
+    forEachPanel(accentsCheck);
+}
+
+static void invalidUtf8Check(SteamiMemoryBackend& mem, TestDisplay& d) {
+    expectSameText(mem, d, "\xFF", "?");
+    expectSameText(mem, d, "A\xC3", "A?");
+    expectSameText(mem, d, "\xE2\x82\xAC", "?");
+    TEST_ASSERT_EQUAL_INT16(16, d.textWidth("A\xC3"));
+}
+static void test_text_invalid_utf8_draws_question_marks(void) {  // Review Focus 2
+    forEachPanel(invalidUtf8Check);
+}
+
+static void textClippingCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    const int16_t h = mem.height();
+    d.clear();
+    d.text("Hello", 10, h - 3, kInk);
+    Box box;
+    TEST_ASSERT_TRUE(litBox(mem, mem.width(), h, box));
+    TEST_ASSERT_EQUAL_INT16(h - 3, box.y0);
+    TEST_ASSERT_EQUAL_INT16(h - 1, box.y1);
+    d.clear();
+    d.text("Hello", -20, 10, kInk);
+    TEST_ASSERT_TRUE(mem.litCount() > 0);
+    d.clear();
+    d.text("WWWW", -100, -100, kInk, 255);
+    d.text("X", 32767, 32767, kInk);
+    d.text("X", -32768, -32768, kInk, 255);
+    d.text("Hello", 32000, 10, kInk, 255);
+}
+static void test_text_clipping(void) {
+    forEachPanel(textClippingCheck);
+}
+
+static void nothingCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    d.clear();
+    mem.clearCounters();
+    d.text(nullptr, 10, 10);
+    d.text("", 10, 10);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.fillRectCalls());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+}
+static void test_text_nullptr_and_empty_draw_nothing(void) {
+    forEachPanel(nothingCheck);
+}
+
+static void scaleZeroCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    d.clear();
+    d.text("AB", 10, 10, kInk, 1);
+    const std::vector<uint16_t> one = snapshot(mem);
+    d.clear();
+    d.text("AB", 10, 10, kInk, 0);
+    TEST_ASSERT_TRUE(one == snapshot(mem));
+    TEST_ASSERT_EQUAL_INT16(16, d.textWidth("AB", 0));
+    d.clear();
+    d.textSmall("AB", 10, 10, kInk, 1);
+    const std::vector<uint16_t> small = snapshot(mem);
+    d.clear();
+    d.textSmall("AB", 10, 10, kInk, 0);
+    TEST_ASSERT_TRUE(small == snapshot(mem));
+    TEST_ASSERT_EQUAL_INT16(12, d.textSmallWidth("AB", 0));
+}
+static void test_text_scale_zero_is_one(void) {  // Review Focus 5
+    forEachPanel(scaleZeroCheck);
+}
+
+static void smallTextCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    d.clear();
+    d.textSmall("A", 10, 10, kInk);
+    Box box;
+    TEST_ASSERT_TRUE(litBox(mem, mem.width(), mem.height(), box));
+    TEST_ASSERT_EQUAL_INT16(10, box.x0);
+    TEST_ASSERT_EQUAL_INT16(14, box.x1);
+    TEST_ASSERT_EQUAL_INT16(10, box.y0);
+    TEST_ASSERT_EQUAL_INT16(16, box.y1);
+    TEST_ASSERT_EQUAL_INT16(18, d.textSmallWidth("950"));
+    TEST_ASSERT_EQUAL_INT16(36, d.textSmallWidth("950", 2));
+    TEST_ASSERT_EQUAL_INT16(0, d.textSmallWidth(nullptr));
+    d.clear();
+    mem.clearCounters();
+    d.textSmall(nullptr, 10, 10, kInk);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.fillRectCalls());
+}
+static void test_small_text(void) {
+    forEachPanel(smallTextCheck);
+}
+
+static void glyphWindowCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    d.clear();
+    d.glyph(steamiGlyph8x8('.'), 2, 4, 8, 10, 10, kInk, 1);
+    TEST_ASSERT_EQUAL_size_t(4, mem.litCount());
+    for (int16_t x = 11; x <= 12; x++) {
+        for (int16_t y = 15; y <= 16; y++) {
+            TEST_ASSERT_TRUE(mem.lit(x, y));
+        }
+    }
+}
+static void test_glyph_window(void) {
+    forEachPanel(glyphWindowCheck);
+}
+
 static void test_protected_name_in_messages(void) {
     TestDisplay d(board);
     TEST_ASSERT_FALSE(d.begin());
@@ -1479,6 +1657,15 @@ int main(int, char**) {
     RUN_TEST(test_arc_angles_normalised);
     RUN_TEST(test_stroke_circle_is_full_arc);
     RUN_TEST(test_extreme_arcs);
+    RUN_TEST(test_glyph_size_at_scales_1_to_4);
+    RUN_TEST(test_text_width_counts_glyphs);
+    RUN_TEST(test_accents_fold_when_drawn);
+    RUN_TEST(test_text_invalid_utf8_draws_question_marks);
+    RUN_TEST(test_text_clipping);
+    RUN_TEST(test_text_nullptr_and_empty_draw_nothing);
+    RUN_TEST(test_text_scale_zero_is_one);
+    RUN_TEST(test_small_text);
+    RUN_TEST(test_glyph_window);
     RUN_TEST(test_protected_name_in_messages);
     return UNITY_END();
 }

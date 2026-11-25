@@ -2,6 +2,7 @@
 
 #include "SteamiDisplay.h"
 
+#include "SteamiFont.h"
 #include "SteamiTrig.h"
 
 namespace {
@@ -65,6 +66,12 @@ struct Sector {
 
 Sector sectorFrom(int32_t s, int32_t e) {
     return {steamiSinQ14(s), -steamiCosQ14(s), steamiSinQ14(e), -steamiCosQ14(e)};
+}
+
+/// glyphs * advance * scale, saturating at 32767; scale 0 counts as 1.
+int16_t textExtent(const char* s, uint8_t advance, uint8_t scale) {
+    const uint64_t w = static_cast<uint64_t>(steamiGlyphCount(s)) * advance * (scale == 0 ? 1 : scale);
+    return static_cast<int16_t>(w > 32767 ? 32767 : w);
 }
 
 }  // namespace
@@ -470,4 +477,67 @@ void SteamiDisplay::arc(int16_t cx, int16_t cy, int16_t r, int16_t startDeg, int
 
 void SteamiDisplay::strokeCircle(int16_t cx, int16_t cy, int16_t r, uint8_t w, SteamiRgb c) {
     arc(cx, cy, r, 0, 360, c, w);
+}
+
+void SteamiDisplay::glyph(const uint8_t* columns, uint8_t firstColumn, uint8_t columnCount,
+                          uint8_t rows, int32_t x, int32_t y, SteamiRgb c, uint8_t scale) {
+    SteamiDisplayBackend* b = ready();
+    if (b == nullptr || columns == nullptr) {
+        return;
+    }
+    const int32_t s = scale == 0 ? 1 : scale;
+    const uint16_t v = c.rgb565();
+    for (uint8_t row = 0; row < rows; row++) {
+        uint8_t col = 0;
+        while (col < columnCount) {
+            if (((columns[firstColumn + col] >> row) & 1) == 0) {
+                col++;
+                continue;
+            }
+            uint8_t end = col;
+            while (end < columnCount && ((columns[firstColumn + end] >> row) & 1) != 0) {
+                end++;
+            }
+            span(b, x + col * s, y + row * s, (end - col) * s, s, v);
+            col = end;
+        }
+    }
+}
+
+void SteamiDisplay::drawText(const char* s, int16_t x, int16_t y, SteamiRgb c, uint8_t scale,
+                             bool small) {
+    SteamiDisplayBackend* b = ready();
+    if (b == nullptr || s == nullptr) {
+        return;
+    }
+    const int32_t sc = scale == 0 ? 1 : scale;
+    const int32_t advance = (small ? 6 : 8) * sc;
+    int32_t px = x;
+    for (uint8_t code = steamiNextGlyph(s); code != 0; code = steamiNextGlyph(s)) {
+        if (px >= b->width()) {
+            break;  // every further glyph is right of the panel
+        }
+        if (small) {
+            glyph(steamiGlyph5x7(code), 0, 5, 7, px, y, c, static_cast<uint8_t>(sc));
+        } else {
+            glyph(steamiGlyph8x8(code), 0, 8, 8, px, y, c, static_cast<uint8_t>(sc));
+        }
+        px += advance;
+    }
+}
+
+void SteamiDisplay::text(const char* s, int16_t x, int16_t y, SteamiRgb c, uint8_t scale) {
+    drawText(s, x, y, c, scale, false);
+}
+
+void SteamiDisplay::textSmall(const char* s, int16_t x, int16_t y, SteamiRgb c, uint8_t scale) {
+    drawText(s, x, y, c, scale, true);
+}
+
+int16_t SteamiDisplay::textWidth(const char* s, uint8_t scale) const {
+    return textExtent(s, 8, scale);
+}
+
+int16_t SteamiDisplay::textSmallWidth(const char* s, uint8_t scale) const {
+    return textExtent(s, 6, scale);
 }

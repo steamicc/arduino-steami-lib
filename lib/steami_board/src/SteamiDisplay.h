@@ -77,6 +77,12 @@ class SteamiDisplay {
 
     void textSmall(const char* s, int16_t x, int16_t y, SteamiRgb c, uint8_t scale = 1);  // 5x7
     int16_t textSmallWidth(const char* s, uint8_t scale = 1) const;
+
+    /// The column window [firstColumn, firstColumn + columnCount) of a glyph stored by columns
+    /// (bit 0 = top row, `rows` rows), its left edge at x; each horizontal run of set bits of a
+    /// row is one span(). Scale 0 counts as 1. 4a's value text uses (g, 2, 4, 8) for '.' and ':'.
+    void glyph(const uint8_t* columns, uint8_t firstColumn, uint8_t columnCount, uint8_t rows,
+               int32_t x, int32_t y, SteamiRgb c, uint8_t scale);
     void strokeLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint8_t w, SteamiRgb c);
     void strokeCircle(int16_t cx, int16_t cy, int16_t r, uint8_t w, SteamiRgb c);
 
@@ -95,6 +101,10 @@ class SteamiDisplay {
     /// extend right and down) through span(), or dot() when w is 1.
     void walk(SteamiDisplayBackend* b, int32_t x1, int32_t y1, int32_t x2, int32_t y2, uint8_t w,
               uint16_t c);
+
+    /// The one glyph loop of text() and textSmall(): 8x8 glyphs advancing 8 columns, or 5x7 glyphs
+    /// advancing 6.
+    void drawText(const char* s, int16_t x, int16_t y, SteamiRgb c, uint8_t scale, bool small);
 
     SteamiBoard* _board;
     const char* _who;
