@@ -14,9 +14,26 @@ constexpr SteamiFunctionInfo kInfo = {SteamiFunction::ACCELEROMETER, "SteamiAcce
 
 SteamiAccelerometer::SteamiAccelerometer(SteamiBoard& board) : _handle(board, kInfo) {}
 
+bool SteamiAccelerometer::begin() {
+    const bool wasStarted = _handle.status() != SteamiStatus::NOT_STARTED;
+    if (!_handle.begin()) {
+        return false;
+    }
+    if (!wasStarted) {
+        SteamiISM330DL* imu = _handle.board().ism330dl();
+        if (imu != nullptr) {
+            imu->configureAccel(SteamiISM330DL::AccelOdr::HZ_104, SteamiISM330DL::AccelScale::G_8);
+        }
+    }
+    return true;
+}
+
 SteamiVector SteamiAccelerometer::read() {
     SteamiVector out = {NAN, NAN, NAN};
-    if (!_handle.ready() || _handle.chipId() != SteamiChip::ISM330DL) {
+    if (_handle.status() == SteamiStatus::NOT_STARTED) {
+        begin();
+    }
+    if (!_handle.isAvailable() || _handle.chipId() != SteamiChip::ISM330DL) {
         return out;
     }
     SteamiISM330DL* imu = _handle.board().ism330dl();

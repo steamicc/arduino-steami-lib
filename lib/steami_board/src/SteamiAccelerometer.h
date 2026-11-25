@@ -12,8 +12,10 @@ class SteamiAccelerometer {
     /// Stores the address of the board only; touches no hardware.
     explicit SteamiAccelerometer(SteamiBoard& board = Steami);
 
-    /// False, with one message, when the accelerometer does not answer. Idempotent.
-    bool begin() { return _handle.begin(); }
+    /// False, with one message, when the accelerometer does not answer. Idempotent. On success
+    /// it sets the +-8 g range at 104 Hz on the shared ISM330DL, so isShaken() can see more than
+    /// 2 g: code that uses `Steami.ism330dl()` sees that range too.
+    bool begin();
     bool isAvailable() const { return _handle.isAvailable(); }
     SteamiStatus status() const { return _handle.status(); }
     const char* error() const { return _handle.error(); }

@@ -549,7 +549,7 @@ static void attachImu(void) {
     Wire.attachDevice(ISM330DL_DEFAULT_ADDRESS, &imu);
 }
 
-static constexpr int16_t kOneG = 16393;  // +-2 g: 0.061 mg per LSB
+static constexpr int16_t kOneG = 4098;  // +-8 g (set by SteamiAccelerometer): 0.244 mg per LSB
 
 static void test_accelerometer_reads_g(void) {
     steamiFakeBme280(Wire);
@@ -566,15 +566,24 @@ static void test_accelerometer_reads_g(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, -1.0f, v.z);
 }
 
+static void test_accelerometer_begin_sets_8g_range(void) {
+    steamiFakeBme280(Wire);
+    attachImu();
+    SteamiGyroscope gyroscope(board);
+    TEST_ASSERT_TRUE(gyroscope.begin());
+    TEST_ASSERT_EQUAL_UINT8(0, (imu.registers[ISM330DL_REG_CTRL1_XL] >> 2) & 0x03);  // +-2 g
+    SteamiAccelerometer accelerometer(board);
+    TEST_ASSERT_TRUE(accelerometer.begin());
+    TEST_ASSERT_EQUAL_UINT8(3, (imu.registers[ISM330DL_REG_CTRL1_XL] >> 2) & 0x03);  // +-8 g
+    TEST_ASSERT_EQUAL_UINT8(4, imu.registers[ISM330DL_REG_CTRL1_XL] >> 4);           // 104 Hz
+}
+
 static void test_accelerometer_is_shaken(void) {
     steamiFakeBme280(Wire);
     attachImu();
     SteamiAccelerometer accelerometer(board);
     TEST_ASSERT_TRUE(accelerometer.begin());
-    // +-2 g saturates below 2 g, so widen the range to +-8 g (0.244 mg per LSB): 2.5 g.
-    TEST_ASSERT_TRUE(board.ism330dl()->configureAccel(SteamiISM330DL::AccelOdr::HZ_104,
-                                                      SteamiISM330DL::AccelScale::G_8));
-    imu.setAccelRaw(static_cast<int16_t>(kOneG / 4 * 2.5f), 0, 0);
+    imu.setAccelRaw(10245, 0, 0);  // 2.5 g at +-8 g
     TEST_ASSERT_TRUE(accelerometer.isShaken());
     TEST_ASSERT_FALSE(accelerometer.isShaken(3.0f));
 }
@@ -680,6 +689,7 @@ int main(void) {
     RUN_TEST(test_battery_discharging);
     RUN_TEST(test_battery_absent);
     RUN_TEST(test_accelerometer_reads_g);
+    RUN_TEST(test_accelerometer_begin_sets_8g_range);
     RUN_TEST(test_accelerometer_is_shaken);
     RUN_TEST(test_accelerometer_and_gyroscope_share_chip);
     RUN_TEST(test_gyroscope_reads_dps);
