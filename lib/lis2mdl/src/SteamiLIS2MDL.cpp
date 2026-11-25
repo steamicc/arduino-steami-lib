@@ -592,7 +592,11 @@ void SteamiLIS2MDL::setHeadingFilter(float alpha) {
 
 float SteamiLIS2MDL::normalizeDeg(float a) {
     a = fmod(a, 360.0f);
-    return a < 0.0f ? a + 360.0f : a;
+    if (a < 0.0f) {
+        a += 360.0f;
+    }
+    // A tiny negative angle plus 360 rounds to 360 in float: that is north, 0.
+    return a >= 360.0f ? 0.0f : a;
 }
 
 float SteamiLIS2MDL::applyHeadingOffsets(float angleDeg) {

@@ -353,6 +353,16 @@ void test_normalize_deg_wraps_negative_angles(void) {
     sensor.setHeadingOffset(0.0f);
 }
 
+void test_tiny_negative_angle_never_gives_360(void) {
+    sensor.begin();
+    sensor.setHeadingOffset(0.0f);
+    sensor.setDeclination(0.0f);
+    sensor.setHeadingFilter(0.0f);
+    // atan2(-1e-9, 1) is a tiny negative angle: + 360 rounds to 360.0f in float.
+    const float heading = sensor.headingFromVectors(1e-9f, 1.0f, 0.0f, false);
+    TEST_ASSERT_TRUE(heading >= 0.0f && heading < 360.0f);
+}
+
 void test_heading_convention_matches_board(void) {
     sensor.begin();
     sensor.setHeadingOffset(0.0f);
@@ -450,6 +460,7 @@ int main(void) {
     RUN_TEST(test_heading_flat_only_returns_angle_in_0_360);
     RUN_TEST(test_heading_filter_smooths_angle);
     RUN_TEST(test_normalize_deg_wraps_negative_angles);
+    RUN_TEST(test_tiny_negative_angle_never_gives_360);
     RUN_TEST(test_direction_label_returns_correct_cardinal);
     RUN_TEST(test_heading_convention_matches_board);
     RUN_TEST(test_direction_sectors_are_centred);
