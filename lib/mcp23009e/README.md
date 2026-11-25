@@ -13,18 +13,16 @@ STeaMi board.
 ## Quick start
 
 On the STeaMi board, the MCP23009E is routed to the **internal** I2C bus.
-Spin up a dedicated `TwoWire` and hand it to the driver:
+The board owns that bus: build the driver on `Steami.wire()`, which starts it on first use:
 
 ```cpp
-#include <Wire.h>
+#include <SteamiBoard.h>
 #include <SteamiMCP23009E.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiMCP23009E expander(internalI2C, RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
 
 void setup() {
     Serial.begin(115200);
-    internalI2C.begin();
 
     if (!expander.begin()) {
         Serial.println("MCP23009E not detected");

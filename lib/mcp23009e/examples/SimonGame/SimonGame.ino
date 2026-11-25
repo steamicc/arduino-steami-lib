@@ -4,19 +4,18 @@
 // Watch the LED sequence, then replay it on the D-PAD. The sequence grows
 // by one direction every round.
 //
-// The MCP23009E sits on the STeaMi internal I2C bus, so spin up a
-// dedicated TwoWire pointed at the variant pin macros and hand it to the
-// driver. Open the serial monitor at 115200 baud to see your score.
+// The MCP23009E sits on the STeaMi internal I2C bus; the driver uses the
+// board's bus, Steami.wire().
+// Open the serial monitor at 115200 baud to see your score.
 
 #include <Arduino.h>
+#include <SteamiBoard.h>
 #include <SteamiMCP23009E.h>
-#include <Wire.h>
 
 #include <map>
 #include <vector>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiMCP23009E expander(internalI2C, RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
 
 static const std::map<uint8_t, String> kButtons = {
     {MCP23009_BTN_UP, "UP"},
@@ -84,7 +83,6 @@ void setup() {
     while (!Serial && millis() < 2000) {
     }
 
-    internalI2C.begin();
     expander.begin();
 
     for (const auto& [pinNumber, name] : kButtons) {

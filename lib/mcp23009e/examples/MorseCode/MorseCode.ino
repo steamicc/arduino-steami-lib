@@ -6,8 +6,8 @@
 // Press DOWN to decode the current Morse sequence.
 
 #include <Arduino.h>
+#include <SteamiBoard.h>
 #include <SteamiMCP23009E.h>
-#include <Wire.h>
 
 #include <map>
 
@@ -27,8 +27,7 @@ String code = "";
 bool upWasPressed = false;
 uint32_t upPressStart = 0;
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiMCP23009E expander(internalI2C, RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
 
 void decodeMorse() {
     if (code == "") {
@@ -54,7 +53,6 @@ void setup() {
         // Wait up to 2 s for the serial monitor.
     }
 
-    internalI2C.begin();
     expander.begin();
 
     expander.setup(MCP23009_BTN_UP, MCP23009_DIR_INPUT, MCP23009_PULLUP);
