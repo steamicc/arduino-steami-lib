@@ -4,17 +4,15 @@
 // and print it to the serial monitor (115200 baud). The sketch only reads:
 // nothing is written to the board.
 //
-// The DAPLink bridge sits on the STeaMi internal I2C bus, so spin up a
-// dedicated TwoWire pointed at the variant pin macros and hand it to the
-// bridge driver.
+// The DAPLink bridge sits on the STeaMi internal I2C bus; the bridge driver
+// uses the board's bus, Steami.wire().
 
 #include <Arduino.h>
+#include <SteamiBoard.h>
 #include <SteamiConfig.h>
 #include <SteamiDaplinkBridge.h>
-#include <Wire.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiDaplinkBridge bridge(internalI2C);
+SteamiDaplinkBridge bridge(Steami.wire());  // the board's internal I2C bus
 SteamiConfig config(bridge);
 
 const char* const TEMPERATURE_SENSORS[] = {
@@ -56,7 +54,6 @@ void setup() {
         // Wait up to 2 s for the host USB CDC to enumerate so the
         // diagnostics below aren't silently dropped.
     }
-    internalI2C.begin();
 
     if (!bridge.begin()) {
         Serial.println("DAPLink bridge not detected.");
