@@ -2,6 +2,7 @@
 
 Status: approved by the maintainer on 2026-11-25 (decisions in section 9). The library
 version stays 0.x.
+Sections 5.7 and 5.8 are superseded by `2026-11-25-steami-display-design.md`.
 Repository: `steamicc/arduino-steami-lib`, base `main` at v0.30.0: #234 GC9A01, #235 BME280, #239 hardened
 `hasConfigZone()`, #241 STM32duino 3.1.0, #167 `SteamiDaplinkBridge`/`SteamiDaplinkFlash` and #242 Steami
 prefix rename are all merged. Each sub-project branches from `main`.
