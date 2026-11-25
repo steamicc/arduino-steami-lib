@@ -13,11 +13,14 @@
 #include "SteamiAccelerometer.h"
 #include "SteamiBattery.h"
 #include "SteamiBoard.h"
+#include "SteamiColor.h"
 #include "SteamiCompass.h"
 #include "SteamiDistance.h"
+#include "SteamiGesture.h"
 #include "SteamiGyroscope.h"
 #include "SteamiHandle.h"
 #include "SteamiHumidity.h"
+#include "SteamiLight.h"
 #include "SteamiMagnetometer.h"
 #include "SteamiPressure.h"
 #include "SteamiTemperature.h"
@@ -745,6 +748,128 @@ static void test_compass_absent(void) {
     TEST_ASSERT_TRUE(isnan(magnetometer.x()));
 }
 
+// --- Light, colour and gesture (APDS-9960, V1a/V1b only) ---
+
+static void test_light_reads_clear(void) {
+    steamiFakeApds9960(Wire, 1234, 100, 200, 300);
+    SteamiLight light(board);
+    TEST_ASSERT_TRUE(light.begin());
+    TEST_ASSERT_EQUAL_STRING("APDS-9960", light.chip());
+    TEST_ASSERT_EQUAL_UINT16(1234, light.read());
+}
+
+static void test_color_reads_rgb(void) {
+    steamiFakeApds9960(Wire, 1234, 100, 200, 300);
+    SteamiColor color(board);
+    TEST_ASSERT_EQUAL_UINT16(100, color.red());
+    TEST_ASSERT_EQUAL_UINT16(200, color.green());
+    TEST_ASSERT_EQUAL_UINT16(300, color.blue());
+    uint16_t r = 1, g = 1, b = 1;
+    TEST_ASSERT_TRUE(color.read(r, g, b));
+    TEST_ASSERT_EQUAL_UINT16(100, r);
+    TEST_ASSERT_EQUAL_UINT16(200, g);
+    TEST_ASSERT_EQUAL_UINT16(300, b);
+}
+
+static void test_light_color_gesture_share_chip(void) {
+    steamiFakeApds9960(Wire, 10, 20, 30, 40);
+    SteamiLight light(board);
+    SteamiColor color(board);
+    SteamiGesture gesture(board);
+    TEST_ASSERT_TRUE(light.begin());
+    const uint32_t afterFirst = Wire.transactions(0x39);
+    TEST_ASSERT_TRUE(afterFirst > 0);
+    TEST_ASSERT_TRUE(color.begin());
+    TEST_ASSERT_EQUAL_UINT32(afterFirst, Wire.transactions(0x39));
+    TEST_ASSERT_TRUE(board.built(SteamiChip::APDS9960));
+    TEST_ASSERT_TRUE(gesture.begin());
+    TEST_ASSERT_TRUE(board.built(SteamiChip::APDS9960));
+}
+
+static void test_gesture_begin_enables_engine(void) {
+    steamiFakeApds9960(Wire, 10, 20, 30, 40);
+    SteamiGesture gesture(board);
+    TEST_ASSERT_TRUE(gesture.begin());
+    const uint8_t enable = Wire.getRegister(0x39, 0x80);
+    TEST_ASSERT_EQUAL_UINT8(APDS9960_ENABLE_PON | APDS9960_ENABLE_GEN,
+                            enable & (APDS9960_ENABLE_PON | APDS9960_ENABLE_GEN));
+    // Idempotent: a second begin() does not touch the chip again.
+    const uint32_t traffic = Wire.transactions(0x39);
+    TEST_ASSERT_TRUE(gesture.begin());
+    TEST_ASSERT_EQUAL_UINT32(traffic, Wire.transactions(0x39));
+}
+
+static void test_gesture_none_without_motion(void) {
+    steamiFakeApds9960(Wire, 10, 20, 30, 40);
+    SteamiGesture gesture(board);
+    TEST_ASSERT_TRUE(gesture.read() == SteamiGesture::NONE);
+    TEST_ASSERT_TRUE(gesture.read(5) == SteamiGesture::NONE);
+}
+
+static void test_gesture_names(void) {
+    TEST_ASSERT_EQUAL_STRING("NONE", SteamiGesture::name(SteamiGesture::NONE));
+    TEST_ASSERT_EQUAL_STRING("LEFT", SteamiGesture::name(SteamiGesture::LEFT));
+    TEST_ASSERT_EQUAL_STRING("RIGHT", SteamiGesture::name(SteamiGesture::RIGHT));
+    TEST_ASSERT_EQUAL_STRING("UP", SteamiGesture::name(SteamiGesture::UP));
+    TEST_ASSERT_EQUAL_STRING("DOWN", SteamiGesture::name(SteamiGesture::DOWN));
+    TEST_ASSERT_EQUAL_STRING("NEAR", SteamiGesture::name(SteamiGesture::NEAR));
+    TEST_ASSERT_EQUAL_STRING("FAR", SteamiGesture::name(SteamiGesture::FAR));
+}
+
+static void test_apds_classes_e20_on_v1c(void) {
+    steamiFakeBme280(Wire);
+    SteamiLight light(board);
+    SteamiColor color(board);
+    SteamiGesture gesture(board);
+    TEST_ASSERT_FALSE(light.begin());
+    TEST_ASSERT_FALSE(color.begin());
+    TEST_ASSERT_FALSE(gesture.begin());
+    assertStatus(SteamiStatus::NOT_ON_THIS_BOARD, light.status());
+    assertStatus(SteamiStatus::NOT_ON_THIS_BOARD, color.status());
+    assertStatus(SteamiStatus::NOT_ON_THIS_BOARD, gesture.status());
+    // The board prints its own detection line first; the three E20 lines follow it.
+    TEST_ASSERT_EQUAL_UINT32(4, g_lines.size());
+    TEST_ASSERT_EQUAL_UINT32(3, countLogged("(E20)"));
+    TEST_ASSERT_EQUAL_STRING(
+        "[STeaMi] SteamiLight: this STeaMi is a V1c, it has no light sensor (APDS-9960 is on "
+        "V1a/V1b only). read() will return 0. (E20)",
+        g_lines[1].c_str());
+    TEST_ASSERT_EQUAL_STRING(
+        "[STeaMi] SteamiColor: this STeaMi is a V1c, it has no colour sensor (APDS-9960 is on "
+        "V1a/V1b only). read() will return false. (E20)",
+        g_lines[2].c_str());
+    TEST_ASSERT_EQUAL_STRING(
+        "[STeaMi] SteamiGesture: this STeaMi is a V1c, it has no gesture sensor (APDS-9960 is on "
+        "V1a/V1b only). read() will return NONE. (E20)",
+        g_lines[3].c_str());
+    TEST_ASSERT_EQUAL_UINT16(0, light.read());
+    uint16_t r = 7, g = 7, b = 7;
+    TEST_ASSERT_FALSE(color.read(r, g, b));
+    TEST_ASSERT_EQUAL_UINT16(0, r);
+    TEST_ASSERT_EQUAL_UINT16(0, g);
+    TEST_ASSERT_EQUAL_UINT16(0, b);
+    TEST_ASSERT_EQUAL_UINT16(0, color.red());
+    TEST_ASSERT_TRUE(gesture.read() == SteamiGesture::NONE);
+    TEST_ASSERT_EQUAL_UINT32(4, g_lines.size());
+    TEST_ASSERT_EQUAL_UINT32(0, Wire.transactions(0x39));
+}
+
+static void test_apds_forced_v1ab_absent_is_e11(void) {
+    TEST_ASSERT_TRUE(board.begin(SteamiRelease::V1B));
+    Wire.setAbsent(0x39);
+    SteamiColor color(board);
+    TEST_ASSERT_FALSE(color.begin());
+    const size_t lines = g_lines.size();
+    TEST_ASSERT_EQUAL_UINT32(1, countLogged("(E11)"));
+    const std::string& line = g_lines.back();
+    TEST_ASSERT_TRUE(line.find("APDS-9960 colour sensor (I2C 0x39)") != std::string::npos);
+    const uint32_t traffic = Wire.totalTransactions();
+    uint16_t r = 1, g = 1, b = 1;
+    TEST_ASSERT_FALSE(color.read(r, g, b));
+    TEST_ASSERT_EQUAL_UINT32(traffic, Wire.totalTransactions());
+    TEST_ASSERT_EQUAL_UINT32(lines, g_lines.size());
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_temperature_on_v1c_reads_bme280);
@@ -793,5 +918,13 @@ int main(void) {
     RUN_TEST(test_compass_declination_before_begin);
     RUN_TEST(test_compass_and_magnetometer_share_chip);
     RUN_TEST(test_compass_absent);
+    RUN_TEST(test_light_reads_clear);
+    RUN_TEST(test_color_reads_rgb);
+    RUN_TEST(test_light_color_gesture_share_chip);
+    RUN_TEST(test_gesture_begin_enables_engine);
+    RUN_TEST(test_gesture_none_without_motion);
+    RUN_TEST(test_gesture_names);
+    RUN_TEST(test_apds_classes_e20_on_v1c);
+    RUN_TEST(test_apds_forced_v1ab_absent_is_e11);
     return UNITY_END();
 }
