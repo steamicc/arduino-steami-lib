@@ -10,15 +10,18 @@
 #include <vector>
 
 #include "FakeDaplinkBridge.h"
+#include "SteamiAccelerometer.h"
 #include "SteamiBattery.h"
 #include "SteamiBoard.h"
 #include "SteamiDistance.h"
+#include "SteamiGyroscope.h"
 #include "SteamiHandle.h"
 #include "SteamiHumidity.h"
 #include "SteamiPressure.h"
 #include "SteamiTemperature.h"
 #include "SteamiTypes.h"
 #include "steami_fake_chips.h"
+#include "steami_fake_ism330dl.h"
 
 static std::vector<std::string> g_lines;
 static void capture(const char* line) {
@@ -537,6 +540,111 @@ static void test_battery_absent(void) {
     TEST_ASSERT_EQUAL_UINT32(lines, g_lines.size());
 }
 
+// --- Accelerometer and gyroscope ---
+
+static SteamiFakeIsm330dl imu;
+
+static void attachImu(void) {
+    imu = SteamiFakeIsm330dl();
+    Wire.attachDevice(ISM330DL_DEFAULT_ADDRESS, &imu);
+}
+
+static constexpr int16_t kOneG = 16393;  // +-2 g: 0.061 mg per LSB
+
+static void test_accelerometer_reads_g(void) {
+    steamiFakeBme280(Wire);
+    attachImu();
+    imu.setAccelRaw(0, 0, static_cast<int16_t>(-kOneG));
+    SteamiAccelerometer accelerometer(board);
+    TEST_ASSERT_TRUE(accelerometer.begin());
+    TEST_ASSERT_EQUAL_STRING("ISM330DL", accelerometer.chip());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -1.0f, accelerometer.z());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, accelerometer.x());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, accelerometer.y());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 1.0f, accelerometer.strength());
+    const SteamiVector v = accelerometer.read();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -1.0f, v.z);
+}
+
+static void test_accelerometer_is_shaken(void) {
+    steamiFakeBme280(Wire);
+    attachImu();
+    SteamiAccelerometer accelerometer(board);
+    TEST_ASSERT_TRUE(accelerometer.begin());
+    // +-2 g saturates below 2 g, so widen the range to +-8 g (0.244 mg per LSB): 2.5 g.
+    TEST_ASSERT_TRUE(board.ism330dl()->configureAccel(SteamiISM330DL::AccelOdr::HZ_104,
+                                                      SteamiISM330DL::AccelScale::G_8));
+    imu.setAccelRaw(static_cast<int16_t>(kOneG / 4 * 2.5f), 0, 0);
+    TEST_ASSERT_TRUE(accelerometer.isShaken());
+    TEST_ASSERT_FALSE(accelerometer.isShaken(3.0f));
+}
+
+static void test_accelerometer_and_gyroscope_share_chip(void) {
+    steamiFakeBme280(Wire);
+    attachImu();
+    SteamiAccelerometer accelerometer(board);
+    SteamiGyroscope gyroscope(board);
+    TEST_ASSERT_TRUE(accelerometer.begin());
+    TEST_ASSERT_TRUE(gyroscope.begin());
+    TEST_ASSERT_EQUAL_INT(1, imu.resetWrites);
+}
+
+static void test_gyroscope_reads_dps(void) {
+    steamiFakeBme280(Wire);
+    attachImu();
+    imu.setGyroRaw(1000, 0, 0);
+    SteamiGyroscope gyroscope(board);
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 8.75f, gyroscope.x());
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.0f, gyroscope.y());
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 0.0f, gyroscope.z());
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 8.75f, gyroscope.read().x);
+}
+
+static void test_accelerometer_absent(void) {
+    steamiFakeBme280(Wire);
+    Wire.setAbsent(0x6B);
+    SteamiAccelerometer accelerometer(board);
+    TEST_ASSERT_FALSE(accelerometer.begin());
+    TEST_ASSERT_EQUAL_UINT32(1, countLogged("(E10)"));
+    TEST_ASSERT_EQUAL_STRING(
+        "[STeaMi] SteamiAccelerometer: the ISM330DL accelerometer (I2C 0x6B) did not answer. "
+        "Check the board or try another one. (E10)",
+        g_lines.back().c_str());
+    const uint32_t traffic = Wire.totalTransactions();
+    const size_t lines = g_lines.size();
+    for (int i = 0; i < 10; i++) {
+        const SteamiVector v = accelerometer.read();
+        TEST_ASSERT_TRUE(isnan(v.x) && isnan(v.y) && isnan(v.z));
+        TEST_ASSERT_TRUE(isnan(accelerometer.strength()));
+        TEST_ASSERT_FALSE(accelerometer.isShaken());
+    }
+    TEST_ASSERT_EQUAL_UINT32(traffic, Wire.totalTransactions());
+    TEST_ASSERT_EQUAL_UINT32(lines, g_lines.size());
+}
+
+static void test_accelerometer_calibrated_from_config(void) {
+    attachFirmware();
+    fw.store("{\"rev\":131,\"ca\":{\"ox\":0.1,\"oy\":0,\"oz\":0}}");
+    steamiFakeBme280(Wire);
+    attachImu();
+    imu.setAccelRaw(kOneG, 0, 0);
+    SteamiAccelerometer accelerometer(board);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.9f, accelerometer.x());
+}
+
+static void test_motion_read_after_board_end_is_safe(void) {
+    steamiFakeBme280(Wire);
+    attachImu();
+    SteamiAccelerometer accelerometer(board);
+    SteamiGyroscope gyroscope(board);
+    TEST_ASSERT_TRUE(accelerometer.begin());
+    TEST_ASSERT_TRUE(gyroscope.begin());
+    board.end();
+    Wire.setAbsent(0x6B);
+    TEST_ASSERT_TRUE(isnan(accelerometer.x()));
+    TEST_ASSERT_TRUE(isnan(gyroscope.z()));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_temperature_on_v1c_reads_bme280);
@@ -571,5 +679,12 @@ int main(void) {
     RUN_TEST(test_battery_reads_gauge);
     RUN_TEST(test_battery_discharging);
     RUN_TEST(test_battery_absent);
+    RUN_TEST(test_accelerometer_reads_g);
+    RUN_TEST(test_accelerometer_is_shaken);
+    RUN_TEST(test_accelerometer_and_gyroscope_share_chip);
+    RUN_TEST(test_gyroscope_reads_dps);
+    RUN_TEST(test_accelerometer_absent);
+    RUN_TEST(test_accelerometer_calibrated_from_config);
+    RUN_TEST(test_motion_read_after_board_end_is_safe);
     return UNITY_END();
 }
