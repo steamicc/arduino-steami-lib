@@ -147,9 +147,9 @@ Thirteen classes read a function without you choosing a chip:
 `SteamiTemperature`, `SteamiHumidity`, `SteamiPressure`, `SteamiDistance`,
 `SteamiBattery`, `SteamiAccelerometer`, `SteamiGyroscope`,
 `SteamiMagnetometer`, `SteamiCompass`, `SteamiLight`, `SteamiColor`,
-`SteamiGesture` and `SteamiButtons`. They pick the chip of the release (V1a/V1b or V1c) and share the driver the
-board already built. Each has a ready-to-run example in
-[`examples/`](examples/).
+`SteamiGesture` and `SteamiButtons`. They pick the chip of the release
+(V1a/V1b or V1c) and share the driver the board already built. Each has a ready-to-run example
+in [`examples/`](examples/).
 
 ```cpp
 #include <SteamiTemperature.h>
@@ -231,7 +231,8 @@ their "unavailable" value without any bus traffic and without printing again.
   driver is built once.
 * `SteamiMagnetometer`: the values are in uT with the hard-iron offset removed
   (hard iron only: the `sx`, `sy` and `sz` scales are not applied to these
-  values). `calibrate(seconds)` is a min/max calibration done in
+  values). `SteamiCompass::heading()` uses the `sx`, `sy` and `sz` scales as
+  well as the offsets. `calibrate(seconds)` is a min/max calibration done in
   RAM: turn the board in every direction meanwhile. It is lost on reset;
   the `cm` key of the board config (see Calibration) is applied automatically.
 * `SteamiCompass`: see Heading convention below. `calibrate()` is the same as

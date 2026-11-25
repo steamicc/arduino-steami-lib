@@ -37,14 +37,21 @@ void setup() {
 }
 
 void loop() {
+    // Poll the buttons often: a short tap is missed if they are read only twice per second.
+    static uint32_t lastPrint = 0;
+
     if (buttons.wasPressed(SteamiButton::MENU)) {
         Serial.println("Calibrating: turn the board in every direction...");
         compass.calibrate(12);
         Serial.println("Calibration done.");
+        lastPrint = millis();
     }
 
-    Serial.print(compass.heading(), 0);
-    Serial.print(" deg ");
-    Serial.println(compass.direction());
-    delay(500);
+    if (millis() - lastPrint >= 500) {
+        lastPrint = millis();
+        Serial.print(compass.heading(), 0);
+        Serial.print(" deg ");
+        Serial.println(compass.direction());
+    }
+    delay(5);
 }

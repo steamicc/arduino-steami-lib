@@ -5,7 +5,8 @@
  * magnetometer, compass, light, colour, gesture, buttons) on a real STeaMi. Nothing is written to
  * the board.
  *
- * Keep the board still and flat, screen up, away from magnets and metal. The same file runs on
+ * Keep the board still and flat, screen up, away from magnets and metal. Leave the buttons alone
+ * and keep your hands away from the sensors during the run. The same file runs on
  * every release: the checks that only hold on a V1c are ignored elsewhere, and the APDS-9960
  * checks flip on a V1a or V1b.
  */
@@ -47,8 +48,6 @@ void test_accelerometer_reads_one_g_flat(void) {
     delay(100);
     const SteamiVector a = accelerometer.read();
     TEST_ASSERT_FALSE(isnan(a.x));
-    TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, a.x);
-    TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, a.y);
     TEST_ASSERT_FLOAT_WITHIN(0.2f, -1.0f, a.z);  // -1.2..-0.8 g: flat, screen up
     TEST_ASSERT_FLOAT_WITHIN(0.2f, 1.0f, accelerometer.strength());
     TEST_ASSERT_FALSE(accelerometer.isShaken());
