@@ -1225,6 +1225,50 @@ static void test_button_held_at_start_is_not_a_press(void) {
     TEST_ASSERT_TRUE(buttons.waitForPress(100) == SteamiButton::NONE);
 }
 
+// --- Every class together ---
+
+static void test_all_classes_on_v1c_print_only_e20(void) {
+    steamiFakeBme280(Wire);
+    attachImu();
+    steamiFakeLis2mdl(Wire, 0, 300, 0);
+    steamiFakeVl53l1x(Wire);
+    steamiFakeBq27441(Wire);
+    steamiFakeMcp23009e(Wire, 0xF0);
+    releaseMcuButtons();
+    SteamiTemperature temperature(board);
+    SteamiHumidity humidity(board);
+    SteamiPressure pressure(board);
+    SteamiDistance distance(board);
+    SteamiBattery battery(board);
+    SteamiAccelerometer accelerometer(board);
+    SteamiGyroscope gyroscope(board);
+    SteamiMagnetometer magnetometer(board);
+    SteamiCompass compass(board);
+    SteamiLight light(board);
+    SteamiColor color(board);
+    SteamiGesture gesture(board);
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(temperature.begin());
+    TEST_ASSERT_TRUE(humidity.begin());
+    TEST_ASSERT_TRUE(pressure.begin());
+    TEST_ASSERT_TRUE(distance.begin());
+    TEST_ASSERT_TRUE(battery.begin());
+    TEST_ASSERT_TRUE(accelerometer.begin());
+    TEST_ASSERT_TRUE(gyroscope.begin());
+    TEST_ASSERT_TRUE(magnetometer.begin());
+    TEST_ASSERT_TRUE(compass.begin());
+    TEST_ASSERT_FALSE(light.begin());
+    TEST_ASSERT_FALSE(color.begin());
+    TEST_ASSERT_FALSE(gesture.begin());
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_EQUAL_UINT32(4, g_lines.size());
+    TEST_ASSERT_EQUAL_STRING("[STeaMi] Board V1c (detected: BME280 at 0x76)", g_lines[0].c_str());
+    TEST_ASSERT_TRUE(g_lines[1].rfind("[STeaMi] SteamiLight: ", 0) == 0);
+    TEST_ASSERT_TRUE(g_lines[2].rfind("[STeaMi] SteamiColor: ", 0) == 0);
+    TEST_ASSERT_TRUE(g_lines[3].rfind("[STeaMi] SteamiGesture: ", 0) == 0);
+    TEST_ASSERT_EQUAL_UINT32(3, countLogged("(E20)"));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_temperature_on_v1c_reads_bme280);
@@ -1296,5 +1340,6 @@ int main(void) {
     RUN_TEST(test_wait_for_press_returns_button);
     RUN_TEST(test_wait_for_press_drops_a_latched_press);
     RUN_TEST(test_button_held_at_start_is_not_a_press);
+    RUN_TEST(test_all_classes_on_v1c_print_only_e20);
     return UNITY_END();
 }
