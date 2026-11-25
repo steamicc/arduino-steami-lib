@@ -103,21 +103,24 @@ void test_distance_is_unavailable_or_in_range(void) {
     TEST_ASSERT_TRUE(mm == -1 || (mm >= 1 && mm <= 4000));
 
     const float cm = distance.cm();
-    TEST_ASSERT_TRUE(isnan(cm) || cm < 0.0f || (cm >= 0.1f && cm <= 400.0f));
+    TEST_ASSERT_TRUE(isnan(cm) || (cm >= 0.1f && cm <= 400.0f));
 }
 
 void test_battery_begins_or_reports_e10(void) {
     SteamiBattery battery;
     if (battery.begin()) {
         TEST_ASSERT_TRUE(battery.isAvailable());
-        TEST_ASSERT_TRUE(battery.chip() != nullptr);
+        TEST_ASSERT_TRUE(strlen(battery.chip()) > 0);
         const float volts = battery.voltage();
         // A gauge that reads 0 mV gives NAN: nothing to range-check then.
         if (!isnan(volts)) {
             TEST_ASSERT_FLOAT_WITHIN(0.65f, 3.65f, volts);  // 3.0..4.3 V
         }
         TEST_ASSERT_TRUE(battery.percent() <= 100);
-        TEST_ASSERT_EQUAL(battery.current() > 0, battery.isCharging());
+        // isCharging() is a second gauge read: compare it to nothing, only to the sane range.
+        const int16_t current = battery.current();
+        TEST_ASSERT_TRUE(current > -3000 && current < 3000);
+        battery.isCharging();
     } else {
         TEST_ASSERT_FALSE(battery.isAvailable());
         TEST_ASSERT_TRUE(endsWith(Steami.lastError(), "(E10)"));

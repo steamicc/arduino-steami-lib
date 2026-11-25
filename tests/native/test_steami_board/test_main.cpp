@@ -807,6 +807,19 @@ static void test_calibrate_forced_legacy_no_config_command(void) {
     TEST_ASSERT_FALSE(fw.hung);
 }
 
+static void test_calibrate_forced_legacy_does_not_retry_config(void) {
+    attachFirmware();
+    fw.legacyFirmware = true;
+    steamiFakeBme280(Wire);
+    TEST_ASSERT_TRUE(board.begin(SteamiRelease::V1C));
+    board.wsenHids();  // claimed (and found absent) before the traffic is measured
+    TEST_ASSERT_FALSE(board.calibrate(SteamiChip::BME280));
+    const uint32_t traffic = Wire.totalTransactions();
+    TEST_ASSERT_FALSE(board.calibrate(SteamiChip::WSEN_HIDS));
+    TEST_ASSERT_EQUAL_UINT32(traffic, Wire.totalTransactions());
+    TEST_ASSERT_EQUAL_UINT32(0, fw.readConfigCommands);
+}
+
 static void test_calibrate_unknown_chip_or_absent_chip_is_false(void) {
     attachFirmware();
     fw.store(kBmeOffsetConfig);
@@ -914,6 +927,7 @@ int main(void) {
     RUN_TEST(test_calibrate_is_once_per_chip);
     RUN_TEST(test_calibrate_forced_loads_config_on_demand);
     RUN_TEST(test_calibrate_forced_legacy_no_config_command);
+    RUN_TEST(test_calibrate_forced_legacy_does_not_retry_config);
     RUN_TEST(test_calibrate_unknown_chip_or_absent_chip_is_false);
     RUN_TEST(test_print_info_marks_calibrated_chip);
     RUN_TEST(test_report_keeps_twenty_pairs);

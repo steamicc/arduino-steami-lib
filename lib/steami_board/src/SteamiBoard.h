@@ -93,7 +93,8 @@ class SteamiBoard {
     /// True when a chip on this release serves the function; detects the release first.
     bool has(SteamiFunction f);
 
-    /// The board config, non-null only after it was loaded during detection.
+    /// The board config, non-null only once it was loaded: during detection, or on demand by
+    /// calibrate() when the release is forced.
     SteamiConfig* config() { return _config.get(); }
 
     /// Builds the driver of a chip on the first call and begins it once; the result is cached.
@@ -205,6 +206,8 @@ class SteamiBoard {
     bool _configTried = false;         // loadConfig() ran since begin()/end()
     uint16_t _calibrationTried = 0;    // bit per chip, set before the config is read
     uint16_t _calibrationApplied = 0;  // bit per chip
+    static_assert(static_cast<unsigned>(SteamiChip::COUNT) <= 16,
+                  "the calibration masks hold one bit per chip: widen them past 16 chips");
     ChipState _chipState[I2C_CHIPS] = {};
     SteamiLazy<SteamiBME280> _bme280;
     SteamiLazy<SteamiWsenHids> _wsenHids;
