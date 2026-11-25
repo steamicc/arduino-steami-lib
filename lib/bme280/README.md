@@ -22,18 +22,17 @@ absent and `begin()` returns `false`.
 
 On the STeaMi board, the BME280 is routed to the **internal** I2C bus
 (pins `I2C_INT_SDA` / `I2C_INT_SCL` from the board variant, not the default
-global `Wire`). Spin up a dedicated `TwoWire` and hand it to the driver:
+global `Wire`).
+The board owns that bus: build the driver on `Steami.wire()`, which starts it on first use:
 
 ```cpp
+#include <SteamiBoard.h>
 #include <SteamiBME280.h>
-#include <Wire.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiBME280 sensor(internalI2C);
+SteamiBME280 sensor(Steami.wire());  // the board's internal I2C bus
 
 void setup() {
     Serial.begin(115200);
-    internalI2C.begin();
 
     if (!sensor.begin()) {
         Serial.println("BME280 not detected");
