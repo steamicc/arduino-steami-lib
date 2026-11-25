@@ -38,6 +38,9 @@ float SteamiMagnetometer::strength() {
 }
 
 void SteamiMagnetometer::calibrate(uint16_t seconds) {
+    if (seconds == 0) {
+        return;  // no sample: min/max would wipe the offsets and scales
+    }
     if (!_handle.ready() || _handle.chipId() != SteamiChip::LIS2MDL) {
         return;
     }

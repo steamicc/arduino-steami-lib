@@ -749,6 +749,134 @@ static void test_compass_absent(void) {
     TEST_ASSERT_TRUE(isnan(magnetometer.x()));
 }
 
+static const char* const kCmConfig =
+    "{\"rev\":131,\"cm\":{\"hx\":100,\"hy\":0,\"hz\":0,\"sx\":1,\"sy\":1,\"sz\":1}}";
+
+static void test_compass_heading_uses_cm(void) {
+    attachFirmware();
+    fw.store(kCmConfig);
+    steamiFakeBme280(Wire);
+    steamiFakeLis2mdl(Wire, 0, 300, 0);
+    SteamiCompass compass(board);
+    // atan2(-(0 - 100), 300) = 18.43 degrees.
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 18.43f, compass.heading());
+}
+
+static void test_motion_calibrations_when_forced(void) {
+    attachFirmware();
+    fw.store(
+        "{\"rev\":131,\"ca\":{\"ox\":0.1,\"oy\":0,\"oz\":0},"
+        "\"cm\":{\"hx\":100,\"hy\":0,\"hz\":0,\"sx\":1,\"sy\":1,\"sz\":1}}");
+    steamiFakeBme280(Wire);
+    attachImu();
+    imu.setAccelRaw(kOneG, 0, 0);
+    steamiFakeLis2mdl(Wire, 0, 300, 0);
+    TEST_ASSERT_TRUE(board.begin(SteamiRelease::V1C));
+    SteamiAccelerometer accelerometer(board);
+    SteamiCompass compass(board);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.9f, accelerometer.x());
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 18.43f, compass.heading());
+}
+
+static void test_calibrate_zero_changes_nothing(void) {
+    attachFirmware();
+    fw.store(kCmConfig);
+    steamiFakeBme280(Wire);
+    steamiFakeLis2mdl(Wire, 0, 300, 0);
+    SteamiCompass compass(board);
+    SteamiMagnetometer magnetometer(board);
+    const float before = compass.heading();
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 18.43f, before);
+    const float x = magnetometer.x();
+    compass.calibrate(0);
+    magnetometer.calibrate(0);
+    const SteamiLIS2MDL* mag = board.lis2mdl();
+    TEST_ASSERT_NOT_NULL(mag);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 100.0f, mag->xOff);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 1.0f, mag->xScale);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 1.0f, mag->yScale);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, before, compass.heading());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, x, magnetometer.x());
+}
+
+// LIS2MDL model whose field changes at a given time of the simulated clock, so that a
+// calibration sees two fields. Same register model as the ISM330DL fake.
+class SteamiSweepLis2mdl : public I2CDevice {
+   public:
+    SteamiSweepLis2mdl() {
+        registers[LIS2MDL_WHO_AM_I] = LIS2MDL_WHO_AM_I_VAL;
+        registers[LIS2MDL_STATUS_REG] = 0x08;  // ZYXDA
+    }
+
+    uint8_t onWrite(const std::vector<uint8_t>& frame) override {
+        if (frame.empty()) {
+            return 0;
+        }
+        pointer = frame[0] & MASK;
+        for (size_t i = 1; i < frame.size(); i++) {
+            registers[pointer] = frame[i];
+            pointer = (pointer + 1) & MASK;
+        }
+        return 0;
+    }
+
+    std::vector<uint8_t> onRead(size_t quantity) override {
+        std::vector<uint8_t> out;
+        for (size_t i = 0; i < quantity; i++) {
+            out.push_back(read(pointer));
+            pointer = (pointer + 1) & MASK;
+        }
+        return out;
+    }
+
+    int16_t before[3] = {};
+    int16_t after[3] = {};
+    uint32_t switchAt = UINT32_MAX;
+
+   private:
+    static constexpr uint8_t MASK = 0x7F;
+
+    uint8_t read(uint8_t reg) const {
+        if (reg < LIS2MDL_OUTX_L_REG || reg > LIS2MDL_OUTZ_H_REG) {
+            return registers[reg];
+        }
+        const int16_t* field = millis() < switchAt ? before : after;
+        const uint8_t offset = reg - LIS2MDL_OUTX_L_REG;
+        const uint16_t bits = static_cast<uint16_t>(field[offset / 2]);
+        return (offset % 2 == 0) ? (bits & 0xFF) : ((bits >> 8) & 0xFF);
+    }
+
+    uint8_t registers[MASK + 1] = {};
+    uint8_t pointer = 0;
+};
+
+static SteamiSweepLis2mdl sweep;
+
+static void test_calibrate_updates_offsets(void) {
+    steamiFakeBme280(Wire);
+    sweep = SteamiSweepLis2mdl();
+    sweep.before[0] = 200;
+    sweep.before[1] = 100;
+    sweep.after[0] = 0;
+    sweep.after[1] = -300;
+    Wire.attachDevice(LIS2MDL_I2C_ADDR, &sweep);
+    SteamiMagnetometer magnetometer(board);
+    TEST_ASSERT_TRUE(magnetometer.begin());
+    const uint32_t start = millis();
+    sweep.switchAt = start + 500;
+    magnetometer.calibrate(1);  // 50 samples, 20 ms apart
+    TEST_ASSERT_TRUE(millis() - start >= 1000);
+    const SteamiLIS2MDL* mag = board.lis2mdl();
+    TEST_ASSERT_NOT_NULL(mag);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 100.0f, mag->xOff);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -100.0f, mag->yOff);
+    SteamiCompass compass(board);
+    sweep.switchAt = millis() + 500;
+    compass.calibrate(1);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 100.0f, mag->xOff);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -100.0f, mag->yOff);
+}
+
 // --- Light, colour and gesture (APDS-9960, V1a/V1b only) ---
 
 static void test_light_reads_clear(void) {
@@ -1145,6 +1273,10 @@ int main(void) {
     RUN_TEST(test_compass_declination_before_begin);
     RUN_TEST(test_compass_and_magnetometer_share_chip);
     RUN_TEST(test_compass_absent);
+    RUN_TEST(test_compass_heading_uses_cm);
+    RUN_TEST(test_motion_calibrations_when_forced);
+    RUN_TEST(test_calibrate_zero_changes_nothing);
+    RUN_TEST(test_calibrate_updates_offsets);
     RUN_TEST(test_light_reads_clear);
     RUN_TEST(test_color_reads_rgb);
     RUN_TEST(test_light_color_gesture_share_chip);

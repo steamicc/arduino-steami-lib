@@ -32,7 +32,7 @@ class SteamiMagnetometer {
     float strength();
 
     /// Min/max calibration over `seconds` (50 samples per second): turn the board in every
-    /// direction meanwhile. Updates the shared driver; does nothing when unavailable.
+    /// direction meanwhile. Updates the shared driver; does nothing when unavailable or for 0.
     void calibrate(uint16_t seconds = 12);
 
    private:

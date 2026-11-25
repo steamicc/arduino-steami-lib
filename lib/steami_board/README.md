@@ -237,7 +237,8 @@ their "unavailable" value without any bus traffic and without printing again.
   uses the `sx`, `sy` and `sz` scales as well as the offsets.
   `calibrate(seconds)` is a min/max calibration done in RAM: turn the board in
   every direction meanwhile. It is lost on reset; the `cm` key of the board
-  config (see Calibration) is applied automatically.
+  config (see Calibration) is applied automatically. `calibrate(0)` does
+  nothing.
 * `SteamiCompass`: see Heading convention below. `calibrate()` is the same as
   the magnetometer one, `setDeclination(deg)` adds the magnetic declination
   and may be called before `begin()`.

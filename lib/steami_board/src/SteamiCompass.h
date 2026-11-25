@@ -27,7 +27,7 @@ class SteamiCompass {
     const char* direction();
 
     /// Min/max calibration over `seconds`: turn the board in every direction meanwhile. Does
-    /// nothing when unavailable.
+    /// nothing when unavailable or for 0.
     void calibrate(uint16_t seconds = 12);
 
     /// Magnetic declination in degrees added to the heading. May be called before begin().

@@ -530,7 +530,7 @@ bool SteamiBoard::calibrate(SteamiChip c) {
         case SteamiChip::ISM330DL:
             applied = cfg.applyAccelerometerCalibration(*_ism330dl.get());
             break;
-        default: {
+        case SteamiChip::LIS2MDL: {
             MagnetometerCalibration cal;
             applied = cfg.getMagnetometerCalibration(cal);
             if (applied) {
@@ -539,6 +539,8 @@ bool SteamiBoard::calibrate(SteamiChip c) {
             }
             break;
         }
+        default:
+            break;
     }
     if (applied) {
         _calibrationApplied |= bit;

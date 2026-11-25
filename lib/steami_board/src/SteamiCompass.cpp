@@ -55,6 +55,9 @@ const char* SteamiCompass::direction() {
 }
 
 void SteamiCompass::calibrate(uint16_t seconds) {
+    if (seconds == 0) {
+        return;  // no sample: min/max would wipe the offsets and scales
+    }
     if (_handle.status() == SteamiStatus::NOT_STARTED) {
         begin();
     }
