@@ -463,6 +463,144 @@ static void test_banner_variants(void) {
     TEST_ASSERT_EQUAL_UINT32(lines, g_lines.size());
 }
 
+// --- Shared chip slots ---
+
+static void test_claim_builds_and_begins_once(void) {
+    presentBme280();
+    TEST_ASSERT_TRUE(board.claim(SteamiChip::BME280) == SteamiStatus::OK);
+    TEST_ASSERT_TRUE(board.built(SteamiChip::BME280));
+    const size_t n = Wire.transactions(0x76);
+    TEST_ASSERT_TRUE(board.claim(SteamiChip::BME280) == SteamiStatus::OK);
+    TEST_ASSERT_EQUAL_UINT32(n, Wire.transactions(0x76));
+}
+
+static void test_accessor_returns_same_instance(void) {
+    presentBme280();
+    SteamiBME280* first = board.bme280();
+    TEST_ASSERT_NOT_NULL(first);
+    TEST_ASSERT_TRUE(first == board.bme280());
+}
+
+static void test_not_responding_is_cached(void) {
+    presentHids();
+    Wire.setAbsent(0x6B);
+    TEST_ASSERT_TRUE(board.release() == SteamiRelease::V1AB);
+    TEST_ASSERT_TRUE(board.claim(SteamiChip::ISM330DL) == SteamiStatus::NOT_RESPONDING);
+    const size_t n = Wire.transactions(0x6B);
+    TEST_ASSERT_TRUE(board.claim(SteamiChip::ISM330DL) == SteamiStatus::NOT_RESPONDING);
+    TEST_ASSERT_EQUAL_UINT32(n, Wire.transactions(0x6B));
+    TEST_ASSERT_NULL(board.ism330dl());
+}
+
+static void test_displays_and_none_are_not_started(void) {
+    presentBme280();
+    TEST_ASSERT_TRUE(board.claim(SteamiChip::SSD1327) == SteamiStatus::NOT_STARTED);
+    TEST_ASSERT_TRUE(board.claim(SteamiChip::GC9A01) == SteamiStatus::NOT_STARTED);
+    TEST_ASSERT_TRUE(board.claim(SteamiChip::NONE) == SteamiStatus::NOT_STARTED);
+    TEST_ASSERT_TRUE(board.claim(SteamiChip::COUNT) == SteamiStatus::NOT_STARTED);
+    TEST_ASSERT_FALSE(board.built(SteamiChip::GC9A01));
+    TEST_ASSERT_FALSE(board.built(SteamiChip::NONE));
+}
+
+static void test_claim_detects_first(void) {
+    presentBme280();
+    TEST_ASSERT_TRUE(board.claim(SteamiChip::BME280) == SteamiStatus::OK);
+    TEST_ASSERT_TRUE(board.origin() == SteamiOrigin::PROBE);
+}
+
+static void test_every_accessor_builds_its_slot(void) {
+    presentBme280();
+    Wire.setAbsent(0x5F);
+    Wire.setAbsent(0x5D);
+    Wire.setAbsent(0x39);
+    Wire.setAbsent(0x6B);
+    Wire.setAbsent(0x1E);
+    Wire.setAbsent(0x29);
+    Wire.setAbsent(0x55);
+    Wire.setAbsent(0x20);
+    TEST_ASSERT_NOT_NULL(board.bme280());
+    TEST_ASSERT_NULL(board.wsenHids());
+    TEST_ASSERT_NULL(board.wsenPads());
+    TEST_ASSERT_NULL(board.apds9960());
+    TEST_ASSERT_NULL(board.ism330dl());
+    TEST_ASSERT_NULL(board.lis2mdl());
+    TEST_ASSERT_NULL(board.vl53l1x());
+    TEST_ASSERT_NULL(board.bq27441());
+    TEST_ASSERT_NULL(board.mcp23009e());
+    TEST_ASSERT_TRUE(board.built(SteamiChip::MCP23009E));
+    TEST_ASSERT_TRUE(board.built(SteamiChip::VL53L1X));
+}
+
+static void test_v1ab_never_builds_bme280(void) {
+    presentHids();
+    TEST_ASSERT_TRUE(board.release() == SteamiRelease::V1AB);
+    for (uint8_t f = 0; f < static_cast<uint8_t>(SteamiFunction::COUNT); f++) {
+        if (static_cast<SteamiFunction>(f) == SteamiFunction::SCREEN) {
+            continue;
+        }
+        board.claim(steamiRoute(SteamiRelease::V1AB, static_cast<SteamiFunction>(f), 0));
+    }
+    TEST_ASSERT_FALSE(board.built(SteamiChip::BME280));
+    TEST_ASSERT_FALSE(board.built(SteamiChip::GC9A01));
+}
+
+static void test_print_info_lists_chips(void) {
+    test_v1ab_never_builds_bme280();
+    StringPrint p;
+    board.printInfo(p);
+    TEST_ASSERT_TRUE(p.text.find("BME280 0x76 not tried\n") != std::string::npos);
+    TEST_ASSERT_TRUE(p.text.find("WSEN-HIDS 0x5F OK\n") != std::string::npos);
+    TEST_ASSERT_TRUE(p.text.find("MCP23009E 0x20 ") != std::string::npos);
+    TEST_ASSERT_TRUE(p.text.find("GC9A01") == std::string::npos);
+    TEST_ASSERT_TRUE(p.text.find("not responding") != std::string::npos);
+}
+
+static void test_print_info_replays_last_error(void) {
+    StringPrint p;
+    board.printInfo(p);  // nothing answers: E01
+    const std::string last = std::string(board.lastError()) + "\n";
+    TEST_ASSERT_TRUE(p.text.size() >= last.size());
+    TEST_ASSERT_EQUAL_STRING(last.c_str(), p.text.c_str() + p.text.size() - last.size());
+
+    restart();
+    presentBme280();
+    StringPrint q;
+    board.printInfo(q);
+    TEST_ASSERT_TRUE(q.text.find("(E") == std::string::npos);
+}
+
+static void test_print_info_logger_sends_banner_once(void) {
+    presentBme280();
+    board.printInfo();
+    size_t banners = 0;
+    for (const std::string& line : g_lines) {
+        if (line.rfind("[STeaMi] Board ", 0) == 0) {
+            banners++;
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT32(1, banners);
+    TEST_ASSERT_TRUE(g_lines.size() > 1);
+}
+
+static void test_end_destroys_slots(void) {
+    presentBme280();
+    TEST_ASSERT_NOT_NULL(board.bme280());
+    TEST_ASSERT_TRUE(board.built(SteamiChip::BME280));
+    board.end();
+    TEST_ASSERT_FALSE(board.built(SteamiChip::BME280));
+    StringPrint p;
+    board.printInfo(p);
+    TEST_ASSERT_TRUE(p.text.find("BME280 0x76 not tried\n") != std::string::npos);
+
+    restart();
+    presentHids();
+    TEST_ASSERT_NOT_NULL(board.wsenHids());
+    board.end();
+    TEST_ASSERT_FALSE(board.built(SteamiChip::WSEN_HIDS));
+    TEST_ASSERT_TRUE(board.release() == SteamiRelease::V1AB);
+    TEST_ASSERT_TRUE(board.origin() == SteamiOrigin::PROBE);
+}
+
 // Must run last: nothing clears the value the registrar writes.
 static void test_registrar_value_and_conflict(void) {
     steamiForceRelease(SteamiRelease::V1C);
@@ -518,6 +656,17 @@ int main(void) {
     RUN_TEST(test_release_names);
     RUN_TEST(test_banner_and_print_info);
     RUN_TEST(test_banner_variants);
+    RUN_TEST(test_claim_builds_and_begins_once);
+    RUN_TEST(test_accessor_returns_same_instance);
+    RUN_TEST(test_not_responding_is_cached);
+    RUN_TEST(test_displays_and_none_are_not_started);
+    RUN_TEST(test_claim_detects_first);
+    RUN_TEST(test_every_accessor_builds_its_slot);
+    RUN_TEST(test_v1ab_never_builds_bme280);
+    RUN_TEST(test_print_info_lists_chips);
+    RUN_TEST(test_print_info_replays_last_error);
+    RUN_TEST(test_print_info_logger_sends_banner_once);
+    RUN_TEST(test_end_destroys_slots);
     RUN_TEST(test_registrar_value_and_conflict);  // last: the registrar value cannot be cleared
     return UNITY_END();
 }

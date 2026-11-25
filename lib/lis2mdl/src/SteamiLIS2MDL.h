@@ -123,7 +123,7 @@ class SteamiLIS2MDL {
     float _hfCos = 0.0f;
     float _hfSin = 0.0f;
 
-    static constexpr float _MAG_LSB_TO_uT = 0.15f;
+    static constexpr float MAG_LSB_TO_UT = 0.15f;
 
     void writeReg(uint8_t reg, uint8_t data);
     void write16(uint8_t regL, int16_t value);

@@ -273,9 +273,9 @@ MagneticFieldUt SteamiLIS2MDL::magneticFieldUt() {
     // Reads the magnetic field in µT, uncalibrated (simple conversion from LSB).
     MagneticField raw = magneticField();
     MagneticFieldUt f;
-    f.x = raw.x * _MAG_LSB_TO_uT;
-    f.y = raw.y * _MAG_LSB_TO_uT;
-    f.z = raw.z * _MAG_LSB_TO_uT;
+    f.x = raw.x * MAG_LSB_TO_UT;
+    f.y = raw.y * MAG_LSB_TO_UT;
+    f.z = raw.z * MAG_LSB_TO_UT;
     return f;
 }
 

@@ -24,14 +24,14 @@ class SteamiBQ27441 {
    public:
     // Parameters for the current() function, to specify which current to read
     // current_measure types
-    enum class CurrentMeasureType {
+    enum class CurrentMeasureType : uint8_t {
         AVG = 0,   // Average Current (DEFAULT)
         STBY = 1,  // Standby Current
         MAX = 2    // Max Current
     };
 
     // Parameters for the capacity() function, to specify which capacity to read
-    enum class CapacityMeasureType {
+    enum class CapacityMeasureType : uint8_t {
         REMAIN = 0,      // Remaining Capacity (DEFAULT)
         FULL = 1,        // Full Capacity
         AVAIL = 2,       // Available Capacity
@@ -44,19 +44,19 @@ class SteamiBQ27441 {
     };
 
     // Parameters for the soc() function
-    enum class SocMeasureType {
+    enum class SocMeasureType : uint8_t {
         FILTERED = 0,   // State of Charge Filtered (DEFAULT)
         UNFILTERED = 1  // State of Charge Unfiltered
     };
 
     // Parameters for the soh() function
-    enum class SohMeasureType {
+    enum class SohMeasureType : uint8_t {
         PERCENT = 0,  // State of Health Percentage (DEFAULT)
         SOH_STAT = 1  // State of Health Status Bits
     };
 
     // Parameters for the temperature() function
-    enum class TempMeasureType {
+    enum class TempMeasureType : uint8_t {
         BATTERY = 0,       // Battery Temperature (DEFAULT)
         INTERNAL_TEMP = 1  // Internal IC Temperature
     };

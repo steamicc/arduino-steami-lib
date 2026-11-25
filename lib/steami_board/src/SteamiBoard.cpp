@@ -358,19 +358,116 @@ void SteamiBoard::logBanner() {
     }
 }
 
-void SteamiBoard::printInfoTo(void (*emit)(void* ctx, const char* line), void* ctx) {
+SteamiBoard::ChipState& SteamiBoard::stateOf(SteamiChip c) {
+    return _chipState[static_cast<size_t>(c) - static_cast<size_t>(SteamiChip::BME280)];
+}
+
+SteamiBoard::ChipState SteamiBoard::stateOf(SteamiChip c) const {
+    return _chipState[static_cast<size_t>(c) - static_cast<size_t>(SteamiChip::BME280)];
+}
+
+bool SteamiBoard::built(SteamiChip c) const {
+    switch (c) {
+        case SteamiChip::BME280:
+            return _bme280.built();
+        case SteamiChip::WSEN_HIDS:
+            return _wsenHids.built();
+        case SteamiChip::WSEN_PADS:
+            return _wsenPads.built();
+        case SteamiChip::APDS9960:
+            return _apds9960.built();
+        case SteamiChip::ISM330DL:
+            return _ism330dl.built();
+        case SteamiChip::LIS2MDL:
+            return _lis2mdl.built();
+        case SteamiChip::VL53L1X:
+            return _vl53l1x.built();
+        case SteamiChip::BQ27441:
+            return _bq27441.built();
+        case SteamiChip::MCP23009E:
+            return _mcp23009e.built();
+        default:
+            return false;
+    }
+}
+
+SteamiStatus SteamiBoard::claim(SteamiChip c) {
+    if (c < SteamiChip::BME280 || c > SteamiChip::MCP23009E) {
+        return SteamiStatus::NOT_STARTED;  // displays, NONE and COUNT have no shared driver
+    }
+    begin();
+    ChipState& state = stateOf(c);
+    if (state == ChipState::NOT_TRIED) {
+        TwoWire& bus = wire();
+        bool ok = false;
+        switch (c) {
+            case SteamiChip::BME280:
+                ok = _bme280.emplace(bus).begin();
+                break;
+            case SteamiChip::WSEN_HIDS:
+                ok = _wsenHids.emplace(bus).begin();
+                break;
+            case SteamiChip::WSEN_PADS:
+                ok = _wsenPads.emplace(bus).begin();
+                break;
+            case SteamiChip::APDS9960:
+                ok = _apds9960.emplace(bus).begin();
+                break;
+            case SteamiChip::ISM330DL:
+                ok = _ism330dl.emplace(bus).begin();
+                break;
+            case SteamiChip::LIS2MDL:
+                ok = _lis2mdl.emplace(bus).begin();
+                break;
+            case SteamiChip::VL53L1X:
+                ok = _vl53l1x.emplace(bus).begin();
+                break;
+            case SteamiChip::BQ27441:
+                ok = _bq27441.emplace(bus).begin();
+                break;
+            default:
+                ok = _mcp23009e
+                         .emplace(bus, static_cast<uint8_t>(pins().expanderReset),
+                                  MCP23009_I2C_ADDR, static_cast<int>(pins().expanderIrq))
+                         .begin();
+                break;
+        }
+        state = ok ? ChipState::OK : ChipState::NOT_RESPONDING;
+    }
+    return state == ChipState::OK ? SteamiStatus::OK : SteamiStatus::NOT_RESPONDING;
+}
+
+void SteamiBoard::printInfoTo(void (*emit)(void* ctx, const char* line), void* ctx,
+                              bool withBanner) {
     begin();
     char line[LINE_SIZE];
-    formatBanner(line, sizeof(line));
-    emit(ctx, line);
-    // Task 5: one line per I2C chip follows here.
+    if (withBanner) {
+        formatBanner(line, sizeof(line));
+        emit(ctx, line);
+    }
+    for (size_t i = 0; i < I2C_CHIPS; i++) {
+        const SteamiChip c = static_cast<SteamiChip>(static_cast<size_t>(SteamiChip::BME280) + i);
+        const ChipState state = stateOf(c);
+        snprintf(line, sizeof(line), "%s 0x%02X %s", steamiChipName(c),
+                 static_cast<unsigned>(steamiChipAddress(c)),
+                 state == ChipState::OK               ? "OK"
+                 : state == ChipState::NOT_RESPONDING ? "not responding"
+                                                      : "not tried");
+        emit(ctx, line);
+    }
+    if (_lastError[0] != '\0') {
+        emit(ctx, _lastError);
+    }
 }
 
 void SteamiBoard::printInfo(Print& out) {
-    printInfoTo([](void* ctx, const char* line) { static_cast<Print*>(ctx)->println(line); }, &out);
+    printInfoTo([](void* ctx, const char* line) { static_cast<Print*>(ctx)->println(line); }, &out,
+                true);
 }
 
 void SteamiBoard::printInfo() {
+    // Detection logs the banner itself: do not send it twice on a first call.
+    const bool withBanner = _detected;
     printInfoTo(
         [](void* ctx, const char* line) {
             void (*log)(const char*) = static_cast<SteamiBoard*>(ctx)->_log;
@@ -378,10 +475,22 @@ void SteamiBoard::printInfo() {
                 log(line);
             }
         },
-        this);
+        this, withBanner);
 }
 
 void SteamiBoard::end() {
+    _mcp23009e.reset();
+    _bq27441.reset();
+    _vl53l1x.reset();
+    _lis2mdl.reset();
+    _ism330dl.reset();
+    _apds9960.reset();
+    _wsenPads.reset();
+    _wsenHids.reset();
+    _bme280.reset();
+    for (ChipState& s : _chipState) {
+        s = ChipState::NOT_TRIED;
+    }
     _config.reset();  // before the bridge it points to
     _bridge.reset();
     _detected = false;

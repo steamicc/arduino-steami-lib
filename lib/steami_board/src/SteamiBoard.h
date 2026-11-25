@@ -3,8 +3,17 @@
 #pragma once
 
 #include <Print.h>
+#include <SteamiAPDS9960.h>
+#include <SteamiBME280.h>
+#include <SteamiBQ27441.h>
 #include <SteamiConfig.h>
 #include <SteamiDaplinkBridge.h>
+#include <SteamiISM330DL.h>
+#include <SteamiLIS2MDL.h>
+#include <SteamiMCP23009E.h>
+#include <SteamiVL53L1X.h>
+#include <SteamiWsenHids.h>
+#include <SteamiWsenPads.h>
 #include <Wire.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -87,7 +96,26 @@ class SteamiBoard {
     /// The board config, non-null only after it was loaded during detection.
     SteamiConfig* config() { return _config.get(); }
 
-    /// Prints the banner, then the I2C chips.
+    /// Builds the driver of a chip on the first call and begins it once; the result is cached.
+    /// OK or NOT_RESPONDING for the nine I2C chips, NOT_STARTED for the displays and NONE.
+    /// Detects the release first when that has not happened.
+    SteamiStatus claim(SteamiChip c);
+
+    /// True when the slot of the chip is constructed.
+    bool built(SteamiChip c) const;
+
+    /// The shared driver of a chip, nullptr unless claim() gives OK.
+    SteamiBME280* bme280() { return claimed(SteamiChip::BME280, _bme280); }
+    SteamiWsenHids* wsenHids() { return claimed(SteamiChip::WSEN_HIDS, _wsenHids); }
+    SteamiWsenPads* wsenPads() { return claimed(SteamiChip::WSEN_PADS, _wsenPads); }
+    SteamiAPDS9960* apds9960() { return claimed(SteamiChip::APDS9960, _apds9960); }
+    SteamiISM330DL* ism330dl() { return claimed(SteamiChip::ISM330DL, _ism330dl); }
+    SteamiLIS2MDL* lis2mdl() { return claimed(SteamiChip::LIS2MDL, _lis2mdl); }
+    SteamiVL53L1X* vl53l1x() { return claimed(SteamiChip::VL53L1X, _vl53l1x); }
+    SteamiBQ27441* bq27441() { return claimed(SteamiChip::BQ27441, _bq27441); }
+    SteamiMCP23009E* mcp23009e() { return claimed(SteamiChip::MCP23009E, _mcp23009e); }
+
+    /// Prints the banner, the I2C chips and the last message, if any.
     void printInfo(Print& out);
 
     /// Same as printInfo(Print&), through the logger.
@@ -129,7 +157,18 @@ class SteamiBoard {
     bool readId(uint8_t address, uint8_t reg, uint8_t& id);
     void formatBanner(char* line, size_t size) const;
     void logBanner();
-    void printInfoTo(void (*emit)(void* ctx, const char* line), void* ctx);
+    void printInfoTo(void (*emit)(void* ctx, const char* line), void* ctx, bool withBanner);
+
+    enum class ChipState : uint8_t { NOT_TRIED, OK, NOT_RESPONDING };
+    static constexpr size_t I2C_CHIPS = 9;  // BME280 .. MCP23009E
+
+    ChipState& stateOf(SteamiChip c);
+    ChipState stateOf(SteamiChip c) const;
+
+    template <typename T>
+    T* claimed(SteamiChip c, SteamiLazy<T>& slot) {
+        return claim(c) == SteamiStatus::OK ? slot.get() : nullptr;
+    }
 
     TwoWire* _wire = nullptr;
     SteamiBoardPins _pins = {};
@@ -147,6 +186,16 @@ class SteamiBoard {
     SteamiChip _probedChip = SteamiChip::NONE;
     SteamiLazy<SteamiDaplinkBridge> _bridge;
     SteamiLazy<SteamiConfig> _config;
+    ChipState _chipState[I2C_CHIPS] = {};
+    SteamiLazy<SteamiBME280> _bme280;
+    SteamiLazy<SteamiWsenHids> _wsenHids;
+    SteamiLazy<SteamiWsenPads> _wsenPads;
+    SteamiLazy<SteamiAPDS9960> _apds9960;
+    SteamiLazy<SteamiISM330DL> _ism330dl;
+    SteamiLazy<SteamiLIS2MDL> _lis2mdl;
+    SteamiLazy<SteamiVL53L1X> _vl53l1x;
+    SteamiLazy<SteamiBQ27441> _bq27441;
+    SteamiLazy<SteamiMCP23009E> _mcp23009e;
 };
 
 extern SteamiBoard Steami;
