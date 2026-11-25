@@ -907,6 +907,7 @@ static void test_was_pressed_once_per_press(void) {
     releaseMcuButtons();
     SteamiButtons buttons(board);
     TEST_ASSERT_TRUE(buttons.begin());
+    buttons.isPressed(SteamiButton::A);
     gpioPinState()[A_BUTTON] = LOW;
     int count = 0;
     for (int t = 0; t < 200; t += 10) {
@@ -1008,20 +1009,47 @@ static void test_wait_for_press_timeout(void) {
     TEST_ASSERT_TRUE(elapsed >= 100 && elapsed <= 110);
 }
 
-// The native mock cannot change a pin during the wait, so B is already low when the call starts
-// and the press is detected once it has been stable for the debounce time.
+// The native mock cannot change a pin during the wait, so B goes low (and is seen once) before
+// the call and the debounce completes inside the wait loop.
 static void test_wait_for_press_returns_button(void) {
     steamiFakeBme280(Wire);
     steamiFakeMcp23009e(Wire, 0xF0);
     releaseMcuButtons();
     SteamiButtons buttons(board);
     TEST_ASSERT_TRUE(buttons.begin());
+    buttons.isPressed(SteamiButton::B);
     gpioPinState()[B_BUTTON] = LOW;
     const uint32_t start = millis();
     TEST_ASSERT_TRUE(buttons.waitForPress(500) == SteamiButton::B);
     const uint32_t elapsed = millis() - start;
     TEST_ASSERT_TRUE(elapsed >= 20 && elapsed < 500);
     TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::B));
+}
+
+static void test_wait_for_press_keeps_a_fresh_press(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeMcp23009e(Wire, 0xF0);
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    gpioPinState()[A_BUTTON] = LOW;
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    delay(25);
+    TEST_ASSERT_TRUE(buttons.waitForPress(100) == SteamiButton::A);
+}
+
+static void test_button_held_at_start_is_not_a_press(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeMcp23009e(Wire, 0xF0);
+    releaseMcuButtons();
+    gpioPinState()[A_BUTTON] = LOW;
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::A));
+    delay(50);
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::A));
+    TEST_ASSERT_TRUE(buttons.waitForPress(100) == SteamiButton::NONE);
 }
 
 int main(void) {
@@ -1088,5 +1116,7 @@ int main(void) {
     RUN_TEST(test_buttons_without_expander);
     RUN_TEST(test_wait_for_press_timeout);
     RUN_TEST(test_wait_for_press_returns_button);
+    RUN_TEST(test_wait_for_press_keeps_a_fresh_press);
+    RUN_TEST(test_button_held_at_start_is_not_a_press);
     return UNITY_END();
 }

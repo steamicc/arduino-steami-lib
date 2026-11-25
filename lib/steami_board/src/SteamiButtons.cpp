@@ -12,7 +12,7 @@ constexpr SteamiFunctionInfo kInfo = {SteamiFunction::BUTTONS, "SteamiButtons", 
 
 constexpr uint32_t kDebounceMs = 20;
 
-// Index of the D-PAD buttons (4 to 7 of SteamiButton minus one) in the expander port.
+// Expander bit for UP, DOWN, LEFT, RIGHT, in SteamiButton order.
 constexpr uint8_t kDpadBits[4] = {MCP23009_BTN_UP, MCP23009_BTN_DOWN, MCP23009_BTN_LEFT,
                                   MCP23009_BTN_RIGHT};
 
@@ -76,6 +76,7 @@ void SteamiButtons::sample() {
     if (!_primed) {
         _primed = true;
         _raw = now;
+        _state = now;  // held at start: not a press
         for (uint8_t i = 0; i < COUNT; i++) {
             _changedAt[i] = t;
         }
@@ -124,7 +125,6 @@ bool SteamiButtons::wasReleased(SteamiButton button) {
 }
 
 SteamiButton SteamiButtons::waitForPress(uint32_t timeoutMs) {
-    sample();
     _pressed = 0;
     const uint32_t start = millis();
     for (;;) {
@@ -138,6 +138,6 @@ SteamiButton SteamiButtons::waitForPress(uint32_t timeoutMs) {
         if (timeoutMs != 0 && millis() - start >= timeoutMs) {
             return SteamiButton::NONE;
         }
-        delay(1);
+        delay(5);
     }
 }

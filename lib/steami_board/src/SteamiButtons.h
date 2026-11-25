@@ -7,7 +7,8 @@
 #include "SteamiTypes.h"
 
 /// The seven buttons: A, B and MENU on MCU pins, the D-PAD on the MCP23009E expander. All are
-/// active low and debounced over 20 ms. Every call samples the buttons once, so poll often.
+/// active low and debounced over 20 ms. Every call samples the buttons once, so poll often: a press
+/// shorter than the polling period can be missed.
 class SteamiButtons {
    public:
     /// Stores the address of the board only; touches no hardware.
@@ -15,7 +16,7 @@ class SteamiButtons {
 
     /// Sets A, B and MENU as inputs with pull-ups, and the D-PAD pins of the expander. False, with
     /// one message, when the expander does not answer: A, B and MENU still work, the D-PAD reads
-    /// as released. Idempotent.
+    /// as released, as it does after a runtime bus error. Idempotent.
     bool begin();
     bool isAvailable() const { return _handle.isAvailable(); }
     SteamiStatus status() const { return _handle.status(); }
