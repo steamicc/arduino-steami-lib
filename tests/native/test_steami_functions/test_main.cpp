@@ -13,10 +13,12 @@
 #include "SteamiAccelerometer.h"
 #include "SteamiBattery.h"
 #include "SteamiBoard.h"
+#include "SteamiCompass.h"
 #include "SteamiDistance.h"
 #include "SteamiGyroscope.h"
 #include "SteamiHandle.h"
 #include "SteamiHumidity.h"
+#include "SteamiMagnetometer.h"
 #include "SteamiPressure.h"
 #include "SteamiTemperature.h"
 #include "SteamiTypes.h"
@@ -654,6 +656,95 @@ static void test_motion_read_after_board_end_is_safe(void) {
     TEST_ASSERT_TRUE(isnan(gyroscope.z()));
 }
 
+// --- Magnetometer and compass ---
+
+static void test_magnetometer_reads_ut(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeLis2mdl(Wire, 200, -100, 50);
+    SteamiMagnetometer magnetometer(board);
+    TEST_ASSERT_TRUE(magnetometer.begin());
+    TEST_ASSERT_EQUAL_STRING("LIS2MDL", magnetometer.chip());
+    const SteamiVector v = magnetometer.read();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 30.0f, v.x);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -15.0f, v.y);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 7.5f, v.z);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 30.0f, magnetometer.x());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -15.0f, magnetometer.y());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 7.5f, magnetometer.z());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, sqrtf(900.0f + 225.0f + 56.25f), magnetometer.strength());
+}
+
+static void test_magnetometer_uses_hard_iron_offsets(void) {
+    attachFirmware();
+    fw.store("{\"rev\":131,\"cm\":{\"hx\":100,\"hy\":-50,\"hz\":0,\"sx\":1,\"sy\":1,\"sz\":1}}");
+    steamiFakeBme280(Wire);
+    steamiFakeLis2mdl(Wire, 200, -100, 50);
+    SteamiMagnetometer magnetometer(board);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.0f, magnetometer.x());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -7.5f, magnetometer.y());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 7.5f, magnetometer.z());
+}
+
+static void test_compass_north_and_east(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeLis2mdl(Wire, 0, 300, 0);
+    SteamiCompass compass(board);
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 0.0f, compass.heading());
+    TEST_ASSERT_EQUAL_STRING("N", compass.direction());
+    steamiFakeLis2mdl(Wire, -300, 0, 0);
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 90.0f, compass.heading());
+    TEST_ASSERT_EQUAL_STRING("E", compass.direction());
+}
+
+static void test_compass_declination_before_begin(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeLis2mdl(Wire, 0, 300, 0);
+    SteamiCompass compass(board);
+    compass.setDeclination(10.0f);
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 10.0f, compass.heading());
+    compass.setDeclination(20.0f);  // already begun: applied at once
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 20.0f, compass.heading());
+}
+
+static void test_compass_and_magnetometer_share_chip(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeLis2mdl(Wire, 0, 300, 0);
+    SteamiCompass compass(board);
+    SteamiMagnetometer magnetometer(board);
+    TEST_ASSERT_TRUE(compass.begin());
+    const uint32_t afterFirst = Wire.transactions(0x1E);
+    TEST_ASSERT_TRUE(afterFirst > 0);
+    TEST_ASSERT_TRUE(magnetometer.begin());
+    // A second claim would read WHO_AM_I and configure the chip again: no bus traffic instead.
+    TEST_ASSERT_EQUAL_UINT32(afterFirst, Wire.transactions(0x1E));
+    TEST_ASSERT_TRUE(board.built(SteamiChip::LIS2MDL));
+}
+
+static void test_compass_absent(void) {
+    steamiFakeBme280(Wire);
+    Wire.setAbsent(0x1E);
+    SteamiCompass compass(board);
+    SteamiMagnetometer magnetometer(board);
+    TEST_ASSERT_FALSE(compass.begin());
+    TEST_ASSERT_EQUAL_UINT32(1, countLogged("(E10)"));
+    TEST_ASSERT_EQUAL_STRING(
+        "[STeaMi] SteamiCompass: the LIS2MDL compass (I2C 0x1E) did not answer. "
+        "Check the board or try another one. (E10)",
+        g_lines.back().c_str());
+    const uint32_t traffic = Wire.totalTransactions();
+    const size_t lines = g_lines.size();
+    for (int i = 0; i < 10; i++) {
+        TEST_ASSERT_TRUE(isnan(compass.heading()));
+        TEST_ASSERT_EQUAL_STRING("", compass.direction());
+        compass.calibrate(1);
+    }
+    TEST_ASSERT_EQUAL_UINT32(traffic, Wire.totalTransactions());
+    TEST_ASSERT_EQUAL_UINT32(lines, g_lines.size());
+    TEST_ASSERT_FALSE(magnetometer.begin());
+    TEST_ASSERT_TRUE(isnan(magnetometer.strength()));
+    TEST_ASSERT_TRUE(isnan(magnetometer.x()));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_temperature_on_v1c_reads_bme280);
@@ -696,5 +787,11 @@ int main(void) {
     RUN_TEST(test_accelerometer_absent);
     RUN_TEST(test_accelerometer_calibrated_from_config);
     RUN_TEST(test_motion_read_after_board_end_is_safe);
+    RUN_TEST(test_magnetometer_reads_ut);
+    RUN_TEST(test_magnetometer_uses_hard_iron_offsets);
+    RUN_TEST(test_compass_north_and_east);
+    RUN_TEST(test_compass_declination_before_begin);
+    RUN_TEST(test_compass_and_magnetometer_share_chip);
+    RUN_TEST(test_compass_absent);
     return UNITY_END();
 }
