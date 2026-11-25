@@ -91,7 +91,8 @@ class SteamiDisplay {
     void span(SteamiDisplayBackend* b, int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c);
 
     /// The one Bresenham walker of line() and strokeLine(): the endpoints in canonical order, a
-    /// w x w square brush (top-left on the path pixel) through span(), or dot() when w is 1.
+    /// w x w square brush (top-left at x - (w-1)/2, y - (w-1)/2: centred on the path, even widths
+    /// extend right and down) through span(), or dot() when w is 1.
     void walk(SteamiDisplayBackend* b, int32_t x1, int32_t y1, int32_t x2, int32_t y2, uint8_t w,
               uint16_t c);
 

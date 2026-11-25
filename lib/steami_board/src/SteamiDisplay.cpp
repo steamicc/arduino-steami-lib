@@ -131,7 +131,7 @@ void SteamiDisplay::walk(SteamiDisplayBackend* b, int32_t x1, int32_t y1, int32_
         if (w == 1) {
             dot(b, x, y, c);
         } else {
-            span(b, x, y, w, w, c);
+            span(b, x - (w - 1) / 2, y - (w - 1) / 2, w, w, c);
         }
         if (x == x2 && y == y2) {
             break;

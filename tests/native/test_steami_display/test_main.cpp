@@ -770,6 +770,29 @@ static void strokeWidthsCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
         TEST_ASSERT_TRUE(mem.lit(static_cast<int16_t>(x + 1), static_cast<int16_t>(y + 1)));
     }
     d.clear();
+    d.strokeLine(10, 10, 60, 33, 3, kInk);
+    const std::vector<uint16_t> wide = snapshot(mem);
+    const int16_t h = d.height();
+    for (int16_t y = 0; y < h; y++) {
+        for (int16_t x = 0; x < w; x++) {
+            bool near = false;
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    const int nx = x + dx;
+                    const int ny = y + dy;
+                    if (nx >= 0 && nx < w && ny >= 0 && ny < h &&
+                        thin[static_cast<size_t>(ny) * static_cast<size_t>(w) +
+                             static_cast<size_t>(nx)] != 0) {
+                        near = true;
+                    }
+                }
+            }
+            // Lit exactly when within one pixel of a width-1 pixel: centred, nothing beyond.
+            TEST_ASSERT_EQUAL(near, wide[static_cast<size_t>(y) * static_cast<size_t>(w) +
+                                         static_cast<size_t>(x)] != 0);
+        }
+    }
+    d.clear();
     mem.clearCounters();
     d.strokeLine(10, 10, 60, 33, 0, kInk);
     TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
