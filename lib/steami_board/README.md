@@ -211,16 +211,17 @@ their "unavailable" value without any bus traffic and without printing again.
 | `E10` | `[STeaMi] SteamiTemperature: the BME280 temperature sensor (I2C 0x76) did not answer. Check the board or try another one. (E10)` |
 | `E10` | `[STeaMi] SteamiTemperature: no temperature sensor answered (WSEN-HIDS, WSEN-PADS). Check the board or try another one. (E10)` |
 | `E11` | `[STeaMi] SteamiTemperature: this STeaMi is set as a V1c (forced by Steami.begin()), but its BME280 temperature sensor (I2C 0x76) did not answer. Check the #define, Steami.begin() or the board config. (E11)` |
-| `E20` | `[STeaMi] SteamiGesture: this STeaMi is a V1c, it has no gesture sensor (APDS-9960 is on V1a/V1b only). read() will return NONE. (E20)` |
+| `E20` | `[STeaMi] <Class>: this STeaMi is a <release>, it has no <noun> (<chip> is on <other release> only). <fallback> (E20)` |
 
 `E10` means that the chip of the release did not answer: with one candidate the
 text names the chip and its I2C address, with several it lists them. `E11`
 replaces it when the release was forced (`Steami.begin(...)`, `#define`) or
 read from the board config: the text then tells you to check that setting.
-`E20` means that the function does not exist on this board (the example is
-from a class for a V1a/V1b function, which no class listed above is). The
-class name, the sensor and the end of the text change from one class to
-another; the code and the shape do not.
+`E20` is a format, not a text you will see: it means that the function does
+not exist on this release. None of the five classes in this library can print
+it, because each of them exists on every release (temperature, humidity,
+pressure, distance and battery). The class name, the sensor and the end of the
+text change from one class to another; the code and the shape do not.
 
 ### Calibration
 
@@ -255,7 +256,10 @@ void setup() {
 }
 ```
 
-* Pass `Steami.wire()` to every driver you build yourself. It can be called from a global initialiser (`SteamiBME280 bme(Steami.wire());`): the bus object is built and begun on first use. Checked on a V1c with STM32duino 3.1.0.
+* Pass `Steami.wire()` to every driver you build yourself. It can be called
+  from a global initialiser (`SteamiBME280 bme(Steami.wire());`): the bus
+  object is built and begun on first use. Checked on a V1c with STM32duino
+  3.1.0.
 * Never create a second `TwoWire` on `I2C_INT_SDA` / `I2C_INT_SCL`. On
   STM32duino 3.1.0 the last `TwoWire` to call `begin()` owns the I2C1
   interrupt (`i2c_handles[I2C1_INDEX]` in `twi.c`); the transfers of the other
