@@ -9,9 +9,8 @@
 /// Hand gestures from the APDS-9960, shared with SteamiLight and SteamiColor. V1a and V1b only:
 /// a V1c reports E20.
 ///
-/// While the gesture engine tracks a hand, the light and colour readings freeze: the chip
-/// serves the gesture first. begin() turns that engine on, so read the light and the colour
-/// before the gesture begin() when both matter.
+/// begin() turns the gesture engine on, and the chip serves the gesture first: while a hand is
+/// over the sensor, the light and colour readings pause and resume afterwards.
 class SteamiGesture {
    public:
     /// Same order as the driver's SteamiAPDS9960::Gesture.

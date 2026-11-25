@@ -148,8 +148,8 @@ Thirteen classes read a function without you choosing a chip:
 `SteamiBattery`, `SteamiAccelerometer`, `SteamiGyroscope`,
 `SteamiMagnetometer`, `SteamiCompass`, `SteamiLight`, `SteamiColor`,
 `SteamiGesture` and `SteamiButtons`. They pick the chip of the release
-(V1a/V1b or V1c) and share the driver the board already built. Each has a ready-to-run example
-in [`examples/`](examples/).
+(V1a/V1b or V1c) and share the driver the board already built. Each has a
+ready-to-run example in [`examples/`](examples/).
 
 ```cpp
 #include <SteamiTemperature.h>
@@ -229,21 +229,24 @@ their "unavailable" value without any bus traffic and without printing again.
 * `SteamiGyroscope` and `SteamiAccelerometer` share the ISM330DL;
   `SteamiMagnetometer` and `SteamiCompass` share the LIS2MDL. Each shared
   driver is built once.
-* `SteamiMagnetometer`: the values are in uT with the hard-iron offset removed
-  (hard iron only: the `sx`, `sy` and `sz` scales are not applied to these
-  values). `SteamiCompass::heading()` uses the `sx`, `sy` and `sz` scales as
-  well as the offsets. `calibrate(seconds)` is a min/max calibration done in
-  RAM: turn the board in every direction meanwhile. It is lost on reset;
-  the `cm` key of the board config (see Calibration) is applied automatically.
+* `SteamiMagnetometer`: the values are in uT. The hard-iron offset is removed
+  only after a calibration (the `cm` key in the board config, or
+  `calibrate()`); before that the values include the board's own field and can
+  be much larger than the Earth's 25 to 65 uT. Hard iron only: the `sx`, `sy`
+  and `sz` scales are not applied to these values. `SteamiCompass::heading()`
+  uses the `sx`, `sy` and `sz` scales as well as the offsets.
+  `calibrate(seconds)` is a min/max calibration done in RAM: turn the board in
+  every direction meanwhile. It is lost on reset; the `cm` key of the board
+  config (see Calibration) is applied automatically.
 * `SteamiCompass`: see Heading convention below. `calibrate()` is the same as
   the magnetometer one, `setDeclination(deg)` adds the magnetic declination
   and may be called before `begin()`.
 * `SteamiLight` and `SteamiColor` give raw counts of the APDS-9960, not lux or
   an RGB value (a colour conversion comes with the display classes).
 * `SteamiLight`, `SteamiColor` and `SteamiGesture` interfere: `SteamiGesture`
-  `begin()` turns the gesture engine on, and while it tracks a hand the light
-  and colour readings freeze (the chip serves the gesture first). Read the
-  light and colour before beginning the gesture class when both matter.
+  `begin()` turns the gesture engine on, and the chip serves the gesture
+  first. While a hand is over the sensor, the light and colour readings pause
+  and resume afterwards.
 * `SteamiButtons`: A, B and MENU are read on MCU pins and always work. The four
   D-PAD arrows are on the MCP23009E: when it does not answer, `begin()` returns
   `false` with one message but A, B and MENU still work and the arrows read as
@@ -263,9 +266,9 @@ their "unavailable" value without any bus traffic and without printing again.
 with the board held flat and the screen up. 0 means that the top of the screen
 (the side opposite the USB connector) points north, 90 east, 180 south and
 270 west. It is `atan2(-x, y)` of the corrected X and Y fields, measured on a
-V1c; it is not the `atan2(y, x)` of the `SteamiLIS2MDL` driver, which is 90
-degrees off. Without tilt compensation, so keep the board flat. With the screen
-up, the accelerometer reads `z` about -1 g.
+V1c: the convention of the `SteamiLIS2MDL` driver (`headingFlatOnly()`).
+Without tilt compensation, so keep the board flat. With the screen up, the
+accelerometer reads `z` about -1 g.
 
 `direction()` returns the nearest of eight sectors, each 45 degrees wide and
 centred on its name: `"N"`, `"NE"`, `"E"`, `"SE"`, `"S"`, `"SW"`, `"W"` or
