@@ -13,7 +13,9 @@
 
 #include "SteamiBoard.h"
 #include "SteamiColor.h"
+#include "SteamiDisplayBackend.h"
 #include "SteamiFont.h"
+#include "SteamiMemoryBackend.h"
 #include "SteamiRgb.h"
 #include "SteamiTrig.h"
 #include "SteamiTypes.h"
@@ -334,6 +336,99 @@ static void test_glyph_count_nullptr_and_empty(void) {
     TEST_ASSERT_EQUAL_PTR(empty, p);
 }
 
+static void test_memory_backend_counts_out_of_bounds(void) {
+    SteamiMemoryBackend mem(128, 128);
+    mem.pixel(-1, 0, 0xFFFF);
+    mem.pixel(128, 5, 0xFFFF);
+    mem.fillRect(120, 0, 9, 1, 0xFFFF);
+    mem.fillRect(0, 0, 0, 1, 0xFFFF);
+    TEST_ASSERT_EQUAL_UINT32(4, mem.outOfBounds());
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+}
+
+static void test_memory_backend_grey_mode_stores_oled_levels(void) {
+    SteamiMemoryBackend mem(128, 128, false);
+    mem.pixel(1, 1, STEAMI_BLUE.rgb565());
+    TEST_ASSERT_EQUAL_HEX16(SteamiRgb::gray(6).rgb565(), mem.at(1, 1));
+    TEST_ASSERT_FALSE(mem.isColor());
+}
+
+static void test_memory_backend_writes_ppm(void) {
+    SteamiMemoryBackend mem(2, 1);
+    mem.pixel(0, 0, STEAMI_RED.rgb565());
+    const char* path = "steami_display_test.ppm";
+    TEST_ASSERT_TRUE(mem.writePpm(path));
+    FILE* f = fopen(path, "rb");
+    TEST_ASSERT_NOT_NULL(f);
+    unsigned char buf[64] = {};
+    const size_t n = fread(buf, 1, sizeof buf, f);
+    fclose(f);
+    remove(path);
+    const char header[] = "P6\n2 1\n255\n";
+    const size_t h = sizeof header - 1;
+    TEST_ASSERT_EQUAL_size_t(h + 6, n);
+    TEST_ASSERT_EQUAL_MEMORY(header, buf, h);
+    const unsigned char expected[6] = {255, 85, 82, 0, 0, 0};
+    TEST_ASSERT_EQUAL_MEMORY(expected, buf + h, 6);
+}
+
+static void test_board_without_backend_is_unknown_board(void) {
+    TEST_ASSERT_NULL(board.display());
+    assertStatus(SteamiStatus::UNKNOWN_BOARD, board.beginDisplay());
+    TEST_ASSERT_EQUAL_size_t(0, g_lines.size());  // the board itself reports nothing
+}
+
+static void test_board_begins_injected_backend_once(void) {
+    SteamiMemoryBackend mem(240, 240);
+    board.setDisplayBackend(mem);
+    TEST_ASSERT_EQUAL_PTR(&mem, board.display());
+    assertStatus(SteamiStatus::OK, board.beginDisplay());
+    assertStatus(SteamiStatus::OK, board.beginDisplay());
+    TEST_ASSERT_EQUAL_UINT32(1, mem.beginCalls());
+}
+
+static void test_board_failed_begin_is_no_memory(void) {
+    SteamiMemoryBackend mem(128, 128, true, false);
+    board.setDisplayBackend(mem);
+    assertStatus(SteamiStatus::NO_MEMORY, board.beginDisplay());
+    assertStatus(SteamiStatus::NO_MEMORY, board.beginDisplay());
+    TEST_ASSERT_EQUAL_UINT32(1, mem.beginCalls());  // a failed begin is cached, not retried
+    TEST_ASSERT_EQUAL_size_t(0, g_lines.size());    // the board itself reports nothing
+}
+
+static void test_set_backend_after_begin_display_is_ignored(void) {
+    SteamiMemoryBackend a(128, 128);
+    SteamiMemoryBackend b(128, 128);
+    board.setDisplayBackend(a);
+    assertStatus(SteamiStatus::OK, board.beginDisplay());
+    board.setDisplayBackend(b);
+    TEST_ASSERT_EQUAL_PTR(&a, board.display());
+    TEST_ASSERT_EQUAL_UINT32(0, b.beginCalls());
+}
+
+static void test_unknown_board_locks_injection_until_end(void) {
+    SteamiMemoryBackend a(128, 128);
+    assertStatus(SteamiStatus::UNKNOWN_BOARD, board.beginDisplay());
+    board.setDisplayBackend(a);
+    TEST_ASSERT_NULL(board.display());
+    TEST_ASSERT_EQUAL_UINT32(0, a.beginCalls());
+    board.end();
+    board.setDisplayBackend(a);
+    assertStatus(SteamiStatus::OK, board.beginDisplay());
+    TEST_ASSERT_EQUAL_UINT32(1, a.beginCalls());
+}
+
+static void test_board_end_forgets_backend_and_status(void) {
+    SteamiMemoryBackend a(128, 128);
+    board.setDisplayBackend(a);
+    assertStatus(SteamiStatus::OK, board.beginDisplay());
+    board.end();
+    TEST_ASSERT_NULL(board.display());
+    board.setDisplayBackend(a);
+    assertStatus(SteamiStatus::OK, board.beginDisplay());
+    TEST_ASSERT_EQUAL_UINT32(2, a.beginCalls());
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_rgb565_of_every_colour);
@@ -356,5 +451,14 @@ int main(int, char**) {
     RUN_TEST(test_utf8_invalid_bytes);
     RUN_TEST(test_utf8_truncated_sequences);
     RUN_TEST(test_glyph_count_nullptr_and_empty);
+    RUN_TEST(test_memory_backend_counts_out_of_bounds);
+    RUN_TEST(test_memory_backend_grey_mode_stores_oled_levels);
+    RUN_TEST(test_memory_backend_writes_ppm);
+    RUN_TEST(test_board_without_backend_is_unknown_board);
+    RUN_TEST(test_board_begins_injected_backend_once);
+    RUN_TEST(test_board_failed_begin_is_no_memory);
+    RUN_TEST(test_set_backend_after_begin_display_is_ignored);
+    RUN_TEST(test_unknown_board_locks_injection_until_end);
+    RUN_TEST(test_board_end_forgets_backend_and_status);
     return UNITY_END();
 }

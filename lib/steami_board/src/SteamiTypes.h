@@ -11,6 +11,8 @@ constexpr uint8_t STEAMI_E_CONFLICTING_DEFINES = 3;
 constexpr uint8_t STEAMI_E_NOT_ANSWERING = 10;
 constexpr uint8_t STEAMI_E_RELEASE_CONTRADICTED = 11;
 constexpr uint8_t STEAMI_E_NOT_ON_THIS_BOARD = 20;
+constexpr uint8_t STEAMI_E_DISPLAY_UNKNOWN_BOARD = 30;
+constexpr uint8_t STEAMI_E_NO_MEMORY = 31;
 
 enum class SteamiRelease : uint8_t { UNKNOWN, V1A, V1B, V1AB, V1C };
 
