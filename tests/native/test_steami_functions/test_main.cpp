@@ -892,7 +892,7 @@ static void test_buttons_read_a_and_dpad(void) {
     TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
     gpioPinState()[A_BUTTON] = LOW;
     setDpad(0xF0 & ~(1 << MCP23009_BTN_UP));
-    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));  // not stable yet
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::A));  // seen on the first call
     delay(30);
     TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::A));
     TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::UP));
@@ -939,21 +939,66 @@ static void test_was_released_after_release(void) {
     TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
 }
 
-static void test_bounce_shorter_than_debounce_is_ignored(void) {
+// Lock-out debounce: a change is taken at once, then the bounces of the next 20 ms are ignored.
+static void test_bounces_after_a_press_give_one_press(void) {
     steamiFakeBme280(Wire);
     steamiFakeMcp23009e(Wire, 0xF0);
     releaseMcuButtons();
     SteamiButtons buttons(board);
     TEST_ASSERT_TRUE(buttons.begin());
     TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
-    gpioPinState()[A_BUTTON] = LOW;
+    delay(50);
+    int presses = 0;
+    int releases = 0;
+    const int bounce[] = {LOW, HIGH, LOW, HIGH, LOW};
+    for (int level : bounce) {  // 0, 3, 6, 9 and 12 ms after the press
+        gpioPinState()[A_BUTTON] = level;
+        presses += buttons.wasPressed(SteamiButton::A) ? 1 : 0;
+        releases += buttons.wasReleased(SteamiButton::A) ? 1 : 0;
+        delay(3);
+    }
+    for (int t = 0; t < 200; t += 10) {  // held
+        presses += buttons.wasPressed(SteamiButton::A) ? 1 : 0;
+        releases += buttons.wasReleased(SteamiButton::A) ? 1 : 0;
+        delay(10);
+    }
+    TEST_ASSERT_EQUAL_INT(1, presses);
+    TEST_ASSERT_EQUAL_INT(0, releases);
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::A));
+    const int releaseBounce[] = {HIGH, LOW, HIGH, LOW, HIGH};
+    for (int level : releaseBounce) {
+        gpioPinState()[A_BUTTON] = level;
+        presses += buttons.wasPressed(SteamiButton::A) ? 1 : 0;
+        releases += buttons.wasReleased(SteamiButton::A) ? 1 : 0;
+        delay(3);
+    }
+    for (int t = 0; t < 100; t += 10) {
+        presses += buttons.wasPressed(SteamiButton::A) ? 1 : 0;
+        releases += buttons.wasReleased(SteamiButton::A) ? 1 : 0;
+        delay(10);
+    }
+    TEST_ASSERT_EQUAL_INT(1, presses);
+    TEST_ASSERT_EQUAL_INT(1, releases);
     TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
-    delay(5);
-    gpioPinState()[A_BUTTON] = HIGH;
-    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
-    delay(30);
+}
+
+// A 100 ms tap in a loop that calls the buttons every 200 ms: one call falls inside the tap.
+static void test_tap_caught_by_a_single_sample(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeMcp23009e(Wire, 0xF0);
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
     TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::A));
-    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    delay(150);
+    gpioPinState()[A_BUTTON] = LOW;
+    delay(50);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::A));  // the only call during the tap
+    delay(50);
+    gpioPinState()[A_BUTTON] = HIGH;
+    delay(150);
+    TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::A));
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::A));
 }
 
 static void test_dpad_bus_error_reads_released(void) {
@@ -1009,8 +1054,8 @@ static void test_wait_for_press_timeout(void) {
     TEST_ASSERT_TRUE(elapsed >= 100 && elapsed <= 110);
 }
 
-// The native mock cannot change a pin during the wait, so B goes low (and is seen once) before
-// the call and the debounce completes inside the wait loop.
+// The native mock cannot change a pin during the wait, so B goes low before the call, unseen:
+// the first sample of the wait takes it.
 static void test_wait_for_press_returns_button(void) {
     steamiFakeBme280(Wire);
     steamiFakeMcp23009e(Wire, 0xF0);
@@ -1018,25 +1063,25 @@ static void test_wait_for_press_returns_button(void) {
     SteamiButtons buttons(board);
     TEST_ASSERT_TRUE(buttons.begin());
     buttons.isPressed(SteamiButton::B);
+    delay(50);
     gpioPinState()[B_BUTTON] = LOW;
     const uint32_t start = millis();
     TEST_ASSERT_TRUE(buttons.waitForPress(500) == SteamiButton::B);
-    const uint32_t elapsed = millis() - start;
-    TEST_ASSERT_TRUE(elapsed >= 20 && elapsed < 500);
+    TEST_ASSERT_TRUE(millis() - start < 500);
     TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::B));
 }
 
-static void test_wait_for_press_keeps_a_fresh_press(void) {
+static void test_wait_for_press_drops_a_latched_press(void) {
     steamiFakeBme280(Wire);
     steamiFakeMcp23009e(Wire, 0xF0);
     releaseMcuButtons();
     SteamiButtons buttons(board);
     TEST_ASSERT_TRUE(buttons.begin());
     TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    delay(50);
     gpioPinState()[A_BUTTON] = LOW;
-    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
-    delay(25);
-    TEST_ASSERT_TRUE(buttons.waitForPress(100) == SteamiButton::A);
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::A));  // latched before the call
+    TEST_ASSERT_TRUE(buttons.waitForPress(100) == SteamiButton::NONE);
 }
 
 static void test_button_held_at_start_is_not_a_press(void) {
@@ -1111,12 +1156,13 @@ int main(void) {
     RUN_TEST(test_buttons_read_a_and_dpad);
     RUN_TEST(test_was_pressed_once_per_press);
     RUN_TEST(test_was_released_after_release);
-    RUN_TEST(test_bounce_shorter_than_debounce_is_ignored);
+    RUN_TEST(test_bounces_after_a_press_give_one_press);
+    RUN_TEST(test_tap_caught_by_a_single_sample);
     RUN_TEST(test_dpad_bus_error_reads_released);
     RUN_TEST(test_buttons_without_expander);
     RUN_TEST(test_wait_for_press_timeout);
     RUN_TEST(test_wait_for_press_returns_button);
-    RUN_TEST(test_wait_for_press_keeps_a_fresh_press);
+    RUN_TEST(test_wait_for_press_drops_a_latched_press);
     RUN_TEST(test_button_held_at_start_is_not_a_press);
     return UNITY_END();
 }

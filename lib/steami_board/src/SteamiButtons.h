@@ -7,8 +7,10 @@
 #include "SteamiTypes.h"
 
 /// The seven buttons: A, B and MENU on MCU pins, the D-PAD on the MCP23009E expander. All are
-/// active low and debounced over 20 ms. Every call samples the buttons once, so poll often: a press
-/// shorter than the polling period can be missed.
+/// active low. Every call samples the buttons once: a press is seen as soon as one call happens
+/// while the button is down, and the bounces of the next 20 ms are ignored. Call the buttons at
+/// least every 50 ms (a quick tap lasts about 100 ms); a tap shorter than the time between two
+/// calls can be missed (see issue #251).
 class SteamiButtons {
    public:
     /// Stores the address of the board only; touches no hardware.
@@ -41,10 +43,9 @@ class SteamiButtons {
     static int index(SteamiButton button);
 
     SteamiHandle _handle;
-    uint32_t _changedAt[COUNT] = {};
-    uint8_t _raw = 0;      // bit i set: button i read as pressed
-    uint8_t _state = 0;    // debounced
-    uint8_t _pressed = 0;  // latched edges
+    uint32_t _changedAt[COUNT] = {};  // time of the last accepted change
+    uint8_t _state = 0;               // debounced, bit i set: button i pressed
+    uint8_t _pressed = 0;             // latched edges
     uint8_t _released = 0;
     bool _pinsReady = false;
     bool _primed = false;

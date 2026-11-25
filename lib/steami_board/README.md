@@ -247,8 +247,12 @@ their "unavailable" value without any bus traffic and without printing again.
 * `SteamiButtons`: A, B and MENU are read on MCU pins and always work. The four
   D-PAD arrows are on the MCP23009E: when it does not answer, `begin()` returns
   `false` with one message but A, B and MENU still work and the arrows read as
-  released. Buttons are debounced over 20 ms and every call samples them once,
-  so poll often; a button held at start is not a press. `waitForPress()` drops
+  released. Every call samples the buttons once: a press is seen as soon as
+  one call happens while the button is down, and the bounces of the next
+  20 ms are ignored. Call the buttons at least every 50 ms (a quick tap lasts
+  about 100 ms); a tap shorter than the time between two calls can be missed
+  (see [issue #251](https://github.com/steamicc/arduino-steami-lib/issues/251)).
+  A button held at start is not a press. `waitForPress()` drops
   the presses latched before the call and returns `NONE` after the timeout.
 * A function that failed is not tried again until the board resets (or
   `Steami.end()`). After plugging in a battery, reset the board.

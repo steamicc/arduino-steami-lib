@@ -3,8 +3,9 @@
 // STeaMi Board - print each press and release of the seven buttons (A, B,
 // MENU and the four D-PAD arrows) (115200 baud).
 //
-// Works on every release (V1a, V1b and V1c). Buttons are debounced over 20 ms,
-// so loop() polls often and does not wait.
+// Works on every release (V1a, V1b and V1c). A press is seen as soon as one call
+// happens while the button is down, so loop() calls the buttons often (at least
+// every 50 ms: a quick tap lasts about 100 ms) and does not wait.
 //
 // If the D-PAD expander does not answer, begin() returns false and error() says
 // why, but A, B and MENU still work and the arrows read as released. A button

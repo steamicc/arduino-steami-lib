@@ -75,25 +75,23 @@ void SteamiButtons::sample() {
     const uint32_t t = millis();
     if (!_primed) {
         _primed = true;
-        _raw = now;
         _state = now;  // held at start: not a press
         for (uint8_t i = 0; i < COUNT; i++) {
-            _changedAt[i] = t;
+            _changedAt[i] = t - kDebounceMs;  // the next change is taken at once
         }
     }
+    // Lock-out debounce: a change is taken at once, then the bounces of the next 20 ms are ignored.
     for (uint8_t i = 0; i < COUNT; i++) {
         const uint8_t bit = 1U << i;
-        if ((now & bit) != (_raw & bit)) {
-            _raw = (_raw & ~bit) | (now & bit);
-            _changedAt[i] = t;
+        if ((now & bit) == (_state & bit) || t - _changedAt[i] < kDebounceMs) {
+            continue;
         }
-        if ((_raw & bit) != (_state & bit) && t - _changedAt[i] >= kDebounceMs) {
-            _state = (_state & ~bit) | (_raw & bit);
-            if ((_state & bit) != 0) {
-                _pressed |= bit;
-            } else {
-                _released |= bit;
-            }
+        _state = (_state & ~bit) | (now & bit);
+        _changedAt[i] = t;
+        if ((_state & bit) != 0) {
+            _pressed |= bit;
+        } else {
+            _released |= bit;
         }
     }
 }
