@@ -75,6 +75,7 @@ Direct read/write access to every register in the MCP23009E register map.
 | `void setIpol(uint8_t value)` / `uint8_t getIpol()` | Input polarity register. |
 | `void setGppu(uint8_t value)` / `uint8_t getGppu()` | Pull-up register. |
 | `void setGpio(uint8_t value)` / `uint8_t getGpio()` | GPIO register. |
+| `bool gpio(uint8_t& value)` | Read the GPIO register in one transaction. Returns `false` on a bus error and leaves `value` unchanged. |
 | `void setOlat(uint8_t value)` / `uint8_t getOlat()` | Output latch register. |
 | `void setIocon(MCP23009Config config)` / `MCP23009Config getIocon()` | I/O configuration register. |
 | `uint8_t getIntf()` | Interrupt flag register (read-only). |

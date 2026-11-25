@@ -63,6 +63,9 @@ class SteamiMCP23009E {
     uint8_t getIntcap();
     void setGpio(uint8_t value);
     uint8_t getGpio();
+    // Reads the GPIO register in one transaction. Returns false on a bus
+    // error and leaves value unchanged.
+    bool gpio(uint8_t& value);
     void setOlat(uint8_t value);
     uint8_t getOlat();
     void interruptOnChange(uint8_t gpx, std::function<void(uint8_t)> callback);

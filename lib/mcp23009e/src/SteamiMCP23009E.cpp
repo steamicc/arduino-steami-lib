@@ -337,6 +337,20 @@ uint8_t SteamiMCP23009E::getGpio() {
     return readReg(MCP23009_GPIO);
 }
 
+bool SteamiMCP23009E::gpio(uint8_t& value) {
+    // Lit le registre GPIO en une transaction et signale les erreurs de bus.
+    _wire->beginTransmission(_address);
+    _wire->write(MCP23009_GPIO);
+    if (_wire->endTransmission(false) != 0) {
+        return false;
+    }
+    if (_wire->requestFrom(_address, static_cast<uint8_t>(1)) != 1 || !_wire->available()) {
+        return false;
+    }
+    value = static_cast<uint8_t>(_wire->read());
+    return true;
+}
+
 void SteamiMCP23009E::setOlat(uint8_t value) {
     // Définit le registre OLAT (Output Latch)
     writeReg(MCP23009_OLAT, value);
