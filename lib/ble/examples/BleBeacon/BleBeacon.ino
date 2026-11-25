@@ -11,11 +11,10 @@
 
 #include <Arduino.h>
 #include <STM32duinoBLE.h>
+#include <SteamiBoard.h>
 #include <SteamiWsenHids.h>
-#include <Wire.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiWsenHids sensor(internalI2C);
+SteamiWsenHids sensor(Steami.wire());  // the board's internal I2C bus
 
 void setup() {
     Serial.begin(115200);
@@ -23,7 +22,6 @@ void setup() {
         ;
 
     // Init sensor
-    internalI2C.begin();
     if (!sensor.begin()) {
         Serial.println("WSEN-HIDS not detected — check wiring.");
         while (true)
