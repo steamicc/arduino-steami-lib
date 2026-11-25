@@ -215,7 +215,7 @@ their "unavailable" value without any bus traffic and without printing again.
 | `SteamiMagnetometer` | `read()` as a `SteamiVector` in uT, `x()`, `y()`, `z()`, `strength()`, `calibrate(seconds = 12)` | `NAN` |
 | `SteamiCompass` | `heading()` in degrees, `direction()`, `setDeclination(deg)`, `calibrate(seconds = 12)` | `NAN`, `""` |
 | `SteamiLight` | `read()`, the raw clear count of the sensor | `0` |
-| `SteamiColor` | `read(r, g, b)` (raw counts, returns whether it worked), `red()`, `green()`, `blue()` | `false`, `0` |
+| `SteamiColor` | `read(r, g, b)` (raw counts, returns whether it worked), `red()`, `green()`, `blue()`, `rgb()` (hue of the object, largest channel 255) | `false`, `0`, `STEAMI_BLACK` |
 | `SteamiGesture` | `read(timeoutMs = 0)` gives `NONE`, `LEFT`, `RIGHT`, `UP`, `DOWN`, `NEAR` or `FAR`; `SteamiGesture::name(d)` | `NONE` |
 | `SteamiButtons` | `isPressed(b)`, `wasPressed(b)`, `wasReleased(b)`, `waitForPress(timeoutMs = 0)` with `SteamiButton::A`, `B`, `MENU`, `UP`, `DOWN`, `LEFT`, `RIGHT` | `false`, `NONE` |
 
@@ -242,8 +242,9 @@ their "unavailable" value without any bus traffic and without printing again.
 * `SteamiCompass`: see Heading convention below. `calibrate()` is the same as
   the magnetometer one, `setDeclination(deg)` adds the magnetic declination
   and may be called before `begin()`.
-* `SteamiLight` and `SteamiColor` give raw counts of the APDS-9960, not lux or
-  an RGB value (a colour conversion comes with the display classes).
+* `SteamiLight` and `SteamiColor` give raw counts of the APDS-9960, not lux.
+  `SteamiColor::rgb()` scales them so that the largest channel is 255: it gives
+  the hue of the object, not its brightness (see Colours).
 * `SteamiLight`, `SteamiColor` and `SteamiGesture` interfere: `SteamiGesture`
   `begin()` turns the gesture engine on, and the chip serves the gesture
   first. While a hand is over the sensor, the light and colour readings pause
@@ -334,6 +335,37 @@ same names as in the MicroPython `steami_config`:
 The classes share their driver with `Steami.bme280()` and the others: once a
 class has begun, the shared driver returns calibrated temperatures, and a
 `calibrateTemperature()` that your sketch made earlier is overwritten.
+
+## Colours
+
+`SteamiRgb` is a colour, stored as one RGB565 word. `SteamiColor::rgb()` returns
+one, and so do the display classes. Include `SteamiRgb.h` (or `SteamiColor.h`).
+
+| Name | RGB | Grey level |
+|------|-----|-----------|
+| `STEAMI_BLACK` | 0, 0, 0 | 0 |
+| `STEAMI_GRID_DARK` | 51, 51, 51 | 3 |
+| `STEAMI_DARK` | 102, 102, 102 | 6 |
+| `STEAMI_BLUE` | 85, 85, 255 | 6 |
+| `STEAMI_RED` | 255, 85, 85 | 8 |
+| `STEAMI_GRAY` | 153, 153, 153 | 9 |
+| `STEAMI_LIGHT` | 187, 187, 187 | 11 |
+| `STEAMI_GREEN` | 119, 255, 119 | 12 |
+| `STEAMI_YELLOW` | 255, 255, 85 | 14 |
+| `STEAMI_WHITE` | 255, 255, 255 | 15 |
+
+```cpp
+SteamiRgb orange(255, 128, 0);        // red, green, blue from 0 to 255
+SteamiRgb same = {255, 128, 0};       // the braces work wherever a colour is expected
+SteamiRgb mid = SteamiRgb::gray(8);   // 16 grey levels, 0 black to 15 white
+uint16_t word = orange.rgb565();      // the RGB565 word
+uint8_t level = orange.gray4();       // grey level 0..15, what an OLED shows
+```
+
+* An integer is not a colour: write `SteamiRgb::gray(15)`, not `15`. A grey
+  level cannot turn into dark blue by mistake.
+* The primitives never adjust a colour. `STEAMI_BLUE` on `STEAMI_DARK` is
+  invisible on the OLED, where both are grey level 6.
 
 ## Using your own drivers
 
