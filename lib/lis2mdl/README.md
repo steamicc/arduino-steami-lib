@@ -154,6 +154,8 @@ to adjust against a reference thermometer.
 
 ### Heading / Compass
 
+Heading: 0° when the top of the screen (the side opposite the USB connector) points north, increasing clockwise (`atan2(-x, y)`, measured on a V1c).
+
 | Method | Description |
 |--------|-------------|
 | `float headingFlatOnly()` | Compass angle (0–360°) assuming the board is flat. Uses XY only. |

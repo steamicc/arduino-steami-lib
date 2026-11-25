@@ -348,9 +348,31 @@ void test_heading_filter_smooths_angle(void) {
 void test_normalize_deg_wraps_negative_angles(void) {
     sensor.begin();
     sensor.setHeadingOffset(-180.0f);
-    float heading = sensor.headingFromVectors(0.0f, 1.0f, 0.0f, false);
+    float heading = sensor.headingFromVectors(-1.0f, 0.0f, 0.0f, false);
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 270.0f, heading);
     sensor.setHeadingOffset(0.0f);
+}
+
+void test_heading_convention_matches_board(void) {
+    sensor.begin();
+    sensor.setHeadingOffset(0.0f);
+    sensor.setDeclination(0.0f);
+    sensor.setHeadingFilter(0.0f);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, sensor.headingFromVectors(0.0f, 1.0f, 0.0f, false));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 90.0f, sensor.headingFromVectors(-1.0f, 0.0f, 0.0f, false));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 180.0f, sensor.headingFromVectors(0.0f, -1.0f, 0.0f, false));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 270.0f, sensor.headingFromVectors(1.0f, 0.0f, 0.0f, false));
+}
+
+void test_direction_sectors_are_centred(void) {
+    sensor.begin();
+    TEST_ASSERT_EQUAL_STRING("N", sensor.directionLabel(350.0f));
+    TEST_ASSERT_EQUAL_STRING("N", sensor.directionLabel(10.0f));
+    TEST_ASSERT_EQUAL_STRING("NE", sensor.directionLabel(30.0f));
+    TEST_ASSERT_EQUAL_STRING("E", sensor.directionLabel(90.0f));
+    TEST_ASSERT_EQUAL_STRING("S", sensor.directionLabel(200.0f));
+    TEST_ASSERT_EQUAL_STRING("NW", sensor.directionLabel(337.4f));
+    TEST_ASSERT_EQUAL_STRING("N", sensor.directionLabel(337.6f));
 }
 
 void test_direction_label_returns_correct_cardinal(void) {
@@ -429,6 +451,8 @@ int main(void) {
     RUN_TEST(test_heading_filter_smooths_angle);
     RUN_TEST(test_normalize_deg_wraps_negative_angles);
     RUN_TEST(test_direction_label_returns_correct_cardinal);
+    RUN_TEST(test_heading_convention_matches_board);
+    RUN_TEST(test_direction_sectors_are_centred);
     RUN_TEST(test_soft_reset_writes_bit5_cfg_reg_a);
     RUN_TEST(test_reboot_writes_bit6_cfg_reg_a);
     RUN_TEST(test_get_mode_returns_correct_string);

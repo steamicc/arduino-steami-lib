@@ -633,7 +633,8 @@ float SteamiLIS2MDL::headingFromVectors(float x, float y, float z, bool calibrat
         x = (x - xOff) / (xScale != 0.0f ? xScale : 1.0f);
         y = (y - yOff) / (yScale != 0.0f ? yScale : 1.0f);
     }
-    float angle = degrees(atan2(y, x));
+    // Clockwise from north, 0 when the top of the screen points north (measured on a V1c).
+    float angle = degrees(atan2(-x, y));
     angle = applyHeadingOffsets(angle);
     return filterHeading(angle);
 }
@@ -670,7 +671,7 @@ const char* SteamiLIS2MDL::directionLabel(float angle) {
         angle = headingFlatOnly();
     }
     const char* dirs[] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
-    return dirs[(int)(angle / 45.0f) % 8];
+    return dirs[(int)((angle + 22.5f) / 45.0f) % 8];
 }
 
 //--------------------------------------------------------
