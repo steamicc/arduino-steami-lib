@@ -22,7 +22,6 @@ Arduino/C++ driver for the SSD1327 128x128 grayscale OLED display used on the ST
 Use this preset when targeting the built-in STeaMi OLED. It creates and starts the internal SPI bus automatically.
 
 ```cpp
-#include <SteamiBoard.h>
 #include <SteamiSSD1327.h>
 
 SteamiSSD1327 display;
@@ -40,12 +39,12 @@ void loop() {}
 ### I2C
 
 ```cpp
+#include <SteamiBoard.h>
 #include <SteamiSSD1327.h>
 
 WS_OLED_128X128_I2C display(Steami.wire());  // the board's internal I2C bus
 
 void setup() {
-
     if (!display.begin()) {
         return;
     }
