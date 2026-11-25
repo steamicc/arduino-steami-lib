@@ -5,7 +5,9 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <vector>
 
+#include "Print.h"
 #include "WString.h"
 
 // Mirror the include-guard symbol the real Arduino.h advertises.
@@ -19,6 +21,20 @@
 #define OUTPUT 1
 #define INPUT 0
 #define INPUT_PULLUP 2
+
+// STeaMi internal pins (arbitrary distinct values on the host).
+#define I2C_INT_SDA 200
+#define I2C_INT_SCL 201
+#define A_BUTTON 202
+#define B_BUTTON 203
+#define MENU_BUTTON 204
+#define RST_EXPANDER 205
+#define INT_EXPANDER 206
+#define CS_DISPLAY 207
+#define RST_DISPLAY 208
+#define SPI_INT_MOSI 209
+#define SPI_INT_MISO 210
+#define SPI_INT_SCK 211
 
 #define FALLING 2
 #define RISING 3
@@ -70,6 +86,16 @@ inline void delay(uint32_t ms) {
 inline void attachInterrupt(uint8_t /* pin */, const std::function<void()>& /* isr */,
                             int /* mode */) {
     // null operation for native tests
+}
+
+// Pins passed to detachInterrupt(), in call order.
+inline std::vector<int>& detachedInterrupts() {
+    static std::vector<int> pins;
+    return pins;
+}
+
+inline void detachInterrupt(int pin) {
+    detachedInterrupts().push_back(pin);
 }
 
 inline int digitalPinToInterrupt(int pin) {

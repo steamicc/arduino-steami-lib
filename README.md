@@ -26,6 +26,7 @@ Arduino/C++ driver library for the [STeaMi](https://www.steami.cc/) board. Each 
 | BME280        | [`bme280`](lib/bme280/)                 | `0x76`      | Pressure + humidity + temp. (V1c)     |
 | GC9A01        | [`gc9a01`](lib/gc9a01/)                 | — (SPI)     | 240x240 round colour TFT display (V1c) |
 | STeaMi Config | [`steami_config`](lib/steami_config/)   | —           | Persistent board configuration        |
+| STeaMi Board  | [`steami_board`](lib/steami_board/)     | —           | Board release detection and shared drivers |
 
 ## Quick start
 

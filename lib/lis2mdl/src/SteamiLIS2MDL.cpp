@@ -22,12 +22,7 @@ SteamiLIS2MDL::SteamiLIS2MDL(TwoWire& wire, uint8_t address, uint8_t odrHz, bool
       _odrHz(odrHz),
       _tempComp(tempComp),
       _lowPower(lowPower),
-      _drdyEnable(drdyEnable),
-      _writeBuffer{0},
-      _readBuffer{0},
-      _tempGain(1.0f),
-      _tempOffset(0.0f),
-      _tempBaseOffset(static_cast<float>(LIS2MDL_TEMP_OFFSET)) {}
+      _drdyEnable(drdyEnable) {}
 
 bool SteamiLIS2MDL::begin() {
     if (deviceId() != LIS2MDL_WHO_AM_I_VAL) {
@@ -273,9 +268,9 @@ MagneticFieldUt SteamiLIS2MDL::magneticFieldUt() {
     // Reads the magnetic field in µT, uncalibrated (simple conversion from LSB).
     MagneticField raw = magneticField();
     MagneticFieldUt f;
-    f.x = raw.x * _MAG_LSB_TO_uT;
-    f.y = raw.y * _MAG_LSB_TO_uT;
-    f.z = raw.z * _MAG_LSB_TO_uT;
+    f.x = raw.x * MAG_LSB_TO_UT;
+    f.y = raw.y * MAG_LSB_TO_UT;
+    f.z = raw.z * MAG_LSB_TO_UT;
     return f;
 }
 

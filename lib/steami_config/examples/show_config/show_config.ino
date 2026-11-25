@@ -27,6 +27,29 @@ void printNotSet(const char* label) {
     Serial.println("(not set)");
 }
 
+// Prints a revision code the way the STeaMi Board library reads it: hundreds
+// are the generation, tens the release (1 = a, 2 = b, 3 = c), units the
+// schematic index (0 = prototype). Done inline so this sketch does not need
+// the SteamiBoard library.
+void printRevision(int32_t rev) {
+    Serial.print(rev);
+    const int32_t generation = rev / 100;
+    const int32_t release = (rev / 10) % 10;
+    if (rev < 100 || rev > 999 || generation != 1 || release < 1 || release > 3) {
+        Serial.println(" (unknown code)");
+        return;
+    }
+    Serial.print(" (V1");
+    Serial.print(static_cast<char>('a' + release - 1));
+    if (rev % 10 == 0) {
+        Serial.println(", prototype)");
+    } else {
+        Serial.print(", index ");
+        Serial.print(rev % 10);
+        Serial.println(")");
+    }
+}
+
 void setup() {
     Serial.begin(115200);
     while (!Serial && millis() < 2000) {
@@ -51,7 +74,7 @@ void setup() {
     int32_t revision = 0;
     if (config.boardRevision(revision)) {
         Serial.print("Board revision: ");
-        Serial.println(revision);
+        printRevision(revision);
     } else {
         printNotSet("Board revision: ");
     }

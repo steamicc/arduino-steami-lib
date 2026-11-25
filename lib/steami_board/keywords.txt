@@ -1,0 +1,56 @@
+#######################################
+# Syntax Coloring Map For STeaMi Board
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+Steami	KEYWORD1
+SteamiBoard	KEYWORD1
+SteamiBoardPins	KEYWORD1
+SteamiRelease	KEYWORD1
+SteamiOrigin	KEYWORD1
+SteamiStatus	KEYWORD1
+SteamiChip	KEYWORD1
+SteamiFunction	KEYWORD1
+SteamiRevisionInfo	KEYWORD1
+SteamiLazy	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin	KEYWORD2
+end	KEYWORD2
+release	KEYWORD2
+releaseName	KEYWORD2
+isV1c	KEYWORD2
+isV1ab	KEYWORD2
+origin	KEYWORD2
+revision	KEYWORD2
+isPrototype	KEYWORD2
+schematicIndex	KEYWORD2
+has	KEYWORD2
+config	KEYWORD2
+claim	KEYWORD2
+built	KEYWORD2
+printInfo	KEYWORD2
+setLogger	KEYWORD2
+lastError	KEYWORD2
+report	KEYWORD2
+wire	KEYWORD2
+pins	KEYWORD2
+bme280	KEYWORD2
+wsenHids	KEYWORD2
+wsenPads	KEYWORD2
+apds9960	KEYWORD2
+ism330dl	KEYWORD2
+lis2mdl	KEYWORD2
+vl53l1x	KEYWORD2
+bq27441	KEYWORD2
+mcp23009e	KEYWORD2
+steamiDecodeRevision	KEYWORD2
+steamiRoute	KEYWORD2
+steamiChipName	KEYWORD2
+steamiChipAddress	KEYWORD2

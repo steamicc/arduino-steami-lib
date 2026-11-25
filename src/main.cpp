@@ -13,6 +13,7 @@
 
 #include <Arduino.h>
 #include <SteamiBME280.h>
+#include <SteamiBoard.h>
 #include <SteamiDaplinkBridge.h>
 #include <SteamiWsenHids.h>
 #include <SteamiWsenPads.h>
@@ -34,6 +35,9 @@ void setup() {
     delay(2000);
 
     Serial.println("STeaMi smoke test");
+
+    Steami.begin();
+    Steami.printInfo();
 
     pinMode(LED_RED, OUTPUT);
     pinMode(LED_GREEN, OUTPUT);

@@ -4,16 +4,7 @@
 
 #include <math.h>
 
-SteamiISM330DL::SteamiISM330DL(TwoWire& wire, uint8_t address)
-    : _wire(wire),
-      _address(address),
-      _accelScale(AccelScale::G_2),
-      _accelOdr(AccelOdr::HZ_104),
-      _gyroScale(GyroScale::DPS_250),
-      _gyroOdr(GyroOdr::HZ_104),
-      _accelOffset{0.0F, 0.0F, 0.0F},
-      _tempGain(1.0F),
-      _tempOffset(0.0F) {}
+SteamiISM330DL::SteamiISM330DL(TwoWire& wire, uint8_t address) : _wire(wire), _address(address) {}
 
 bool SteamiISM330DL::begin() {
     if (!isConnected()) {
