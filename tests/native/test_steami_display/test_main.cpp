@@ -443,8 +443,8 @@ static_assert(SteamiDisplay::CHAR_W == 8 && SteamiDisplay::CHAR_H == 8, "5.3");
 class TestDisplay : public SteamiDisplay {
    public:
     explicit TestDisplay(SteamiBoard& b) : SteamiDisplay(b, "SteamiTestDisplay") {}
-    using SteamiDisplay::strokeCircle;
     using SteamiDisplay::glyph;
+    using SteamiDisplay::strokeCircle;
     using SteamiDisplay::strokeLine;
     using SteamiDisplay::textSmall;
     using SteamiDisplay::textSmallWidth;
@@ -1457,8 +1457,11 @@ static void test_glyph_size_at_scales_1_to_4(void) {
 
 static void test_text_width_counts_glyphs(void) {
     TestDisplay d(board);
-    TEST_ASSERT_EQUAL_INT16(16, d.textWidth("\xC2\xB0" "C"));
-    TEST_ASSERT_EQUAL_INT16(32, d.textWidth("\xC2\xB0" "C", 2));
+    TEST_ASSERT_EQUAL_INT16(16, d.textWidth("\xC2\xB0"
+                                            "C"));
+    TEST_ASSERT_EQUAL_INT16(32, d.textWidth("\xC2\xB0"
+                                            "C",
+                                            2));
     TEST_ASSERT_EQUAL_INT16(88, d.textWidth("Temp\xC3\xA9rature"));
     TEST_ASSERT_EQUAL_INT16(0, d.textWidth(""));
     TEST_ASSERT_EQUAL_INT16(0, d.textWidth(nullptr));
@@ -1609,8 +1612,10 @@ static void drawGallery(SteamiDisplay& d) {
     d.arc(cx, cy, r - 4 * s, 225, 270, STEAMI_GRID_DARK, 6 * s);  // gauge track
     d.arc(cx, cy, r - 4 * s, 225, 135, STEAMI_GREEN, 6 * s);      // half fill
     d.text("STeaMi", cx - d.textWidth("STeaMi", s) / 2, cy - r / 2, STEAMI_WHITE, s);
-    d.text("20\xC2\xB0" "C \xC3\xA9", cx - d.textWidth("20\xC2\xB0" "C \xC3\xA9", s) / 2,
-           cy - r / 2 + 12 * s, STEAMI_YELLOW, s);
+    const char* temp =
+        "20\xC2\xB0"
+        "C \xC3\xA9";  // "20°C é"
+    d.text(temp, cx - d.textWidth(temp, s) / 2, cy - r / 2 + 12 * s, STEAMI_YELLOW, s);
     d.rect(cx - r / 2, cy - r / 8, r / 3, r / 4, STEAMI_LIGHT);
     d.rect(cx - r / 2 + 2, cy - r / 8 + 2, r / 3 - 4, r / 4 - 4, STEAMI_BLUE, true);
     d.circle(cx + r / 3, cy, r / 8, STEAMI_RED, true);

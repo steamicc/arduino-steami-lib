@@ -25,7 +25,9 @@ class SteamiRgb {
     /// Grey level 0..15 of this colour (luma 77/150/29 of the expanded 8-bit channels).
     constexpr uint8_t gray4() const {
         return static_cast<uint8_t>(
-            ((expand5(_v >> 11) * 77 + expand6((_v >> 5) & 63) * 150 + expand5(_v & 31) * 29) >> 8) >> 4);
+            ((expand5(_v >> 11) * 77 + expand6((_v >> 5) & 63) * 150 + expand5(_v & 31) * 29) >>
+             8) >>
+            4);
     }
 
     constexpr bool operator==(SteamiRgb other) const { return _v == other._v; }
