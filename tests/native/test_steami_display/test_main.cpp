@@ -4,6 +4,8 @@
 #include <Wire.h>
 #include <math.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unity.h>
 
@@ -1597,6 +1599,49 @@ static void test_protected_name_in_messages(void) {
     TEST_ASSERT_EQUAL_UINT32(0, g_lines[0].rfind("[STeaMi] SteamiTestDisplay: ", 0));
 }
 
+/// The primitives gallery: the scene the 3b Drawing example copies line for line. The 240 px colour
+/// dump is the reference for the V1c photo.
+static void drawGallery(SteamiDisplay& d) {
+    const int16_t cx = d.centerX(), cy = d.centerY(), r = d.radius();
+    const uint8_t s = d.width() >= 240 ? 2 : 1;
+    d.clear();
+    d.circle(cx, cy, r - 1, STEAMI_DARK);                         // panel edge
+    d.arc(cx, cy, r - 4 * s, 225, 270, STEAMI_GRID_DARK, 6 * s);  // gauge track
+    d.arc(cx, cy, r - 4 * s, 225, 135, STEAMI_GREEN, 6 * s);      // half fill
+    d.text("STeaMi", cx - d.textWidth("STeaMi", s) / 2, cy - r / 2, STEAMI_WHITE, s);
+    d.text("20\xC2\xB0" "C \xC3\xA9", cx - d.textWidth("20\xC2\xB0" "C \xC3\xA9", s) / 2,
+           cy - r / 2 + 12 * s, STEAMI_YELLOW, s);
+    d.rect(cx - r / 2, cy - r / 8, r / 3, r / 4, STEAMI_LIGHT);
+    d.rect(cx - r / 2 + 2, cy - r / 8 + 2, r / 3 - 4, r / 4 - 4, STEAMI_BLUE, true);
+    d.circle(cx + r / 3, cy, r / 8, STEAMI_RED, true);
+    d.triangle(cx - r / 4, cy + r / 2, cx + r / 4, cy + r / 2, cx, cy + r / 4, STEAMI_YELLOW, true);
+    d.line(cx - r / 2, cy + r / 6, cx + r / 2, cy + r / 6, STEAMI_GRAY);
+    d.show();
+}
+
+static void galleryOn(int16_t size, bool color, const char* fileName) {
+    board.end();
+    board.setLogger(&capture);
+    SteamiMemoryBackend mem(size, size, color);
+    board.setDisplayBackend(mem);
+    SteamiDisplay d(board);
+    drawGallery(d);
+    TEST_ASSERT_EQUAL_UINT32(0, mem.outOfBounds());
+    TEST_ASSERT_TRUE(mem.litCount() > 0);
+    TEST_ASSERT_EQUAL_UINT32(1, mem.showCalls());
+    const char* dir = getenv("STEAMI_PPM_DIR");
+    if (dir != nullptr && dir[0] != '\0') {
+        const std::string path = std::string(dir) + "/" + fileName;
+        TEST_ASSERT_TRUE(mem.writePpm(path.c_str()));
+    }
+    board.end();
+}
+
+static void test_gallery_ppm(void) {
+    galleryOn(128, false, "steami-display-gallery-128-gray.ppm");
+    galleryOn(240, true, "steami-display-gallery-240-color.ppm");
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_rgb565_of_every_colour);
@@ -1667,5 +1712,6 @@ int main(int, char**) {
     RUN_TEST(test_small_text);
     RUN_TEST(test_glyph_window);
     RUN_TEST(test_protected_name_in_messages);
+    RUN_TEST(test_gallery_ppm);
     return UNITY_END();
 }
