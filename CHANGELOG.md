@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.31.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.30.0...v0.31.0) (2026-11-25)
+
+
+### Features
+
+* **board:** Add SteamiBoard, board detection and shared drivers. ([#244](https://github.com/steamicc/arduino-steami-lib/issues/244)) ([c98082c](https://github.com/steamicc/arduino-steami-lib/commit/c98082c9dea99e4be24fc494a0423d7913b54f6a))
+
 # [0.30.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.29.0...v0.30.0) (2026-11-24)
 
 
