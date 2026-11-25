@@ -27,8 +27,9 @@ class SteamiGesture {
     const char* error() const { return _handle.error(); }
     const char* chip() const { return _handle.chip(); }
 
-    /// The gesture seen, waiting up to `timeoutMs` for one; NONE when there is none or when
-    /// unavailable. With 0 it only looks at what the chip already holds.
+    /// The gesture in progress, read for at most `timeoutMs`; NONE when the sensor has not seen
+    /// a gesture (it does not wait for one to start) or when unavailable. Call it on every
+    /// loop() turn; with 0 it only decodes what the chip already holds and can cut a gesture.
     Direction read(uint32_t timeoutMs = 0);
 
     /// "NONE", "LEFT", "RIGHT", "UP", "DOWN", "NEAR" or "FAR".
