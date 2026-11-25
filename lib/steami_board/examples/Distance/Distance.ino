@@ -4,7 +4,8 @@
 // (115200 baud).
 //
 // Works on every release (V1a, V1b and V1c). read() gives millimetres, or -1
-// when the sensor gives no result (nothing in range, or a true 0 mm).
+// when the sensor timed out or is unavailable (the driver ignores the range
+// status, so a target out of range is not told apart).
 //
 // If the sensor does not answer, begin() returns false and error() says why;
 // the library also logs one message with its code.

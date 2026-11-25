@@ -200,9 +200,12 @@ their "unavailable" value without any bus traffic and without printing again.
 | `SteamiDistance` | `read()` in mm, `cm()` | `-1` (`NAN` for `cm()`) |
 | `SteamiBattery` | `percent()`, `voltage()` in V, `current()` in mA, `isCharging()` | `0`, `NAN`, `0`, `false` |
 
-* `SteamiDistance`: a true 0 mm reading reads as `-1`, because the driver
-  returns 0 on a timeout.
+* `SteamiDistance`: `-1` means that the sensor timed out or is unavailable.
+  The driver ignores the range status, so a target out of range is not told
+  apart, and a true 0 mm reading reads as `-1` too.
 * `SteamiBattery`: `isCharging()` is `current() > 0`.
+* A function that failed is not tried again until the board resets (or
+  `Steami.end()`). After plugging in a battery, reset the board.
 
 ### Messages of the function classes
 
@@ -215,8 +218,11 @@ their "unavailable" value without any bus traffic and without printing again.
 
 `E10` means that the chip of the release did not answer: with one candidate the
 text names the chip and its I2C address, with several it lists them. `E11`
-replaces it when the release was forced (`Steami.begin(...)`, `#define`) or
-read from the board config: the text then tells you to check that setting.
+replaces it only for the sensors that differ between releases (temperature,
+humidity and pressure) when the release was forced (`Steami.begin(...)`,
+`#define`) or read from the board config: the text then tells you to check
+that setting. Distance and battery are on every release, so they always use
+`E10`.
 `E20` is a format, not a text you will see: it means that the function does
 not exist on this release. None of the five classes in this library can print
 it, because each of them exists on every release (temperature, humidity,
@@ -239,6 +245,10 @@ The keys are the same as in the MicroPython `steami_config`:
 calibration. `Steami.calibrate(chip)` applies it on demand and
 `Steami.calibrated(chip)` tells whether it was applied. Without a config
 zone, nothing changes.
+
+The classes share their driver with `Steami.bme280()` and the others: once a
+class has begun, the shared driver returns calibrated temperatures, and a
+`calibrateTemperature()` that your sketch made earlier is overwritten.
 
 ## Using your own drivers
 
