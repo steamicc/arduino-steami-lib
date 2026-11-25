@@ -78,7 +78,7 @@
   `enum class SteamiOrigin : uint8_t { NONE, FORCED_RUNTIME, FORCED_DEFINE, CONFIG, PROBE };`
   `enum class SteamiStatus : uint8_t { OK, NOT_STARTED, NOT_ON_THIS_BOARD, NOT_RESPONDING, NO_MEMORY, UNKNOWN_BOARD };`
   `enum class SteamiChip : uint8_t { NONE, BME280, WSEN_HIDS, WSEN_PADS, APDS9960, ISM330DL, LIS2MDL, VL53L1X, BQ27441, MCP23009E, SSD1327, GC9A01, COUNT };`
-  `enum class SteamiFunction : uint8_t { TEMPERATURE, HUMIDITY, PRESSURE, DISTANCE, ACCELEROMETER, GYROSCOPE, MAGNETOMETER, COMPASS, LIGHT, COLOR, GESTURE, BATTERY, BUTTONS, DISPLAY, COUNT };`
+  `enum class SteamiFunction : uint8_t { TEMPERATURE, HUMIDITY, PRESSURE, DISTANCE, ACCELEROMETER, GYROSCOPE, MAGNETOMETER, COMPASS, LIGHT, COLOR, GESTURE, BATTERY, BUTTONS, SCREEN, COUNT };`
   `struct SteamiRevisionInfo { bool valid; uint8_t generation; uint8_t release; uint8_t index; SteamiRelease board; bool prototype; };`
   `constexpr SteamiRevisionInfo steamiDecodeRevision(int32_t rev);`
   `constexpr SteamiChip steamiRoute(SteamiRelease release, SteamiFunction f, uint8_t candidate);` (returns `SteamiChip::NONE` past the last candidate)
@@ -98,14 +98,14 @@
 | LIGHT, COLOR, GESTURE | APDS9960 | none | APDS9960 |
 | BATTERY | BQ27441 | BQ27441 | BQ27441 |
 | BUTTONS | MCP23009E | MCP23009E | MCP23009E |
-| DISPLAY | SSD1327 | GC9A01 | none (E30, sub-project 3) |
+| SCREEN | SSD1327 | GC9A01 | none (E30, sub-project 3) |
 
 - `library.properties`: `name=STeaMi Board`, `version=0.0.0`, `author=STeaMi contributors`, `maintainer=STeaMi contributors`, `sentence=Board detection and shared drivers for the STeaMi.`, `paragraph=Detects the STeaMi release (V1a, V1b or V1c) from the DAPLink config zone or the on-board sensors, and shares one instance of each sensor driver on the internal I2C bus.`, `category=Sensors`, `url=https://github.com/steamicc/arduino-steami-lib`, `architectures=*`, `depends=STeaMi DAPLink Bridge, STeaMi Config, STeaMi BME280, STeaMi WSEN-HIDS, STeaMi WSEN-PADS, STeaMi APDS9960, STeaMi ISM330DL, STeaMi LIS2MDL, STeaMi VL53L1X, STeaMi BQ27441, STeaMi MCP23009E` (use each dependency's exact `name=` from its `library.properties`), `includes=SteamiBoard.h`.
 
 - [ ] **Step 1: Write the failing tests** (`tests/native/test_steami_board/test_main.cpp`, includes `"SteamiTypes.h"` and `"SteamiLazy.h"`):
   - `test_revision_codes`: `static_assert(steamiDecodeRevision(131).board == SteamiRelease::V1C, "")`; runtime asserts for 110 (V1A, prototype), 111 (V1A), 120 (V1B, prototype), 121 (V1B), 130 (V1C, prototype, index 0), 131 (V1C, index 1, not prototype); invalid: 3, 99, 100, 140, 210, 230, 1000, -131.
-  - `test_routing_v1c_has_no_apds_and_uses_bme280`: `steamiRoute(V1C, TEMPERATURE, 0) == BME280`, `steamiRoute(V1C, TEMPERATURE, 1) == NONE`, `steamiRoute(V1C, GESTURE, 0) == NONE`, `steamiRoute(V1C, DISPLAY, 0) == GC9A01`.
-  - `test_routing_v1ab_and_unknown_candidates`: `steamiRoute(V1AB, TEMPERATURE, 1) == WSEN_PADS`, `steamiRoute(V1B, DISPLAY, 0) == SSD1327`, `steamiRoute(UNKNOWN, HUMIDITY, 0) == BME280`, `steamiRoute(UNKNOWN, HUMIDITY, 1) == WSEN_HIDS`, `steamiRoute(UNKNOWN, DISPLAY, 0) == NONE`.
+  - `test_routing_v1c_has_no_apds_and_uses_bme280`: `steamiRoute(V1C, TEMPERATURE, 0) == BME280`, `steamiRoute(V1C, TEMPERATURE, 1) == NONE`, `steamiRoute(V1C, GESTURE, 0) == NONE`, `steamiRoute(V1C, SCREEN, 0) == GC9A01`.
+  - `test_routing_v1ab_and_unknown_candidates`: `steamiRoute(V1AB, TEMPERATURE, 1) == WSEN_PADS`, `steamiRoute(V1B, SCREEN, 0) == SSD1327`, `steamiRoute(UNKNOWN, HUMIDITY, 0) == BME280`, `steamiRoute(UNKNOWN, HUMIDITY, 1) == WSEN_HIDS`, `steamiRoute(UNKNOWN, SCREEN, 0) == NONE`.
   - `test_lazy_slot_builds_once_and_resets`: a counting type `struct Probe { static int alive; int v; explicit Probe(int x) : v(x) { ++alive; } ~Probe() { --alive; } };` — `emplace(4)` then `emplace(9)` keeps `get()->v == 4` and `alive == 1`; `reset()` -> `alive == 0`, `built() == false`.
 - [ ] **Step 2: Run** `make test-native/steami_board` — Expected: FAIL, headers missing.
 - [ ] **Step 3: Implement** `SteamiTypes.h` and `SteamiLazy.h` per Interfaces (routing as one constexpr switch; no tables in RAM). Add `library.properties` and a `keywords.txt` listing every type and enum (`KEYWORD1`) and `steamiDecodeRevision` (`KEYWORD2`).
@@ -229,7 +229,7 @@
   - `test_claim_builds_and_begins_once`: V1c by probing, BME280 registers for a successful `begin()` (copy the register preload used by `tests/native/test_bme280` for its `begin()` test); `claim(BME280)` twice -> `OK` both times, and the second call makes no transaction at 0x76 (`Wire.transactions(0x76)` unchanged).
   - `test_accessor_returns_same_instance`: `bme280() == bme280()`, non-null.
   - `test_not_responding_is_cached`: V1AB, nothing at 0x6B -> `claim(ISM330DL) == NOT_RESPONDING`, second call makes no transaction at 0x6B, `ism330dl() == nullptr`.
-  - `test_v1ab_never_builds_bme280`: V1AB by probing; for every `SteamiFunction` except DISPLAY, `claim(steamiRoute(V1AB, f, 0))`; then `!built(SteamiChip::BME280)` and `!built(SteamiChip::GC9A01)`.
+  - `test_v1ab_never_builds_bme280`: V1AB by probing; for every `SteamiFunction` except SCREEN, `claim(steamiRoute(V1AB, f, 0))`; then `!built(SteamiChip::BME280)` and `!built(SteamiChip::GC9A01)`.
   - `test_print_info_lists_chips`: after the previous scenario, `printInfo(p)` contains `"BME280 0x76 not tried"` and `"WSEN-HIDS 0x5F"`.
   - `test_end_destroys_slots`: after claims, `end()` -> `built(SteamiChip::WSEN_HIDS) == false`, `release()` detects again.
   - keep `test_sizeof_board` passing (below 2560 bytes with every slot).

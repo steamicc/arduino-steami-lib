@@ -122,7 +122,8 @@ enum class SteamiStatus  : uint8_t { OK, NOT_STARTED, NOT_ON_THIS_BOARD, NOT_RES
 enum class SteamiChip    : uint8_t { NONE, BME280, WSEN_HIDS, WSEN_PADS, APDS9960, ISM330DL, LIS2MDL,
                                      VL53L1X, BQ27441, MCP23009E, SSD1327, GC9A01, COUNT };
 enum class SteamiFunction : uint8_t { TEMPERATURE, HUMIDITY, PRESSURE, DISTANCE, ACCELEROMETER, GYROSCOPE,
-                                      MAGNETOMETER, COMPASS, LIGHT, COLOR, GESTURE, BATTERY, BUTTONS, DISPLAY, COUNT };
+                                      MAGNETOMETER, COMPASS, LIGHT, COLOR, GESTURE, BATTERY, BUTTONS, SCREEN, COUNT };
+// SCREEN, not DISPLAY: the STM32 core #defines DISPLAY, which would break the enumerator.
 struct SteamiBoardPins { uint32_t sda, scl, expanderReset, expanderIrq, buttonA, buttonB, buttonMenu;
                          static SteamiBoardPins steami(); };   // defaults from the STeaMi variant
 
@@ -179,7 +180,7 @@ Detection, `SteamiBoard::begin()`, runs once:
    - `bridge.hasConfigZone()` (the #239 probe: READ_SECTOR, ERROR read before STATUS, Unknown counts as
      absent). If false, go to 3. **No SteamiConfig method is called before this returns true.**
    - build the `SteamiConfig` slot, `load()`, `boardRevision(rev)`. Decode `rev` with the board revision
-     code of 5.2.1. Missing or unknown value: message E02 and go to 3. Origin `CONFIG`; the loaded config
+     code of 5.2.1. Missing value: go to 3 silently; invalid value: message E02 and go to 3. Origin `CONFIG`; the loaded config
      stays available for calibrations (5.3.1).
 3. Probe, by chip ID (one register write + one-byte read each, never at 0x3B):
    - 0x76 reg 0xD0 == 0x60 (BME280) -> V1C;
@@ -216,8 +217,8 @@ as the board name. Decoding: `generation = rev / 100`, `release = (rev / 10) % 1
   (`unknown board revision 230 in the board config: update the STeaMi library`), then probing. The example
   value 3 written by older examples falls here, which is the wanted behaviour (no board carries a factory
   value yet).
-- The table lives in one constexpr function `steamiDecodeRevision(int32_t, SteamiRevisionInfo&)` in
-  `SteamiTypes.h`, unit-tested on every value above and the boundaries.
+- The table lives in one function, `constexpr SteamiRevisionInfo steamiDecodeRevision(int32_t)`
+  (the result is returned by value), in `SteamiTypes.h`, unit-tested on every value above and the boundaries.
 - Same code in MicroPython `steami_config` and on the wiki: sub-project 1 changes the Arduino `SteamiConfig`
   README and `show_config` example (`setBoardRevision(131)`, decoded print); separate PRs update the MicroPython
   `steami_config` README/examples and the wiki page *Révisions* (section *Identifier sa version*), so the
@@ -602,7 +603,7 @@ per-address NACK `setAbsent(addr)` in the Wire mock; a capturing logger installe
 Native suites:
 1. `test_steami_board`: **legacy firmware -> no config command ever reaches the fake, the fake is not hung,
    result from probe**; config `{"rev":131}` -> V1C/CONFIG with no probe traffic, `{"rev":130}` -> V1C prototype, `{"rev":3}` and `{"rev":230}` -> E02 then probe; bridge absent, probe Unknown,
-   revision missing or unknown (E02) -> probe; BME280 / HIDS / PADS-only / APDS-only / nothing -> V1C / V1AB /
+   revision missing (silent) or unknown (E02) -> probe; BME280 / HIDS / PADS-only / APDS-only / nothing -> V1C / V1AB /
    V1AB / V1AB / UNKNOWN + E01; second `begin()` and `begin(SteamiRelease::V1C)` make no I2C transaction; the
    constructor touches neither Wire nor pins; on V1AB, using every function leaves the BME280 and GC9A01 slots
    unbuilt; `sizeof(SteamiBoard)` under 2.5 KB.
