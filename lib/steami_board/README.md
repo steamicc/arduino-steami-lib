@@ -293,9 +293,10 @@ centred on its name: `"N"`, `"NE"`, `"E"`, `"SE"`, `"S"`, `"SW"`, `"W"` or
 `E10` means that the chip of the release did not answer: with one candidate the
 text names the chip and its I2C address, with several it lists them. `E11`
 replaces it only for the sensors that differ between releases (temperature,
-humidity and pressure) when the release was forced (`Steami.begin(...)`,
-`#define`) or read from the board config: the text then tells you to check
-that setting. Distance and battery are on every release, so they always use
+humidity, pressure, light, colour and gesture) when the release was forced
+(`Steami.begin(...)`, `#define`) or read from the board config: the text then
+tells you to check that setting. Distance, battery, accelerometer, gyroscope,
+magnetometer, compass and buttons are on every release, so they always use
 `E10`.
 `E20` means that the function does not exist on this release. Only
 `SteamiLight`, `SteamiColor` and `SteamiGesture` can print it, on a V1c (the
