@@ -109,12 +109,12 @@ class SteamiLIS2MDL {
     bool _lowPower;
     bool _drdyEnable;
 
-    uint8_t _writeBuffer[1];
-    uint8_t _readBuffer[1];
+    uint8_t _writeBuffer[1] = {0};
+    uint8_t _readBuffer[1] = {0};
 
-    float _tempGain;
-    float _tempOffset;
-    float _tempBaseOffset;
+    float _tempGain = 1.0f;
+    float _tempOffset = 0.0f;
+    float _tempBaseOffset = static_cast<float>(LIS2MDL_TEMP_OFFSET);
 
     float _headingOffsetDeg = 0.0f;
     float _declinationDeg = 0.0f;

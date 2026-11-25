@@ -128,14 +128,14 @@ class SteamiISM330DL {
     TwoWire& _wire;
     uint8_t _address;
 
-    AccelScale _accelScale;
-    AccelOdr _accelOdr;
-    GyroScale _gyroScale;
-    GyroOdr _gyroOdr;
+    AccelScale _accelScale = AccelScale::G_2;
+    AccelOdr _accelOdr = AccelOdr::HZ_104;
+    GyroScale _gyroScale = GyroScale::DPS_250;
+    GyroOdr _gyroOdr = GyroOdr::HZ_104;
 
-    Vector3 _accelOffset;
-    float _tempGain;
-    float _tempOffset;
+    Vector3 _accelOffset{0.0F, 0.0F, 0.0F};
+    float _tempGain = 1.0F;
+    float _tempOffset = 0.0F;
 
     bool readReg(uint8_t reg, uint8_t& value);
     bool writeReg(uint8_t reg, uint8_t value);
