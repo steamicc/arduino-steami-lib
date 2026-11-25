@@ -32,8 +32,11 @@ void setup() {
 void loop() {}
 ```
 
-This is the [`BoardInfo`](examples/BoardInfo/) example. It prints the release,
-where the answer comes from, and the I2C chips that answered.
+It prints the release, where the answer comes from, and the I2C chips of that
+release, each one `OK`, `not responding` or `not tried`. "Not tried" means that
+no function used that chip yet. The [`BoardInfo`](examples/BoardInfo/) example
+claims the chip of every function first (`Steami.claim(steamiRoute(...))`), so
+each line shows whether the chip really answers.
 
 ## Detection order
 
@@ -90,8 +93,10 @@ A forced release makes no I2C traffic.
 ## Messages
 
 Messages look like `[STeaMi] <who>: <detail> (Exx)`. Each one is logged once
-per (class, code); `lastError()` keeps the last one, and `printInfo()` shows
-it again if it was reported earlier.
+per (class, code); `lastError()` keeps the last one. A message too long for
+`lastError()` loses the end of its detail, never its code. `printInfo()` shows
+the last message again only when the logger did not deliver it (no logger, or
+`Serial` not started yet).
 
 | Code | Text |
 |------|------|
@@ -121,7 +126,8 @@ The default logger prints on `Serial` only once `Serial` is started
 | `SteamiStatus claim(SteamiChip c)` | Build the driver of a chip on the first call and begin it once. `OK` or `NOT_RESPONDING` for the nine I2C chips, `NOT_STARTED` for the displays. |
 | `bool built(SteamiChip c)` | True when the driver of the chip is constructed. |
 | `bme280()`, `wsenHids()`, `wsenPads()`, `apds9960()`, `ism330dl()`, `lis2mdl()`, `vl53l1x()`, `bq27441()`, `mcp23009e()` | The shared driver of a chip, `nullptr` unless `claim()` gives `OK`. |
-| `void printInfo(Print& out)` / `void printInfo()` | Print the banner, the I2C chips and the last message, to `out` or through the logger. |
+| `void printInfo()` | Through the logger: the banner (unless the logger already delivered it), the I2C chips of the release, then the last message (unless the logger already delivered it). |
+| `void printInfo(Print& out)` | A full report to `out`: always the banner, the I2C chips of the release, then the last message unless the logger already delivered it. |
 | `void setLogger(void (*log)(const char*))` | Where messages go; `nullptr` keeps the library silent. |
 | `const char* lastError()` | The last message reported, `""` when none. |
 | `void report(const char* who, SteamiStatus s, const char* detail, uint8_t code)` | Store and log a coded message (once per pair). `who` must be a literal. |
@@ -133,6 +139,33 @@ Free functions: `steamiDecodeRevision(int32_t)`, `steamiRoute(release,
 function, candidate)`, `steamiChipName(chip)`, `steamiChipAddress(chip)` and
 `steamiForceRelease(release)` (used by the `#define` mechanism, do not call
 it).
+
+## Using your own drivers
+
+Some drivers are not shared by `Steami` yet. Build them on the board's bus,
+from `setup()`:
+
+```cpp
+#include <SteamiBoard.h>
+#include <SteamiDaplinkBridge.h>
+
+void setup() {
+    Steami.begin();
+    static SteamiDaplinkBridge bridge(Steami.wire());
+    bridge.begin();
+}
+```
+
+* Pass `Steami.wire()` to every driver you build yourself, and call it from
+  `setup()` (or later), never from a global initialiser: the bus is built and
+  begun on first use.
+* Never create a second `TwoWire` on `I2C_INT_SDA` / `I2C_INT_SCL`. On
+  STM32duino 3.1.0 the last `TwoWire` to call `begin()` owns the I2C1
+  interrupt (`i2c_handles[I2C1_INDEX]` in `twi.c`); the transfers of the other
+  one time out without any error.
+* The examples of the other drivers still create their own bus. Do not mix
+  them with `Steami` in one sketch until they move to `Steami.wire()` (a later
+  sub-project).
 
 ## Testing
 
