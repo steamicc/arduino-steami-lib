@@ -2,6 +2,8 @@
 
 #include "SteamiDisplay.h"
 
+#include "SteamiTrig.h"
+
 namespace {
 
 const char* const kUnknownBoardHint =
@@ -10,6 +12,44 @@ const char* const kUnknownBoardHint =
 const char* const kNoMemoryHint =
     "not enough RAM for the colour screen (115200 bytes in one block). "
     "Call screen.begin() first in setup().";
+
+/// The largest |dx| that the midpoint outline of radius r (1 to 32767) lights on the row k rows
+/// from its centre (0 <= k <= r), in closed form so a filled circle visits only the panel rows.
+/// The walk of circle() puts on row k the octant point x, the largest with x(x - 1) + k^2 < r^2,
+/// as long as 2k^2 - k < r^2; further out the row holds only mirrored points, the widest at the
+/// largest y with y^2 < r^2 - k(k - 1). Both arguments of steamiIsqrt() stay under 2^32.
+int32_t circleHalfWidth(int32_t r, int32_t k) {
+    const int64_t r2 = static_cast<int64_t>(r) * r;
+    const int64_t k2 = static_cast<int64_t>(k) * k;
+    if (2 * k2 - k < r2) {
+        // x(x - 1) <= r^2 - k^2 - 1  <=>  (2x - 1)^2 <= 4(r^2 - k^2 - 1) + 1
+        const uint32_t s = steamiIsqrt(static_cast<uint32_t>(4 * (r2 - k2 - 1) + 1));
+        return static_cast<int32_t>((s + 1) / 2);
+    }
+    return static_cast<int32_t>(steamiIsqrt(static_cast<uint32_t>(r2 - k2 + k - 1)));
+}
+
+/// A triangle edge oriented from its lower-y end (ties: lower x), so that the vertex order of the
+/// call does not change the pixels.
+struct Edge {
+    int32_t xa, ya, xb, yb;
+};
+
+Edge orientedEdge(int32_t x1, int32_t y1, int32_t x2, int32_t y2) {
+    if (y2 < y1 || (y2 == y1 && x2 < x1)) {
+        return {x2, y2, x1, y1};
+    }
+    return {x1, y1, x2, y2};
+}
+
+/// x of a non-horizontal edge on the row y (ya <= y <= yb): xa + (xb - xa)(y - ya) / (yb - ya),
+/// rounded to nearest with halves away from zero. The product needs int64_t at the int16_t limits.
+int32_t edgeX(const Edge& e, int32_t y) {
+    const int64_t num = static_cast<int64_t>(e.xb - e.xa) * (y - e.ya);
+    const int64_t den = e.yb - e.ya;
+    const int64_t q = (2 * (num < 0 ? -num : num) + den) / (2 * den);
+    return e.xa + static_cast<int32_t>(num < 0 ? -q : q);
+}
 
 }  // namespace
 
@@ -243,5 +283,100 @@ void SteamiDisplay::rect(int16_t x, int16_t y, int16_t w, int16_t h, SteamiRgb c
     if (h > 2) {
         span(b, x, static_cast<int32_t>(y) + 1, 1, h - 2, v);
         span(b, static_cast<int32_t>(x) + w - 1, static_cast<int32_t>(y) + 1, 1, h - 2, v);
+    }
+}
+
+void SteamiDisplay::circle(int16_t cx, int16_t cy, int16_t r, SteamiRgb c, bool fill) {
+    SteamiDisplayBackend* b = ready();
+    if (b == nullptr || r < 0) {
+        return;
+    }
+    const uint16_t v = c.rgb565();
+    if (r == 0) {
+        if (fill) {
+            span(b, cx, cy, 1, 1, v);
+        } else {
+            dot(b, cx, cy, v);
+        }
+        return;
+    }
+    if (fill) {
+        // One span per panel row of the disc, as wide as the outline on that row.
+        const int32_t top = cy - r < 0 ? 0 : cy - r;
+        const int32_t bottom = cy + r >= b->height() ? b->height() - 1 : cy + r;
+        for (int32_t y = top; y <= bottom; y++) {
+            const int32_t half = circleHalfWidth(r, y < cy ? cy - y : y - cy);
+            span(b, cx - half, y, 2 * half + 1, 1, v);
+        }
+        return;
+    }
+    // Midpoint walk over the octant from (r, 0) to the diagonal, mirrored 8 ways. d is the test of
+    // the next midpoint, (x - 1/2)^2 + (y + 1)^2 - r^2 - 1/4 = x(x - 1) + (y + 1)^2 - r^2: an
+    // integer, negative exactly when the midpoint is inside. Off the panel dot() drops the point.
+    int32_t x = r;
+    int32_t y = 0;
+    int32_t d = 1 - r;
+    while (x >= y) {
+        dot(b, cx + x, cy + y, v);
+        dot(b, cx - x, cy + y, v);
+        dot(b, cx + x, cy - y, v);
+        dot(b, cx - x, cy - y, v);
+        dot(b, cx + y, cy + x, v);
+        dot(b, cx - y, cy + x, v);
+        dot(b, cx + y, cy - x, v);
+        dot(b, cx - y, cy - x, v);
+        y++;
+        if (d < 0) {
+            d += 2 * y + 1;
+        } else {
+            x--;
+            d += 2 * (y - x) + 1;
+        }
+    }
+}
+
+void SteamiDisplay::triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2,
+                             SteamiRgb c, bool fill) {
+    SteamiDisplayBackend* b = ready();
+    if (b == nullptr) {
+        return;
+    }
+    const uint16_t v = c.rgb565();
+    if (!fill) {  // the three line()s
+        walk(b, x0, y0, x1, y1, 1, v);
+        walk(b, x1, y1, x2, y2, 1, v);
+        walk(b, x2, y2, x0, y0, 1, v);
+        return;
+    }
+    const Edge edges[3] = {orientedEdge(x0, y0, x1, y1), orientedEdge(x1, y1, x2, y2),
+                           orientedEdge(x2, y2, x0, y0)};
+    int32_t ymin = edges[0].ya;
+    int32_t ymax = edges[0].yb;
+    for (const Edge& e : edges) {
+        ymin = e.ya < ymin ? e.ya : ymin;
+        ymax = e.yb > ymax ? e.yb : ymax;
+    }
+    const int32_t top = ymin < 0 ? 0 : ymin;
+    const int32_t bottom = ymax >= b->height() ? b->height() - 1 : ymax;
+    for (int32_t y = top; y <= bottom; y++) {
+        // The edge from the lowest to the highest vertex spans every row: lo <= hi below.
+        int32_t lo = INT32_MAX;
+        int32_t hi = INT32_MIN;
+        const auto take = [&lo, &hi](int32_t x) {
+            lo = x < lo ? x : lo;
+            hi = x > hi ? x : hi;
+        };
+        for (const Edge& e : edges) {
+            if (y < e.ya || y > e.yb) {
+                continue;
+            }
+            if (e.ya == e.yb) {  // a horizontal edge gives both of its ends
+                take(e.xa);
+                take(e.xb);
+            } else {
+                take(edgeX(e, y));
+            }
+        }
+        span(b, lo, y, hi - lo + 1, 1, v);
     }
 }

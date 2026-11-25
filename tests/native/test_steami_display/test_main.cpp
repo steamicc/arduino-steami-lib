@@ -788,8 +788,10 @@ static void strokeWidthsCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
                 }
             }
             // Lit exactly when within one pixel of a width-1 pixel: centred, nothing beyond.
-            TEST_ASSERT_EQUAL(near, wide[static_cast<size_t>(y) * static_cast<size_t>(w) +
-                                         static_cast<size_t>(x)] != 0);
+            TEST_ASSERT_EQUAL(
+                near,
+                wide[static_cast<size_t>(y) * static_cast<size_t>(w) + static_cast<size_t>(x)] !=
+                    0);
         }
     }
     d.clear();
@@ -899,6 +901,361 @@ static void test_extreme_spans(void) {  // Review Focus 1; UBSan runs under nati
     forEachPanel(extremeSpansCheck);
 }
 
+// ---- Circles and triangles ----
+
+/// A fresh board state with `mem` injected, as forEachPanel prepares each panel.
+static void injectFresh(SteamiMemoryBackend& mem) {
+    board.end();
+    board.setLogger(&capture);
+    board.setDisplayBackend(mem);
+}
+
+/// The leftmost and rightmost lit x of row y; false when the row is dark.
+static bool rowExtent(const SteamiMemoryBackend& mem, int16_t w, int16_t y, int16_t& lo,
+                      int16_t& hi) {
+    lo = -1;
+    hi = -1;
+    for (int16_t x = 0; x < w; x++) {
+        if (mem.lit(x, y)) {
+            if (lo < 0) {
+                lo = x;
+            }
+            hi = x;
+        }
+    }
+    return lo >= 0;
+}
+
+static void test_circle_is_8_way_symmetric(void) {
+    SteamiMemoryBackend mem(240, 240);
+    injectFresh(mem);
+    SteamiDisplay d(board);
+    const int16_t radii[] = {0, 1, 2, 5, 37, 100};
+    for (int16_t r : radii) {
+        d.clear();
+        d.circle(120, 120, r, kInk);
+        TEST_ASSERT_TRUE(mem.lit(static_cast<int16_t>(120 + r), 120));
+        TEST_ASSERT_TRUE(mem.lit(120, static_cast<int16_t>(120 - r)));
+        if (r == 0) {
+            TEST_ASSERT_EQUAL_size_t(1, mem.litCount());
+        }
+        for (int16_t y = 0; y < 240; y++) {
+            for (int16_t x = 0; x < 240; x++) {
+                if (!mem.lit(x, y)) {
+                    continue;
+                }
+                const int16_t a = static_cast<int16_t>(x - 120);
+                const int16_t b = static_cast<int16_t>(y - 120);
+                for (int sa : {-1, 1}) {
+                    for (int sb : {-1, 1}) {
+                        TEST_ASSERT_TRUE(mem.lit(static_cast<int16_t>(120 + sa * a),
+                                                 static_cast<int16_t>(120 + sb * b)));
+                        TEST_ASSERT_TRUE(mem.lit(static_cast<int16_t>(120 + sa * b),
+                                                 static_cast<int16_t>(120 + sb * a)));
+                    }
+                }
+            }
+        }
+    }
+}
+
+static void test_filled_circle_covers_outline_with_spans(void) {
+    const int16_t radii[] = {3, 20, 64};
+    for (int16_t r : radii) {
+        SteamiMemoryBackend outline(240, 240);
+        injectFresh(outline);
+        SteamiDisplay a(board);
+        a.circle(120, 120, r, kInk);
+
+        SteamiMemoryBackend filled(240, 240);
+        injectFresh(filled);
+        SteamiDisplay b(board);
+        b.circle(120, 120, r, kInk, true);
+
+        for (int16_t y = 0; y < 240; y++) {
+            for (int16_t x = 0; x < 240; x++) {
+                if (outline.lit(x, y)) {
+                    TEST_ASSERT_TRUE(filled.lit(x, y));
+                }
+            }
+            // Each filled row spans exactly the outline's extent on that row.
+            int16_t lo = 0, hi = 0, flo = 0, fhi = 0;
+            const bool inOutline = rowExtent(outline, 240, y, lo, hi);
+            TEST_ASSERT_EQUAL(inOutline, rowExtent(filled, 240, y, flo, fhi));
+            TEST_ASSERT_EQUAL_INT16(lo, flo);
+            TEST_ASSERT_EQUAL_INT16(hi, fhi);
+        }
+        TEST_ASSERT_EQUAL_UINT32(0, filled.pixelCalls());
+        TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(2 * r + 1), filled.fillRectCalls());
+        TEST_ASSERT_EQUAL_UINT64(filled.litCount(), filled.areaDrawn());
+        TEST_ASSERT_EQUAL_UINT32(0, filled.outOfBounds());
+    }
+
+    SteamiMemoryBackend clipped(128, 128);
+    injectFresh(clipped);
+    SteamiDisplay d(board);
+    d.circle(64, 64, 64, kInk, true);
+    TEST_ASSERT_EQUAL_UINT32(128, clipped.fillRectCalls());  // visible rows only
+    TEST_ASSERT_EQUAL_UINT32(0, clipped.pixelCalls());
+    TEST_ASSERT_EQUAL_UINT64(clipped.litCount(), clipped.areaDrawn());
+    TEST_ASSERT_EQUAL_UINT32(0, clipped.outOfBounds());
+    board.end();
+}
+
+/// Every panel pixel of `mem` is lit exactly when `ref` (same panel) is lit at the pixel moved by
+/// (-dx, -dy); a reference pixel that lands off the panel counts as dark.
+static void expectShifted(const SteamiMemoryBackend& mem, const std::vector<uint16_t>& ref,
+                          int16_t w, int16_t h, int32_t dx, int32_t dy) {
+    for (int16_t y = 0; y < h; y++) {
+        for (int16_t x = 0; x < w; x++) {
+            const int32_t rx = x - dx;
+            const int32_t ry = y - dy;
+            const bool refLit =
+                rx >= 0 && ry >= 0 && rx < w && ry < h &&
+                ref[static_cast<size_t>(ry) * static_cast<size_t>(w) + static_cast<size_t>(rx)] !=
+                    0;
+            TEST_ASSERT_EQUAL(refLit, mem.lit(x, y));
+        }
+    }
+}
+
+static void circlesCrossingCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    const int16_t W = d.width();
+    const int16_t H = d.height();
+    const int16_t cx = d.centerX();
+    const int16_t cy = d.centerY();
+    const int16_t centres[4][2] = {
+        {0, cy}, {static_cast<int16_t>(W - 1), cy}, {cx, 0}, {cx, static_cast<int16_t>(H - 1)}};
+    for (bool fill : {false, true}) {
+        d.clear();
+        d.circle(cx, cy, 30, kInk, fill);  // wholly visible: the reference
+        const std::vector<uint16_t> ref = snapshot(mem);
+        for (const auto& c : centres) {
+            d.clear();
+            mem.clearCounters();
+            d.circle(c[0], c[1], 30, kInk, fill);
+            TEST_ASSERT_EQUAL_UINT32(0, mem.outOfBounds());
+            expectShifted(mem, ref, W, H, c[0] - cx, c[1] - cy);
+            if (fill) {
+                TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+                TEST_ASSERT_EQUAL_UINT64(mem.litCount(), mem.areaDrawn());
+                const uint32_t rows = (c[1] == cy) ? 61 : 31;  // rows of the disc on the panel
+                TEST_ASSERT_EQUAL_UINT32(rows, mem.fillRectCalls());
+            }
+        }
+    }
+    if (W == 128) {
+        // Radius 100 around the centre: the outline misses the panel (corners at 90.5), the disc
+        // covers it.
+        d.clear();
+        d.circle(cx, cy, 100, kInk);
+        TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+        d.clear();
+        mem.clearCounters();
+        d.circle(cx, cy, 100, kInk, true);
+        TEST_ASSERT_EQUAL_size_t(static_cast<size_t>(W) * static_cast<size_t>(H), mem.litCount());
+        TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(H), mem.fillRectCalls());
+    }
+}
+static void test_circles_crossing_every_edge(void) {
+    forEachPanel(circlesCrossingCheck);
+}
+
+/// Filled-triangle rows recomputed in double: each edge oriented from its lower-y end (ties: lower
+/// x), x rounded to nearest with halves away from zero (lround); one run per row, min to max.
+static void expectTriangleRows(const SteamiMemoryBackend& mem, int16_t w, int16_t h,
+                               const int32_t v[3][2]) {
+    for (int16_t y = 0; y < h; y++) {
+        bool any = false;
+        long lo = 0, hi = 0;
+        for (int e = 0; e < 3; e++) {
+            const int32_t* p = v[e];
+            const int32_t* q = v[(e + 1) % 3];
+            if (q[1] < p[1] || (q[1] == p[1] && q[0] < p[0])) {
+                const int32_t* t = p;
+                p = q;
+                q = t;
+            }
+            if (y < p[1] || y > q[1]) {
+                continue;
+            }
+            long xs[2];
+            int n = 0;
+            if (p[1] == q[1]) {
+                xs[n++] = p[0];
+                xs[n++] = q[0];
+            } else {
+                xs[n++] = p[0] + lround(static_cast<double>(q[0] - p[0]) * (y - p[1]) /
+                                        static_cast<double>(q[1] - p[1]));
+            }
+            for (int i = 0; i < n; i++) {
+                lo = any ? (xs[i] < lo ? xs[i] : lo) : xs[i];
+                hi = any ? (xs[i] > hi ? xs[i] : hi) : xs[i];
+                any = true;
+            }
+        }
+        for (int16_t x = 0; x < w; x++) {
+            TEST_ASSERT_EQUAL(any && x >= lo && x <= hi, mem.lit(x, y));
+        }
+    }
+}
+
+static void expectSameForSixOrders(int16_t size, const int32_t v[3][2]) {
+    SteamiMemoryBackend mem(size, size);
+    injectFresh(mem);
+    SteamiDisplay d(board);
+    const int order[6][3] = {{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}};
+    for (bool fill : {true, false}) {
+        std::vector<uint16_t> first;
+        for (const auto& o : order) {
+            d.clear();
+            mem.clearCounters();
+            d.triangle(v[o[0]][0], v[o[0]][1], v[o[1]][0], v[o[1]][1], v[o[2]][0], v[o[2]][1], kInk,
+                       fill);
+            if (fill) {
+                TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+                TEST_ASSERT_EQUAL_UINT64(mem.litCount(), mem.areaDrawn());
+            }
+            TEST_ASSERT_EQUAL_UINT32(0, mem.outOfBounds());
+            if (first.empty()) {
+                first = snapshot(mem);
+                TEST_ASSERT_TRUE(mem.litCount() > 0);
+            } else {
+                TEST_ASSERT_TRUE(first == snapshot(mem));
+            }
+        }
+        if (fill) {
+            expectTriangleRows(mem, size, size, v);
+        }
+    }
+    board.end();
+}
+
+static void test_filled_triangle_same_for_six_orders(void) {
+    const int32_t small[3][2] = {{10, 5}, {60, 40}, {25, 90}};
+    expectSameForSixOrders(128, small);
+    const int32_t large[3][2] = {{-20, 10}, {200, 120}, {100, 300}};
+    expectSameForSixOrders(240, large);
+
+    // Spot values of the first one: row 40 runs from 10 + round(15 * 35 / 85) = 16 to 60.
+    SteamiMemoryBackend mem(128, 128);
+    injectFresh(mem);
+    SteamiDisplay d(board);
+    d.triangle(10, 5, 60, 40, 25, 90, kInk, true);
+    int16_t lo = 0, hi = 0;
+    TEST_ASSERT_TRUE(rowExtent(mem, 128, 40, lo, hi));
+    TEST_ASSERT_EQUAL_INT16(16, lo);
+    TEST_ASSERT_EQUAL_INT16(60, hi);
+    TEST_ASSERT_TRUE(rowExtent(mem, 128, 5, lo, hi));
+    TEST_ASSERT_EQUAL_INT16(10, lo);
+    TEST_ASSERT_EQUAL_INT16(10, hi);
+    TEST_ASSERT_FALSE(rowExtent(mem, 128, 4, lo, hi));
+    TEST_ASSERT_FALSE(rowExtent(mem, 128, 91, lo, hi));
+    board.end();
+}
+
+static void degenerateShapesCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    d.clear();
+    mem.clearCounters();
+    d.circle(20, 20, -1, kInk);
+    d.circle(20, 20, -1, kInk, true);
+    d.circle(20, 20, -32768, kInk, true);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls() + mem.fillRectCalls());
+
+    d.circle(20, 20, 0, kInk);
+    TEST_ASSERT_EQUAL_size_t(1, mem.litCount());
+    TEST_ASSERT_TRUE(mem.lit(20, 20));
+    d.clear();
+    mem.clearCounters();
+    d.circle(20, 20, 0, kInk, true);
+    TEST_ASSERT_EQUAL_size_t(1, mem.litCount());
+    TEST_ASSERT_TRUE(mem.lit(20, 20));
+    TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+    TEST_ASSERT_EQUAL_UINT32(1, mem.fillRectCalls());
+
+    for (bool fill : {false, true}) {
+        d.clear();
+        d.triangle(7, 9, 7, 9, 7, 9, kInk, fill);
+        TEST_ASSERT_EQUAL_size_t(1, mem.litCount());
+        TEST_ASSERT_TRUE(mem.lit(7, 9));
+    }
+
+    d.clear();
+    mem.clearCounters();
+    d.triangle(0, 0, 5, 5, 10, 10, kInk, true);
+    TEST_ASSERT_EQUAL_UINT32(11, mem.fillRectCalls());  // one span per row, rows 0 to 10
+    TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+    TEST_ASSERT_EQUAL_size_t(11, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT64(11, mem.areaDrawn());
+    for (int16_t i = 0; i <= 10; i++) {
+        TEST_ASSERT_TRUE(mem.lit(i, i));
+    }
+
+    d.clear();
+    mem.clearCounters();
+    d.triangle(20, 5, 0, 5, 10, 5, kInk, true);  // flat: one span, both ends of every edge
+    TEST_ASSERT_EQUAL_UINT32(1, mem.fillRectCalls());
+    TEST_ASSERT_EQUAL_size_t(21, mem.litCount());
+    TEST_ASSERT_TRUE(mem.lit(0, 5));
+    TEST_ASSERT_TRUE(mem.lit(20, 5));
+    TEST_ASSERT_EQUAL_UINT32(0, mem.outOfBounds());
+}
+static void test_degenerate_circles_and_triangles(void) {  // Review Focus 5
+    forEachPanel(degenerateShapesCheck);
+}
+
+static void extremeShapesCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    const int16_t W = d.width();
+    const int16_t H = d.height();
+    const size_t all = static_cast<size_t>(W) * static_cast<size_t>(H);
+
+    d.clear();
+    mem.clearCounters();
+    d.circle(d.centerX(), d.centerY(), 32767, kInk, true);
+    TEST_ASSERT_EQUAL_size_t(all, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+    TEST_ASSERT_EQUAL_UINT32(static_cast<uint32_t>(H), mem.fillRectCalls());
+
+    d.clear();
+    d.circle(d.centerX(), d.centerY(), 32767, kInk);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+
+    d.clear();
+    d.circle(0, 0, 32767, kInk);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+
+    d.clear();
+    mem.clearCounters();
+    d.circle(-32768, 64, 32767, kInk, true);  // a wrapped cx - r would land at x 1
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.fillRectCalls());
+
+    d.clear();
+    d.circle(32767, 32767, 32767, kInk, true);
+    d.circle(-32768, -32768, 32767, kInk);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+
+    d.clear();
+    d.triangle(-32768, -32768, 32767, 0, -32768, 32767, kInk, true);
+    TEST_ASSERT_EQUAL_size_t(all, mem.litCount());
+
+    d.clear();
+    d.triangle(-32768, -32768, 32767, 0, -32768, 32767, kInk);  // edges at x 0: y -16384, 16383
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+
+    d.clear();
+    d.triangle(32767, 32767, -32768, 32767, 32767, -32768, kInk, true);
+    TEST_ASSERT_EQUAL_size_t(all, mem.litCount());  // the hypotenuse passes near (-1, -1)
+
+    d.clear();
+    d.triangle(-32768, -32768, -32768, 32767, -32000, 0, kInk, true);  // left of the panel
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+}
+static void test_extreme_circles_and_triangles(void) {  // Review Focus 1; UBSan under native_asan
+    forEachPanel(extremeShapesCheck);
+}
+
 static void test_protected_name_in_messages(void) {
     TestDisplay d(board);
     TEST_ASSERT_FALSE(d.begin());
@@ -954,6 +1311,12 @@ int main(int, char**) {
     RUN_TEST(test_stroke_widths);
     RUN_TEST(test_degenerate_spans);
     RUN_TEST(test_extreme_spans);
+    RUN_TEST(test_circle_is_8_way_symmetric);
+    RUN_TEST(test_filled_circle_covers_outline_with_spans);
+    RUN_TEST(test_circles_crossing_every_edge);
+    RUN_TEST(test_filled_triangle_same_for_six_orders);
+    RUN_TEST(test_degenerate_circles_and_triangles);
+    RUN_TEST(test_extreme_circles_and_triangles);
     RUN_TEST(test_protected_name_in_messages);
     return UNITY_END();
 }
