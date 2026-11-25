@@ -339,7 +339,7 @@ class has begun, the shared driver returns calibrated temperatures, and a
 ## Colours
 
 `SteamiRgb` is a colour, stored as one RGB565 word. `SteamiColor::rgb()` returns
-one, and so do the display classes. Include `SteamiRgb.h` (or `SteamiColor.h`).
+one, and the display classes take one. Include `SteamiRgb.h` (or `SteamiColor.h`).
 
 | Name | RGB | Grey level |
 |------|-----|-----------|

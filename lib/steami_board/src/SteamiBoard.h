@@ -164,7 +164,8 @@ class SteamiBoard {
     /// UNKNOWN_BOARD (no backend). Reports nothing: the caller does, under its own name.
     SteamiStatus beginDisplay();
 
-    /// Destroys the slots and forgets reported pairs and delivered lines. The logger is kept.
+    /// Destroys the slots and forgets reported pairs and delivered lines, the injected
+    /// display backend and the cached display status. The logger is kept.
     void end();
 
    private:
