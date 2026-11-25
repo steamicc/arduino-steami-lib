@@ -10,12 +10,11 @@
 // local METAR / weather-station QNH value before flashing.
 
 #include <Arduino.h>
+#include <SteamiBoard.h>
 #include <SteamiWsenPads.h>
-#include <Wire.h>
 #include <math.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiWsenPads sensor(internalI2C);
+SteamiWsenPads sensor(Steami.wire());  // the board's internal I2C bus
 
 // International Standard Atmosphere reference values.
 constexpr float seaLevelPressure = 1013.25f;  // hPa
@@ -33,7 +32,6 @@ void setup() {
     Serial.begin(115200);
     while (!Serial && millis() < 2000) {
     }
-    internalI2C.begin();
 
     if (!sensor.begin()) {
         Serial.println("WSEN-PADS not detected — check wiring.");

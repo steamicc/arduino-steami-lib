@@ -6,11 +6,10 @@
 // check.
 
 #include <Arduino.h>
+#include <SteamiBoard.h>
 #include <SteamiWsenPads.h>
-#include <Wire.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiWsenPads sensor(internalI2C);
+SteamiWsenPads sensor(Steami.wire());  // the board's internal I2C bus
 
 void setup() {
     Serial.begin(115200);
@@ -18,7 +17,6 @@ void setup() {
         // Wait up to 2 s for the host USB CDC to enumerate so the
         // "not detected" diagnostic below isn't silently dropped.
     }
-    internalI2C.begin();
 
     if (!sensor.begin()) {
         Serial.println("WSEN-PADS not detected — check wiring.");
