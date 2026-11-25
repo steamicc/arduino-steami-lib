@@ -51,9 +51,15 @@ void loop() {
 
 ## Examples
 
-No example sketch has been merged for this driver yet; practical examples
-are tracked in [#194](https://github.com/steamicc/arduino-steami-lib/issues/194).
-Once they land, `make list-examples DRIVER=vl53l1x` lists the ready-to-run
+| Example | What it does |
+|---------|--------------|
+| [`BasicDistance`](examples/BasicDistance/) | Print the measured distance in millimetres to the Serial Monitor. |
+| [`ProximityAlarm`](examples/ProximityAlarm/) | Sound the buzzer while an object is closer than a configurable threshold. |
+| [`ParkingSensor`](examples/ParkingSensor/) | Beep faster as an object gets closer, like a car parking sensor. |
+| [`ObjectCounter`](examples/ObjectCounter/) | Measure the background distance, then count each object passing in front of the sensor. |
+| [`GestureDetection`](examples/GestureDetection/) | Toggle the LED when a hand waves quickly in front of the sensor. |
+
+`make list-examples DRIVER=vl53l1x` lists the ready-to-run
 `flash-vl53l1x/<example>` targets.
 
 ## API
