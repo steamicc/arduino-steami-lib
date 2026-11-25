@@ -5,10 +5,9 @@
 // Open the serial monitor at 115200 baud.
 
 #include <SteamiAPDS9960.h>
-#include <Wire.h>
+#include <SteamiBoard.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiAPDS9960 sensor(internalI2C);
+SteamiAPDS9960 sensor(Steami.wire());  // the board's internal I2C bus
 
 static const uint8_t NEAR_THRESHOLD = 80;
 static const uint32_t PRINT_PERIOD_MS = 100;
@@ -23,8 +22,6 @@ void setup() {
 
     pinMode(LED_BUILTIN, OUTPUT);
     digitalWrite(LED_BUILTIN, LOW);
-
-    internalI2C.begin();
 
     if (!sensor.begin()) {
         Serial.println("APDS9960 not detected.");
