@@ -107,6 +107,47 @@ void SteamiDisplay::span(SteamiDisplayBackend* b, int32_t x, int32_t y, int32_t 
                 static_cast<int16_t>(y1 - y0), c);
 }
 
+void SteamiDisplay::walk(SteamiDisplayBackend* b, int32_t x1, int32_t y1, int32_t x2, int32_t y2,
+                         uint8_t w, uint16_t c) {
+    if (w == 0) {
+        return;
+    }
+    // Canonical order (lower x, then lower y): a reversed line lights the same pixels.
+    if (x2 < x1 || (x2 == x1 && y2 < y1)) {
+        const int32_t tx = x1;
+        const int32_t ty = y1;
+        x1 = x2;
+        y1 = y2;
+        x2 = tx;
+        y2 = ty;
+    }
+    const int32_t dx = x2 - x1;
+    const int32_t dy = y2 > y1 ? y1 - y2 : y2 - y1;  // minus the absolute height
+    const int32_t sy = y1 < y2 ? 1 : -1;
+    int32_t err = dx + dy;
+    int32_t x = x1;
+    int32_t y = y1;
+    for (;;) {
+        if (w == 1) {
+            dot(b, x, y, c);
+        } else {
+            span(b, x, y, w, w, c);
+        }
+        if (x == x2 && y == y2) {
+            break;
+        }
+        const int32_t e2 = 2 * err;
+        if (e2 >= dy) {
+            err += dy;
+            x += 1;
+        }
+        if (e2 <= dx) {
+            err += dx;
+            y += sy;
+        }
+    }
+}
+
 void SteamiDisplay::clear(SteamiRgb c) {
     SteamiDisplayBackend* b = ready();
     if (b != nullptr) {
@@ -153,5 +194,54 @@ void SteamiDisplay::powerOff() {
     SteamiDisplayBackend* b = ready();
     if (b != nullptr) {
         b->powerOff();
+    }
+}
+
+void SteamiDisplay::line(int16_t x1, int16_t y1, int16_t x2, int16_t y2, SteamiRgb c) {
+    SteamiDisplayBackend* b = ready();
+    if (b != nullptr) {
+        walk(b, x1, y1, x2, y2, 1, c.rgb565());
+    }
+}
+
+void SteamiDisplay::strokeLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint8_t w,
+                               SteamiRgb c) {
+    SteamiDisplayBackend* b = ready();
+    if (b != nullptr) {
+        walk(b, x1, y1, x2, y2, w, c.rgb565());
+    }
+}
+
+void SteamiDisplay::hline(int16_t x, int16_t y, int16_t w, SteamiRgb c) {
+    SteamiDisplayBackend* b = ready();
+    if (b != nullptr) {
+        span(b, x, y, w, 1, c.rgb565());
+    }
+}
+
+void SteamiDisplay::vline(int16_t x, int16_t y, int16_t h, SteamiRgb c) {
+    SteamiDisplayBackend* b = ready();
+    if (b == nullptr) {
+        return;
+    }
+    span(b, x, y, 1, h, c.rgb565());
+}
+
+void SteamiDisplay::rect(int16_t x, int16_t y, int16_t w, int16_t h, SteamiRgb c, bool fill) {
+    SteamiDisplayBackend* b = ready();
+    if (b == nullptr || w <= 0 || h <= 0) {
+        return;
+    }
+    const uint16_t v = c.rgb565();
+    if (fill || w == 1 || h == 1) {
+        span(b, x, y, w, h, v);
+        return;
+    }
+    // Outline: no pixel twice. The sides sit between the top and the bottom row.
+    span(b, x, y, w, 1, v);
+    span(b, x, static_cast<int32_t>(y) + h - 1, w, 1, v);
+    if (h > 2) {
+        span(b, x, static_cast<int32_t>(y) + 1, 1, h - 2, v);
+        span(b, static_cast<int32_t>(x) + w - 1, static_cast<int32_t>(y) + 1, 1, h - 2, v);
     }
 }

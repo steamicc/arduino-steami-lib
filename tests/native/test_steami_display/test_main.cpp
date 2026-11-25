@@ -448,7 +448,7 @@ class TestDisplay : public SteamiDisplay {
 
 /// Runs `check` on a 128 colour, a 128 grey, a 240 colour and a 240 grey panel, each with a fresh
 /// board state, backend and display, then asserts that nothing reached the backend off the panel.
-[[maybe_unused]] static void forEachPanel(void (*check)(SteamiMemoryBackend&, TestDisplay&)) {
+static void forEachPanel(void (*check)(SteamiMemoryBackend&, TestDisplay&)) {
     const int16_t sizes[] = {128, 240};
     for (int16_t size : sizes) {
         for (bool color : {true, false}) {
@@ -464,7 +464,7 @@ class TestDisplay : public SteamiDisplay {
     board.end();
 }
 
-[[maybe_unused]] static std::vector<uint16_t> snapshot(const SteamiMemoryBackend& mem) {
+static std::vector<uint16_t> snapshot(const SteamiMemoryBackend& mem) {
     return mem.pixels();
 }
 
@@ -667,6 +667,215 @@ static void test_drawing_after_board_end_does_nothing(void) {  // Review Focus 3
     TEST_ASSERT_TRUE(b.lit(1, 1));
 }
 
+static const SteamiRgb kInk = STEAMI_WHITE;
+
+static void hlineVlineRectCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    d.clear();
+    mem.clearCounters();
+    d.hline(10, 5, 4, kInk);
+    TEST_ASSERT_EQUAL_size_t(4, mem.litCount());
+    for (int16_t x = 10; x < 14; x++) {
+        TEST_ASSERT_TRUE(mem.lit(x, 5));
+    }
+    TEST_ASSERT_EQUAL_UINT32(1, mem.fillRectCalls());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+    d.clear();
+    mem.clearCounters();
+    d.vline(7, 20, 3, kInk);
+    TEST_ASSERT_EQUAL_size_t(3, mem.litCount());
+    for (int16_t y = 20; y < 23; y++) {
+        TEST_ASSERT_TRUE(mem.lit(7, y));
+    }
+    TEST_ASSERT_EQUAL_UINT32(1, mem.fillRectCalls());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+
+    d.clear();
+    mem.clearCounters();
+    d.rect(10, 10, 5, 4, kInk);
+    TEST_ASSERT_EQUAL_size_t(14, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT64(14, mem.areaDrawn());
+    TEST_ASSERT_TRUE(mem.fillRectCalls() <= 4);
+    TEST_ASSERT_FALSE(mem.lit(11, 11));
+    TEST_ASSERT_TRUE(mem.lit(10, 11));
+    TEST_ASSERT_TRUE(mem.lit(14, 12));
+    d.clear();
+    mem.clearCounters();
+    d.rect(10, 10, 5, 4, kInk, true);
+    TEST_ASSERT_EQUAL_size_t(20, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT32(1, mem.fillRectCalls());
+}
+static void test_hline_vline_rect(void) {
+    forEachPanel(hlineVlineRectCheck);
+}
+
+static void lineSymmetryCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    d.clear();
+    d.line(0, 0, 10, 4, kInk);
+    TEST_ASSERT_EQUAL_size_t(11, mem.litCount());
+    TEST_ASSERT_TRUE(mem.lit(0, 0));
+    TEST_ASSERT_TRUE(mem.lit(10, 4));
+    const std::vector<uint16_t> forward = snapshot(mem);
+    d.clear();
+    d.line(10, 4, 0, 0, kInk);
+    TEST_ASSERT_TRUE(forward == snapshot(mem));
+    d.clear();
+    d.line(5, 5, 5, 5, kInk);
+    TEST_ASSERT_EQUAL_size_t(1, mem.litCount());
+    TEST_ASSERT_TRUE(mem.lit(5, 5));
+    // Same x, reversed y: also the same pixels.
+    d.clear();
+    d.line(20, 30, 20, 10, kInk);
+    const std::vector<uint16_t> up = snapshot(mem);
+    d.clear();
+    d.line(20, 10, 20, 30, kInk);
+    TEST_ASSERT_TRUE(up == snapshot(mem));
+    TEST_ASSERT_EQUAL_size_t(21, mem.litCount());
+}
+static void test_line_endpoints_and_symmetry(void) {
+    forEachPanel(lineSymmetryCheck);
+}
+
+static void lineCrossingCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    d.clear();
+    d.line(-50, -50, 300, 300, kInk);
+    const int16_t n = d.width();
+    TEST_ASSERT_EQUAL_size_t(static_cast<size_t>(n), mem.litCount());
+    for (int16_t i = 0; i < n; i++) {
+        TEST_ASSERT_TRUE(mem.lit(i, i));
+    }
+}
+static void test_lines_crossing_the_panel(void) {
+    forEachPanel(lineCrossingCheck);
+}
+
+static void strokeWidthsCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    d.clear();
+    d.line(10, 10, 60, 33, kInk);
+    const std::vector<uint16_t> thin = snapshot(mem);
+    d.clear();
+    d.strokeLine(10, 10, 60, 33, 1, kInk);
+    TEST_ASSERT_TRUE(thin == snapshot(mem));
+    d.clear();
+    d.strokeLine(10, 10, 60, 33, 2, kInk);
+    const int16_t w = d.width();
+    for (size_t i = 0; i < thin.size(); i++) {
+        if (thin[i] == 0) {
+            continue;
+        }
+        const int16_t x = static_cast<int16_t>(i % static_cast<size_t>(w));
+        const int16_t y = static_cast<int16_t>(i / static_cast<size_t>(w));
+        TEST_ASSERT_TRUE(mem.lit(x, y));
+        TEST_ASSERT_TRUE(mem.lit(static_cast<int16_t>(x + 1), y));
+        TEST_ASSERT_TRUE(mem.lit(x, static_cast<int16_t>(y + 1)));
+        TEST_ASSERT_TRUE(mem.lit(static_cast<int16_t>(x + 1), static_cast<int16_t>(y + 1)));
+    }
+    d.clear();
+    mem.clearCounters();
+    d.strokeLine(10, 10, 60, 33, 0, kInk);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls() + mem.fillRectCalls());
+}
+static void test_stroke_widths(void) {
+    forEachPanel(strokeWidthsCheck);
+}
+
+static void degenerateSpansCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    d.clear();
+    mem.clearCounters();
+    d.hline(10, 5, 0, kInk);
+    d.hline(10, 5, -3, kInk);
+    d.vline(10, 5, 0, kInk);
+    d.rect(10, 10, 0, 5, kInk);
+    d.rect(10, 10, 5, -1, kInk);
+    d.rect(10, 10, 0, 5, kInk, true);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.fillRectCalls());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+
+    d.rect(10, 10, 1, 1, kInk);
+    TEST_ASSERT_EQUAL_size_t(1, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT64(1, mem.areaDrawn());
+    d.clear();
+    mem.clearCounters();
+    d.rect(10, 10, 2, 2, kInk);
+    TEST_ASSERT_EQUAL_size_t(4, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT64(4, mem.areaDrawn());
+    d.clear();
+    mem.clearCounters();
+    d.rect(10, 10, 1, 5, kInk);
+    TEST_ASSERT_EQUAL_size_t(5, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT64(5, mem.areaDrawn());
+    d.clear();
+    mem.clearCounters();
+    d.rect(10, 10, 5, 1, kInk);
+    TEST_ASSERT_EQUAL_size_t(5, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT64(5, mem.areaDrawn());
+}
+static void test_degenerate_spans(void) {  // Review Focus 5
+    forEachPanel(degenerateSpansCheck);
+}
+
+static void extremeSpansCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    const int16_t W = d.width();
+    const int16_t H = d.height();
+    d.clear();
+    mem.clearCounters();
+    d.hline(100, 5, 32767, kInk);
+    TEST_ASSERT_EQUAL_size_t(static_cast<size_t>(W - 100), mem.litCount());
+    for (int16_t x = 100; x < W; x++) {
+        TEST_ASSERT_TRUE(mem.lit(x, 5));
+    }
+    TEST_ASSERT_EQUAL_UINT32(1, mem.fillRectCalls());
+
+    d.clear();
+    d.vline(5, 100, 32767, kInk);
+    TEST_ASSERT_EQUAL_size_t(static_cast<size_t>(H - 100), mem.litCount());
+    for (int16_t y = 100; y < H; y++) {
+        TEST_ASSERT_TRUE(mem.lit(5, y));
+    }
+
+    d.clear();
+    d.hline(-32700, 5, 32767, kInk);
+    TEST_ASSERT_EQUAL_size_t(67, mem.litCount());
+    for (int16_t x = 0; x <= 66; x++) {
+        TEST_ASSERT_TRUE(mem.lit(x, 5));
+    }
+
+    d.clear();
+    d.hline(32000, 5, 32767, kInk);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+
+    d.clear();
+    mem.clearCounters();
+    d.rect(-100, -100, 32767, 32767, kInk, true);
+    TEST_ASSERT_EQUAL_size_t(static_cast<size_t>(W) * static_cast<size_t>(H), mem.litCount());
+    TEST_ASSERT_EQUAL_UINT32(1, mem.fillRectCalls());
+
+    d.clear();
+    d.rect(10, 10, 32767, 32767, kInk);
+    TEST_ASSERT_EQUAL_size_t(static_cast<size_t>((W - 10) + (H - 11)), mem.litCount());
+    TEST_ASSERT_TRUE(mem.lit(W - 1, 10));
+    TEST_ASSERT_TRUE(mem.lit(10, H - 1));
+    TEST_ASSERT_FALSE(mem.lit(W - 1, H - 1));
+
+    d.clear();
+    d.hline(-32768, 5, 32767, kInk);
+    d.vline(5, 32767, 32767, kInk);
+    d.rect(30000, 30000, 10000, 10000, kInk);
+    d.rect(-32768, -32768, 32767, 32767, kInk, true);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+
+    d.clear();
+    d.line(-32768, -32768, 32767, 32767, kInk);
+    TEST_ASSERT_EQUAL_size_t(static_cast<size_t>(W), mem.litCount());
+    for (int16_t i = 0; i < W; i++) {
+        TEST_ASSERT_TRUE(mem.lit(i, i));
+    }
+}
+static void test_extreme_spans(void) {  // Review Focus 1; UBSan runs under native_asan
+    forEachPanel(extremeSpansCheck);
+}
+
 static void test_protected_name_in_messages(void) {
     TestDisplay d(board);
     TEST_ASSERT_FALSE(d.begin());
@@ -716,6 +925,12 @@ int main(int, char**) {
     RUN_TEST(test_clear_show_and_controls_forward);
     RUN_TEST(test_two_objects_share_one_backend);
     RUN_TEST(test_drawing_after_board_end_does_nothing);
+    RUN_TEST(test_hline_vline_rect);
+    RUN_TEST(test_line_endpoints_and_symmetry);
+    RUN_TEST(test_lines_crossing_the_panel);
+    RUN_TEST(test_stroke_widths);
+    RUN_TEST(test_degenerate_spans);
+    RUN_TEST(test_extreme_spans);
     RUN_TEST(test_protected_name_in_messages);
     return UNITY_END();
 }
