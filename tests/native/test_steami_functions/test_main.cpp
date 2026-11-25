@@ -13,6 +13,7 @@
 #include "SteamiAccelerometer.h"
 #include "SteamiBattery.h"
 #include "SteamiBoard.h"
+#include "SteamiButtons.h"
 #include "SteamiColor.h"
 #include "SteamiCompass.h"
 #include "SteamiDistance.h"
@@ -870,6 +871,159 @@ static void test_apds_forced_v1ab_absent_is_e11(void) {
     TEST_ASSERT_EQUAL_UINT32(lines, g_lines.size());
 }
 
+// --- Buttons ---
+
+static void releaseMcuButtons(void) {
+    gpioPinState()[A_BUTTON] = HIGH;
+    gpioPinState()[B_BUTTON] = HIGH;
+    gpioPinState()[MENU_BUTTON] = HIGH;
+}
+
+static void setDpad(uint8_t gpio) {
+    Wire.setRegister(MCP23009_I2C_ADDR, MCP23009_GPIO, gpio);
+}
+
+static void test_buttons_read_a_and_dpad(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeMcp23009e(Wire, 0xF0);
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    gpioPinState()[A_BUTTON] = LOW;
+    setDpad(0xF0 & ~(1 << MCP23009_BTN_UP));
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));  // not stable yet
+    delay(30);
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::A));
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::UP));
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::B));
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::DOWN));
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::NONE));
+}
+
+static void test_was_pressed_once_per_press(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeMcp23009e(Wire, 0xF0);
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    gpioPinState()[A_BUTTON] = LOW;
+    int count = 0;
+    for (int t = 0; t < 200; t += 10) {
+        if (buttons.wasPressed(SteamiButton::A)) {
+            count++;
+        }
+        delay(10);
+    }
+    TEST_ASSERT_EQUAL_INT(1, count);
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::A));
+}
+
+static void test_was_released_after_release(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeMcp23009e(Wire, 0xF0);
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    gpioPinState()[A_BUTTON] = LOW;
+    buttons.isPressed(SteamiButton::A);
+    delay(30);
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::A));
+    TEST_ASSERT_FALSE(buttons.wasReleased(SteamiButton::A));
+    gpioPinState()[A_BUTTON] = HIGH;
+    buttons.isPressed(SteamiButton::A);
+    delay(30);
+    TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::A));
+    TEST_ASSERT_FALSE(buttons.wasReleased(SteamiButton::A));
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+}
+
+static void test_bounce_shorter_than_debounce_is_ignored(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeMcp23009e(Wire, 0xF0);
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    gpioPinState()[A_BUTTON] = LOW;
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    delay(5);
+    gpioPinState()[A_BUTTON] = HIGH;
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    delay(30);
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::A));
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+}
+
+static void test_dpad_bus_error_reads_released(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeMcp23009e(Wire, 0xF0 & ~(1 << MCP23009_BTN_UP));
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    buttons.isPressed(SteamiButton::UP);
+    delay(30);
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::UP));
+    Wire.setAbsent(MCP23009_I2C_ADDR);
+    gpioPinState()[A_BUTTON] = LOW;
+    buttons.isPressed(SteamiButton::UP);
+    delay(30);
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::UP));
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::DOWN));
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::LEFT));
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::RIGHT));
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::A));
+}
+
+static void test_buttons_without_expander(void) {
+    steamiFakeBme280(Wire);
+    Wire.setAbsent(MCP23009_I2C_ADDR);
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_FALSE(buttons.begin());
+    TEST_ASSERT_EQUAL_UINT32(1, countLogged("(E10)"));
+    TEST_ASSERT_EQUAL_STRING(
+        "[STeaMi] SteamiButtons: the MCP23009E D-PAD expander (I2C 0x20) did not answer. "
+        "The A, B and MENU buttons still work. (E10)",
+        g_lines.back().c_str());
+    gpioPinState()[A_BUTTON] = LOW;
+    buttons.isPressed(SteamiButton::A);
+    delay(30);
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::A));
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::UP));
+    const size_t lines = g_lines.size();
+    TEST_ASSERT_FALSE(buttons.begin());
+    TEST_ASSERT_EQUAL_UINT32(lines, g_lines.size());
+}
+
+static void test_wait_for_press_timeout(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeMcp23009e(Wire, 0xF0);
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    const uint32_t start = millis();
+    TEST_ASSERT_TRUE(buttons.waitForPress(100) == SteamiButton::NONE);
+    const uint32_t elapsed = millis() - start;
+    TEST_ASSERT_TRUE(elapsed >= 100 && elapsed <= 110);
+}
+
+// The native mock cannot change a pin during the wait, so B is already low when the call starts
+// and the press is detected once it has been stable for the debounce time.
+static void test_wait_for_press_returns_button(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeMcp23009e(Wire, 0xF0);
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    gpioPinState()[B_BUTTON] = LOW;
+    const uint32_t start = millis();
+    TEST_ASSERT_TRUE(buttons.waitForPress(500) == SteamiButton::B);
+    const uint32_t elapsed = millis() - start;
+    TEST_ASSERT_TRUE(elapsed >= 20 && elapsed < 500);
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::B));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_temperature_on_v1c_reads_bme280);
@@ -926,5 +1080,13 @@ int main(void) {
     RUN_TEST(test_gesture_names);
     RUN_TEST(test_apds_classes_e20_on_v1c);
     RUN_TEST(test_apds_forced_v1ab_absent_is_e11);
+    RUN_TEST(test_buttons_read_a_and_dpad);
+    RUN_TEST(test_was_pressed_once_per_press);
+    RUN_TEST(test_was_released_after_release);
+    RUN_TEST(test_bounce_shorter_than_debounce_is_ignored);
+    RUN_TEST(test_dpad_bus_error_reads_released);
+    RUN_TEST(test_buttons_without_expander);
+    RUN_TEST(test_wait_for_press_timeout);
+    RUN_TEST(test_wait_for_press_returns_button);
     return UNITY_END();
 }
