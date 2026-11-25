@@ -68,14 +68,15 @@ def _copy_sources(drivers: list[Path], out_dir: Path) -> list[str]:
     origin: dict[str, Path] = {}
     for driver in drivers:
         for source in _sources(driver):
-            if source.name in origin:
+            key = source.name.lower()
+            if key in origin:
                 raise PackageError(
-                    f"{source.name} exists in both {origin[source.name].parent.parent.name}"
-                    f" and {driver.name}"
+                    f"{source.name} exists in both {origin[key].parent.parent.name}"
+                    f" and {driver.name} (file names are compared ignoring case)"
                 )
-            origin[source.name] = source
+            origin[key] = source
             shutil.copy2(source, src_out / source.name)
-    return sorted(origin)
+    return sorted(p.name for p in origin.values())
 
 
 def _write_umbrella(out_dir: Path, file_names: list[str]) -> None:

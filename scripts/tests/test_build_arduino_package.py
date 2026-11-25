@@ -116,6 +116,26 @@ class BuildPackageTest(unittest.TestCase):
             self.build()
         self.assertIn("X.h", str(ctx.exception))
 
+    def test_case_insensitive_duplicate_is_rejected(self) -> None:
+        write(self.lib / "a" / "src" / "Foo.h")
+        write(self.lib / "b" / "src" / "foo.h")
+        with self.assertRaises(self.mod.PackageError):
+            self.build()
+
+    def test_umbrella_includes_function_classes(self) -> None:
+        real_root = Path(__file__).resolve().parent.parent.parent
+        self.mod.build_package(real_root, self.out, "1.2.3")
+        umbrella = (self.out / "src" / "STeaMi.h").read_text()
+        for header in (
+            "SteamiTemperature.h",
+            "SteamiHumidity.h",
+            "SteamiPressure.h",
+            "SteamiDistance.h",
+            "SteamiBattery.h",
+            "SteamiHandle.h",
+        ):
+            self.assertIn(f'#include "{header}"', umbrella)
+
     def test_keywords_concatenated(self) -> None:
         write(self.lib / "aaa" / "keywords.txt", "AAA\tKEYWORD1\n")
         write(self.lib / "bbb" / "keywords.txt", "BBB\tKEYWORD1\n")
