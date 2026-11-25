@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.33.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.32.0...v0.33.0) (2026-11-25)
+
+
+### Features
+
+* **vl53l1x:** Add practical usage examples. ([#250](https://github.com/steamicc/arduino-steami-lib/issues/250)) ([4cce660](https://github.com/steamicc/arduino-steami-lib/commit/4cce6605df8d9c1e67d7e22ca6cd8585c44a8989)), closes [#198](https://github.com/steamicc/arduino-steami-lib/issues/198) [#72](https://github.com/steamicc/arduino-steami-lib/issues/72) [#194](https://github.com/steamicc/arduino-steami-lib/issues/194)
+
 # [0.32.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.31.1...v0.32.0) (2026-11-25)
 
 
