@@ -180,8 +180,12 @@ static void test_report_without_logger_still_stores_last_error(void) {
 static void test_last_error_is_truncated(void) {
     std::string longText(400, 'x');
     board.report("SteamiX", SteamiStatus::NOT_RESPONDING, longText.c_str(), 7);
-    TEST_ASSERT_EQUAL_UINT32(191, strlen(board.lastError()));
+    const std::string last = board.lastError();
+    TEST_ASSERT_EQUAL_UINT32(191, last.size());
+    TEST_ASSERT_EQUAL_UINT32(0, last.rfind("[STeaMi] SteamiX: xxx", 0));
+    TEST_ASSERT_EQUAL_STRING("x (E07)", last.c_str() + last.size() - 7);
     TEST_ASSERT_EQUAL_UINT32(1, g_lines.size());
+    TEST_ASSERT_EQUAL_STRING(last.c_str(), g_lines[0].c_str());
 }
 
 static void test_more_than_16_pairs_do_not_overflow(void) {
@@ -236,14 +240,37 @@ static void presentApds(void) {
     Wire.setRegister(0x39, 0x92, 0xAB);
 }
 
-static bool loggedCode(const char* suffix) {
+static size_t countLogged(const char* suffix) {
     const size_t n = strlen(suffix);
+    size_t count = 0;
     for (const std::string& line : g_lines) {
         if (line.size() >= n && line.compare(line.size() - n, n, suffix) == 0) {
-            return true;
+            count++;
         }
     }
-    return false;
+    return count;
+}
+
+static bool loggedCode(const char* suffix) {
+    return countLogged(suffix) > 0;
+}
+
+static size_t countBanners(void) {
+    size_t count = 0;
+    for (const std::string& line : g_lines) {
+        if (line.rfind("[STeaMi] Board ", 0) == 0) {
+            count++;
+        }
+    }
+    return count;
+}
+
+static size_t countIn(const std::string& text, const std::string& what) {
+    size_t count = 0;
+    for (size_t at = text.find(what); at != std::string::npos; at = text.find(what, at + 1)) {
+        count++;
+    }
+    return count;
 }
 
 // Starts the next case of a test on a fresh bus and a fresh board.
@@ -267,6 +294,8 @@ static void test_config_131_gives_v1c_without_probing(void) {
     TEST_ASSERT_NOT_NULL(board.config());
     TEST_ASSERT_EQUAL_UINT32(0, Wire.transactions(0x76));
     TEST_ASSERT_EQUAL_UINT32(0, Wire.transactions(0x5F));
+    TEST_ASSERT_EQUAL_UINT32(0, Wire.transactions(0x5D));
+    TEST_ASSERT_EQUAL_UINT32(0, Wire.transactions(0x39));
 }
 
 static void test_config_130_is_a_prototype(void) {
@@ -283,7 +312,7 @@ static void test_invalid_revision_reports_e02_and_probes(void) {
     presentBme280();
     TEST_ASSERT_TRUE(board.release() == SteamiRelease::V1C);
     TEST_ASSERT_TRUE(board.origin() == SteamiOrigin::PROBE);
-    TEST_ASSERT_TRUE(loggedCode("(E02)"));
+    TEST_ASSERT_EQUAL_UINT32(1, countLogged("(E02)"));
     TEST_ASSERT_FALSE(board.isPrototype());
     TEST_ASSERT_EQUAL_UINT8(0xFF, board.schematicIndex());
 
@@ -293,7 +322,7 @@ static void test_invalid_revision_reports_e02_and_probes(void) {
     presentHids();
     TEST_ASSERT_TRUE(board.release() == SteamiRelease::V1AB);
     TEST_ASSERT_TRUE(board.origin() == SteamiOrigin::PROBE);
-    TEST_ASSERT_TRUE(loggedCode("(E02)"));
+    TEST_ASSERT_EQUAL_UINT32(1, countLogged("(E02)"));
 }
 
 static void test_missing_revision_probes_silently(void) {
@@ -425,14 +454,50 @@ static void test_banner_and_print_info(void) {
     TEST_ASSERT_EQUAL_STRING(banner, g_lines[0].c_str());
     TEST_ASSERT_EQUAL_UINT32(1, g_lines.size());
 
+    // An explicit report to another output always starts with the banner.
     StringPrint p;
     board.printInfo(p);
     TEST_ASSERT_EQUAL_UINT32(0, p.text.rfind(std::string(banner) + "\n", 0));
+    TEST_ASSERT_EQUAL_UINT32(1, countIn(p.text, banner));
 
-    g_lines.clear();
+    // The logger already delivered the banner: printInfo() sends the chips only.
     board.printInfo();
-    TEST_ASSERT_FALSE(g_lines.empty());
+    TEST_ASSERT_EQUAL_UINT32(1, countBanners());
+    TEST_ASSERT_TRUE(g_lines.size() > 1);
     TEST_ASSERT_EQUAL_STRING(banner, g_lines[0].c_str());
+}
+
+static void test_begin_then_print_info_logs_banner_and_error_once(void) {
+    attachFirmware();
+    fw.store("{\"rev\":3}");
+    presentBme280();
+    TEST_ASSERT_TRUE(board.begin());
+    board.printInfo();
+    TEST_ASSERT_EQUAL_UINT32(1, countBanners());
+    TEST_ASSERT_EQUAL_UINT32(1, countLogged("(E02)"));
+    TEST_ASSERT_EQUAL_STRING("[STeaMi] Board V1c (detected: BME280 at 0x76)", g_lines[1].c_str());
+}
+
+static void test_print_info_without_logger_replays_error(void) {
+    board.setLogger(nullptr);
+    attachFirmware();
+    fw.store("{\"rev\":3}");
+    presentBme280();
+    TEST_ASSERT_TRUE(board.begin());
+    StringPrint p;
+    board.printInfo(p);
+    TEST_ASSERT_EQUAL_UINT32(0, p.text.rfind("[STeaMi] Board V1c (detected: BME280 at 0x76)\n", 0));
+    const std::string last = std::string(board.lastError()) + "\n";
+    TEST_ASSERT_TRUE(last.find("(E02)") != std::string::npos);
+    TEST_ASSERT_EQUAL_UINT32(1, countIn(p.text, "(E02)"));
+    TEST_ASSERT_EQUAL_STRING(last.c_str(), p.text.c_str() + p.text.size() - last.size());
+
+    // A logger set later gets the banner and the message it never delivered, once.
+    board.setLogger(&capture);
+    board.printInfo();
+    board.printInfo();
+    TEST_ASSERT_EQUAL_UINT32(1, countBanners());
+    TEST_ASSERT_EQUAL_UINT32(1, countLogged("(E02)"));
 }
 
 static void test_banner_variants(void) {
@@ -548,20 +613,61 @@ static void test_print_info_lists_chips(void) {
     test_v1ab_never_builds_bme280();
     StringPrint p;
     board.printInfo(p);
-    TEST_ASSERT_TRUE(p.text.find("BME280 0x76 not tried\n") != std::string::npos);
+    TEST_ASSERT_TRUE(p.text.find("BME280") == std::string::npos);
     TEST_ASSERT_TRUE(p.text.find("WSEN-HIDS 0x5F OK\n") != std::string::npos);
+    TEST_ASSERT_TRUE(p.text.find("WSEN-PADS 0x5D ") != std::string::npos);
+    TEST_ASSERT_TRUE(p.text.find("APDS-9960 0x39 ") != std::string::npos);
     TEST_ASSERT_TRUE(p.text.find("MCP23009E 0x20 ") != std::string::npos);
     TEST_ASSERT_TRUE(p.text.find("GC9A01") == std::string::npos);
+    TEST_ASSERT_TRUE(p.text.find("SSD1327") == std::string::npos);
     TEST_ASSERT_TRUE(p.text.find("not responding") != std::string::npos);
 }
 
+static void test_print_info_lists_the_chips_of_the_release(void) {
+    presentBme280();
+    TEST_ASSERT_TRUE(board.release() == SteamiRelease::V1C);
+    StringPrint p;
+    board.printInfo(p);
+    TEST_ASSERT_TRUE(p.text.find("APDS-9960") == std::string::npos);
+    TEST_ASSERT_TRUE(p.text.find("WSEN-HIDS") == std::string::npos);
+    TEST_ASSERT_TRUE(p.text.find("WSEN-PADS") == std::string::npos);
+    const char* const v1c[] = {"BME280 0x76 ",  "ISM330DL 0x6B ", "LIS2MDL 0x1E ",
+                               "VL53L1X 0x29 ", "BQ27441 0x55 ",  "MCP23009E 0x20 "};
+    size_t previous = 0;
+    for (const char* chip : v1c) {
+        const size_t at = p.text.find(chip);
+        TEST_ASSERT_TRUE(at != std::string::npos);
+        TEST_ASSERT_TRUE(at >= previous);  // enum order
+        previous = at;
+    }
+
+    restart();
+    TEST_ASSERT_FALSE(board.begin());  // unknown: all nine I2C chips
+    StringPrint q;
+    board.printInfo(q);
+    for (size_t i = 0; i < 9; i++) {
+        const SteamiChip c = static_cast<SteamiChip>(static_cast<size_t>(SteamiChip::BME280) + i);
+        TEST_ASSERT_EQUAL_UINT32(1, countIn(q.text, std::string(steamiChipName(c)) + " 0x"));
+    }
+}
+
 static void test_print_info_replays_last_error(void) {
-    TEST_ASSERT_FALSE(board.begin());  // nothing answers: E01
+    board.setLogger(nullptr);
+    TEST_ASSERT_FALSE(board.begin());  // nothing answers: E01, not delivered
     StringPrint p;
     board.printInfo(p);
     const std::string last = std::string(board.lastError()) + "\n";
     TEST_ASSERT_TRUE(p.text.size() >= last.size());
     TEST_ASSERT_EQUAL_STRING(last.c_str(), p.text.c_str() + p.text.size() - last.size());
+
+    // Delivered by the logger: not replayed into another output.
+    restart();
+    board.setLogger(&capture);
+    TEST_ASSERT_FALSE(board.begin());
+    TEST_ASSERT_EQUAL_UINT32(1, countLogged("(E01)"));
+    StringPrint r;
+    board.printInfo(r);
+    TEST_ASSERT_TRUE(r.text.find("(E01)") == std::string::npos);
 
     restart();
     presentBme280();
@@ -603,14 +709,24 @@ static void test_end_detaches_expander_interrupt(void) {
 static void test_print_info_logger_sends_banner_once(void) {
     presentBme280();
     board.printInfo();
-    size_t banners = 0;
-    for (const std::string& line : g_lines) {
-        if (line.rfind("[STeaMi] Board ", 0) == 0) {
-            banners++;
-        }
-    }
-    TEST_ASSERT_EQUAL_UINT32(1, banners);
+    TEST_ASSERT_EQUAL_UINT32(1, countBanners());
     TEST_ASSERT_TRUE(g_lines.size() > 1);
+}
+
+static void test_new_message_is_replayed_once(void) {
+    presentBme280();
+    TEST_ASSERT_TRUE(board.begin());
+    board.report("SteamiX", SteamiStatus::NOT_RESPONDING, "first.", 5);
+    board.printInfo();
+    TEST_ASSERT_EQUAL_UINT32(1, countLogged("(E05)"));
+
+    // Same pair, other text: stored but not logged, so printInfo() replays it once.
+    board.report("SteamiX", SteamiStatus::NOT_RESPONDING, "second.", 5);
+    TEST_ASSERT_EQUAL_UINT32(1, countLogged("(E05)"));
+    board.printInfo();
+    TEST_ASSERT_EQUAL_STRING("[STeaMi] SteamiX: second. (E05)", g_lines.back().c_str());
+    board.printInfo();
+    TEST_ASSERT_EQUAL_UINT32(2, countLogged("(E05)"));
 }
 
 static void test_end_destroys_slots(void) {
@@ -686,6 +802,8 @@ int main(void) {
     RUN_TEST(test_queries_before_begin_detect);
     RUN_TEST(test_release_names);
     RUN_TEST(test_banner_and_print_info);
+    RUN_TEST(test_begin_then_print_info_logs_banner_and_error_once);
+    RUN_TEST(test_print_info_without_logger_replays_error);
     RUN_TEST(test_banner_variants);
     RUN_TEST(test_claim_builds_and_begins_once);
     RUN_TEST(test_accessor_returns_same_instance);
@@ -695,8 +813,10 @@ int main(void) {
     RUN_TEST(test_every_accessor_builds_its_slot);
     RUN_TEST(test_v1ab_never_builds_bme280);
     RUN_TEST(test_print_info_lists_chips);
+    RUN_TEST(test_print_info_lists_the_chips_of_the_release);
     RUN_TEST(test_print_info_replays_last_error);
     RUN_TEST(test_print_info_logger_sends_banner_once);
+    RUN_TEST(test_new_message_is_replayed_once);
     RUN_TEST(test_print_info_does_not_repeat_its_own_error);
     RUN_TEST(test_end_detaches_expander_interrupt);
     RUN_TEST(test_end_destroys_slots);

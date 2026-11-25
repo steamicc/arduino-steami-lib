@@ -67,6 +67,30 @@ const char* releaseText(SteamiRelease r) {
     }
 }
 
+// True when a function other than the screen can use the chip on this release. Every I2C chip
+// counts on an unknown release.
+bool routedChip(SteamiRelease r, SteamiChip c) {
+    if (r == SteamiRelease::UNKNOWN) {
+        return true;
+    }
+    for (uint8_t f = 0; f < static_cast<uint8_t>(SteamiFunction::COUNT); f++) {
+        const SteamiFunction function = static_cast<SteamiFunction>(f);
+        if (function == SteamiFunction::SCREEN) {
+            continue;
+        }
+        for (uint8_t i = 0;; i++) {
+            const SteamiChip candidate = steamiRoute(r, function, i);
+            if (candidate == SteamiChip::NONE) {
+                break;
+            }
+            if (candidate == c) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 const char* defineText(SteamiRelease r) {
     switch (r) {
         case SteamiRelease::V1A:
@@ -152,12 +176,39 @@ void SteamiBoard::setLogger(void (*log)(const char* line)) {
     _log = log;
 }
 
+bool SteamiBoard::deliver(const char* line) {
+    if (_log == nullptr) {
+        return false;
+    }
+#ifdef ARDUINO
+    if (_log == &steamiSerialLog && !Serial) {
+        return false;  // the default logger drops the line until Serial is started
+    }
+#endif
+    _log(line);
+    return true;
+}
+
 void SteamiBoard::report(const char* who, SteamiStatus /* s */, const char* detail, uint8_t code) {
-    snprintf(_lastError, sizeof(_lastError), "[STeaMi] %s: %s (E%02u)", who, detail,
-             static_cast<unsigned>(code));
+    // The code stays at the end of a long line: only the detail is cut.
+    char suffix[8];  // " (E255)"
+    snprintf(suffix, sizeof(suffix), " (E%02u)", static_cast<unsigned>(code));
+    const size_t suffixLength = strlen(suffix);
+    char line[ERROR_SIZE];
+    const int written = snprintf(line, sizeof(line) - suffixLength, "[STeaMi] %s: %s", who, detail);
+    size_t length = written < 0 ? 0 : static_cast<size_t>(written);
+    if (length > sizeof(line) - suffixLength - 1) {
+        length = sizeof(line) - suffixLength - 1;
+    }
+    memcpy(line + length, suffix, suffixLength + 1);
+    const bool same = strcmp(line, _lastError) == 0;
+    memcpy(_lastError, line, sizeof(_lastError));
 
     for (size_t i = 0; i < _reportedCount; i++) {
         if (_reported[i].code == code && strcmp(_reported[i].who, who) == 0) {
+            if (!same) {
+                _errorDelivered = false;  // a new text, not logged again: printInfo() replays it
+            }
             return;
         }
     }
@@ -165,9 +216,7 @@ void SteamiBoard::report(const char* who, SteamiStatus /* s */, const char* deta
         _reported[_reportedCount] = {who, code};
         _reportedCount++;
     }
-    if (_log != nullptr) {
-        _log(_lastError);
-    }
+    _errorDelivered = deliver(_lastError);
 }
 
 const SteamiBoardPins& SteamiBoard::pins() {
@@ -351,11 +400,9 @@ void SteamiBoard::formatBanner(char* line, size_t size) const {
 }
 
 void SteamiBoard::logBanner() {
-    if (_log != nullptr) {
-        char line[LINE_SIZE];
-        formatBanner(line, sizeof(line));
-        _log(line);
-    }
+    char line[LINE_SIZE];
+    formatBanner(line, sizeof(line));
+    _bannerDelivered = deliver(line);
 }
 
 SteamiBoard::ChipState& SteamiBoard::stateOf(SteamiChip c) {
@@ -437,19 +484,22 @@ SteamiStatus SteamiBoard::claim(SteamiChip c) {
     return state == ChipState::OK ? SteamiStatus::OK : SteamiStatus::NOT_RESPONDING;
 }
 
-void SteamiBoard::printInfoTo(void (*emit)(void* ctx, const char* line), void* ctx,
-                              bool withBanner) {
-    // Only a message reported before this call is replayed: detection logs its own.
-    char before[ERROR_SIZE];
-    memcpy(before, _lastError, sizeof(before));
+void SteamiBoard::printInfoTo(bool (*emit)(void* ctx, const char* line), void* ctx, bool toLogger) {
     begin();
     char line[LINE_SIZE];
-    if (withBanner) {
+    // Through the logger, a line the logger already delivered is not sent twice.
+    if (!toLogger || !_bannerDelivered) {
         formatBanner(line, sizeof(line));
-        emit(ctx, line);
+        const bool sent = emit(ctx, line);
+        if (toLogger) {
+            _bannerDelivered = sent;
+        }
     }
     for (size_t i = 0; i < I2C_CHIPS; i++) {
         const SteamiChip c = static_cast<SteamiChip>(static_cast<size_t>(SteamiChip::BME280) + i);
+        if (!routedChip(_release, c)) {
+            continue;
+        }
         const ChipState state = stateOf(c);
         snprintf(line, sizeof(line), "%s 0x%02X %s", steamiChipName(c),
                  static_cast<unsigned>(steamiChipAddress(c)),
@@ -458,27 +508,27 @@ void SteamiBoard::printInfoTo(void (*emit)(void* ctx, const char* line), void* c
                                                       : "not tried");
         emit(ctx, line);
     }
-    if (before[0] != '\0') {
-        emit(ctx, before);
+    if (_lastError[0] != '\0' && !_errorDelivered) {
+        const bool sent = emit(ctx, _lastError);
+        if (toLogger) {
+            _errorDelivered = sent;
+        }
     }
 }
 
 void SteamiBoard::printInfo(Print& out) {
-    printInfoTo([](void* ctx, const char* line) { static_cast<Print*>(ctx)->println(line); }, &out,
-                true);
+    printInfoTo(
+        [](void* ctx, const char* line) {
+            static_cast<Print*>(ctx)->println(line);
+            return true;
+        },
+        &out, false);
 }
 
 void SteamiBoard::printInfo() {
-    // Detection logs the banner itself: do not send it twice on a first call.
-    const bool withBanner = _detected;
     printInfoTo(
-        [](void* ctx, const char* line) {
-            void (*log)(const char*) = static_cast<SteamiBoard*>(ctx)->_log;
-            if (log != nullptr) {
-                log(line);
-            }
-        },
-        this, withBanner);
+        [](void* ctx, const char* line) { return static_cast<SteamiBoard*>(ctx)->deliver(line); },
+        this, true);
 }
 
 void SteamiBoard::end() {
@@ -506,6 +556,8 @@ void SteamiBoard::end() {
     _revision = -1;
     _probedChip = SteamiChip::NONE;
     _lastError[0] = '\0';
+    _bannerDelivered = false;
+    _errorDelivered = false;
     _reportedCount = 0;
     _begun = false;
 }

@@ -115,13 +115,16 @@ class SteamiBoard {
     SteamiBQ27441* bq27441() { return claimed(SteamiChip::BQ27441, _bq27441); }
     SteamiMCP23009E* mcp23009e() { return claimed(SteamiChip::MCP23009E, _mcp23009e); }
 
-    /// Prints the banner, the I2C chips and the last message, if any.
+    /// Prints the banner, the I2C chips of the release and the last message to `out`. The banner
+    /// is always printed; the last message only when the logger did not deliver it.
     void printInfo(Print& out);
 
-    /// Same as printInfo(Print&), through the logger.
+    /// Same list through the logger, without repeating the banner or the last message when the
+    /// logger already delivered them.
     void printInfo();
 
-    /// Sets where messages go; nullptr keeps the library silent.
+    /// Sets where messages go; nullptr keeps the library silent. A logger set here counts as
+    /// delivering every line; the default one only while Serial is started.
     void setLogger(void (*log)(const char* line));
 
     /// The last message reported, "" when nothing was reported.
@@ -138,7 +141,7 @@ class SteamiBoard {
     /// The I2C bus; begins it the first time.
     TwoWire& wire();
 
-    /// Destroys the slots and forgets reported pairs. The logger is kept.
+    /// Destroys the slots and forgets reported pairs and delivered lines. The logger is kept.
     void end();
 
    private:
@@ -157,7 +160,8 @@ class SteamiBoard {
     bool readId(uint8_t address, uint8_t reg, uint8_t& id);
     void formatBanner(char* line, size_t size) const;
     void logBanner();
-    void printInfoTo(void (*emit)(void* ctx, const char* line), void* ctx, bool withBanner);
+    bool deliver(const char* line);
+    void printInfoTo(bool (*emit)(void* ctx, const char* line), void* ctx, bool toLogger);
 
     enum class ChipState : uint8_t { NOT_TRIED, OK, NOT_RESPONDING };
     static constexpr size_t I2C_CHIPS = 9;  // BME280 .. MCP23009E
@@ -176,6 +180,8 @@ class SteamiBoard {
     bool _begun = false;
     void (*_log)(const char* line);
     char _lastError[ERROR_SIZE] = {};
+    bool _bannerDelivered = false;  // the logger delivered the current banner
+    bool _errorDelivered = false;   // the logger delivered the current last error
     Reported _reported[MAX_REPORTED] = {};
     size_t _reportedCount = 0;
 

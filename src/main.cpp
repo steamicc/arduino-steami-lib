@@ -37,7 +37,7 @@ void setup() {
     Serial.println("STeaMi smoke test");
 
     Steami.begin();
-    Steami.printInfo(Serial);
+    Steami.printInfo();
 
     pinMode(LED_RED, OUTPUT);
     pinMode(LED_GREEN, OUTPUT);
