@@ -16,6 +16,12 @@ SteamiChip	KEYWORD1
 SteamiFunction	KEYWORD1
 SteamiRevisionInfo	KEYWORD1
 SteamiLazy	KEYWORD1
+SteamiHandle	KEYWORD1
+SteamiTemperature	KEYWORD1
+SteamiHumidity	KEYWORD1
+SteamiPressure	KEYWORD1
+SteamiDistance	KEYWORD1
+SteamiBattery	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
@@ -54,3 +60,17 @@ steamiDecodeRevision	KEYWORD2
 steamiRoute	KEYWORD2
 steamiChipName	KEYWORD2
 steamiChipAddress	KEYWORD2
+read	KEYWORD2
+setOffset	KEYWORD2
+altitude	KEYWORD2
+cm	KEYWORD2
+percent	KEYWORD2
+voltage	KEYWORD2
+current	KEYWORD2
+isCharging	KEYWORD2
+isAvailable	KEYWORD2
+status	KEYWORD2
+error	KEYWORD2
+chip	KEYWORD2
+calibrate	KEYWORD2
+calibrated	KEYWORD2
