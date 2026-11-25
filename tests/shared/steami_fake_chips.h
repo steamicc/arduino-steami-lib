@@ -261,3 +261,62 @@ inline void steamiFakeBq27441Measurement(TwoWire& wire, uint16_t mV, int16_t mA,
 }
 
 #endif
+
+#if __has_include(<SteamiLIS2MDL.h>)
+#include <SteamiLIS2MDL.h>
+
+// --------------------------------------------------------------- LIS2MDL
+
+/// WHO_AM_I, STATUS with ZYXDA (data ready) and the raw field on X, Y and Z (1.5 mG per LSB).
+inline void steamiFakeLis2mdl(TwoWire& wire, int16_t x, int16_t y, int16_t z) {
+    const uint8_t addr = LIS2MDL_I2C_ADDR;
+    const uint16_t ux = static_cast<uint16_t>(x);
+    const uint16_t uy = static_cast<uint16_t>(y);
+    const uint16_t uz = static_cast<uint16_t>(z);
+    wire.setRegister(addr, LIS2MDL_WHO_AM_I, LIS2MDL_WHO_AM_I_VAL);
+    wire.setRegister(addr, LIS2MDL_STATUS_REG, 0x08);  // ZYXDA
+    wire.setRegister(addr, LIS2MDL_OUTX_L_REG, ux & 0xFF);
+    wire.setRegister(addr, LIS2MDL_OUTX_H_REG, (ux >> 8) & 0xFF);
+    wire.setRegister(addr, LIS2MDL_OUTY_L_REG, uy & 0xFF);
+    wire.setRegister(addr, LIS2MDL_OUTY_H_REG, (uy >> 8) & 0xFF);
+    wire.setRegister(addr, LIS2MDL_OUTZ_L_REG, uz & 0xFF);
+    wire.setRegister(addr, LIS2MDL_OUTZ_H_REG, (uz >> 8) & 0xFF);
+}
+
+#endif
+
+#if __has_include(<SteamiAPDS9960.h>)
+#include <SteamiAPDS9960.h>
+
+// ------------------------------------------------------------- APDS-9960
+
+/// ID 0xAB, STATUS with AVALID and the clear, red, green and blue channels.
+inline void steamiFakeApds9960(TwoWire& wire, uint16_t clear, uint16_t red, uint16_t green,
+                               uint16_t blue) {
+    const uint8_t addr = APDS9960_DEFAULT_ADDRESS;
+    wire.setRegister(addr, APDS9960_REG_ID, APDS9960_DEVICE_ID_1);
+    wire.setRegister(addr, APDS9960_REG_STATUS, APDS9960_STATUS_AVALID);
+    wire.setRegister(addr, APDS9960_REG_CDATAL, clear & 0xFF);
+    wire.setRegister(addr, APDS9960_REG_CDATAH, (clear >> 8) & 0xFF);
+    wire.setRegister(addr, APDS9960_REG_RDATAL, red & 0xFF);
+    wire.setRegister(addr, APDS9960_REG_RDATAH, (red >> 8) & 0xFF);
+    wire.setRegister(addr, APDS9960_REG_GDATAL, green & 0xFF);
+    wire.setRegister(addr, APDS9960_REG_GDATAH, (green >> 8) & 0xFF);
+    wire.setRegister(addr, APDS9960_REG_BDATAL, blue & 0xFF);
+    wire.setRegister(addr, APDS9960_REG_BDATAH, (blue >> 8) & 0xFF);
+}
+
+#endif
+
+#if __has_include(<SteamiMCP23009E.h>)
+#include <SteamiMCP23009E.h>
+
+// ------------------------------------------------------------- MCP23009E
+
+/// IODIR 0xF0 (the D-pad pins 4 to 7 as inputs) and the GPIO port value.
+inline void steamiFakeMcp23009e(TwoWire& wire, uint8_t gpio) {
+    wire.setRegister(MCP23009_I2C_ADDR, MCP23009_IODIR, 0xF0);
+    wire.setRegister(MCP23009_I2C_ADDR, MCP23009_GPIO, gpio);
+}
+
+#endif
