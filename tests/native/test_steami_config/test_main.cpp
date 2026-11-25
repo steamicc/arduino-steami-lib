@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+#include <string.h>
 #include <unity.h>
 
 #include "FakeDaplinkBridge.h"
@@ -89,7 +90,7 @@ void test_board_name_set_get_and_clear(void) {
 
 void test_temperature_calibration_supported_sensors(void) {
     const char* sensors[] = {
-        "hts221", "lis2mdl", "ism330dl", "wsen_hids", "wsen_pads",
+        "hts221", "lis2mdl", "ism330dl", "wsen_hids", "wsen_pads", "bme280",
     };
 
     for (size_t i = 0; i < sizeof(sensors) / sizeof(sensors[0]); ++i) {
@@ -290,6 +291,18 @@ void test_save_then_load_round_trip(void) {
     TEST_ASSERT_EQUAL_UINT32(12, bootCount);
 }
 
+void test_bme280_calibration_uses_short_key_bme(void) {
+    FakeDaplinkBridge& firmware = attachFirmware();
+    TEST_ASSERT_TRUE(config.begin());
+
+    TEST_ASSERT_TRUE(config.setTemperatureCalibration("bme280", 1.0f, -2.0f));
+    TEST_ASSERT_TRUE(config.save());
+
+    const char* expected = "{\"tc\":{\"bme\":{\"g\":1,\"o\":-2}}}";
+    TEST_ASSERT_EQUAL_STRING_LEN(expected, reinterpret_cast<const char*>(firmware.zone.data()),
+                                 strlen(expected));
+}
+
 void test_load_reads_micropython_json(void) {
     // Same document as micropython-steami-lib's SteamiConfig.save(), so a
     // board calibrated from MicroPython keeps its settings under Arduino.
@@ -401,6 +414,7 @@ int main(void) {
     RUN_TEST(test_boot_counter_set_get_and_increment);
     RUN_TEST(test_clear_resets_all_in_memory_values);
     RUN_TEST(test_save_then_load_round_trip);
+    RUN_TEST(test_bme280_calibration_uses_short_key_bme);
     RUN_TEST(test_load_reads_micropython_json);
     RUN_TEST(test_save_and_load_config_longer_than_256_bytes);
     RUN_TEST(test_save_rejects_config_larger_than_zone);

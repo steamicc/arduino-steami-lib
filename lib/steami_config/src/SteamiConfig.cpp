@@ -9,11 +9,11 @@ namespace {
 
 constexpr const char* kSensorNames[STEAMI_CONFIG_SENSOR_COUNT] = {
     STEAMI_CONFIG_SENSOR_HTS221,    STEAMI_CONFIG_SENSOR_LIS2MDL,   STEAMI_CONFIG_SENSOR_ISM330DL,
-    STEAMI_CONFIG_SENSOR_WSEN_HIDS, STEAMI_CONFIG_SENSOR_WSEN_PADS,
+    STEAMI_CONFIG_SENSOR_WSEN_HIDS, STEAMI_CONFIG_SENSOR_WSEN_PADS, STEAMI_CONFIG_SENSOR_BME280,
 };
 
 constexpr const char* kSensorShortKeys[STEAMI_CONFIG_SENSOR_COUNT] = {
-    "hts", "mag", "ism", "hid", "pad",
+    "hts", "mag", "ism", "hid", "pad", "bme",
 };
 
 void appendFloat(String& out, float value) {

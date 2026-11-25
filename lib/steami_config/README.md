@@ -112,6 +112,7 @@ Supported sensor names match the MicroPython library:
 - `ism330dl`
 - `wsen_hids`
 - `wsen_pads`
+- `bme280`
 
 ```cpp
 config.setTemperatureCalibration("hts221", 1.0f, -0.5f);
@@ -202,7 +203,7 @@ The format is compatible with the MicroPython sister library:
 | `ca` | Accelerometer offsets |
 | `bc` | Boot counter |
 
-Temperature sensor short keys are `hts`, `mag`, `ism`, `hid`, and `pad`.
+Temperature sensor short keys are `hts`, `mag`, `ism`, `hid`, `pad`, and `bme`.
 
 ## Examples
 
