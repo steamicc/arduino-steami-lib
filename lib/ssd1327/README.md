@@ -39,15 +39,12 @@ void loop() {}
 ### I2C
 
 ```cpp
-#include <Wire.h>
+#include <SteamiBoard.h>
 #include <SteamiSSD1327.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-WS_OLED_128X128_I2C display(internalI2C);
+WS_OLED_128X128_I2C display(Steami.wire());  // the board's internal I2C bus
 
 void setup() {
-    internalI2C.begin();
-
     if (!display.begin()) {
         return;
     }

@@ -141,32 +141,140 @@ function, candidate)`, `steamiChipName(chip)`, `steamiChipAddress(chip)` and
 `steamiForceRelease(release)` (used by the `#define` mechanism, do not call
 it).
 
+## Function classes
+
+Five classes read a function without you choosing a chip: `SteamiTemperature`,
+`SteamiHumidity`, `SteamiPressure`, `SteamiDistance` and `SteamiBattery`.
+They pick the chip of the release (V1a/V1b or V1c) and share the driver the
+board already built. Each has a ready-to-run example in
+[`examples/`](examples/).
+
+```cpp
+#include <SteamiTemperature.h>
+
+SteamiTemperature temperature;
+
+void setup() {
+    Serial.begin(115200);
+    temperature.begin();
+}
+
+void loop() {
+    Serial.println(temperature.read());
+    delay(1000);
+}
+```
+
+| Class | V1a / V1b | V1c |
+|-------|-----------|-----|
+| `SteamiTemperature` | WSEN-HIDS, then WSEN-PADS | BME280 |
+| `SteamiHumidity` | WSEN-HIDS | BME280 |
+| `SteamiPressure` | WSEN-PADS | BME280 |
+| `SteamiDistance` | VL53L1X | VL53L1X |
+| `SteamiBattery` | BQ27441 | BQ27441 |
+
+When the release is unknown, every candidate is tried (for the temperature:
+BME280, WSEN-HIDS, then WSEN-PADS). The altitude of `SteamiPressure` comes from
+`SteamiBME280::altitudeFromPressure` on every release.
+
+### Common shape
+
+Every class has the same methods:
+
+| Method | Description |
+|--------|-------------|
+| `explicit SteamiXxx(SteamiBoard& board = Steami)` | Stores the address of the board only; touches no hardware. |
+| `bool begin()` | Claims the chip; `false` with one message when it does not answer. Idempotent. |
+| `bool isAvailable() const` | True once `begin()` succeeded. |
+| `SteamiStatus status() const` | `OK`, `NOT_STARTED`, `NOT_RESPONDING`, `NOT_ON_THIS_BOARD`, `NO_MEMORY` or `UNKNOWN_BOARD`. |
+| `const char* error() const` | A short text for the status (`"no answer"`, `"not on this board"`, ...), `""` when `OK`. |
+| `const char* chip() const` | The chip in use (`"BME280"`, `"WSEN-HIDS"`, ...), `""` when none. |
+
+A read before `begin()` calls `begin()`. After a failure, the reads return
+their "unavailable" value without any bus traffic and without printing again.
+
+| Class | Reads | Value when unavailable |
+|-------|-------|------------------------|
+| `SteamiTemperature` | `read()` in degrees Celsius, `setOffset(c)` | `NAN` |
+| `SteamiHumidity` | `read()` in %RH | `NAN` |
+| `SteamiPressure` | `read()` in hPa, `altitude(seaLevelHpa = 1013.25f)` in metres | `NAN` |
+| `SteamiDistance` | `read()` in mm, `cm()` | `-1` (`NAN` for `cm()`) |
+| `SteamiBattery` | `percent()`, `voltage()` in V, `current()` in mA, `isCharging()` | `0`, `NAN`, `0`, `false` |
+
+* `SteamiDistance`: `-1` means that the sensor timed out or is unavailable.
+  The driver ignores the range status, so a target out of range is not told
+  apart, and a true 0 mm reading reads as `-1` too.
+* `SteamiBattery`: `isCharging()` is `current() > 0`.
+* A function that failed is not tried again until the board resets (or
+  `Steami.end()`). After plugging in a battery, reset the board.
+
+### Messages of the function classes
+
+| Code | Text |
+|------|------|
+| `E10` | `[STeaMi] SteamiTemperature: the BME280 temperature sensor (I2C 0x76) did not answer. Check the board or try another one. (E10)` |
+| `E10` | `[STeaMi] SteamiTemperature: no temperature sensor answered (WSEN-HIDS, WSEN-PADS). Check the board or try another one. (E10)` |
+| `E11` | `[STeaMi] SteamiTemperature: this STeaMi is set as a V1c (forced by Steami.begin()), but its BME280 temperature sensor (I2C 0x76) did not answer. Check the #define, Steami.begin() or the board config. (E11)` |
+| `E20` | `[STeaMi] <Class>: this STeaMi is a <release>, it has no <noun> (<chip> is on <other release> only). <fallback> (E20)` |
+
+`E10` means that the chip of the release did not answer: with one candidate the
+text names the chip and its I2C address, with several it lists them. `E11`
+replaces it only for the sensors that differ between releases (temperature,
+humidity and pressure) when the release was forced (`Steami.begin(...)`,
+`#define`) or read from the board config: the text then tells you to check
+that setting. Distance and battery are on every release, so they always use
+`E10`.
+`E20` is a format, not a text you will see: it means that the function does
+not exist on this release. None of the five classes in this library can print
+it, because each of them exists on every release (temperature, humidity,
+pressure, distance and battery). The class name, the sensor and the end of the
+text change from one class to another; the code and the shape do not.
+
+### Calibration
+
+When the board config holds a temperature calibration (`tc`), it is applied
+automatically in `begin()`, once per chip, also when the release is forced.
+The keys are the same as in the MicroPython `steami_config`:
+
+| Key | Chip |
+|-----|------|
+| `bme` | BME280 |
+| `hid` | WSEN-HIDS |
+| `pad` | WSEN-PADS |
+
+`printInfo()` adds `, calibrated` to the line of a chip that got its
+calibration. `Steami.calibrate(chip)` applies it on demand and
+`Steami.calibrated(chip)` tells whether it was applied. Without a config
+zone, nothing changes.
+
+The classes share their driver with `Steami.bme280()` and the others: once a
+class has begun, the shared driver returns calibrated temperatures, and a
+`calibrateTemperature()` that your sketch made earlier is overwritten.
+
 ## Using your own drivers
 
-Some drivers are not shared by `Steami` yet. Build them on the board's bus,
-from `setup()`:
+Some drivers are not shared by `Steami` yet. Build them on the board's bus:
 
 ```cpp
 #include <SteamiBoard.h>
 #include <SteamiDaplinkBridge.h>
 
+SteamiDaplinkBridge bridge(Steami.wire());
+
 void setup() {
     Steami.begin();
-    static SteamiDaplinkBridge bridge(Steami.wire());
     bridge.begin();
 }
 ```
 
-* Pass `Steami.wire()` to every driver you build yourself, and call it from
-  `setup()` (or later), never from a global initialiser: the bus is built and
-  begun on first use.
+* Pass `Steami.wire()` to every driver you build yourself. It can be called
+  from a global initialiser (`SteamiBME280 bme(Steami.wire());`): the bus
+  object is built and begun on first use. Checked on a V1c with STM32duino
+  3.1.0.
 * Never create a second `TwoWire` on `I2C_INT_SDA` / `I2C_INT_SCL`. On
   STM32duino 3.1.0 the last `TwoWire` to call `begin()` owns the I2C1
   interrupt (`i2c_handles[I2C1_INDEX]` in `twi.c`); the transfers of the other
   one time out without any error.
-* The examples of the other drivers still create their own bus. Do not mix
-  them with `Steami` in one sketch until they move to `Steami.wire()` (a later
-  sub-project).
 
 ## Testing
 

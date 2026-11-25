@@ -165,10 +165,11 @@ The public header of a driver is `Steami<Chip>.h` (constants in `Steami<Chip>_co
 
 - One folder per example, folder name in lower snake-case.
 - The `.ino` file inside has the exact same name as the folder.
-- Every sketch targets the STeaMi **internal** I2C bus when talking to
-  on-board peripherals: `TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);`
-  and pass it to the driver. The default global `Wire` sits on different
-  pins and will silently fail to detect on-board sensors.
+- A driver example builds its driver on the board's single internal I2C
+  bus, `Steami.wire()`, and includes `<SteamiBoard.h>`. Never create a
+  `TwoWire` on `I2C_INT_SDA` / `I2C_INT_SCL`: two `TwoWire` objects on the
+  same I2C peripheral break each other. The default global `Wire` sits on
+  different pins and will silently fail to detect on-board sensors.
 - Wait for USB CDC enumeration before printing diagnostics:
   `while (!Serial && millis() < 2000) {}` — otherwise early output
   vanishes.

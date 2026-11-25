@@ -21,17 +21,15 @@ for the zone first (`SteamiDaplinkBridge::hasConfigZone()`): on such a board,
 ## Quick start
 
 ```cpp
-#include <Wire.h>
+#include <SteamiBoard.h>
 #include <SteamiDaplinkBridge.h>
 #include <SteamiConfig.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiDaplinkBridge bridge(internalI2C);
+SteamiDaplinkBridge bridge(Steami.wire());  // the board's internal I2C bus
 SteamiConfig config(bridge);
 
 void setup() {
     Serial.begin(115200);
-    internalI2C.begin();
 
     if (!config.begin()) {
         Serial.println("DAPLink bridge not detected");
@@ -112,6 +110,7 @@ Supported sensor names match the MicroPython library:
 - `ism330dl`
 - `wsen_hids`
 - `wsen_pads`
+- `bme280`
 
 ```cpp
 config.setTemperatureCalibration("hts221", 1.0f, -0.5f);
@@ -202,7 +201,7 @@ The format is compatible with the MicroPython sister library:
 | `ca` | Accelerometer offsets |
 | `bc` | Boot counter |
 
-Temperature sensor short keys are `hts`, `mag`, `ism`, `hid`, and `pad`.
+Temperature sensor short keys are `hts`, `mag`, `ism`, `hid`, `pad`, and `bme`.
 
 ## Examples
 

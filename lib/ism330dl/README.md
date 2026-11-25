@@ -27,15 +27,13 @@ On the STeaMi board, the ISM330DL is connected to the **internal**
 I2C bus (`I2C_INT_SDA` / `I2C_INT_SCL`).
 
 ```cpp
-#include <Wire.h>
+#include <SteamiBoard.h>
 #include <SteamiISM330DL.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiISM330DL imu(internalI2C);
+SteamiISM330DL imu(Steami.wire());  // the board's internal I2C bus
 
 void setup() {
     Serial.begin(115200);
-    internalI2C.begin();
 
     if (!imu.begin()) {
         Serial.println("ISM330DL not detected");

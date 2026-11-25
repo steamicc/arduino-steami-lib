@@ -6,11 +6,12 @@
 #include "SteamiWsenPads_const.h"
 #include "Wire.h"
 #include "driver_checks.h"
+#include "steami_fake_chips.h"
 
 constexpr uint8_t ADDR = WSEN_PADS_I2C_DEFAULT_ADDR;
 
 static void preloadDeviceId(bool valid = true) {
-    Wire.setRegister(ADDR, REG_DEVICE_ID, valid ? WSEN_PADS_DEVICE_ID : 0x42);
+    steamiFakeWsenPadsId(Wire, valid);
 }
 
 // Force the device to look "powered on" so reads don't auto-trigger a
@@ -21,20 +22,7 @@ static void preloadPoweredOn() {
 }
 
 static void preloadMeasurement(float tempC, float pressureHpa) {
-    auto rawFromTemp = [](float t) -> int16_t { return static_cast<int16_t>(t / 0.01f); };
-    auto rawPressure = [](float p) -> int32_t { return static_cast<int32_t>(p * 4096); };
-
-    int16_t tempRaw = rawFromTemp(tempC);
-    int32_t pressureRaw = rawPressure(pressureHpa);
-
-    Wire.setRegister(ADDR, REG_DATA_P_XL, pressureRaw & 0xFF);
-    Wire.setRegister(ADDR, REG_DATA_P_L, (pressureRaw >> 8) & 0xFF);
-    Wire.setRegister(ADDR, REG_DATA_P_H, (pressureRaw >> 16) & 0xFF);
-
-    Wire.setRegister(ADDR, REG_DATA_T_L, tempRaw & 0xFF);
-    Wire.setRegister(ADDR, REG_DATA_T_H, (tempRaw >> 8) & 0xFF);
-
-    Wire.setRegister(ADDR, REG_STATUS, STATUS_P_DA | STATUS_T_DA);
+    steamiFakeWsenPadsMeasurement(Wire, tempC, pressureHpa);
 }
 
 SteamiWsenPads sensor;

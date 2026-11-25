@@ -10,18 +10,15 @@
 
 #include <Arduino.h>
 #include <SteamiBME280.h>
-#include <Wire.h>
+#include <SteamiBoard.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiBME280 sensor(internalI2C);
+SteamiBME280 sensor(Steami.wire());  // the board's internal I2C bus
 
 void setup() {
     Serial.begin(115200);
     while (!Serial && millis() < 2000) {
         // Wait up to 2 s for a connected monitor.
     }
-
-    internalI2C.begin();
 
     if (!sensor.begin()) {
         Serial.println("BME280 not detected - check that this is a STeaMi V1c board.");

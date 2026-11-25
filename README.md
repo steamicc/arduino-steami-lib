@@ -59,10 +59,10 @@ All the drivers are published as one Arduino library named **STeaMi**, built fro
 Each on-board component is driven by a `Steami<Chip>` class declared in `Steami<Chip>.h`, so the headers never clash with homonymous libraries of the Library Manager:
 
 ```cpp
+#include <SteamiBoard.h>
 #include <SteamiLIS2MDL.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiLIS2MDL magnetometer(internalI2C);
+SteamiLIS2MDL magnetometer(Steami.wire());  // the board's internal I2C bus
 ```
 
 With the Library Manager package, `#include <STeaMi.h>` pulls in every driver at once.

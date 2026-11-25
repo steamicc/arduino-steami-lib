@@ -13,19 +13,17 @@ light, RGB colour, and gesture sensor on the STeaMi board.
 
 On the STeaMi board, the APDS9960 is connected to the **internal** I2C
 bus (pins `I2C_INT_SDA` / `I2C_INT_SCL` from the board variant, not the
-default global `Wire`). Create a dedicated `TwoWire` instance and pass
-it to the driver:
+default global `Wire`).
+The board owns that bus: build the driver on `Steami.wire()`, which starts it on first use:
 
 ```cpp
-#include <Wire.h>
+#include <SteamiBoard.h>
 #include <SteamiAPDS9960.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiAPDS9960 sensor(internalI2C);
+SteamiAPDS9960 sensor(Steami.wire());  // the board's internal I2C bus
 
 void setup() {
     Serial.begin(115200);
-    internalI2C.begin();
 
     if (!sensor.begin()) {
         Serial.println("APDS9960 not detected");

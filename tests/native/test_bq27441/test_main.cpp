@@ -5,37 +5,23 @@
 
 #include "SteamiBQ27441.h"
 #include "Wire.h"
+#include "steami_fake_chips.h"
 
 constexpr uint8_t ADDR = BQ27441_I2C_ADDRESS;
 
 static void preloadWhoAmI(bool valid = true) {
-    uint16_t value = valid ? BQ27441_DEVICE_ID : 0x1234;
-    Wire.setRegister(ADDR, 0x00, value & 0xFF);
-    Wire.setRegister(ADDR, 0x01, (value >> 8) & 0xFF);
+    steamiFakeBq27441WhoAmI(Wire, valid);
 }
 
 static void preloadMeasurement(uint16_t voltage, int16_t current_avg, uint8_t soc) {
-    Wire.setRegister(ADDR, BQ27441_COMMAND_VOLTAGE, voltage & 0xFF);
-    Wire.setRegister(ADDR, BQ27441_COMMAND_VOLTAGE + 1, (voltage >> 8) & 0xFF);
-    Wire.setRegister(ADDR, BQ27441_COMMAND_AVG_CURRENT, current_avg & 0xFF);
-    Wire.setRegister(ADDR, BQ27441_COMMAND_AVG_CURRENT + 1, (current_avg >> 8) & 0xFF);
-    Wire.setRegister(ADDR, BQ27441_COMMAND_SOC, soc & 0xFF);
-    Wire.setRegister(ADDR, BQ27441_COMMAND_SOC + 1, 0x00);
+    steamiFakeBq27441Measurement(Wire, voltage, current_avg, soc);
 }
 
 SteamiBQ27441* sensor = nullptr;
 void setUp(void) {
     Wire = TwoWire();
     millisClock() = 0xFFFFFFFF - 1;
-    Wire.setControlResponse(BQ27441_CONTROL_DEVICE_TYPE, BQ27441_DEVICE_ID);
-    Wire.setControlResponse(BQ27441_CONTROL_STATUS, 0x0080);
-    // Preload the FLAGS register with CFGUPMODE set so begin() →
-    // powerOn() → setCapacity() → writeExtendedData() → enterConfig()
-    // observes the chip already in config-update mode. Without it the
-    // enterConfig loop spins until timeout and begin() now returns
-    // false (the fix that brought this dependency in).
-    Wire.setRegister(ADDR, BQ27441_COMMAND_FLAGS, BQ27441_FLAG_CFGUPMODE & 0xFF);
-    Wire.setRegister(ADDR, BQ27441_COMMAND_FLAGS + 1, (BQ27441_FLAG_CFGUPMODE >> 8) & 0xFF);
+    steamiFakeBq27441(Wire);  // control responses and the CFGUPMODE flag
     sensor = new SteamiBQ27441(Wire);
     preloadWhoAmI(true);
 }

@@ -13,19 +13,17 @@ and temperature sensor on the STeaMi board.
 
 On the STeaMi board, the WSEN-HIDS is routed to the **internal** I2C bus
 (pins `I2C_INT_SDA` / `I2C_INT_SCL` from the board variant, not the
-default global `Wire`). Spin up a dedicated `TwoWire` and hand it to the
-driver:
+default global `Wire`).
+The board owns that bus: build the driver on `Steami.wire()`, which starts it on first use:
 
 ```cpp
-#include <Wire.h>
+#include <SteamiBoard.h>
 #include <SteamiWsenHids.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiWsenHids sensor(internalI2C);
+SteamiWsenHids sensor(Steami.wire());  // the board's internal I2C bus
 
 void setup() {
     Serial.begin(115200);
-    internalI2C.begin();
 
     if (!sensor.begin()) {
         Serial.println("WSEN-HIDS not detected");

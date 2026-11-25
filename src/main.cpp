@@ -17,18 +17,13 @@
 #include <SteamiDaplinkBridge.h>
 #include <SteamiWsenHids.h>
 #include <SteamiWsenPads.h>
-#include <Wire.h>
 
-// The STeaMi routes its on-board I2C peripherals to an internal bus
-// (pins PB8/PB9, exported as I2C_INT_SCL / I2C_INT_SDA by the variant).
-// The default global Wire sits on a different pair, so spin up a
-// dedicated TwoWire and hand it to every on-board driver.
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-
-SteamiBME280 bme280(internalI2C);
-SteamiWsenHids wsen_hids(internalI2C);
-SteamiWsenPads wsen_pads(internalI2C);
-SteamiDaplinkBridge daplink_bridge(internalI2C);
+// Every on-board driver sits on the board's internal I2C bus, which
+// Steami.wire() returns (and starts on first use).
+SteamiBME280 bme280(Steami.wire());
+SteamiWsenHids wsen_hids(Steami.wire());
+SteamiWsenPads wsen_pads(Steami.wire());
+SteamiDaplinkBridge daplink_bridge(Steami.wire());
 
 void setup() {
     Serial.begin(115200);
@@ -42,8 +37,6 @@ void setup() {
     pinMode(LED_RED, OUTPUT);
     pinMode(LED_GREEN, OUTPUT);
     pinMode(LED_BLUE, OUTPUT);
-
-    internalI2C.begin();
 
     // --- BME280 (pressure + humidity + temperature, V1c only) ---
     if (bme280.begin()) {

@@ -3,16 +3,15 @@
 // HumidityAlert — sound the on-board buzzer when ambient humidity climbs
 // past a mold-risk threshold.
 //
-// The WSEN-HIDS sits on the STeaMi internal I2C bus, so spin up a
-// dedicated TwoWire pointed at the variant pin macros and hand it to the
-// driver. Open the serial monitor at 115200 baud to see the live readings.
+// The WSEN-HIDS sits on the STeaMi internal I2C bus; the driver uses the
+// board's bus, Steami.wire().
+// Open the serial monitor at 115200 baud to see the live readings.
 
 #include <Arduino.h>
+#include <SteamiBoard.h>
 #include <SteamiWsenHids.h>
-#include <Wire.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiWsenHids sensor(internalI2C);
+SteamiWsenHids sensor(Steami.wire());  // the board's internal I2C bus
 
 constexpr float HUMIDITY_THRESHOLD = 70.0f;  // %RH — mold risk above this
 
@@ -28,8 +27,6 @@ void setup() {
         // Wait up to 2 s for a connected monitor — on the STeaMi USB CDC
         // !Serial stays true until the host enumerates.
     }
-
-    internalI2C.begin();
 
     if (!sensor.begin()) {
         Serial.println("WSEN-HIDS not detected — check wiring and I2C address.");

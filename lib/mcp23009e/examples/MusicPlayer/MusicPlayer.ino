@@ -4,13 +4,13 @@
 // depending on which D-PAD button is pressed: UP plays Tetris, DOWN plays
 // Mario, LEFT plays Zelda and RIGHT plays Pokemon.
 //
-// The MCP23009E sits on the STeaMi internal I2C bus, so spin up a
-// dedicated TwoWire pointed at the variant pin macros and hand it to the
-// driver. Open the serial monitor at 115200 baud to see the active button.
+// The MCP23009E sits on the STeaMi internal I2C bus; the driver uses the
+// board's bus, Steami.wire().
+// Open the serial monitor at 115200 baud to see the active button.
 
 #include <Arduino.h>
+#include <SteamiBoard.h>
 #include <SteamiMCP23009E.h>
-#include <Wire.h>
 
 #include <functional>
 #include <map>
@@ -88,8 +88,7 @@ static const std::map<uint8_t, std::function<void()>> kMelodies = {
     {MCP23009_BTN_RIGHT, playPokemon},
 };
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiMCP23009E expander(internalI2C, RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
 
 void setup() {
     Serial.begin(115200);
@@ -102,7 +101,6 @@ void setup() {
         expander.setup(pinNumber, MCP23009_DIR_INPUT, MCP23009_PULLUP);
     }
 
-    internalI2C.begin();
     expander.begin();
 
     Serial.println("MusicPlayer — UP: Tetris, DOWN: Mario, LEFT: Zelda, RIGHT: Pokemon.");

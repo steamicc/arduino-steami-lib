@@ -3,16 +3,15 @@
 // BQ27441 — print voltage, state of charge, remaining capacity and state
 // of health to the serial monitor every 3 seconds.
 //
-// The BQ27441 sits on the STeaMi internal I2C bus, so spin up a
-// dedicated TwoWire pointed at the variant pin macros and hand it to the
-// driver. Open the serial monitor at 115200 baud to see the live readings.
+// The BQ27441 sits on the STeaMi internal I2C bus; the driver uses the
+// board's bus, Steami.wire().
+// Open the serial monitor at 115200 baud to see the live readings.
 
 #include <Arduino.h>
 #include <SteamiBQ27441.h>
-#include <Wire.h>
+#include <SteamiBoard.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiBQ27441 fuelGauge(internalI2C);
+SteamiBQ27441 fuelGauge(Steami.wire());  // the board's internal I2C bus
 
 constexpr uint32_t REFRESH_PERIOD_MS = 3000;
 
@@ -22,7 +21,6 @@ void setup() {
         // Wait up to 2 s for the host USB CDC to enumerate so the
         // "not detected" diagnostic below isn't silently dropped.
     }
-    internalI2C.begin();
 
     if (!fuelGauge.begin()) {
         Serial.println("BQ27441 not detected — check wiring.");

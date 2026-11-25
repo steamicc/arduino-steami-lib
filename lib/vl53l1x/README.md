@@ -16,18 +16,17 @@ starting ranging operations, and reading distance measurements over I2C.
 
 On the STeaMi board, the VL53L1X is routed to the **internal** I2C bus
 (pins `I2C_INT_SDA` / `I2C_INT_SCL` from the variant, not the default
-global `Wire`). Spin up a dedicated `TwoWire` and hand it to the driver:
+global `Wire`).
+The board owns that bus: build the driver on `Steami.wire()`, which starts it on first use:
 
 ```cpp
-#include <Wire.h>
+#include <SteamiBoard.h>
 #include <SteamiVL53L1X.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiVL53L1X sensor(internalI2C);
+SteamiVL53L1X sensor(Steami.wire());  // the board's internal I2C bus
 
 void setup() {
     Serial.begin(115200);
-    internalI2C.begin();
 
     if (!sensor.begin()) {
         Serial.println("VL53L1X not detected");

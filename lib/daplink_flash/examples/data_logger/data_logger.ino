@@ -10,14 +10,13 @@
  * The file is never erased here. To start over, call flash.clearFlash().
  */
 
+#include <SteamiBoard.h>
 #include <SteamiDaplinkBridge.h>
 #include <SteamiDaplinkFlash.h>
-#include <Wire.h>
 
 static constexpr uint32_t PERIOD_MS = 10000;
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiDaplinkBridge bridge(internalI2C);
+SteamiDaplinkBridge bridge(Steami.wire());  // the board's internal I2C bus
 SteamiDaplinkFlash flash(bridge);
 
 static uint8_t content[1024];
@@ -25,7 +24,6 @@ static bool ready = false;
 
 void setup() {
     Serial.begin(115200);
-    internalI2C.begin();
 
     if (!flash.begin()) {
         Serial.println("DAPLink bridge not found.");

@@ -6,68 +6,28 @@
 #include "SteamiWsenHids.h"
 #include "Wire.h"
 #include "driver_checks.h"
+#include "steami_fake_chips.h"
 
 // The driver uses bit 7 of the sub-address as the ST auto-increment flag for
 // multi-byte reads (see WSEN_HIDS_AUTO_INCREMENT). The Wire mock is a straight
 // register map, so preloads for burst-read ranges have to sit at the
 // post-OR address the driver will actually emit on the wire.
 constexpr uint8_t ADDR = WSEN_HIDS_DEFAULT_ADDRESS;
-constexpr uint8_t CAL_BASE = WSEN_HIDS_REG_H0_RH_X2 | WSEN_HIDS_AUTO_INCREMENT;
-constexpr uint8_t HUM_OUT_BASE = WSEN_HIDS_REG_HUMIDITY_OUT_L | WSEN_HIDS_AUTO_INCREMENT;
-constexpr uint8_t TEMP_OUT_BASE = WSEN_HIDS_REG_TEMP_OUT_L | WSEN_HIDS_AUTO_INCREMENT;
+
+constexpr uint8_t CAL_BASE = STEAMI_FAKE_HIDS_CAL_BASE;
+constexpr uint8_t HUM_OUT_BASE = STEAMI_FAKE_HIDS_HUM_BASE;
+constexpr uint8_t TEMP_OUT_BASE = STEAMI_FAKE_HIDS_TEMP_BASE;
 
 static void preloadWhoAmI(bool valid = true) {
-    Wire.setRegister(ADDR, WSEN_HIDS_REG_WHO_AM_I, valid ? WSEN_HIDS_WHO_AM_I_VALUE : 0x42);
+    steamiFakeWsenHidsWhoAmI(Wire, valid);
 }
 
-// Factory calibration chosen so the math is trivial to verify:
-//   temperature = 0.001 * raw       (T0=0 °C at raw 0, T1=25 °C at raw 25000)
-//   humidity    = (100/30000) * raw (H0=0 %RH at raw 0, H1=100 %RH at raw 30000)
 static void preloadFactoryCalibration() {
-    // H0_rH_x2 = 0 → H0 = 0 %RH, H1_rH_x2 = 200 → H1 = 100 %RH.
-    Wire.setRegister(ADDR, CAL_BASE + 0x00, 0);
-    Wire.setRegister(ADDR, CAL_BASE + 0x01, 200);
-    // T0_degC_x8 = 0 → T0 = 0 °C, T1_degC_x8 = 200 → T1 = 25 °C.
-    Wire.setRegister(ADDR, CAL_BASE + 0x02, 0);
-    Wire.setRegister(ADDR, CAL_BASE + 0x03, 200);
-    // Reserved byte (offset 4) and T1_T0_MSB (offset 5, high bits all zero).
-    Wire.setRegister(ADDR, CAL_BASE + 0x04, 0);
-    Wire.setRegister(ADDR, CAL_BASE + 0x05, 0);
-    // H0_T0_OUT = 0 (bytes 6-7).
-    Wire.setRegister(ADDR, CAL_BASE + 0x06, 0x00);
-    Wire.setRegister(ADDR, CAL_BASE + 0x07, 0x00);
-    // Reserved (bytes 8-9).
-    Wire.setRegister(ADDR, CAL_BASE + 0x08, 0);
-    Wire.setRegister(ADDR, CAL_BASE + 0x09, 0);
-    // H1_T0_OUT = 30000 = 0x7530 (bytes 10-11, little endian).
-    Wire.setRegister(ADDR, CAL_BASE + 0x0A, 0x30);
-    Wire.setRegister(ADDR, CAL_BASE + 0x0B, 0x75);
-    // T0_OUT = 0 (bytes 12-13).
-    Wire.setRegister(ADDR, CAL_BASE + 0x0C, 0x00);
-    Wire.setRegister(ADDR, CAL_BASE + 0x0D, 0x00);
-    // T1_OUT = 25000 = 0x61A8 (bytes 14-15, little endian).
-    Wire.setRegister(ADDR, CAL_BASE + 0x0E, 0xA8);
-    Wire.setRegister(ADDR, CAL_BASE + 0x0F, 0x61);
+    steamiFakeWsenHidsCalibration(Wire);
 }
 
-// Preload humidity and temperature OUT registers with values that, through
-// the calibration above, map to the requested clean values in %RH and °C.
 static void preloadMeasurement(float tempC, float humidityPct) {
-    auto rawFromTemp = [](float t) -> int16_t {
-        return static_cast<int16_t>(t / 0.001f);  // 1 °C = 1000 LSB
-    };
-    auto rawFromHum = [](float h) -> int16_t {
-        return static_cast<int16_t>(h * 300.0f);  // 100 %RH = 30000 LSB
-    };
-
-    int16_t tempRaw = rawFromTemp(tempC);
-    int16_t humRaw = rawFromHum(humidityPct);
-
-    Wire.setRegister(ADDR, TEMP_OUT_BASE + 0, tempRaw & 0xFF);
-    Wire.setRegister(ADDR, TEMP_OUT_BASE + 1, (tempRaw >> 8) & 0xFF);
-    Wire.setRegister(ADDR, HUM_OUT_BASE + 0, humRaw & 0xFF);
-    Wire.setRegister(ADDR, HUM_OUT_BASE + 1, (humRaw >> 8) & 0xFF);
-    Wire.setRegister(ADDR, WSEN_HIDS_REG_STATUS, WSEN_HIDS_STATUS_H_DA | WSEN_HIDS_STATUS_T_DA);
+    steamiFakeWsenHidsMeasurement(Wire, tempC, humidityPct);
 }
 
 SteamiWsenHids sensor;

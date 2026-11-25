@@ -12,6 +12,7 @@
 #include "SteamiBoard.h"
 #include "SteamiLazy.h"
 #include "SteamiTypes.h"
+#include "steami_fake_chips.h"
 
 static std::vector<std::string> g_lines;
 static void capture(const char* line) {
@@ -181,7 +182,7 @@ static void test_last_error_is_truncated(void) {
     std::string longText(400, 'x');
     board.report("SteamiX", SteamiStatus::NOT_RESPONDING, longText.c_str(), 7);
     const std::string last = board.lastError();
-    TEST_ASSERT_EQUAL_UINT32(191, last.size());
+    TEST_ASSERT_EQUAL_UINT32(255, last.size());
     TEST_ASSERT_EQUAL_UINT32(0, last.rfind("[STeaMi] SteamiX: xxx", 0));
     TEST_ASSERT_EQUAL_STRING("x (E07)", last.c_str() + last.size() - 7);
     TEST_ASSERT_EQUAL_UINT32(1, g_lines.size());
@@ -748,6 +749,107 @@ static void test_end_destroys_slots(void) {
     TEST_ASSERT_TRUE(board.origin() == SteamiOrigin::PROBE);
 }
 
+// --- Calibration ---
+
+static const char* const kBmeOffsetConfig = "{\"rev\":131,\"tc\":{\"bme\":{\"g\":1.0,\"o\":-2.0}}}";
+
+static void test_calibrate_applies_bme_key(void) {
+    attachFirmware();
+    fw.store(kBmeOffsetConfig);
+    steamiFakeBme280(Wire);
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(SteamiStatus::OK),
+                            static_cast<uint8_t>(board.claim(SteamiChip::BME280)));
+    TEST_ASSERT_TRUE(board.calibrate(SteamiChip::BME280));
+    TEST_ASSERT_TRUE(board.calibrated(SteamiChip::BME280));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.08f, board.bme280()->temperature());
+}
+
+static void test_calibrate_without_key_changes_nothing(void) {
+    attachFirmware();
+    fw.store("{\"rev\":131}");
+    steamiFakeBme280(Wire);
+    board.claim(SteamiChip::BME280);
+    TEST_ASSERT_FALSE(board.calibrate(SteamiChip::BME280));
+    TEST_ASSERT_FALSE(board.calibrated(SteamiChip::BME280));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 25.08f, board.bme280()->temperature());
+}
+
+static void test_calibrate_is_once_per_chip(void) {
+    attachFirmware();
+    fw.store(kBmeOffsetConfig);
+    steamiFakeBme280(Wire);
+    board.claim(SteamiChip::BME280);
+    TEST_ASSERT_TRUE(board.calibrate(SteamiChip::BME280));
+    const uint32_t reads = fw.readConfigCommands;
+    TEST_ASSERT_TRUE(board.calibrate(SteamiChip::BME280));
+    TEST_ASSERT_EQUAL_UINT32(reads, fw.readConfigCommands);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.08f, board.bme280()->temperature());  // not applied twice
+}
+
+static void test_calibrate_forced_loads_config_on_demand(void) {
+    attachFirmware();
+    fw.store(kBmeOffsetConfig);
+    steamiFakeBme280(Wire);
+    TEST_ASSERT_TRUE(board.begin(SteamiRelease::V1C));
+    TEST_ASSERT_NULL(board.config());
+    TEST_ASSERT_TRUE(board.calibrate(SteamiChip::BME280));
+    TEST_ASSERT_TRUE(board.calibrated(SteamiChip::BME280));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.08f, board.bme280()->temperature());
+}
+
+static void test_calibrate_forced_legacy_no_config_command(void) {
+    attachFirmware();
+    fw.legacyFirmware = true;
+    steamiFakeBme280(Wire);
+    TEST_ASSERT_TRUE(board.begin(SteamiRelease::V1C));
+    TEST_ASSERT_FALSE(board.calibrate(SteamiChip::BME280));
+    TEST_ASSERT_EQUAL_UINT32(0, fw.readConfigCommands);
+    TEST_ASSERT_FALSE(fw.hung);
+}
+
+static void test_calibrate_forced_legacy_does_not_retry_config(void) {
+    attachFirmware();
+    fw.legacyFirmware = true;
+    steamiFakeBme280(Wire);
+    TEST_ASSERT_TRUE(board.begin(SteamiRelease::V1C));
+    board.wsenHids();  // claimed (and found absent) before the traffic is measured
+    TEST_ASSERT_FALSE(board.calibrate(SteamiChip::BME280));
+    const uint32_t traffic = Wire.totalTransactions();
+    TEST_ASSERT_FALSE(board.calibrate(SteamiChip::WSEN_HIDS));
+    TEST_ASSERT_EQUAL_UINT32(traffic, Wire.totalTransactions());
+    TEST_ASSERT_EQUAL_UINT32(0, fw.readConfigCommands);
+}
+
+static void test_calibrate_unknown_chip_or_absent_chip_is_false(void) {
+    attachFirmware();
+    fw.store(kBmeOffsetConfig);
+    steamiFakeBme280(Wire);
+    TEST_ASSERT_FALSE(board.calibrate(SteamiChip::VL53L1X));  // no calibration, no chip
+    TEST_ASSERT_FALSE(board.calibrate(SteamiChip::GC9A01));
+    TEST_ASSERT_FALSE(board.calibrated(SteamiChip::VL53L1X));
+}
+
+static void test_print_info_marks_calibrated_chip(void) {
+    attachFirmware();
+    fw.store(kBmeOffsetConfig);
+    steamiFakeBme280(Wire);
+    board.claim(SteamiChip::BME280);
+    board.calibrate(SteamiChip::BME280);
+    StringPrint p;
+    board.printInfo(p);
+    TEST_ASSERT_TRUE(p.text.find("BME280 0x76 OK, calibrated\n") != std::string::npos);
+}
+
+static void test_report_keeps_twenty_pairs(void) {
+    for (uint8_t i = 0; i < 20; i++) {
+        board.report("SteamiX", SteamiStatus::NOT_RESPONDING, "d", i);
+    }
+    for (uint8_t i = 0; i < 20; i++) {
+        board.report("SteamiX", SteamiStatus::NOT_RESPONDING, "d", i);
+    }
+    TEST_ASSERT_EQUAL_UINT32(20, g_lines.size());
+}
+
 // Must run last: nothing clears the value the registrar writes.
 static void test_registrar_value_and_conflict(void) {
     steamiForceRelease(SteamiRelease::V1C);
@@ -820,6 +922,15 @@ int main(void) {
     RUN_TEST(test_print_info_does_not_repeat_its_own_error);
     RUN_TEST(test_end_detaches_expander_interrupt);
     RUN_TEST(test_end_destroys_slots);
+    RUN_TEST(test_calibrate_applies_bme_key);
+    RUN_TEST(test_calibrate_without_key_changes_nothing);
+    RUN_TEST(test_calibrate_is_once_per_chip);
+    RUN_TEST(test_calibrate_forced_loads_config_on_demand);
+    RUN_TEST(test_calibrate_forced_legacy_no_config_command);
+    RUN_TEST(test_calibrate_forced_legacy_does_not_retry_config);
+    RUN_TEST(test_calibrate_unknown_chip_or_absent_chip_is_false);
+    RUN_TEST(test_print_info_marks_calibrated_chip);
+    RUN_TEST(test_report_keeps_twenty_pairs);
     RUN_TEST(test_registrar_value_and_conflict);  // last: the registrar value cannot be cleared
     return UNITY_END();
 }

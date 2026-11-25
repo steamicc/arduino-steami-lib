@@ -4,23 +4,21 @@
 // red LED lights up. The LED turns on after a random delay between 300
 // and 1500 ms; your reaction time is printed to the serial monitor.
 //
-// The MCP23009E sits on the STeaMi internal I2C bus, so spin up a
-// dedicated TwoWire pointed at the variant pin macros and hand it to the
-// driver. Open the serial monitor at 115200 baud to see your results.
+// The MCP23009E sits on the STeaMi internal I2C bus; the driver uses the
+// board's bus, Steami.wire().
+// Open the serial monitor at 115200 baud to see your results.
 
 #include <Arduino.h>
+#include <SteamiBoard.h>
 #include <SteamiMCP23009E.h>
-#include <Wire.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiMCP23009E expander(internalI2C, RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
 
 void setup() {
     Serial.begin(115200);
     while (!Serial && millis() < 2000) {
     }
 
-    internalI2C.begin();
     expander.begin();
 
     expander.setup(MCP23009_BTN_UP, MCP23009_DIR_INPUT, MCP23009_PULLUP);

@@ -13,11 +13,10 @@
 // serial monitor at 115200 baud.
 
 #include <Arduino.h>
+#include <SteamiBoard.h>
 #include <SteamiWsenHids.h>
-#include <Wire.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiWsenHids sensor(internalI2C);
+SteamiWsenHids sensor(Steami.wire());  // the board's internal I2C bus
 
 const char* classifyComfort(float temperature, float humidity) {
     if (temperature < 18.0f) {
@@ -40,8 +39,6 @@ void setup() {
     while (!Serial && millis() < 2000) {
         // Wait up to 2 s for a connected monitor.
     }
-
-    internalI2C.begin();
 
     if (!sensor.begin()) {
         Serial.println("WSEN-HIDS not detected — check wiring and I2C address.");
