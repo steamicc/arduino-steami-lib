@@ -13,18 +13,16 @@ Li-Po fuel gauge on the STeaMi board.
 ## Quick start
 
 On the STeaMi board, the BQ27441 is routed to the **internal** I2C bus.
-Spin up a dedicated `TwoWire` and hand it to the driver:
+The board owns that bus: build the driver on `Steami.wire()`, which starts it on first use:
 
 ```cpp
-#include <Wire.h>
+#include <SteamiBoard.h>
 #include <SteamiBQ27441.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiBQ27441 fuelGauge(internalI2C);
+SteamiBQ27441 fuelGauge(Steami.wire());  // the board's internal I2C bus
 
 void setup() {
     Serial.begin(115200);
-    internalI2C.begin();
 
     if (!fuelGauge.begin()) {
         Serial.println("BQ27441 not detected");

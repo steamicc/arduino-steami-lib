@@ -4,16 +4,14 @@
 // the on-board buzzer when it falls below 5 %. The state of charge is
 // printed to the serial monitor (115200 baud) on every check.
 //
-// The BQ27441 sits on the STeaMi internal I2C bus, so spin up a
-// dedicated TwoWire pointed at the variant pin macros and hand it to the
-// driver.
+// The BQ27441 sits on the STeaMi internal I2C bus; the driver uses the
+// board's bus, Steami.wire().
 
 #include <Arduino.h>
 #include <SteamiBQ27441.h>
-#include <Wire.h>
+#include <SteamiBoard.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiBQ27441 fuelGauge(internalI2C);
+SteamiBQ27441 fuelGauge(Steami.wire());  // the board's internal I2C bus
 
 // Tune to the use case: the LED warns early, the buzzer only when the
 // board is about to shut down.
@@ -47,7 +45,6 @@ void setup() {
         // Wait up to 2 s for the host USB CDC to enumerate so the
         // "not detected" diagnostic below isn't silently dropped.
     }
-    internalI2C.begin();
     pinMode(ALERT_LED_PIN, OUTPUT);
     pinMode(BUZZER_PIN, OUTPUT);
     digitalWrite(ALERT_LED_PIN, LOW);
