@@ -157,7 +157,7 @@ void test_string_print_collects_text(void) {
     p.print(int32_t(-3));
     p.print(uint32_t(0x3B), 16);
     p.println("z");
-    TEST_ASSERT_EQUAL_STRING("a-33bz\n", p.text.c_str());
+    TEST_ASSERT_EQUAL_STRING("a-33Bz\n", p.text.c_str());
 }
 
 int main(void) {

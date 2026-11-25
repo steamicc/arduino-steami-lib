@@ -30,7 +30,7 @@ class Print {
         }
         std::string digits;
         while (v > 0) {
-            digits.insert(digits.begin(), "0123456789abcdef"[v % base]);
+            digits.insert(digits.begin(), "0123456789ABCDEF"[v % base]);
             v /= base;
         }
         return write(digits.c_str());
