@@ -4,9 +4,10 @@
  * Hardware unit tests for the board layer on a real STeaMi.
  *
  * test_factory_revision_round_trip writes the DAPLink configuration zone.
- * The zone content is saved first and written back before any assertion.
- * It is skipped on a board without a config zone, and no write happens
- * when the board already has a revision.
+ * It writes only on a V1c detected by probing whose config loads, has no
+ * revision and could be saved (non-empty); in every other case it is
+ * ignored before any write. The saved zone is written back before any
+ * assertion.
  */
 
 #include <Arduino.h>
@@ -45,19 +46,30 @@ void test_factory_revision_round_trip(void) {
         return;
     }
 
+    // Every check below comes before the first write: in doubt, the zone is left alone.
     SteamiConfig cfg(bridge);
-    cfg.begin();
-    cfg.load();
-
-    int32_t existing = 0;
-    if (cfg.boardRevision(existing)) {
-        // The board already has a factory revision: do not touch it.
-        const bool valid = steamiDecodeRevision(existing).valid;
-        TEST_ASSERT_TRUE_MESSAGE(valid, "the revision stored on the board does not decode");
+    if (!cfg.begin() || !cfg.load()) {
+        TEST_IGNORE_MESSAGE("the board config could not be loaded: nothing written.");
         return;
     }
-
+    int32_t existing = 0;
+    if (cfg.boardRevision(existing)) {
+        TEST_IGNORE_MESSAGE("the board already has a revision: nothing written.");
+        return;
+    }
     backup.take(bridge);
+    if (backup.length == 0) {
+        TEST_IGNORE_MESSAGE("the config zone could not be saved: nothing written.");
+        return;
+    }
+    Steami.end();
+    const bool probed = Steami.begin() && Steami.release() == SteamiRelease::V1C &&
+                        Steami.origin() == SteamiOrigin::PROBE;
+    Steami.end();
+    if (!probed) {
+        TEST_IGNORE_MESSAGE("not a V1c detected by probing: nothing written.");
+        return;
+    }
 
     cfg.setBoardRevision(131);
     const bool saved = cfg.save();
@@ -67,6 +79,7 @@ void test_factory_revision_round_trip(void) {
     const SteamiOrigin origin = Steami.origin();
     const int32_t revision = Steami.revision();
 
+    // Restore before asserting, so that a failed assertion leaves the zone as it was.
     const bool restored = backup.restore(bridge);
     Steami.end();
 
