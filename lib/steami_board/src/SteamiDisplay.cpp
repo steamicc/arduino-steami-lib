@@ -70,7 +70,8 @@ Sector sectorFrom(int32_t s, int32_t e) {
 
 /// glyphs * advance * scale, saturating at 32767; scale 0 counts as 1.
 int16_t textExtent(const char* s, uint8_t advance, uint8_t scale) {
-    const uint64_t w = static_cast<uint64_t>(steamiGlyphCount(s)) * advance * (scale == 0 ? 1 : scale);
+    const uint64_t w =
+        static_cast<uint64_t>(steamiGlyphCount(s)) * advance * (scale == 0 ? 1 : scale);
     return static_cast<int16_t>(w > 32767 ? 32767 : w);
 }
 
