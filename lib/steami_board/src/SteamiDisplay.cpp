@@ -51,6 +51,22 @@ int32_t edgeX(const Edge& e, int32_t y) {
     return e.xa + static_cast<int32_t>(num < 0 ? -q : q);
 }
 
+/// The closed wedge of at most 180 degrees from the ray at s clockwise to the ray at e, held as the
+/// Q14 directions S = (sin s, -cos s) and E = (sin e, -cos e). With y down a clockwise turn has a
+/// positive cross product, so (dx, dy) is inside when cross(S, p) >= 0 and cross(p, E) >= 0. Every
+/// factor fits in int32_t: |S|, |E| <= 2^14 and |dx|, |dy| <= 2^15 + panel size.
+struct Sector {
+    int32_t sx, sy, ex, ey;
+
+    bool holds(int32_t dx, int32_t dy) const {
+        return sx * dy - sy * dx >= 0 && dx * ey - dy * ex >= 0;
+    }
+};
+
+Sector sectorFrom(int32_t s, int32_t e) {
+    return {steamiSinQ14(s), -steamiCosQ14(s), steamiSinQ14(e), -steamiCosQ14(e)};
+}
+
 }  // namespace
 
 bool SteamiDisplay::begin() {
@@ -379,4 +395,79 @@ void SteamiDisplay::triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int
         }
         span(b, lo, y, hi - lo + 1, 1, v);
     }
+}
+
+void SteamiDisplay::arc(int16_t cx, int16_t cy, int16_t r, int16_t startDeg, int16_t sweepDeg,
+                        SteamiRgb c, uint8_t width) {
+    SteamiDisplayBackend* b = ready();
+    if (b == nullptr || sweepDeg <= 0 || width == 0 || r < 0) {
+        return;
+    }
+    const uint16_t v = c.rgb565();
+
+    // Under a full turn, wedges of at most 180 degrees: [s, s + 180] then [s + 180, s + sweep].
+    const bool full = sweepDeg >= 360;
+    Sector sectors[2] = {};
+    int sectorCount = 0;
+    if (!full) {
+        const int32_t e = static_cast<int32_t>(startDeg) + sweepDeg;
+        const int32_t m = sweepDeg > 180 ? static_cast<int32_t>(startDeg) + 180 : e;
+        sectors[sectorCount++] = sectorFrom(startDeg, m);
+        if (m != e) {
+            sectors[sectorCount++] = sectorFrom(m, e);
+        }
+    }
+    const auto inside = [&](int32_t dx, int32_t dy) {
+        for (int i = 0; i < sectorCount; i++) {
+            if (sectors[i].holds(dx, dy)) {
+                return true;
+            }
+        }
+        return full;
+    };
+
+    // The span [lo, hi] of row dy, walked only where cx + dx is on the panel; each contiguous run
+    // of kept pixels is one span() (an empty run draws nothing).
+    const int32_t lastX = b->width() - 1;
+    const auto runs = [&](int32_t lo, int32_t hi, int32_t dy) {
+        lo = lo < -cx ? -cx : lo;
+        hi = hi > lastX - cx ? lastX - cx : hi;
+        int32_t start = lo;
+        for (int32_t dx = lo; dx <= hi; dx++) {
+            if (!inside(dx, dy)) {
+                span(b, cx + start, cy + dy, dx - start, 1, v);
+                start = dx + 1;
+            }
+        }
+        span(b, cx + start, cy + dy, hi + 1 - start, 1, v);
+    };
+
+    // Ring between the radii ri - 1/2 and r + 1/2, squares in int64_t: (2r + 1)^2 < 2^32.
+    const int32_t ri = r - width + 1 > 0 ? r - width + 1 : 0;
+    const int64_t outer = (2 * static_cast<int64_t>(r) + 1) * (2 * static_cast<int64_t>(r) + 1);
+    const int64_t inner = (2 * static_cast<int64_t>(ri) - 1) * (2 * static_cast<int64_t>(ri) - 1);
+    const int32_t top = -r > -cy ? -r : -cy;  // the rows of the panel: 0 <= cy + dy < height
+    const int32_t bottom = r < b->height() - 1 - cy ? r : b->height() - 1 - cy;
+    for (int32_t dy = top; dy <= bottom; dy++) {
+        const int64_t dy4 = 4 * static_cast<int64_t>(dy) * dy;
+        // Outer half-chord: the largest x with 4(x^2 + dy^2) <= (2r + 1)^2.
+        const auto xo = static_cast<int32_t>(steamiIsqrt(static_cast<uint32_t>((outer - dy4) / 4)));
+        // Inner hole: the smallest x >= 0 with 4(x^2 + dy^2) >= (2ri - 1)^2, 0 without a hole.
+        int32_t xi = 0;
+        if (ri > 0 && inner > dy4) {
+            const auto q = static_cast<uint32_t>((inner - dy4 + 3) / 4);  // x^2 >= q
+            const uint32_t s = steamiIsqrt(q);
+            xi = static_cast<int32_t>(s * s == q ? s : s + 1);
+        }
+        if (xi == 0) {
+            runs(-xo, xo, dy);
+        } else {  // xi > xo leaves both spans empty
+            runs(-xo, -xi, dy);
+            runs(xi, xo, dy);
+        }
+    }
+}
+
+void SteamiDisplay::strokeCircle(int16_t cx, int16_t cy, int16_t r, uint8_t w, SteamiRgb c) {
+    arc(cx, cy, r, 0, 360, c, w);
 }

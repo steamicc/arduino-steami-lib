@@ -9,6 +9,7 @@
 
 #include <initializer_list>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "SteamiBoard.h"
@@ -1256,6 +1257,161 @@ static void test_extreme_circles_and_triangles(void) {  // Review Focus 1; UBSan
     forEachPanel(extremeShapesCheck);
 }
 
+// ---- Arcs ----
+
+/// The distance test of 5.6: outer radius r + 1/2, inner radius ri - 1/2 with ri = max(0, r - w +
+/// 1).
+static bool inRing(int32_t dx, int32_t dy, int32_t r, int32_t w) {
+    const int64_t d4 = 4 * (static_cast<int64_t>(dx) * dx + static_cast<int64_t>(dy) * dy);
+    const int32_t ri = r - w + 1 > 0 ? r - w + 1 : 0;
+    return d4 <= static_cast<int64_t>(2 * r + 1) * (2 * r + 1) &&
+           (ri == 0 || d4 >= static_cast<int64_t>(2 * ri - 1) * (2 * ri - 1));
+}
+
+/// Every panel pixel is lit exactly when inRing holds around (cx, cy).
+static void expectRing(const SteamiMemoryBackend& mem, int16_t w, int16_t h, int32_t cx, int32_t cy,
+                       int32_t r, int32_t width) {
+    for (int16_t y = 0; y < h; y++) {
+        for (int16_t x = 0; x < w; x++) {
+            TEST_ASSERT_EQUAL(inRing(x - cx, y - cy, r, width), mem.lit(x, y));
+        }
+    }
+}
+
+static void fullArcCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    const int16_t W = d.width();
+    const int16_t H = d.height();
+    const int16_t cx = d.centerX();
+    const int16_t cy = d.centerY();
+    const int16_t centres[5][2] = {{cx, cy},
+                                   {0, 0},
+                                   {static_cast<int16_t>(W - 1), cy},
+                                   {cx, 0},
+                                   {cx, static_cast<int16_t>(H - 1)}};
+    const int16_t rings[4][2] = {{50, 1}, {50, 7}, {5, 10}, {60, 7}};
+    for (const auto& ring : rings) {
+        for (const auto& c : centres) {
+            d.clear();
+            mem.clearCounters();
+            d.arc(c[0], c[1], ring[0], 0, 360, kInk, static_cast<uint8_t>(ring[1]));
+            expectRing(mem, W, H, c[0], c[1], ring[0], ring[1]);
+            TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+            TEST_ASSERT_EQUAL_UINT64(mem.litCount(), mem.areaDrawn());  // each pixel once
+        }
+    }
+}
+static void test_full_arc_equals_distance_ring(void) {
+    forEachPanel(fullArcCheck);
+}
+
+static void test_quarter_arc_is_noon_to_three(void) {
+    SteamiMemoryBackend mem(240, 240);
+    injectFresh(mem);
+    SteamiDisplay d(board);
+    d.arc(120, 120, 50, 0, 90, kInk, 7);
+    TEST_ASSERT_TRUE(mem.litCount() > 0);
+    for (int16_t y = 0; y < 240; y++) {
+        for (int16_t x = 0; x < 240; x++) {
+            const int32_t dx = x - 120;
+            const int32_t dy = y - 120;
+            if (mem.lit(x, y)) {
+                TEST_ASSERT_TRUE(dx >= 0 && dy <= 0);
+            }
+            if (dx > 0 && dy < 0 && inRing(dx, dy, 50, 7)) {
+                TEST_ASSERT_TRUE(mem.lit(x, y));
+            }
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+    board.end();
+}
+
+/// The pixels of the arcs {start, sweep} drawn in turn on a cleared panel, centre 120, r 60, w 7.
+static std::vector<uint16_t> arcsSnapshot(SteamiMemoryBackend& mem, SteamiDisplay& d,
+                                          std::initializer_list<std::pair<int16_t, int16_t>> arcs,
+                                          int16_t r = 60, uint8_t w = 7) {
+    d.clear();
+    for (const auto& a : arcs) {
+        d.arc(120, 120, r, a.first, a.second, kInk, w);
+    }
+    return snapshot(mem);
+}
+
+static void test_adjacent_arcs_leave_no_gap(void) {
+    SteamiMemoryBackend mem(240, 240);
+    injectFresh(mem);
+    SteamiDisplay d(board);
+    TEST_ASSERT_TRUE(arcsSnapshot(mem, d, {{0, 90}, {90, 90}}) == arcsSnapshot(mem, d, {{0, 180}}));
+    // The gauge: track then fill, against one 270 degree arc (two sectors inside arc()).
+    TEST_ASSERT_TRUE(arcsSnapshot(mem, d, {{225, 135}, {0, 135}}) ==
+                     arcsSnapshot(mem, d, {{225, 270}}));
+    TEST_ASSERT_TRUE(mem.litCount() > 0);
+    board.end();
+}
+
+static void test_arc_angles_normalised(void) {  // Review Focus 4
+    SteamiMemoryBackend mem(240, 240);
+    injectFresh(mem);
+    SteamiDisplay d(board);
+    TEST_ASSERT_TRUE(arcsSnapshot(mem, d, {{-90, 90}}) == arcsSnapshot(mem, d, {{270, 90}}));
+    TEST_ASSERT_TRUE(arcsSnapshot(mem, d, {{450, 90}}) == arcsSnapshot(mem, d, {{90, 90}}));
+    TEST_ASSERT_TRUE(arcsSnapshot(mem, d, {{0, 400}}) == arcsSnapshot(mem, d, {{0, 360}}));
+
+    arcsSnapshot(mem, d, {{0, 0}, {0, -10}});
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    arcsSnapshot(mem, d, {{0, 360}}, 60, 0);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    arcsSnapshot(mem, d, {{0, 360}}, -1, 1);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    arcsSnapshot(mem, d, {{0, 360}}, 0, 1);
+    TEST_ASSERT_EQUAL_size_t(1, mem.litCount());
+    TEST_ASSERT_TRUE(mem.lit(120, 120));
+    board.end();
+}
+
+static void test_stroke_circle_is_full_arc(void) {
+    SteamiMemoryBackend mem(240, 240);
+    injectFresh(mem);
+    TestDisplay d(board);
+    const int16_t centres[3][2] = {{120, 120}, {10, 200}, {239, 0}};
+    for (const auto& c : centres) {
+        d.clear();
+        d.strokeCircle(c[0], c[1], 40, 2, kInk);
+        const std::vector<uint16_t> stroke = snapshot(mem);
+        d.clear();
+        d.arc(c[0], c[1], 40, 0, 360, kInk, 2);
+        TEST_ASSERT_TRUE(stroke == snapshot(mem));
+        TEST_ASSERT_TRUE(mem.litCount() > 0);
+    }
+    board.end();
+}
+
+static void extremeArcsCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    const int16_t W = d.width();
+    const int16_t H = d.height();
+    const int16_t cx = d.centerX();
+    const int16_t cy = d.centerY();
+
+    d.clear();
+    d.arc(cx, cy, 32767, 0, 360, kInk, 255);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    expectRing(mem, W, H, cx, cy, 32767, 255);  // no panel pixel is in that ring
+
+    d.clear();
+    d.arc(-32768, -32768, 32767, 45, 90, kInk, 3);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+
+    d.clear();
+    mem.clearCounters();
+    d.arc(cx, cy, 300, 0, 360, kInk, 255);  // the panel inside the ring, around a hole of 46
+    expectRing(mem, W, H, cx, cy, 300, 255);
+    TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+    TEST_ASSERT_EQUAL_UINT64(mem.litCount(), mem.areaDrawn());
+}
+static void test_extreme_arcs(void) {  // Review Focus 1; UBSan under native_asan
+    forEachPanel(extremeArcsCheck);
+}
+
 static void test_protected_name_in_messages(void) {
     TestDisplay d(board);
     TEST_ASSERT_FALSE(d.begin());
@@ -1317,6 +1473,12 @@ int main(int, char**) {
     RUN_TEST(test_filled_triangle_same_for_six_orders);
     RUN_TEST(test_degenerate_circles_and_triangles);
     RUN_TEST(test_extreme_circles_and_triangles);
+    RUN_TEST(test_full_arc_equals_distance_ring);
+    RUN_TEST(test_quarter_arc_is_noon_to_three);
+    RUN_TEST(test_adjacent_arcs_leave_no_gap);
+    RUN_TEST(test_arc_angles_normalised);
+    RUN_TEST(test_stroke_circle_is_full_arc);
+    RUN_TEST(test_extreme_arcs);
     RUN_TEST(test_protected_name_in_messages);
     return UNITY_END();
 }
