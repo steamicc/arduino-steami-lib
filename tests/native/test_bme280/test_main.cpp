@@ -6,6 +6,7 @@
 #include "SteamiBME280.h"
 #include "Wire.h"
 #include "driver_checks.h"
+#include "steami_fake_chips.h"
 
 constexpr uint8_t ADDR = BME280_DEFAULT_ADDRESS;
 
@@ -18,63 +19,19 @@ constexpr int32_t RAW_TEMP = 519888;   // t_fine = 128422 -> 25.08 degC
 constexpr int32_t RAW_PRESS = 415148;  // -> 1006.5325 hPa (100653.25 Pa)
 constexpr int32_t RAW_HUM = 30000;     // -> 55.3535 %RH (with H1..H6 below)
 
-struct Calibration {
-    uint16_t t1;
-    int16_t t2, t3;
-    uint16_t p1;
-    int16_t p2, p3, p4, p5, p6, p7, p8, p9;
-    uint8_t h1;
-    int16_t h2;
-    uint8_t h3;
-    int16_t h4, h5;
-    int8_t h6;
-};
-
-constexpr Calibration BOSCH_EXAMPLE = {27504, 26435,  -1000, 36477, -10685, 3024, 2855, 140, -7,
-                                       15500, -14600, 6000,  75,    362,    0,    312,  50,  30};
-
-static void setLe16(uint8_t reg, int32_t value) {
-    Wire.setRegister(ADDR, reg, value & 0xFF);
-    Wire.setRegister(ADDR, reg + 1, (value >> 8) & 0xFF);
-}
+using Calibration = SteamiFakeBme280Calibration;
+constexpr Calibration BOSCH_EXAMPLE = STEAMI_FAKE_BME280_BOSCH;
 
 static void preloadCalibration(const Calibration& c) {
-    setLe16(0x88, c.t1);
-    setLe16(0x8A, c.t2);
-    setLe16(0x8C, c.t3);
-    setLe16(0x8E, c.p1);
-    setLe16(0x90, c.p2);
-    setLe16(0x92, c.p3);
-    setLe16(0x94, c.p4);
-    setLe16(0x96, c.p5);
-    setLe16(0x98, c.p6);
-    setLe16(0x9A, c.p7);
-    setLe16(0x9C, c.p8);
-    setLe16(0x9E, c.p9);
-    Wire.setRegister(ADDR, 0xA0, 0x00);  // reserved
-    Wire.setRegister(ADDR, 0xA1, c.h1);
-    setLe16(0xE1, c.h2);
-    Wire.setRegister(ADDR, 0xE3, c.h3);
-    // H4 = E4[7:0] << 4 | E5[3:0]; H5 = E6[7:0] << 4 | E5[7:4] (12-bit signed).
-    Wire.setRegister(ADDR, 0xE4, (c.h4 >> 4) & 0xFF);
-    Wire.setRegister(ADDR, 0xE5, ((c.h5 & 0x0F) << 4) | (c.h4 & 0x0F));
-    Wire.setRegister(ADDR, 0xE6, (c.h5 >> 4) & 0xFF);
-    Wire.setRegister(ADDR, 0xE7, static_cast<uint8_t>(c.h6));
+    steamiFakeBme280Calibration(Wire, c);
 }
 
 static void preloadChipId(bool valid = true) {
-    Wire.setRegister(ADDR, BME280_REG_CHIP_ID, valid ? BME280_CHIP_ID_VALUE : 0x42);
+    steamiFakeBme280ChipId(Wire, valid);
 }
 
 static void preloadRaw(int32_t press, int32_t temp, int32_t hum) {
-    Wire.setRegister(ADDR, 0xF7, (press >> 12) & 0xFF);
-    Wire.setRegister(ADDR, 0xF8, (press >> 4) & 0xFF);
-    Wire.setRegister(ADDR, 0xF9, (press & 0x0F) << 4);
-    Wire.setRegister(ADDR, 0xFA, (temp >> 12) & 0xFF);
-    Wire.setRegister(ADDR, 0xFB, (temp >> 4) & 0xFF);
-    Wire.setRegister(ADDR, 0xFC, (temp & 0x0F) << 4);
-    Wire.setRegister(ADDR, 0xFD, (hum >> 8) & 0xFF);
-    Wire.setRegister(ADDR, 0xFE, hum & 0xFF);
+    steamiFakeBme280Raw(Wire, press, temp, hum);
 }
 
 static void preloadMeasurement() {

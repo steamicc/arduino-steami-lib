@@ -6,27 +6,20 @@
 #include "SteamiVL53L1X.h"
 #include "Wire.h"
 #include "driver_checks.h"
+#include "steami_fake_chips.h"
 
 constexpr uint8_t ADDR = VL53L1X_I2C_DEFAULT_ADDR;
 
 static void preloadWhoAmI(bool valid = true) {
-    uint8_t msb = valid ? (uint8_t)(VL53L1X_DEVICE_ID >> 8) : 0x42;
-    uint8_t lsb = valid ? (uint8_t)(VL53L1X_DEVICE_ID & 0xFF) : 0x42;
-    Wire.setRegister(ADDR, 0x010F, msb);
-    Wire.setRegister(ADDR, 0x0110, lsb);
+    steamiFakeVl53l1xWhoAmI(Wire, valid);
 }
 
 static void preloadDataReady(bool ready = true) {
-    Wire.setRegister(ADDR, (uint8_t)REG_GPIO_HV_MUX_CTRL, 0x00);
-    Wire.setRegister(ADDR, (uint8_t)REG_GPIO_TIO_HV_STATUS,
-                     ready ? GPIO_TIO_HV_STATUS_DATA_READY : 0x00);
+    steamiFakeVl53l1xDataReady(Wire, ready);
 }
 
 static void preloadDistance(uint16_t distance) {
-    preloadDataReady(true);
-    Wire.setRegister(ADDR, REG_RESULT_RANGE_STATUS + RESULT_DISTANCE_MSB_OFFSET,
-                     (distance >> 8) & 0xFF);
-    Wire.setRegister(ADDR, REG_RESULT_RANGE_STATUS + RESULT_DISTANCE_LSB_OFFSET, distance & 0xFF);
+    steamiFakeVl53l1xDistance(Wire, distance);
 }
 
 SteamiVL53L1X sensor;
