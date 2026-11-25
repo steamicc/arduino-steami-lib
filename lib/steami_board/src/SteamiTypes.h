@@ -47,7 +47,7 @@ enum class SteamiFunction : uint8_t {
     GESTURE,
     BATTERY,
     BUTTONS,
-    DISPLAY,
+    SCREEN,
     COUNT
 };
 
@@ -129,7 +129,7 @@ constexpr SteamiChip steamiRoute(SteamiRelease release, SteamiFunction f, uint8_
             return pick(candidate, SteamiChip::BQ27441);
         case SteamiFunction::BUTTONS:
             return pick(candidate, SteamiChip::MCP23009E);
-        case SteamiFunction::DISPLAY:
+        case SteamiFunction::SCREEN:
             return unknown ? SteamiChip::NONE
                    : v1c   ? pick(candidate, SteamiChip::GC9A01)
                            : pick(candidate, SteamiChip::SSD1327);

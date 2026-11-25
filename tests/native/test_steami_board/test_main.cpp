@@ -81,20 +81,20 @@ static void test_routing_v1c_has_no_apds_and_uses_bme280(void) {
                      SteamiChip::NONE);
     TEST_ASSERT_TRUE(steamiRoute(SteamiRelease::V1C, SteamiFunction::GESTURE, 0) ==
                      SteamiChip::NONE);
-    TEST_ASSERT_TRUE(steamiRoute(SteamiRelease::V1C, SteamiFunction::DISPLAY, 0) ==
+    TEST_ASSERT_TRUE(steamiRoute(SteamiRelease::V1C, SteamiFunction::SCREEN, 0) ==
                      SteamiChip::GC9A01);
 }
 
 static void test_routing_v1ab_and_unknown_candidates(void) {
     TEST_ASSERT_TRUE(steamiRoute(SteamiRelease::V1AB, SteamiFunction::TEMPERATURE, 1) ==
                      SteamiChip::WSEN_PADS);
-    TEST_ASSERT_TRUE(steamiRoute(SteamiRelease::V1B, SteamiFunction::DISPLAY, 0) ==
+    TEST_ASSERT_TRUE(steamiRoute(SteamiRelease::V1B, SteamiFunction::SCREEN, 0) ==
                      SteamiChip::SSD1327);
     TEST_ASSERT_TRUE(steamiRoute(SteamiRelease::UNKNOWN, SteamiFunction::HUMIDITY, 0) ==
                      SteamiChip::BME280);
     TEST_ASSERT_TRUE(steamiRoute(SteamiRelease::UNKNOWN, SteamiFunction::HUMIDITY, 1) ==
                      SteamiChip::WSEN_HIDS);
-    TEST_ASSERT_TRUE(steamiRoute(SteamiRelease::UNKNOWN, SteamiFunction::DISPLAY, 0) ==
+    TEST_ASSERT_TRUE(steamiRoute(SteamiRelease::UNKNOWN, SteamiFunction::SCREEN, 0) ==
                      SteamiChip::NONE);
 }
 
