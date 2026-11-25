@@ -22,17 +22,15 @@ computer then reads as a plain file.
 ## Quick start
 
 ```cpp
+#include <SteamiBoard.h>
 #include <SteamiDaplinkBridge.h>
 #include <SteamiDaplinkFlash.h>
-#include <Wire.h>
 
-TwoWire internalI2C(I2C_INT_SDA, I2C_INT_SCL);
-SteamiDaplinkBridge bridge(internalI2C);
+SteamiDaplinkBridge bridge(Steami.wire());  // the board's internal I2C bus
 SteamiDaplinkFlash flash(bridge);
 
 void setup() {
     Serial.begin(115200);
-    internalI2C.begin();
     if (!flash.begin()) {
         Serial.println("DAPLink bridge not found");
         return;
