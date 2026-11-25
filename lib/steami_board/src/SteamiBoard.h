@@ -103,9 +103,10 @@ class SteamiBoard {
     SteamiStatus claim(SteamiChip c);
 
     /// Applies the config calibration of a chip once: claims the chip, loads the board config on
-    /// demand and applies the temperature calibration of BME280, WSEN-HIDS and WSEN-PADS. True
-    /// when a calibration was applied, now or on an earlier call; false for the other chips, a
-    /// chip that does not answer, and a config without calibration for it.
+    /// demand and applies the temperature calibration (`tc`) of BME280, WSEN-HIDS and WSEN-PADS,
+    /// the accelerometer offsets (`ca`) of ISM330DL and the hard and soft iron (`cm`) of LIS2MDL.
+    /// True when a calibration was applied, now or on an earlier call; false for the other chips,
+    /// a chip that does not answer, and a config without calibration for it.
     bool calibrate(SteamiChip c);
 
     /// True when a calibration was applied to the chip.

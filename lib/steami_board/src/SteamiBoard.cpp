@@ -506,7 +506,8 @@ bool SteamiBoard::calibrate(SteamiChip c) {
         return calibrated(c);
     }
     _calibrationTried |= bit;  // before any bus traffic: a failing config read is not retried
-    if (c != SteamiChip::BME280 && c != SteamiChip::WSEN_HIDS && c != SteamiChip::WSEN_PADS) {
+    if (c != SteamiChip::BME280 && c != SteamiChip::WSEN_HIDS && c != SteamiChip::WSEN_PADS &&
+        c != SteamiChip::ISM330DL && c != SteamiChip::LIS2MDL) {
         return false;
     }
     if (!loadConfig()) {
@@ -522,10 +523,22 @@ bool SteamiBoard::calibrate(SteamiChip c) {
             applied =
                 cfg.applyTemperatureCalibration(STEAMI_CONFIG_SENSOR_WSEN_HIDS, *_wsenHids.get());
             break;
-        default:
+        case SteamiChip::WSEN_PADS:
             applied =
                 cfg.applyTemperatureCalibration(STEAMI_CONFIG_SENSOR_WSEN_PADS, *_wsenPads.get());
             break;
+        case SteamiChip::ISM330DL:
+            applied = cfg.applyAccelerometerCalibration(*_ism330dl.get());
+            break;
+        default: {
+            MagnetometerCalibration cal;
+            applied = cfg.getMagnetometerCalibration(cal);
+            if (applied) {
+                _lis2mdl.get()->setCalibrateStep(cal.hardIronX, cal.hardIronY, cal.hardIronZ,
+                                                 cal.softIronX, cal.softIronY, cal.softIronZ);
+            }
+            break;
+        }
     }
     if (applied) {
         _calibrationApplied |= bit;

@@ -13,6 +13,7 @@
 #include "SteamiLazy.h"
 #include "SteamiTypes.h"
 #include "steami_fake_chips.h"
+#include "steami_fake_ism330dl.h"
 
 static std::vector<std::string> g_lines;
 static void capture(const char* line) {
@@ -840,6 +841,95 @@ static void test_print_info_marks_calibrated_chip(void) {
     TEST_ASSERT_TRUE(p.text.find("BME280 0x76 OK, calibrated\n") != std::string::npos);
 }
 
+// --- Motion calibrations (ca, cm) ---
+
+static SteamiFakeIsm330dl imu;
+
+static void attachImu(void) {
+    imu = SteamiFakeIsm330dl();
+    Wire.attachDevice(ISM330DL_DEFAULT_ADDRESS, &imu);
+}
+
+static const char* const kAccelOffsetConfig = "{\"rev\":131,\"ca\":{\"ox\":0.1,\"oy\":0,\"oz\":0}}";
+static const char* const kMagnetometerConfig =
+    "{\"rev\":131,\"cm\":{\"hx\":100,\"hy\":-50,\"hz\":0,\"sx\":1,\"sy\":1,\"sz\":1}}";
+static const char* const kMotionConfig =
+    "{\"rev\":131,\"ca\":{\"ox\":0.1,\"oy\":0,\"oz\":0},"
+    "\"cm\":{\"hx\":100,\"hy\":-50,\"hz\":0,\"sx\":1,\"sy\":1,\"sz\":1}}";
+
+static constexpr int16_t kOneG = 16393;  // +-2 g: 0.061 mg per LSB
+
+static void test_fake_ism330dl_lets_claim_succeed(void) {
+    attachImu();
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(SteamiStatus::OK),
+                            static_cast<uint8_t>(board.claim(SteamiChip::ISM330DL)));
+    TEST_ASSERT_EQUAL_INT(1, imu.resetWrites);
+    imu.setAccelRaw(kOneG, 0, static_cast<int16_t>(-kOneG));
+    imu.setGyroRaw(1000, 0, 0);
+    SteamiISM330DL::Vector3 a{};
+    TEST_ASSERT_TRUE(board.ism330dl()->accelerationG(a));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 1.0f, a.x);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, a.y);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -1.0f, a.z);
+    SteamiISM330DL::Vector3 g{};
+    TEST_ASSERT_TRUE(board.ism330dl()->gyroscopeDps(g));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 8.75f, g.x);
+}
+
+static void test_calibrate_applies_ca(void) {
+    attachFirmware();
+    fw.store(kAccelOffsetConfig);
+    attachImu();
+    imu.setAccelRaw(kOneG, 0, 0);
+    TEST_ASSERT_TRUE(board.calibrate(SteamiChip::ISM330DL));
+    TEST_ASSERT_TRUE(board.calibrated(SteamiChip::ISM330DL));
+    SteamiISM330DL::Vector3 a{};
+    TEST_ASSERT_TRUE(board.ism330dl()->accelerationG(a));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.9f, a.x);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, a.y);
+}
+
+static void test_calibrate_applies_cm(void) {
+    attachFirmware();
+    fw.store(kMagnetometerConfig);
+    steamiFakeLis2mdl(Wire, 300, 200, 100);
+    TEST_ASSERT_TRUE(board.calibrate(SteamiChip::LIS2MDL));
+    TEST_ASSERT_TRUE(board.calibrated(SteamiChip::LIS2MDL));
+    TEST_ASSERT_EQUAL_FLOAT(100.0f, board.lis2mdl()->xOff);
+    TEST_ASSERT_EQUAL_FLOAT(-50.0f, board.lis2mdl()->yOff);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, board.lis2mdl()->zOff);
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, board.lis2mdl()->xScale);
+}
+
+static void test_calibrate_motion_without_keys_changes_nothing(void) {
+    attachFirmware();
+    fw.store("{\"rev\":131}");
+    attachImu();
+    imu.setAccelRaw(kOneG, 0, 0);
+    steamiFakeLis2mdl(Wire, 300, 200, 100);
+    TEST_ASSERT_FALSE(board.calibrate(SteamiChip::ISM330DL));
+    TEST_ASSERT_FALSE(board.calibrate(SteamiChip::LIS2MDL));
+    TEST_ASSERT_FALSE(board.calibrated(SteamiChip::ISM330DL));
+    TEST_ASSERT_FALSE(board.calibrated(SteamiChip::LIS2MDL));
+    SteamiISM330DL::Vector3 a{};
+    TEST_ASSERT_TRUE(board.ism330dl()->accelerationG(a));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 1.0f, a.x);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, board.lis2mdl()->xOff);
+}
+
+static void test_print_info_marks_ca_and_cm(void) {
+    attachFirmware();
+    fw.store(kMotionConfig);
+    attachImu();
+    steamiFakeLis2mdl(Wire, 300, 200, 100);
+    TEST_ASSERT_TRUE(board.calibrate(SteamiChip::ISM330DL));
+    TEST_ASSERT_TRUE(board.calibrate(SteamiChip::LIS2MDL));
+    StringPrint p;
+    board.printInfo(p);
+    TEST_ASSERT_TRUE(p.text.find("ISM330DL 0x6B OK, calibrated\n") != std::string::npos);
+    TEST_ASSERT_TRUE(p.text.find("LIS2MDL 0x1E OK, calibrated\n") != std::string::npos);
+}
+
 static void test_report_keeps_twenty_pairs(void) {
     for (uint8_t i = 0; i < 20; i++) {
         board.report("SteamiX", SteamiStatus::NOT_RESPONDING, "d", i);
@@ -930,6 +1020,11 @@ int main(void) {
     RUN_TEST(test_calibrate_forced_legacy_does_not_retry_config);
     RUN_TEST(test_calibrate_unknown_chip_or_absent_chip_is_false);
     RUN_TEST(test_print_info_marks_calibrated_chip);
+    RUN_TEST(test_fake_ism330dl_lets_claim_succeed);
+    RUN_TEST(test_calibrate_applies_ca);
+    RUN_TEST(test_calibrate_applies_cm);
+    RUN_TEST(test_calibrate_motion_without_keys_changes_nothing);
+    RUN_TEST(test_print_info_marks_ca_and_cm);
     RUN_TEST(test_report_keeps_twenty_pairs);
     RUN_TEST(test_registrar_value_and_conflict);  // last: the registrar value cannot be cleared
     return UNITY_END();
