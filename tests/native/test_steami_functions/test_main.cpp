@@ -10,7 +10,9 @@
 #include <vector>
 
 #include "FakeDaplinkBridge.h"
+#include "SteamiBattery.h"
 #include "SteamiBoard.h"
+#include "SteamiDistance.h"
 #include "SteamiHandle.h"
 #include "SteamiHumidity.h"
 #include "SteamiPressure.h"
@@ -409,6 +411,93 @@ static void test_handle_ready_begins_on_first_use(void) {
     TEST_ASSERT_TRUE(&handle.board() == &board);
 }
 
+// --- Distance and battery ---
+
+static void test_distance_reads_mm(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeVl53l1x(Wire);
+    SteamiDistance distance(board);
+    TEST_ASSERT_TRUE(distance.begin());
+    TEST_ASSERT_EQUAL_STRING("VL53L1X", distance.chip());
+    steamiFakeVl53l1xDistance(Wire, 123);
+    TEST_ASSERT_EQUAL_INT(123, distance.read());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 12.3f, distance.cm());
+}
+
+static void test_distance_zero_is_minus_one(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeVl53l1x(Wire);
+    SteamiDistance distance(board);
+    TEST_ASSERT_TRUE(distance.begin());
+    steamiFakeVl53l1xDistance(Wire, 0);
+    TEST_ASSERT_EQUAL_INT(-1, distance.read());
+    TEST_ASSERT_TRUE(isnan(distance.cm()));
+}
+
+static void test_distance_absent(void) {
+    steamiFakeBme280(Wire);
+    Wire.setAbsent(0x29);
+    SteamiDistance distance(board);
+    TEST_ASSERT_FALSE(distance.begin());
+    TEST_ASSERT_EQUAL_UINT32(1, countLogged("(E10)"));
+    TEST_ASSERT_EQUAL_STRING(
+        "[STeaMi] SteamiDistance: the VL53L1X distance sensor (I2C 0x29) did not answer. Check "
+        "the board or try another one. (E10)",
+        g_lines.back().c_str());
+    const uint32_t traffic = Wire.totalTransactions();
+    const size_t lines = g_lines.size();
+    for (int i = 0; i < 10; i++) {
+        TEST_ASSERT_EQUAL_INT(-1, distance.read());
+        TEST_ASSERT_TRUE(isnan(distance.cm()));
+    }
+    TEST_ASSERT_EQUAL_UINT32(traffic, Wire.totalTransactions());
+    TEST_ASSERT_EQUAL_UINT32(lines, g_lines.size());
+}
+
+static void test_battery_reads_gauge(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeBq27441(Wire);
+    SteamiBattery battery(board);
+    TEST_ASSERT_TRUE(battery.begin());
+    steamiFakeBq27441Measurement(Wire, 3900, 250, 87);
+    TEST_ASSERT_EQUAL_UINT8(87, battery.percent());
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 3.9f, battery.voltage());
+    TEST_ASSERT_EQUAL_INT16(250, battery.current());
+    TEST_ASSERT_TRUE(battery.isCharging());
+}
+
+static void test_battery_discharging(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeBq27441(Wire);
+    SteamiBattery battery(board);
+    TEST_ASSERT_TRUE(battery.begin());
+    steamiFakeBq27441Measurement(Wire, 3900, -120, 50);
+    TEST_ASSERT_EQUAL_INT16(-120, battery.current());
+    TEST_ASSERT_FALSE(battery.isCharging());
+}
+
+static void test_battery_absent(void) {
+    steamiFakeBme280(Wire);
+    Wire.setAbsent(0x55);
+    SteamiBattery battery(board);
+    TEST_ASSERT_FALSE(battery.begin());
+    TEST_ASSERT_EQUAL_UINT32(1, countLogged("(E10)"));
+    TEST_ASSERT_EQUAL_STRING(
+        "[STeaMi] SteamiBattery: the BQ27441 battery gauge (I2C 0x55) did not answer. Plug in a "
+        "battery or check the board. (E10)",
+        g_lines.back().c_str());
+    const uint32_t traffic = Wire.totalTransactions();
+    const size_t lines = g_lines.size();
+    for (int i = 0; i < 10; i++) {
+        TEST_ASSERT_EQUAL_UINT8(0, battery.percent());
+        TEST_ASSERT_TRUE(isnan(battery.voltage()));
+        TEST_ASSERT_EQUAL_INT16(0, battery.current());
+        TEST_ASSERT_FALSE(battery.isCharging());
+    }
+    TEST_ASSERT_EQUAL_UINT32(traffic, Wire.totalTransactions());
+    TEST_ASSERT_EQUAL_UINT32(lines, g_lines.size());
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_temperature_on_v1c_reads_bme280);
@@ -434,5 +523,11 @@ int main(void) {
     RUN_TEST(test_handle_e20_on_v1c);
     RUN_TEST(test_handle_unknown_board_without_candidate_is_silent);
     RUN_TEST(test_handle_ready_begins_on_first_use);
+    RUN_TEST(test_distance_reads_mm);
+    RUN_TEST(test_distance_zero_is_minus_one);
+    RUN_TEST(test_distance_absent);
+    RUN_TEST(test_battery_reads_gauge);
+    RUN_TEST(test_battery_discharging);
+    RUN_TEST(test_battery_absent);
     return UNITY_END();
 }
