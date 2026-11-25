@@ -196,7 +196,9 @@ The public header of a driver is `Steami<Chip>.h` (constants in `Steami<Chip>_co
   the class stays default-assignable — the public constructor still
   accepts a `TwoWire&`.
 - **No `Serial.print()` in library code**. Diagnostics go in examples,
-  not in the driver itself.
+  not in the driver itself. The only exception is the STeaMi Board logger:
+  its default logger prints on `Serial` once it is started, and
+  `Steami.setLogger()` replaces it.
 
 ## Driver API conventions
 

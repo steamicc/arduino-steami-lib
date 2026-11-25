@@ -39,7 +39,7 @@ void setup() {
     }
     config.load();  // keep what is already stored (calibrations...)
 
-    config.setBoardRevision(3);
+    config.setBoardRevision(131);  // series V1c
     config.setBoardName("STeaMi-01");
     config.save();
 }
@@ -70,7 +70,7 @@ the DAPLink config zone minus its last byte).
 ## Board information
 
 ```cpp
-config.setBoardRevision(3);
+config.setBoardRevision(131);  // series V1c, schematic index 1
 config.setBoardName("STeaMi-01");
 
 int32_t revision;
@@ -84,6 +84,24 @@ if (config.boardName(name)) {
     // name is valid
 }
 ```
+
+### Revision code
+
+The board revision is a decimal code: the hundreds are the generation, the
+tens the release (1 = a, 2 = b, 3 = c) and the units the schematic index
+(0 = prototype).
+
+| Code | Board |
+|---|---|
+| 110 | V1a prototype |
+| 111 | V1a, schematic index 1 (A1) |
+| 120 | V1b prototype |
+| 121 | V1b, schematic index 1 (B1) |
+| 130 | V1c prototype |
+| 131 | V1c, schematic index 1 (C1) |
+
+The code is decoded by `steamiDecodeRevision()` in the STeaMi Board library.
+Any other value (for example the old example value `3`) is not a valid code.
 
 ## Temperature calibration
 
@@ -172,12 +190,12 @@ if (config.bootCount(count)) {
 The format is compatible with the MicroPython sister library:
 
 ```json
-{"rev":3,"name":"STeaMi-01","tc":{"hts":{"g":1.0,"o":-0.5}},"cm":{"hx":12.3,"hy":-5.1,"hz":0.8,"sx":1.01,"sy":0.98,"sz":1.0},"ca":{"ox":0.01,"oy":-0.02,"oz":0.03},"bc":1}
+{"rev":131,"name":"STeaMi-01","tc":{"hts":{"g":1.0,"o":-0.5}},"cm":{"hx":12.3,"hy":-5.1,"hz":0.8,"sx":1.01,"sy":0.98,"sz":1.0},"ca":{"ox":0.01,"oy":-0.02,"oz":0.03},"bc":1}
 ```
 
 | Key | Content |
 |---|---|
-| `rev` | Board revision |
+| `rev` | Board revision code (for example `131` for a V1c) |
 | `name` | Board name |
 | `tc` | Temperature calibration map |
 | `cm` | Magnetometer hard-/soft-iron calibration |
