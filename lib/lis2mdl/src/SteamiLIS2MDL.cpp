@@ -592,7 +592,11 @@ void SteamiLIS2MDL::setHeadingFilter(float alpha) {
 
 float SteamiLIS2MDL::normalizeDeg(float a) {
     a = fmod(a, 360.0f);
-    return a < 0.0f ? a + 360.0f : a;
+    if (a < 0.0f) {
+        a += 360.0f;
+    }
+    // A tiny negative angle plus 360 rounds to 360 in float: that is north, 0.
+    return a >= 360.0f ? 0.0f : a;
 }
 
 float SteamiLIS2MDL::applyHeadingOffsets(float angleDeg) {
@@ -633,7 +637,8 @@ float SteamiLIS2MDL::headingFromVectors(float x, float y, float z, bool calibrat
         x = (x - xOff) / (xScale != 0.0f ? xScale : 1.0f);
         y = (y - yOff) / (yScale != 0.0f ? yScale : 1.0f);
     }
-    float angle = degrees(atan2(y, x));
+    // Clockwise from north, 0 when the top of the screen points north (measured on a V1c).
+    float angle = degrees(atan2(-x, y));
     angle = applyHeadingOffsets(angle);
     return filterHeading(angle);
 }
@@ -670,7 +675,7 @@ const char* SteamiLIS2MDL::directionLabel(float angle) {
         angle = headingFlatOnly();
     }
     const char* dirs[] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
-    return dirs[(int)(angle / 45.0f) % 8];
+    return dirs[(int)((angle + 22.5f) / 45.0f) % 8];
 }
 
 //--------------------------------------------------------

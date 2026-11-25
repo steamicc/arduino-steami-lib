@@ -40,6 +40,7 @@ getIntf	KEYWORD2
 getIntcap	KEYWORD2
 setGpio	KEYWORD2
 getGpio	KEYWORD2
+gpio	KEYWORD2
 setOlat	KEYWORD2
 getOlat	KEYWORD2
 interruptOnChange	KEYWORD2

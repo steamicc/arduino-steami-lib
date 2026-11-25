@@ -59,6 +59,16 @@ enum class SteamiFunction : uint8_t {
     COUNT
 };
 
+/// A three-axis reading (acceleration, angular rate or magnetic field) in the unit of its class.
+struct SteamiVector {
+    float x;
+    float y;
+    float z;
+};
+
+/// A button of the D-pad or the A, B and MENU buttons, NONE when none is pressed.
+enum class SteamiButton : uint8_t { NONE, A, B, MENU, UP, DOWN, LEFT, RIGHT };
+
 /// Decoded board revision code (for example 131 is generation 1, release 3, index 1).
 struct SteamiRevisionInfo {
     bool valid;

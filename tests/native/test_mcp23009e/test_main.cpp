@@ -102,6 +102,29 @@ void testGetGpioReadsCorrectRegister(void) {
     TEST_ASSERT_EQUAL(0xC3, mcp->getGpio());
 }
 
+void testGpioReadsPort(void) {
+    Wire.setRegister(ADDR, MCP23009_GPIO, 0xB0);
+    uint8_t value = 0;
+    TEST_ASSERT_TRUE(mcp->gpio(value));
+    TEST_ASSERT_EQUAL_HEX8(0xB0, value);
+}
+
+void testGpioReportsBusErrorWhenAbsent(void) {
+    Wire.setRegister(ADDR, MCP23009_GPIO, 0xB0);
+    Wire.setAbsent(ADDR);
+    uint8_t value = 0x5A;
+    TEST_ASSERT_FALSE(mcp->gpio(value));
+    TEST_ASSERT_EQUAL_HEX8(0x5A, value);
+}
+
+void testGpioReportsEndTransmissionError(void) {
+    Wire.setRegister(ADDR, MCP23009_GPIO, 0xB0);
+    Wire.setEndTransmissionResult(2);
+    uint8_t value = 0x5A;
+    TEST_ASSERT_FALSE(mcp->gpio(value));
+    TEST_ASSERT_EQUAL_HEX8(0x5A, value);
+}
+
 void testSetGppuWritesCorrectRegister(void) {
     mcp->setGppu(0x0F);
     bool found = false;
@@ -583,6 +606,9 @@ int main(void) {
     RUN_TEST(testGetIodirReadsCorrectRegister);
     RUN_TEST(testSetGpioWritesCorrectRegister);
     RUN_TEST(testGetGpioReadsCorrectRegister);
+    RUN_TEST(testGpioReadsPort);
+    RUN_TEST(testGpioReportsBusErrorWhenAbsent);
+    RUN_TEST(testGpioReportsEndTransmissionError);
     RUN_TEST(testSetGppuWritesCorrectRegister);
     RUN_TEST(testGetGppuReadsCorrectRegister);
     RUN_TEST(testSetOlatWritesCorrectRegister);
