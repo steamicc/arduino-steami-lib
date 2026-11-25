@@ -2,6 +2,8 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <math.h>
+#include <stdint.h>
 #include <string.h>
 #include <unity.h>
 
@@ -11,6 +13,7 @@
 #include "SteamiBoard.h"
 #include "SteamiColor.h"
 #include "SteamiRgb.h"
+#include "SteamiTrig.h"
 #include "SteamiTypes.h"
 #include "steami_fake_chips.h"
 
@@ -123,6 +126,48 @@ static void test_color_rgb_unavailable_is_black(void) {
     TEST_ASSERT_EQUAL_size_t(1, countLogged("(E20)"));
 }
 
+static void test_sin_table_matches_rounded_sine(void) {
+    for (int32_t d = 0; d <= 90; d++) {  // test code may use double
+        TEST_ASSERT_EQUAL_INT16((int16_t)lround(16384.0 * sin(d * M_PI / 180.0)), steamiSinQ14(d));
+    }
+}
+
+static void test_sin_symmetries_and_normalisation(void) {
+    for (int32_t d = -720; d <= 720; d++) {
+        TEST_ASSERT_EQUAL_INT16(-steamiSinQ14(d), steamiSinQ14(-d));
+        TEST_ASSERT_EQUAL_INT16(steamiSinQ14(d), steamiSinQ14(180 - d));
+        TEST_ASSERT_EQUAL_INT16(steamiSinQ14(d), steamiSinQ14(d + 360));
+        TEST_ASSERT_EQUAL_INT16(steamiSinQ14(d + 90), steamiCosQ14(d));
+    }
+    TEST_ASSERT_EQUAL_INT16(16384, steamiSinQ14(90));
+    TEST_ASSERT_EQUAL_INT16(-16384, steamiSinQ14(270));
+    TEST_ASSERT_EQUAL_INT16(-16384, steamiSinQ14(-450));
+    // The two calls below must not trigger a UBSan report (checked by native_asan).
+    const int16_t lowest = steamiSinQ14(INT32_MIN);
+    const int16_t highest = steamiCosQ14(INT32_MAX);
+    TEST_ASSERT_TRUE(lowest >= -16384 && lowest <= 16384);
+    TEST_ASSERT_TRUE(highest >= -16384 && highest <= 16384);
+}
+
+static void test_round_q14(void) {
+    TEST_ASSERT_EQUAL_INT32(1, steamiRoundQ14(8192));
+    TEST_ASSERT_EQUAL_INT32(0, steamiRoundQ14(8191));
+    TEST_ASSERT_EQUAL_INT32(-1, steamiRoundQ14(-8192));
+    TEST_ASSERT_EQUAL_INT32(0, steamiRoundQ14(-8191));
+    TEST_ASSERT_EQUAL_INT32(100, steamiRoundQ14(16384 * 100));
+    TEST_ASSERT_EQUAL_INT32(-4, steamiRoundQ14(-(16384 * 3 + 8192)));
+}
+
+static void test_isqrt(void) {
+    for (uint32_t v = 0; v <= 70000; v++) {
+        const uint64_t r = steamiIsqrt(v);
+        TEST_ASSERT_TRUE(r * r <= v);
+        TEST_ASSERT_TRUE(v < (r + 1) * (r + 1));
+    }
+    TEST_ASSERT_EQUAL_UINT32(65535, steamiIsqrt(4294967295u));
+    TEST_ASSERT_EQUAL_UINT32(65535, steamiIsqrt(4294836225u));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_rgb565_of_every_colour);
@@ -133,5 +178,9 @@ int main(int, char**) {
     RUN_TEST(test_color_rgb_rounds_to_nearest);
     RUN_TEST(test_color_rgb_zero_is_black);
     RUN_TEST(test_color_rgb_unavailable_is_black);
+    RUN_TEST(test_sin_table_matches_rounded_sine);
+    RUN_TEST(test_sin_symmetries_and_normalisation);
+    RUN_TEST(test_round_q14);
+    RUN_TEST(test_isqrt);
     return UNITY_END();
 }
