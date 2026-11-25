@@ -439,6 +439,9 @@ SteamiStatus SteamiBoard::claim(SteamiChip c) {
 
 void SteamiBoard::printInfoTo(void (*emit)(void* ctx, const char* line), void* ctx,
                               bool withBanner) {
+    // Only a message reported before this call is replayed: detection logs its own.
+    char before[ERROR_SIZE];
+    memcpy(before, _lastError, sizeof(before));
     begin();
     char line[LINE_SIZE];
     if (withBanner) {
@@ -455,8 +458,8 @@ void SteamiBoard::printInfoTo(void (*emit)(void* ctx, const char* line), void* c
                                                       : "not tried");
         emit(ctx, line);
     }
-    if (_lastError[0] != '\0') {
-        emit(ctx, _lastError);
+    if (before[0] != '\0') {
+        emit(ctx, before);
     }
 }
 
@@ -479,6 +482,10 @@ void SteamiBoard::printInfo() {
 }
 
 void SteamiBoard::end() {
+    if (_mcp23009e.built()) {
+        // The driver attaches a handler that captures its address and never detaches it.
+        detachInterrupt(digitalPinToInterrupt(static_cast<int>(pins().expanderIrq)));
+    }
     _mcp23009e.reset();
     _bq27441.reset();
     _vl53l1x.reset();

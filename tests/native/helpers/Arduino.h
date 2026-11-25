@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <vector>
 
 #include "Print.h"
 #include "WString.h"
@@ -85,6 +86,16 @@ inline void delay(uint32_t ms) {
 inline void attachInterrupt(uint8_t /* pin */, const std::function<void()>& /* isr */,
                             int /* mode */) {
     // null operation for native tests
+}
+
+// Pins passed to detachInterrupt(), in call order.
+inline std::vector<int>& detachedInterrupts() {
+    static std::vector<int> pins;
+    return pins;
+}
+
+inline void detachInterrupt(int pin) {
+    detachedInterrupts().push_back(pin);
 }
 
 inline int digitalPinToInterrupt(int pin) {

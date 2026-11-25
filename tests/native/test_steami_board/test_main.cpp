@@ -556,8 +556,9 @@ static void test_print_info_lists_chips(void) {
 }
 
 static void test_print_info_replays_last_error(void) {
+    TEST_ASSERT_FALSE(board.begin());  // nothing answers: E01
     StringPrint p;
-    board.printInfo(p);  // nothing answers: E01
+    board.printInfo(p);
     const std::string last = std::string(board.lastError()) + "\n";
     TEST_ASSERT_TRUE(p.text.size() >= last.size());
     TEST_ASSERT_EQUAL_STRING(last.c_str(), p.text.c_str() + p.text.size() - last.size());
@@ -567,6 +568,36 @@ static void test_print_info_replays_last_error(void) {
     StringPrint q;
     board.printInfo(q);
     TEST_ASSERT_TRUE(q.text.find("(E") == std::string::npos);
+}
+
+static void test_print_info_does_not_repeat_its_own_error(void) {
+    board.printInfo();  // detection inside the call reports E01 to the logger
+    size_t e01 = 0;
+    for (const std::string& line : g_lines) {
+        if (line.size() >= 5 && line.compare(line.size() - 5, 5, "(E01)") == 0) {
+            e01++;
+        }
+    }
+    TEST_ASSERT_EQUAL_UINT32(1, e01);
+
+    restart();
+    StringPrint p;
+    board.printInfo(p);
+    TEST_ASSERT_TRUE(p.text.find("(E01)") == std::string::npos);
+}
+
+static void test_end_detaches_expander_interrupt(void) {
+    presentBme280();
+    TEST_ASSERT_NOT_NULL(board.bme280());
+    board.mcp23009e();
+    detachedInterrupts().clear();
+    board.end();
+    TEST_ASSERT_EQUAL_UINT32(1, detachedInterrupts().size());
+    TEST_ASSERT_EQUAL_INT(static_cast<int>(INT_EXPANDER), detachedInterrupts()[0]);
+
+    detachedInterrupts().clear();
+    board.end();  // nothing built: nothing to detach
+    TEST_ASSERT_TRUE(detachedInterrupts().empty());
 }
 
 static void test_print_info_logger_sends_banner_once(void) {
@@ -666,6 +697,8 @@ int main(void) {
     RUN_TEST(test_print_info_lists_chips);
     RUN_TEST(test_print_info_replays_last_error);
     RUN_TEST(test_print_info_logger_sends_banner_once);
+    RUN_TEST(test_print_info_does_not_repeat_its_own_error);
+    RUN_TEST(test_end_detaches_expander_interrupt);
     RUN_TEST(test_end_destroys_slots);
     RUN_TEST(test_registrar_value_and_conflict);  // last: the registrar value cannot be cleared
     return UNITY_END();
