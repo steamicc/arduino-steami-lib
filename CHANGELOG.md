@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.31.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.31.0...v0.31.1) (2026-11-25)
+
+
+### Bug Fixes
+
+* **board:** Claim every candidate chip in the BoardInfo example. ([#246](https://github.com/steamicc/arduino-steami-lib/issues/246)) ([25d95f7](https://github.com/steamicc/arduino-steami-lib/commit/25d95f783446c73d5acf1853a74f8a1bc15d027b)), closes [#245](https://github.com/steamicc/arduino-steami-lib/issues/245)
+
 # [0.31.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.30.0...v0.31.0) (2026-11-25)
 
 
