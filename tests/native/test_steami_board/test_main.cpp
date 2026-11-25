@@ -182,7 +182,7 @@ static void test_last_error_is_truncated(void) {
     std::string longText(400, 'x');
     board.report("SteamiX", SteamiStatus::NOT_RESPONDING, longText.c_str(), 7);
     const std::string last = board.lastError();
-    TEST_ASSERT_EQUAL_UINT32(191, last.size());
+    TEST_ASSERT_EQUAL_UINT32(255, last.size());
     TEST_ASSERT_EQUAL_UINT32(0, last.rfind("[STeaMi] SteamiX: xxx", 0));
     TEST_ASSERT_EQUAL_STRING("x (E07)", last.c_str() + last.size() - 7);
     TEST_ASSERT_EQUAL_UINT32(1, g_lines.size());

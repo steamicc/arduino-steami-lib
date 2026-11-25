@@ -155,7 +155,7 @@ class SteamiBoard {
 
    private:
     static constexpr size_t MAX_REPORTED = 24;
-    static constexpr size_t ERROR_SIZE = 192;
+    static constexpr size_t ERROR_SIZE = 256;  // the longest E11 line is about 220 bytes
     static constexpr size_t LINE_SIZE = 96;
 
     struct Reported {
