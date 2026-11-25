@@ -7,6 +7,8 @@
 
 namespace {
 
+// The longest detail is the E11 one with the longest names (about 180 bytes with the NUL), and
+// report() keeps up to 220 bytes of detail (ERROR_SIZE minus prefix, class and " (Exx)").
 constexpr size_t kDetailSize = 192;
 
 // Where the release comes from, for E11; nullptr when it was detected from the sensors.
@@ -94,7 +96,11 @@ void SteamiHandle::reportNotOnThisBoard(SteamiRelease release) {
 void SteamiHandle::reportNotAnswering(SteamiRelease release, uint8_t candidates) {
     const SteamiFunction function = _info->function;
     const SteamiChip first = steamiRoute(release, function, 0);
-    const char* origin = trustedOriginText(_board->origin());
+    // E11 only when the release decides which chip serves the function; a chip that is on every
+    // release (distance, battery) never contradicts it.
+    const bool dependsOnRelease = steamiRoute(SteamiRelease::V1C, function, 0) !=
+                                  steamiRoute(SteamiRelease::V1AB, function, 0);
+    const char* origin = dependsOnRelease ? trustedOriginText(_board->origin()) : nullptr;
     char detail[kDetailSize];
     if (origin != nullptr) {
         snprintf(detail, sizeof(detail),
