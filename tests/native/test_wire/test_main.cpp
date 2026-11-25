@@ -2,6 +2,8 @@
 
 #include <unity.h>
 
+#include "Arduino.h"
+#include "Print.h"
 #include "Wire.h"
 
 TwoWire wire;
@@ -118,6 +120,46 @@ void test_interleaved_register_pointers_are_isolated(void) {
     TEST_ASSERT_EQUAL_HEX8(0xB2, wire.read());
 }
 
+void test_absent_address_nacks(void) {
+    wire.setAbsent(0x76);
+
+    wire.beginTransmission(0x76);
+    wire.write(0xD0);
+    TEST_ASSERT_EQUAL(2, wire.endTransmission());
+    TEST_ASSERT_EQUAL(0, wire.requestFrom(0x76, 1));
+
+    wire.beginTransmission(0x5F);
+    wire.write(0x0F);
+    TEST_ASSERT_EQUAL(0, wire.endTransmission());
+    TEST_ASSERT_EQUAL(1, wire.requestFrom(0x5F, 1));
+}
+
+void test_transactions_are_counted_per_address(void) {
+    wire.beginTransmission(0x76);
+    wire.write(0xD0);
+    wire.endTransmission(false);
+    wire.requestFrom(0x76, 1);
+
+    TEST_ASSERT_EQUAL(2, wire.transactions(0x76));
+    TEST_ASSERT_EQUAL(0, wire.transactions(0x5F));
+    TEST_ASSERT_EQUAL(2, wire.totalTransactions());
+}
+
+void test_pin_constructor_exists(void) {
+    TwoWire w(I2C_INT_SDA, I2C_INT_SCL);
+    w.begin();
+    TEST_ASSERT_EQUAL(0, w.totalTransactions());
+}
+
+void test_string_print_collects_text(void) {
+    StringPrint p;
+    p.print("a");
+    p.print(int32_t(-3));
+    p.print(uint32_t(0x3B), 16);
+    p.println("z");
+    TEST_ASSERT_EQUAL_STRING("a-33bz\n", p.text.c_str());
+}
+
 int main(void) {
     UNITY_BEGIN();
 
@@ -128,6 +170,11 @@ int main(void) {
     RUN_TEST(test_addresses_are_isolated);
     RUN_TEST(test_multi_byte_write_fills_consecutive_registers);
     RUN_TEST(test_interleaved_register_pointers_are_isolated);
+
+    RUN_TEST(test_absent_address_nacks);
+    RUN_TEST(test_transactions_are_counted_per_address);
+    RUN_TEST(test_pin_constructor_exists);
+    RUN_TEST(test_string_print_collects_text);
 
     return UNITY_END();
 }

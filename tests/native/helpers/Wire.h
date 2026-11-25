@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <map>
+#include <set>
 #include <vector>
 
 // Behavioural model of an I2C peripheral, for protocols the register map
@@ -23,6 +24,10 @@ class I2CDevice {
 
 class TwoWire {
    public:
+    TwoWire() = default;
+    // Pin constructor of the STM32duino core; the pins are not modelled.
+    TwoWire(uint32_t /* sda */, uint32_t /* scl */) {}
+
     void begin() {}
 
     void beginTransmission(uint8_t address) {
@@ -42,6 +47,11 @@ class TwoWire {
     }
 
     uint8_t endTransmission(bool = true) {
+        countTransaction(currentAddress_);
+        if (absent_.count(currentAddress_) != 0) {
+            txBuffer_.clear();
+            return 2;  // NACK on address
+        }
         // Tests that want to exercise the I2C error path opt-in via
         // setEndTransmissionResult(non-zero). Default = success.
         if (endTransmissionResult_ != 0) {
@@ -95,6 +105,10 @@ class TwoWire {
     size_t requestFrom(uint8_t address, size_t quantity) {
         rxBuffer_.clear();
         rxIndex_ = 0;
+        countTransaction(address);
+        if (absent_.count(address) != 0) {
+            return 0;
+        }
         auto device = devices_.find(address);
         if (device != devices_.end()) {
             rxBuffer_ = device->second->onRead(quantity);
@@ -140,6 +154,17 @@ class TwoWire {
 
     // Host-side helpers — not part of the real Arduino TwoWire API.
 
+    // From now on the address NACKs: endTransmission() returns 2 and
+    // requestFrom() returns 0.
+    void setAbsent(uint8_t address) { absent_.insert(address); }
+
+    // One per endTransmission() and one per requestFrom(), per address.
+    size_t transactions(uint8_t address) const {
+        auto it = transactions_.find(address);
+        return (it != transactions_.end()) ? it->second : 0;
+    }
+    size_t totalTransactions() const { return totalTransactions_; }
+
     void attachDevice(uint8_t address, I2CDevice* device) { devices_[address] = device; }
 
     void setRegister(uint8_t address, uint16_t reg, uint8_t value) {
@@ -171,6 +196,11 @@ class TwoWire {
     }
 
    private:
+    void countTransaction(uint8_t address) {
+        transactions_[address]++;
+        totalTransactions_++;
+    }
+
     static uint32_t makeKey(uint8_t addr, uint16_t reg) {
         return (static_cast<uint32_t>(addr) << 16) | reg;
     }
@@ -184,6 +214,9 @@ class TwoWire {
     std::vector<WriteOp> writes_;
     uint8_t endTransmissionResult_ = 0;
     std::map<uint8_t, I2CDevice*> devices_;
+    std::set<uint8_t> absent_;
+    std::map<uint8_t, size_t> transactions_;
+    size_t totalTransactions_ = 0;
 };
 
 inline TwoWire Wire;

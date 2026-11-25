@@ -6,6 +6,7 @@
 #include <functional>
 #include <map>
 
+#include "Print.h"
 #include "WString.h"
 
 // Mirror the include-guard symbol the real Arduino.h advertises.
@@ -19,6 +20,20 @@
 #define OUTPUT 1
 #define INPUT 0
 #define INPUT_PULLUP 2
+
+// STeaMi internal pins (arbitrary distinct values on the host).
+#define I2C_INT_SDA 200
+#define I2C_INT_SCL 201
+#define A_BUTTON 202
+#define B_BUTTON 203
+#define MENU_BUTTON 204
+#define RST_EXPANDER 205
+#define INT_EXPANDER 206
+#define CS_DISPLAY 207
+#define RST_DISPLAY 208
+#define SPI_INT_MOSI 209
+#define SPI_INT_MISO 210
+#define SPI_INT_SCK 211
 
 #define FALLING 2
 #define RISING 3
