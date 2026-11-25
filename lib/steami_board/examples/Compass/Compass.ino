@@ -17,6 +17,7 @@
 #include <Arduino.h>
 #include <SteamiButtons.h>
 #include <SteamiCompass.h>
+#include <math.h>
 
 SteamiCompass compass;
 SteamiButtons buttons;
@@ -49,9 +50,16 @@ void loop() {
 
     if (millis() - lastPrint >= 500) {
         lastPrint = millis();
-        Serial.print(compass.heading(), 0);
-        Serial.print(" deg ");
-        Serial.println(compass.direction());
+        const float heading = compass.heading();
+        if (isnan(heading)) {
+            Serial.println("no heading");
+        } else {
+            // Round, then wrap: 359.6 prints 0, never 360.
+            const long deg = lroundf(heading) % 360;
+            Serial.print(deg);
+            Serial.print(" deg ");
+            Serial.println(compass.direction());
+        }
     }
     delay(5);
 }
