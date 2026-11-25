@@ -32,10 +32,6 @@ const char* const kConflictingDefines =
     "two different STEAMI_BOARD_ defines in this sketch. Keep only one, before #include "
     "<STeaMi.h>.";
 
-constexpr uint8_t E_UNKNOWN_BOARD = 1;
-constexpr uint8_t E_UNKNOWN_REVISION = 2;
-constexpr uint8_t E_CONFLICTING_DEFINES = 3;
-
 // One chip ID read per entry, in probing order. Never 0x3B: that is the DAPLink bridge.
 struct ProbeEntry {
     SteamiChip chip;
@@ -302,7 +298,8 @@ void SteamiBoard::detect() {
     wire();
     _detected = true;
     if (gForcedConflict) {
-        report(kWho, SteamiStatus::UNKNOWN_BOARD, kConflictingDefines, E_CONFLICTING_DEFINES);
+        report(kWho, SteamiStatus::UNKNOWN_BOARD, kConflictingDefines,
+               STEAMI_E_CONFLICTING_DEFINES);
     }
     if (gForced != SteamiRelease::UNKNOWN) {
         _release = gForced;
@@ -310,12 +307,16 @@ void SteamiBoard::detect() {
     } else if (!detectFromConfig() && !detectByProbe()) {
         _release = SteamiRelease::UNKNOWN;
         _origin = SteamiOrigin::NONE;
-        report(kWho, SteamiStatus::UNKNOWN_BOARD, kUnknownBoard, E_UNKNOWN_BOARD);
+        report(kWho, SteamiStatus::UNKNOWN_BOARD, kUnknownBoard, STEAMI_E_UNKNOWN_BOARD);
     }
     logBanner();
 }
 
-bool SteamiBoard::detectFromConfig() {
+bool SteamiBoard::loadConfig() {
+    if (_configTried) {
+        return _config.built();
+    }
+    _configTried = true;
     SteamiDaplinkBridge& bridge = _bridge.emplace(wire());
     // Older DAPLink firmwares lock up on config commands: no SteamiConfig call before this.
     if (!bridge.begin() || !bridge.hasConfigZone()) {
@@ -326,6 +327,14 @@ bool SteamiBoard::detectFromConfig() {
         _config.reset();
         return false;
     }
+    return true;
+}
+
+bool SteamiBoard::detectFromConfig() {
+    if (!loadConfig()) {
+        return false;
+    }
+    SteamiConfig& cfg = *_config.get();
     int32_t rev = -1;
     if (!cfg.boardRevision(rev)) {
         return false;  // no revision written: probe, without a message
@@ -338,7 +347,7 @@ bool SteamiBoard::detectFromConfig() {
                  "unknown board revision %ld in the board config. Update the STeaMi library; the "
                  "board is detected from its sensors instead.",
                  static_cast<long>(rev));
-        report(kWho, SteamiStatus::UNKNOWN_BOARD, detail, E_UNKNOWN_REVISION);
+        report(kWho, SteamiStatus::UNKNOWN_BOARD, detail, STEAMI_E_UNKNOWN_REVISION);
         return false;
     }
     _release = info.board;
@@ -484,6 +493,46 @@ SteamiStatus SteamiBoard::claim(SteamiChip c) {
     return state == ChipState::OK ? SteamiStatus::OK : SteamiStatus::NOT_RESPONDING;
 }
 
+bool SteamiBoard::calibrated(SteamiChip c) const {
+    return (_calibrationApplied & (1U << static_cast<unsigned>(c))) != 0;
+}
+
+bool SteamiBoard::calibrate(SteamiChip c) {
+    if (claim(c) != SteamiStatus::OK) {
+        return false;
+    }
+    const uint16_t bit = static_cast<uint16_t>(1U << static_cast<unsigned>(c));
+    if ((_calibrationTried & bit) != 0) {
+        return calibrated(c);
+    }
+    _calibrationTried |= bit;  // before any bus traffic: a failing config read is not retried
+    if (c != SteamiChip::BME280 && c != SteamiChip::WSEN_HIDS && c != SteamiChip::WSEN_PADS) {
+        return false;
+    }
+    if (!loadConfig()) {
+        return false;
+    }
+    const SteamiConfig& cfg = *_config.get();
+    bool applied = false;
+    switch (c) {
+        case SteamiChip::BME280:
+            applied = cfg.applyTemperatureCalibration(STEAMI_CONFIG_SENSOR_BME280, *_bme280.get());
+            break;
+        case SteamiChip::WSEN_HIDS:
+            applied =
+                cfg.applyTemperatureCalibration(STEAMI_CONFIG_SENSOR_WSEN_HIDS, *_wsenHids.get());
+            break;
+        default:
+            applied =
+                cfg.applyTemperatureCalibration(STEAMI_CONFIG_SENSOR_WSEN_PADS, *_wsenPads.get());
+            break;
+    }
+    if (applied) {
+        _calibrationApplied |= bit;
+    }
+    return applied;
+}
+
 void SteamiBoard::printInfoTo(bool (*emit)(void* ctx, const char* line), void* ctx, bool toLogger) {
     begin();
     char line[LINE_SIZE];
@@ -501,11 +550,12 @@ void SteamiBoard::printInfoTo(bool (*emit)(void* ctx, const char* line), void* c
             continue;
         }
         const ChipState state = stateOf(c);
-        snprintf(line, sizeof(line), "%s 0x%02X %s", steamiChipName(c),
+        snprintf(line, sizeof(line), "%s 0x%02X %s%s", steamiChipName(c),
                  static_cast<unsigned>(steamiChipAddress(c)),
                  state == ChipState::OK               ? "OK"
                  : state == ChipState::NOT_RESPONDING ? "not responding"
-                                                      : "not tried");
+                                                      : "not tried",
+                 calibrated(c) ? ", calibrated" : "");
         emit(ctx, line);
     }
     if (_lastError[0] != '\0' && !_errorDelivered) {
@@ -550,6 +600,9 @@ void SteamiBoard::end() {
     }
     _config.reset();  // before the bridge it points to
     _bridge.reset();
+    _configTried = false;
+    _calibrationTried = 0;
+    _calibrationApplied = 0;
     _detected = false;
     _release = SteamiRelease::UNKNOWN;
     _origin = SteamiOrigin::NONE;

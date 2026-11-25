@@ -101,6 +101,15 @@ class SteamiBoard {
     /// Detects the release first when that has not happened.
     SteamiStatus claim(SteamiChip c);
 
+    /// Applies the config calibration of a chip once: claims the chip, loads the board config on
+    /// demand and applies the temperature calibration of BME280, WSEN-HIDS and WSEN-PADS. True
+    /// when a calibration was applied, now or on an earlier call; false for the other chips, a
+    /// chip that does not answer, and a config without calibration for it.
+    bool calibrate(SteamiChip c);
+
+    /// True when a calibration was applied to the chip.
+    bool calibrated(SteamiChip c) const;
+
     /// True when the slot of the chip is constructed.
     bool built(SteamiChip c) const;
 
@@ -145,7 +154,7 @@ class SteamiBoard {
     void end();
 
    private:
-    static constexpr size_t MAX_REPORTED = 16;
+    static constexpr size_t MAX_REPORTED = 24;
     static constexpr size_t ERROR_SIZE = 192;
     static constexpr size_t LINE_SIZE = 96;
 
@@ -156,6 +165,7 @@ class SteamiBoard {
 
     void detect();
     bool detectFromConfig();
+    bool loadConfig();
     bool detectByProbe();
     bool readId(uint8_t address, uint8_t reg, uint8_t& id);
     void formatBanner(char* line, size_t size) const;
@@ -192,6 +202,9 @@ class SteamiBoard {
     SteamiChip _probedChip = SteamiChip::NONE;
     SteamiLazy<SteamiDaplinkBridge> _bridge;
     SteamiLazy<SteamiConfig> _config;
+    bool _configTried = false;         // loadConfig() ran since begin()/end()
+    uint16_t _calibrationTried = 0;    // bit per chip, set before the config is read
+    uint16_t _calibrationApplied = 0;  // bit per chip
     ChipState _chipState[I2C_CHIPS] = {};
     SteamiLazy<SteamiBME280> _bme280;
     SteamiLazy<SteamiWsenHids> _wsenHids;
