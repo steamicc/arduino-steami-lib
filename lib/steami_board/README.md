@@ -264,9 +264,6 @@ void setup() {
   STM32duino 3.1.0 the last `TwoWire` to call `begin()` owns the I2C1
   interrupt (`i2c_handles[I2C1_INDEX]` in `twi.c`); the transfers of the other
   one time out without any error.
-* The examples of the other drivers still create their own bus. Do not mix
-  them with `Steami` in one sketch until they move to `Steami.wire()` (a later
-  sub-project).
 
 ## Testing
 
