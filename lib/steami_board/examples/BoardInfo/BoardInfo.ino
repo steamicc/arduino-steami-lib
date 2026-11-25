@@ -14,8 +14,9 @@
 //
 // printInfo() lists the I2C chips of the release with OK, "not responding"
 // or "not tried". "Not tried" means that no function used that chip yet, so
-// this sketch first claims the chip of every function (the screen aside):
-// each line then shows whether the chip really answers.
+// this sketch first claims every candidate chip of every function (the screen
+// aside): each line then shows whether the chip really answers, even when the
+// release stays unknown.
 //
 // To force a V1c, uncomment the next line (it must come before the include):
 // #define STEAMI_BOARD_V1C
@@ -32,10 +33,19 @@ void setup() {
     }
 
     Steami.begin();
+    // Claim every candidate chip of every function: on an unknown release,
+    // the temperature has three candidates (BME280, WSEN-HIDS, WSEN-PADS).
     for (uint8_t f = 0; f < static_cast<uint8_t>(SteamiFunction::COUNT); f++) {
         const SteamiFunction function = static_cast<SteamiFunction>(f);
-        if (function != SteamiFunction::SCREEN) {
-            Steami.claim(steamiRoute(Steami.release(), function, 0));
+        if (function == SteamiFunction::SCREEN) {
+            continue;
+        }
+        for (uint8_t i = 0;; i++) {
+            const SteamiChip chip = steamiRoute(Steami.release(), function, i);
+            if (chip == SteamiChip::NONE) {
+                break;
+            }
+            Steami.claim(chip);
         }
     }
     Steami.printInfo();

@@ -35,8 +35,9 @@ void loop() {}
 It prints the release, where the answer comes from, and the I2C chips of that
 release, each one `OK`, `not responding` or `not tried`. "Not tried" means that
 no function used that chip yet. The [`BoardInfo`](examples/BoardInfo/) example
-claims the chip of every function first (`Steami.claim(steamiRoute(...))`), so
-each line shows whether the chip really answers.
+claims every candidate chip of every function first
+(`Steami.claim(steamiRoute(release, function, i))` until it returns `NONE`), so
+each line shows whether the chip really answers, even on an unknown release.
 
 ## Detection order
 
