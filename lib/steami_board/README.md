@@ -143,9 +143,11 @@ it).
 
 ## Function classes
 
-Five classes read a function without you choosing a chip: `SteamiTemperature`,
-`SteamiHumidity`, `SteamiPressure`, `SteamiDistance` and `SteamiBattery`.
-They pick the chip of the release (V1a/V1b or V1c) and share the driver the
+Thirteen classes read a function without you choosing a chip:
+`SteamiTemperature`, `SteamiHumidity`, `SteamiPressure`, `SteamiDistance`,
+`SteamiBattery`, `SteamiAccelerometer`, `SteamiGyroscope`,
+`SteamiMagnetometer`, `SteamiCompass`, `SteamiLight`, `SteamiColor`,
+`SteamiGesture` and `SteamiButtons`. They pick the chip of the release (V1a/V1b or V1c) and share the driver the
 board already built. Each has a ready-to-run example in
 [`examples/`](examples/).
 
@@ -172,6 +174,14 @@ void loop() {
 | `SteamiPressure` | WSEN-PADS | BME280 |
 | `SteamiDistance` | VL53L1X | VL53L1X |
 | `SteamiBattery` | BQ27441 | BQ27441 |
+| `SteamiAccelerometer` | ISM330DL | ISM330DL |
+| `SteamiGyroscope` | ISM330DL | ISM330DL |
+| `SteamiMagnetometer` | LIS2MDL | LIS2MDL |
+| `SteamiCompass` | LIS2MDL | LIS2MDL |
+| `SteamiLight` | APDS-9960 | none (`E20`) |
+| `SteamiColor` | APDS-9960 | none (`E20`) |
+| `SteamiGesture` | APDS-9960 | none (`E20`) |
+| `SteamiButtons` | MCP23009E (D-PAD) and MCU pins (A, B, MENU) | same |
 
 When the release is unknown, every candidate is tried (for the temperature:
 BME280, WSEN-HIDS, then WSEN-PADS). The altitude of `SteamiPressure` comes from
@@ -200,13 +210,61 @@ their "unavailable" value without any bus traffic and without printing again.
 | `SteamiPressure` | `read()` in hPa, `altitude(seaLevelHpa = 1013.25f)` in metres | `NAN` |
 | `SteamiDistance` | `read()` in mm, `cm()` | `-1` (`NAN` for `cm()`) |
 | `SteamiBattery` | `percent()`, `voltage()` in V, `current()` in mA, `isCharging()` | `0`, `NAN`, `0`, `false` |
+| `SteamiAccelerometer` | `read()` as a `SteamiVector` in g, `x()`, `y()`, `z()`, `strength()`, `isShaken(g = 2.0f)` | `NAN` (all three axes and `strength()`), `false` |
+| `SteamiGyroscope` | `read()` as a `SteamiVector` in degrees per second, `x()`, `y()`, `z()` | `NAN` |
+| `SteamiMagnetometer` | `read()` as a `SteamiVector` in uT, `x()`, `y()`, `z()`, `strength()`, `calibrate(seconds = 12)` | `NAN` |
+| `SteamiCompass` | `heading()` in degrees, `direction()`, `setDeclination(deg)`, `calibrate(seconds = 12)` | `NAN`, `""` |
+| `SteamiLight` | `read()`, the raw clear count of the sensor | `0` |
+| `SteamiColor` | `read(r, g, b)` (raw counts, returns whether it worked), `red()`, `green()`, `blue()` | `false`, `0` |
+| `SteamiGesture` | `read(timeoutMs = 0)` gives `NONE`, `LEFT`, `RIGHT`, `UP`, `DOWN`, `NEAR` or `FAR`; `SteamiGesture::name(d)` | `NONE` |
+| `SteamiButtons` | `isPressed(b)`, `wasPressed(b)`, `wasReleased(b)`, `waitForPress(timeoutMs = 0)` with `SteamiButton::A`, `B`, `MENU`, `UP`, `DOWN`, `LEFT`, `RIGHT` | `false`, `NONE` |
 
 * `SteamiDistance`: `-1` means that the sensor timed out or is unavailable.
   The driver ignores the range status, so a target out of range is not told
   apart, and a true 0 mm reading reads as `-1` too.
 * `SteamiBattery`: `isCharging()` is `current() > 0`.
+* `SteamiAccelerometer`: `begin()` sets the shared ISM330DL to +-8 g, so a
+  sketch that reads the chip itself through `Steami.ism330dl()` sees that
+  range once the class began. `strength()` is the norm of the three axes.
+* `SteamiGyroscope` and `SteamiAccelerometer` share the ISM330DL;
+  `SteamiMagnetometer` and `SteamiCompass` share the LIS2MDL. Each shared
+  driver is built once.
+* `SteamiMagnetometer`: the values are in uT with the hard-iron offset removed
+  (hard iron only: the `sx`, `sy` and `sz` scales are not applied to these
+  values). `calibrate(seconds)` is a min/max calibration done in
+  RAM: turn the board in every direction meanwhile. It is lost on reset;
+  the `cm` key of the board config (see Calibration) is applied automatically.
+* `SteamiCompass`: see Heading convention below. `calibrate()` is the same as
+  the magnetometer one, `setDeclination(deg)` adds the magnetic declination
+  and may be called before `begin()`.
+* `SteamiLight` and `SteamiColor` give raw counts of the APDS-9960, not lux or
+  an RGB value (a colour conversion comes with the display classes).
+* `SteamiLight`, `SteamiColor` and `SteamiGesture` interfere: `SteamiGesture`
+  `begin()` turns the gesture engine on, and while it tracks a hand the light
+  and colour readings freeze (the chip serves the gesture first). Read the
+  light and colour before beginning the gesture class when both matter.
+* `SteamiButtons`: A, B and MENU are read on MCU pins and always work. The four
+  D-PAD arrows are on the MCP23009E: when it does not answer, `begin()` returns
+  `false` with one message but A, B and MENU still work and the arrows read as
+  released. Buttons are debounced over 20 ms and every call samples them once,
+  so poll often; a button held at start is not a press. `waitForPress()` drops
+  the presses latched before the call and returns `NONE` after the timeout.
 * A function that failed is not tried again until the board resets (or
   `Steami.end()`). After plugging in a battery, reset the board.
+
+### Heading convention
+
+`SteamiCompass::heading()` is in degrees clockwise from north, in [0, 360),
+with the board held flat and the screen up. 0 means that the top of the screen
+(the side opposite the USB connector) points north, 90 east, 180 south and
+270 west. It is `atan2(-x, y)` of the corrected X and Y fields, measured on a
+V1c; it is not the `atan2(y, x)` of the `SteamiLIS2MDL` driver, which is 90
+degrees off. Without tilt compensation, so keep the board flat. With the screen
+up, the accelerometer reads `z` about -1 g.
+
+`direction()` returns the nearest of eight sectors, each 45 degrees wide and
+centred on its name: `"N"`, `"NE"`, `"E"`, `"SE"`, `"S"`, `"SW"`, `"W"` or
+`"NW"`.
 
 ### Messages of the function classes
 
@@ -214,7 +272,13 @@ their "unavailable" value without any bus traffic and without printing again.
 |------|------|
 | `E10` | `[STeaMi] SteamiTemperature: the BME280 temperature sensor (I2C 0x76) did not answer. Check the board or try another one. (E10)` |
 | `E10` | `[STeaMi] SteamiTemperature: no temperature sensor answered (WSEN-HIDS, WSEN-PADS). Check the board or try another one. (E10)` |
+| `E10` | `[STeaMi] SteamiAccelerometer: the ISM330DL accelerometer (I2C 0x6B) did not answer. Check the board or try another one. (E10)` |
+| `E10` | `[STeaMi] SteamiCompass: the LIS2MDL compass (I2C 0x1E) did not answer. Check the board or try another one. (E10)` |
+| `E10` | `[STeaMi] SteamiButtons: the MCP23009E D-PAD expander (I2C 0x20) did not answer. The A, B and MENU buttons still work. (E10)` |
 | `E11` | `[STeaMi] SteamiTemperature: this STeaMi is set as a V1c (forced by Steami.begin()), but its BME280 temperature sensor (I2C 0x76) did not answer. Check the #define, Steami.begin() or the board config. (E11)` |
+| `E20` | `[STeaMi] SteamiLight: this STeaMi is a V1c, it has no light sensor (APDS-9960 is on V1a/V1b only). read() will return 0. (E20)` |
+| `E20` | `[STeaMi] SteamiColor: this STeaMi is a V1c, it has no colour sensor (APDS-9960 is on V1a/V1b only). read() will return false. (E20)` |
+| `E20` | `[STeaMi] SteamiGesture: this STeaMi is a V1c, it has no gesture sensor (APDS-9960 is on V1a/V1b only). read() will return NONE. (E20)` |
 | `E20` | `[STeaMi] <Class>: this STeaMi is a <release>, it has no <noun> (<chip> is on <other release> only). <fallback> (E20)` |
 
 `E10` means that the chip of the release did not answer: with one candidate the
@@ -224,11 +288,13 @@ humidity and pressure) when the release was forced (`Steami.begin(...)`,
 `#define`) or read from the board config: the text then tells you to check
 that setting. Distance and battery are on every release, so they always use
 `E10`.
-`E20` is a format, not a text you will see: it means that the function does
-not exist on this release. None of the five classes in this library can print
-it, because each of them exists on every release (temperature, humidity,
-pressure, distance and battery). The class name, the sensor and the end of the
-text change from one class to another; the code and the shape do not.
+`E20` means that the function does not exist on this release. Only
+`SteamiLight`, `SteamiColor` and `SteamiGesture` can print it, on a V1c (the
+APDS-9960 is on V1a/V1b only); the other classes exist on every release. The
+class name, the sensor and the end of the text change from one class to
+another; the code and the shape do not. The classes that share a chip with
+another one (the ISM330DL, the LIS2MDL, the APDS-9960) print their own message
+once each.
 
 ### Calibration
 
@@ -246,6 +312,14 @@ The keys are the same as in the MicroPython `steami_config`:
 calibration. `Steami.calibrate(chip)` applies it on demand and
 `Steami.calibrated(chip)` tells whether it was applied. Without a config
 zone, nothing changes.
+
+Two more keys are applied automatically when the config holds them, with the
+same names as in the MicroPython `steami_config`:
+
+| Key | Fields | Goes to |
+|-----|--------|---------|
+| `ca` | `ox`, `oy`, `oz` offsets in g | the ISM330DL (accelerometer) |
+| `cm` | `hx`, `hy`, `hz` hard iron in LSB, `sx`, `sy`, `sz` scales | the LIS2MDL (magnetometer and compass) |
 
 The classes share their driver with `Steami.bme280()` and the others: once a
 class has begun, the shared driver returns calibrated temperatures, and a
