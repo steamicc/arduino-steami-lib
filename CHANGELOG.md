@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.34.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.33.0...v0.34.0) (2026-11-25)
+
+
+### Features
+
+* **board:** Add the motion, compass, light and button classes. ([#252](https://github.com/steamicc/arduino-steami-lib/issues/252)) ([0b12744](https://github.com/steamicc/arduino-steami-lib/commit/0b127442c8acd92762ea3ce0ac77f542cfeb6e18)), closes [#249](https://github.com/steamicc/arduino-steami-lib/issues/249)
+
 # [0.33.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.32.0...v0.33.0) (2026-11-25)
 
 
