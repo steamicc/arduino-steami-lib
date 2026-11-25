@@ -1,7 +1,7 @@
 # STeaMi display layer: SteamiDisplay and SteamiScreen
 
-Status: Draft for maintainer review. The five recommendations of the design study (section 9) were
-accepted by the maintainer on 2026-11-25; the rest of this document awaits review.
+Status: Approved by the maintainer on 2026-11-25 (the whole document, with the designer's calls B1 to B10 and
+decision 6 of section 9: the V1c rendering comes first).
 Repository: `steamicc/arduino-steami-lib`, base `main` at v0.34.0 (`SteamiBoard`, `SteamiHandle`, the 13
 per-function classes, `Steami.wire()`, `SteamiSSD1327`, `SteamiGC9A01`). Each delivery branches from `main`.
 
@@ -921,9 +921,9 @@ Hardware checks (PlatformIO env:steami) *(designer's call, B5)*:
   of the `test_steami_display` gallery (same scene); `WeatherStation` page by page with the mockup each page
   reuses (Temperature with 01, Humidity with 04, Pressure with 05, Compass with 07 at a known heading),
   allowing for the titles and live values.
-- **V1a/V1b, if a board is available** (to be confirmed by the maintainer): the same examples, photographed the
-  same way. When no V1a/V1b board is available, the OLED path is covered by the native rendering tests (grey
-  memory backend at 128, SSD1327 backend over the SPI mock) and the PR says that the V1a/V1b check was not run.
+- **V1a/V1b**: not checked on hardware (decision 6). The OLED path is covered by the native rendering tests
+  (grey memory backend at 128, SSD1327 backend over the SPI mock), and each PR says that the V1a/V1b check was
+  not run.
 - On V1c, `screen.begin()` succeeds after STM32duinoBLE is initialised; `screen.begin()` called late (after
   large allocations) reports E31 and the sketch goes on.
 - The `Drawing` example prints the measured `show()` time; the value goes into the PR (V1c; V1b when
@@ -943,8 +943,8 @@ gate). Each row below names the paths outside `lib/steami_board`. MicroPython, t
 
 "Reviewed on V1c" means photographed by the controller on the shared V1c under the webcam and compared with
 the mockup's `_ref.png` (or, for an example without a mockup, with the reference named in section 7); "and on
-V1a/V1b if available" means the same on such a board when the maintainer confirms one is available, otherwise
-covered by the native rendering tests, as the PR states (B5).
+V1a/V1b if available" is covered by the native rendering tests only: by decision 6 the V1a/V1b are not
+checked on hardware, and a V1a/V1b rendering defect does not block a delivery (B5).
 
 | # | Delivery | Content | Done when |
 |---|---|---|---|
@@ -968,6 +968,14 @@ Maintainer, 2026-11-25 (the five recommendations of the design study):
    (revisit after the V1c review on the board).
 5. The **128 → 240 scaling rule** (×15/8 for positions and sizes, k = 1 or 2 for glyphs and strokes) applies
    in Arduino now; MicroPython gets the same rule in a separate issue completing #368.
+
+Maintainer, 2026-11-25 (on approving this document):
+
+6. **The V1c comes first.** Only V1c boards will be deployed, so the rendering on the 240 px round TFT must
+   be perfect (checked against the mockups on the board, under the webcam); the 128 px OLED of V1a/V1b is
+   best effort. The 128 px rules of this document stay (they are the base of the scaling rule and the
+   native tests cover them), but when a rule cannot serve both panels equally, the V1c wins, and a V1a/V1b
+   defect does not block a delivery. V1a/V1b are not checked on hardware.
 
 Designer's calls (reversible): grey minimum contrast and GRID_DARK bar track; centred, wrapping `menu()`;
 NAN shows `--`; `SteamiValue`; `arc()` angles 0° = noon, clockwise. Taken while writing this document:
@@ -993,8 +1001,8 @@ maintainer to review; the document marks each place they apply with B1 to B10:
   `platformio.ini` and `.github/workflows` as needed; each delivery names its paths (section 8). MicroPython,
   tutorials, `design-constraints.md` and wiki changes are separate PRs (section 12).
 - **B5, hardware**: V1c checks by the controller under the webcam against the mockup's `_ref.png` (or the
-  reference named in section 7 for `Drawing` and WeatherStation); V1a/V1b checks when the maintainer confirms
-  a board is available, otherwise covered by the native rendering tests (sections 7, 8).
+  reference named in section 7 for `Drawing` and WeatherStation); V1a/V1b covered by the native rendering
+  tests only (decision 6; sections 7, 8).
 - **B6, value glyphs and side-by-side scale** (replaces B2's `max(len, 4)` reference): in `value()` text only,
   '.' and ':' are drawn from a 4-column window (glyph columns 2 to 5) with a `4·f` advance; the W/E scale is
   the largest at which `max(valueWidth(text), valueWidth("88.8"))` fits the half region. "23.5" and "45" get ×2
