@@ -20,12 +20,18 @@ float SteamiTemperature::read() {
     }
     SteamiBoard& board = _handle.board();
     switch (_handle.chipId()) {
-        case SteamiChip::BME280:
-            return board.bme280()->temperature() + _offset;
-        case SteamiChip::WSEN_HIDS:
-            return board.wsenHids()->temperature() + _offset;
-        case SteamiChip::WSEN_PADS:
-            return board.wsenPads()->temperature() + _offset;
+        case SteamiChip::BME280: {
+            SteamiBME280* bme = board.bme280();
+            return bme == nullptr ? NAN : bme->temperature() + _offset;
+        }
+        case SteamiChip::WSEN_HIDS: {
+            SteamiWsenHids* hids = board.wsenHids();
+            return hids == nullptr ? NAN : hids->temperature() + _offset;
+        }
+        case SteamiChip::WSEN_PADS: {
+            SteamiWsenPads* pads = board.wsenPads();
+            return pads == nullptr ? NAN : pads->temperature() + _offset;
+        }
         default:
             return NAN;
     }

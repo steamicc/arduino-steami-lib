@@ -18,7 +18,11 @@ int SteamiDistance::read() {
     if (!_handle.ready() || _handle.chipId() != SteamiChip::VL53L1X) {
         return -1;
     }
-    const uint16_t mm = _handle.board().vl53l1x()->read();
+    SteamiVL53L1X* sensor = _handle.board().vl53l1x();
+    if (sensor == nullptr) {
+        return -1;
+    }
+    const uint16_t mm = sensor->read();
     return mm == 0 ? -1 : static_cast<int>(mm);
 }
 

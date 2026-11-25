@@ -7,7 +7,7 @@
 namespace {
 
 constexpr SteamiFunctionInfo kInfo = {SteamiFunction::BATTERY, "SteamiBattery", "battery gauge",
-                                      "Plug in a battery or check the board.",
+                                      "Plug in a battery, then reset the board.",
                                       "percent() will return 0."};
 
 }  // namespace
@@ -18,14 +18,19 @@ uint8_t SteamiBattery::percent() {
     if (!_handle.ready() || _handle.chipId() != SteamiChip::BQ27441) {
         return 0;
     }
-    return static_cast<uint8_t>(_handle.board().bq27441()->stateOfCharge());
+    SteamiBQ27441* gauge = _handle.board().bq27441();
+    return gauge == nullptr ? 0 : static_cast<uint8_t>(gauge->stateOfCharge());
 }
 
 float SteamiBattery::voltage() {
     if (!_handle.ready() || _handle.chipId() != SteamiChip::BQ27441) {
         return NAN;
     }
-    const uint16_t mv = _handle.board().bq27441()->voltageMv();
+    SteamiBQ27441* gauge = _handle.board().bq27441();
+    if (gauge == nullptr) {
+        return NAN;
+    }
+    const uint16_t mv = gauge->voltageMv();
     return mv == 0 ? NAN : static_cast<float>(mv) / 1000.0f;
 }
 
@@ -33,7 +38,8 @@ int16_t SteamiBattery::current() {
     if (!_handle.ready() || _handle.chipId() != SteamiChip::BQ27441) {
         return 0;
     }
-    return static_cast<int16_t>(_handle.board().bq27441()->currentAverage());
+    SteamiBQ27441* gauge = _handle.board().bq27441();
+    return gauge == nullptr ? 0 : static_cast<int16_t>(gauge->currentAverage());
 }
 
 bool SteamiBattery::isCharging() {

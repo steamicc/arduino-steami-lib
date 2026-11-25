@@ -20,10 +20,14 @@ float SteamiHumidity::read() {
     }
     SteamiBoard& board = _handle.board();
     switch (_handle.chipId()) {
-        case SteamiChip::BME280:
-            return board.bme280()->humidity();
-        case SteamiChip::WSEN_HIDS:
-            return board.wsenHids()->humidity();
+        case SteamiChip::BME280: {
+            SteamiBME280* bme = board.bme280();
+            return bme == nullptr ? NAN : bme->humidity();
+        }
+        case SteamiChip::WSEN_HIDS: {
+            SteamiWsenHids* hids = board.wsenHids();
+            return hids == nullptr ? NAN : hids->humidity();
+        }
         default:
             return NAN;
     }

@@ -253,6 +253,45 @@ static void test_config_release_contradicted_reports_e11(void) {
         g_lines.back().c_str());
 }
 
+static void test_config_release_missing_battery_reports_e10(void) {
+    attachFirmware();
+    fw.store("{\"rev\":131}");
+    steamiFakeBme280(Wire);
+    Wire.setAbsent(0x55);
+    SteamiBattery battery(board);
+    TEST_ASSERT_FALSE(battery.begin());
+    TEST_ASSERT_TRUE(board.origin() == SteamiOrigin::CONFIG);
+    TEST_ASSERT_EQUAL_UINT32(0, countLogged("(E11)"));
+    TEST_ASSERT_EQUAL_UINT32(1, countLogged("(E10)"));
+    TEST_ASSERT_EQUAL_STRING(
+        "[STeaMi] SteamiBattery: the BQ27441 battery gauge (I2C 0x55) did not answer. Plug in a "
+        "battery, then reset the board. (E10)",
+        g_lines.back().c_str());
+}
+
+static void test_config_release_missing_distance_reports_e10(void) {
+    attachFirmware();
+    fw.store("{\"rev\":131}");
+    steamiFakeBme280(Wire);
+    Wire.setAbsent(0x29);
+    SteamiDistance distance(board);
+    TEST_ASSERT_EQUAL_INT(-1, distance.read());
+    TEST_ASSERT_EQUAL_UINT32(0, countLogged("(E11)"));
+    TEST_ASSERT_EQUAL_STRING(
+        "[STeaMi] SteamiDistance: the VL53L1X distance sensor (I2C 0x29) did not answer. Check "
+        "the board or try another one. (E10)",
+        g_lines.back().c_str());
+}
+
+static void test_read_after_board_end_is_safe(void) {
+    steamiFakeBme280(Wire);
+    SteamiTemperature temperature(board);
+    TEST_ASSERT_TRUE(temperature.begin());
+    board.end();
+    Wire.setAbsent(0x76);
+    TEST_ASSERT_TRUE(isnan(temperature.read()));
+}
+
 static void test_failed_function_is_silent_and_quiet(void) {
     SteamiTemperature temperature(board);
     SteamiHumidity humidity(board);
@@ -484,7 +523,7 @@ static void test_battery_absent(void) {
     TEST_ASSERT_EQUAL_UINT32(1, countLogged("(E10)"));
     TEST_ASSERT_EQUAL_STRING(
         "[STeaMi] SteamiBattery: the BQ27441 battery gauge (I2C 0x55) did not answer. Plug in a "
-        "battery or check the board. (E10)",
+        "battery, then reset the board. (E10)",
         g_lines.back().c_str());
     const uint32_t traffic = Wire.totalTransactions();
     const size_t lines = g_lines.size();
@@ -511,6 +550,9 @@ int main(void) {
     RUN_TEST(test_several_candidates_on_v1ab_list_in_e10);
     RUN_TEST(test_forced_release_contradicted_reports_e11);
     RUN_TEST(test_config_release_contradicted_reports_e11);
+    RUN_TEST(test_config_release_missing_battery_reports_e10);
+    RUN_TEST(test_config_release_missing_distance_reports_e10);
+    RUN_TEST(test_read_after_board_end_is_safe);
     RUN_TEST(test_failed_function_is_silent_and_quiet);
     RUN_TEST(test_two_objects_one_message);
     RUN_TEST(test_constructor_touches_nothing);

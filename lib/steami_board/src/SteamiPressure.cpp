@@ -20,10 +20,14 @@ float SteamiPressure::read() {
     }
     SteamiBoard& board = _handle.board();
     switch (_handle.chipId()) {
-        case SteamiChip::BME280:
-            return board.bme280()->pressureHpa();
-        case SteamiChip::WSEN_PADS:
-            return board.wsenPads()->pressureHpa();
+        case SteamiChip::BME280: {
+            SteamiBME280* bme = board.bme280();
+            return bme == nullptr ? NAN : bme->pressureHpa();
+        }
+        case SteamiChip::WSEN_PADS: {
+            SteamiWsenPads* pads = board.wsenPads();
+            return pads == nullptr ? NAN : pads->pressureHpa();
+        }
         default:
             return NAN;
     }
