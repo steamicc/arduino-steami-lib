@@ -1,0 +1,96 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+#pragma once
+
+#include <stdint.h>
+
+#include "SteamiBoard.h"
+#include "SteamiDisplayBackend.h"
+#include "SteamiRgb.h"
+#include "SteamiTypes.h"
+
+/// Drawing on the board's screen, in the physical pixels of the panel: origin top-left, x to the
+/// right, y down. Every object of the layer draws into the one backend of its board. The first
+/// drawing call begins the display if the sketch did not; after a failure every drawing call and
+/// show() does nothing and error() says why. Everything is clipped to the panel before the backend
+/// is called.
+class SteamiDisplay {
+   public:
+    /// Stores the address of the board only; touches no hardware.
+    explicit constexpr SteamiDisplay(SteamiBoard& board = Steami) noexcept
+        : _board(&board), _who("SteamiDisplay") {}
+
+    /// Begins the display once and keeps the result. False with one message on an unknown board
+    /// (E30) or when the colour screen does not fit in RAM (E31). Idempotent.
+    bool begin();
+
+    bool isAvailable() const { return _status == SteamiStatus::OK; }
+    SteamiStatus status() const { return _status; }
+
+    /// "" when OK, "not started", "unknown board" or "no memory".
+    const char* error() const;
+
+    /// Geometry of the panel; valid before begin(), 0 or false without a backend.
+    bool isColor();
+    int16_t width();
+    int16_t height();
+    int16_t centerX();
+    int16_t centerY();
+    int16_t radius();
+
+    void clear(SteamiRgb c = STEAMI_BLACK);
+    void pixel(int16_t x, int16_t y, SteamiRgb c = STEAMI_WHITE);
+    void line(int16_t x1, int16_t y1, int16_t x2, int16_t y2, SteamiRgb c = STEAMI_WHITE);
+    void hline(int16_t x, int16_t y, int16_t w, SteamiRgb c = STEAMI_WHITE);
+    void vline(int16_t x, int16_t y, int16_t h, SteamiRgb c = STEAMI_WHITE);
+    void rect(int16_t x, int16_t y, int16_t w, int16_t h, SteamiRgb c = STEAMI_WHITE,
+              bool fill = false);
+    void circle(int16_t cx, int16_t cy, int16_t r, SteamiRgb c = STEAMI_WHITE, bool fill = false);
+    void triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2,
+                  SteamiRgb c = STEAMI_WHITE, bool fill = false);
+
+    /// Ring of outer radius r and radial thickness width; degrees, 0 = noon (12 o'clock),
+    /// clockwise, the same convention as compass() and watch().
+    void arc(int16_t cx, int16_t cy, int16_t r, int16_t startDeg, int16_t sweepDeg,
+             SteamiRgb c = STEAMI_WHITE, uint8_t width = 1);
+
+    void text(const char* s, int16_t x, int16_t y, SteamiRgb c = STEAMI_WHITE, uint8_t scale = 1);
+
+    /// Width in pixels of s: glyphs, not bytes.
+    int16_t textWidth(const char* s, uint8_t scale = 1) const;
+
+    void show();
+    void rotate(bool upsideDown);
+    void invert(bool on);
+    void powerOn();
+    void powerOff();
+
+    /// The board's backend, built but not begun; nullptr without one.
+    SteamiDisplayBackend* backend();
+
+    static constexpr uint8_t CHAR_W = 8, CHAR_H = 8;
+
+   protected:  // for SteamiScreen, not for the student
+    /// `who` is the name in messages ("SteamiScreen"); it must outlive the object (a literal).
+    constexpr SteamiDisplay(SteamiBoard& board, const char* who) noexcept
+        : _board(&board), _who(who) {}
+
+    void textSmall(const char* s, int16_t x, int16_t y, SteamiRgb c, uint8_t scale = 1);  // 5x7
+    int16_t textSmallWidth(const char* s, uint8_t scale = 1) const;
+    void strokeLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint8_t w, SteamiRgb c);
+    void strokeCircle(int16_t cx, int16_t cy, int16_t r, uint8_t w, SteamiRgb c);
+
+   private:
+    /// The backend when drawing is allowed (begins on first use), nullptr otherwise.
+    SteamiDisplayBackend* ready();
+
+    /// One pixel, dropped when off the panel.
+    void dot(SteamiDisplayBackend* b, int32_t x, int32_t y, uint16_t c);
+
+    /// A w x h rectangle intersected with the panel; nothing when the result is empty.
+    void span(SteamiDisplayBackend* b, int32_t x, int32_t y, int32_t w, int32_t h, uint16_t c);
+
+    SteamiBoard* _board;
+    const char* _who;
+    SteamiStatus _status = SteamiStatus::NOT_STARTED;
+};

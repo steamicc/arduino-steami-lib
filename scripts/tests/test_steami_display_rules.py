@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class SteamiDisplayRulesTest(unittest.TestCase):
-    def _compiles(self, body: str) -> bool:
+    def _compiles(self, body: str, header: str = "SteamiRgb.h") -> bool:
         compiler = shutil.which("c++")
         if compiler is None:
             self.skipTest("no c++ compiler on PATH")
@@ -24,7 +24,7 @@ class SteamiDisplayRulesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             unit = Path(tmp) / "colour_rule.cpp"
             unit.write_text(
-                '#include "SteamiRgb.h"\n'
+                f'#include "{header}"\n'
                 "void f(SteamiRgb) {}\n"
                 f"int main() {{ {body} }}\n",
                 encoding="utf-8",
@@ -46,6 +46,15 @@ class SteamiDisplayRulesTest(unittest.TestCase):
         self.assertTrue(
             self._compiles("f(SteamiRgb::gray(15)); f({255, 128, 0}); f(STEAMI_BLUE);")
         )
+
+    def test_display_takes_no_integer_colour(self) -> None:
+        # Positive control first: the header is found and the colour overload compiles.
+        self.assertTrue(
+            self._compiles("SteamiDisplay d; d.clear(SteamiRgb::gray(15));", "SteamiDisplay.h")
+        )
+        for body in ("SteamiDisplay d; d.clear(15);", "SteamiDisplay d; d.pixel(1, 1, 15);"):
+            with self.subTest(body=body):
+                self.assertFalse(self._compiles(body, "SteamiDisplay.h"))
 
 
 if __name__ == "__main__":

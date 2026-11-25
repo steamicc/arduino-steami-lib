@@ -13,6 +13,7 @@
 
 #include "SteamiBoard.h"
 #include "SteamiColor.h"
+#include "SteamiDisplay.h"
 #include "SteamiDisplayBackend.h"
 #include "SteamiFont.h"
 #include "SteamiMemoryBackend.h"
@@ -429,6 +430,250 @@ static void test_board_end_forgets_backend_and_status(void) {
     TEST_ASSERT_EQUAL_UINT32(2, a.beginCalls());
 }
 
+// ---- SteamiDisplay core ----
+
+[[maybe_unused]] static constexpr SteamiDisplay kConstInitDisplay(board);  // constant-initialised
+static_assert(sizeof(SteamiDisplay) <= 3 * sizeof(void*), "12 B on the 32-bit target");
+static_assert(SteamiDisplay::CHAR_W == 8 && SteamiDisplay::CHAR_H == 8, "5.3");
+
+/// The protected face of SteamiDisplay, as SteamiScreen will use it.
+class TestDisplay : public SteamiDisplay {
+   public:
+    explicit TestDisplay(SteamiBoard& b) : SteamiDisplay(b, "SteamiTestDisplay") {}
+    using SteamiDisplay::strokeCircle;
+    using SteamiDisplay::strokeLine;
+    using SteamiDisplay::textSmall;
+    using SteamiDisplay::textSmallWidth;
+};
+
+/// Runs `check` on a 128 colour, a 128 grey, a 240 colour and a 240 grey panel, each with a fresh
+/// board state, backend and display, then asserts that nothing reached the backend off the panel.
+[[maybe_unused]] static void forEachPanel(void (*check)(SteamiMemoryBackend&, TestDisplay&)) {
+    const int16_t sizes[] = {128, 240};
+    for (int16_t size : sizes) {
+        for (bool color : {true, false}) {
+            board.end();
+            board.setLogger(&capture);
+            SteamiMemoryBackend mem(size, size, color);
+            board.setDisplayBackend(mem);
+            TestDisplay d(board);
+            check(mem, d);
+            TEST_ASSERT_EQUAL_UINT32(0, mem.outOfBounds());
+        }
+    }
+    board.end();
+}
+
+[[maybe_unused]] static std::vector<uint16_t> snapshot(const SteamiMemoryBackend& mem) {
+    return mem.pixels();
+}
+
+static void expectGeometry(int16_t w, int16_t h, int16_t cx, int16_t cy, int16_t r) {
+    board.end();
+    board.setLogger(&capture);
+    SteamiMemoryBackend mem(w, h);
+    board.setDisplayBackend(mem);
+    SteamiDisplay d(board);
+    TEST_ASSERT_EQUAL_INT16(w, d.width());
+    TEST_ASSERT_EQUAL_INT16(h, d.height());
+    TEST_ASSERT_EQUAL_INT16(cx, d.centerX());
+    TEST_ASSERT_EQUAL_INT16(cy, d.centerY());
+    TEST_ASSERT_EQUAL_INT16(r, d.radius());
+    TEST_ASSERT_TRUE(d.isColor());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.beginCalls());
+}
+
+static void test_geometry_before_begin(void) {
+    expectGeometry(128, 128, 64, 64, 64);
+    expectGeometry(240, 240, 120, 120, 120);
+    expectGeometry(200, 100, 100, 50, 50);
+    expectGeometry(100, 200, 50, 100, 50);
+
+    board.end();
+    SteamiDisplay fresh(board);
+    assertStatus(SteamiStatus::NOT_STARTED, fresh.status());
+    TEST_ASSERT_EQUAL_STRING("not started", fresh.error());
+    TEST_ASSERT_FALSE(fresh.isAvailable());
+    TEST_ASSERT_EQUAL_INT16(0, fresh.width());
+    TEST_ASSERT_EQUAL_INT16(0, fresh.height());
+    TEST_ASSERT_EQUAL_INT16(0, fresh.radius());
+    TEST_ASSERT_FALSE(fresh.isColor());
+}
+
+static void test_no_backend_reports_e30_once(void) {
+    SteamiDisplay a(board), b(board);
+    TEST_ASSERT_FALSE(a.begin());
+    TEST_ASSERT_FALSE(b.begin());
+    assertStatus(SteamiStatus::UNKNOWN_BOARD, a.status());
+    TEST_ASSERT_EQUAL_STRING("unknown board", a.error());
+    TEST_ASSERT_FALSE(a.isAvailable());
+    TEST_ASSERT_EQUAL_size_t(1, g_lines.size());
+    TEST_ASSERT_EQUAL_STRING(
+        "[STeaMi] SteamiDisplay: cannot tell if this board is a V1a/V1b or a V1c. "
+        "Add #define STEAMI_BOARD_V1C (or V1B) before #include <STeaMi.h>. (E30)",
+        g_lines[0].c_str());
+}
+
+static void test_failed_begin_reports_e31_and_draws_nothing(void) {
+    SteamiMemoryBackend mem(240, 240, true, false);
+    board.setDisplayBackend(mem);
+    SteamiDisplay d(board);
+    TEST_ASSERT_FALSE(d.begin());
+    assertStatus(SteamiStatus::NO_MEMORY, d.status());
+    TEST_ASSERT_EQUAL_STRING("no memory", d.error());
+    TEST_ASSERT_EQUAL_size_t(1, g_lines.size());
+    TEST_ASSERT_EQUAL_STRING(
+        "[STeaMi] SteamiDisplay: not enough RAM for the colour screen (115200 bytes in one block). "
+        "Call screen.begin() first in setup(). (E31)",
+        g_lines[0].c_str());
+    d.clear(STEAMI_WHITE);
+    d.pixel(1, 1);
+    d.show();
+    TEST_ASSERT_EQUAL_UINT32(0, mem.fillCalls());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.fillRectCalls());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.showCalls());
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT32(1, mem.beginCalls());
+}
+
+static void test_auto_begin_on_first_draw(void) {
+    SteamiMemoryBackend mem(128, 128);
+    board.setDisplayBackend(mem);
+    SteamiDisplay d(board);
+    d.pixel(3, 4, STEAMI_RED);
+    TEST_ASSERT_EQUAL_UINT32(1, mem.beginCalls());
+    TEST_ASSERT_EQUAL_HEX16(STEAMI_RED.rgb565(), mem.at(3, 4));
+    TEST_ASSERT_TRUE(d.isAvailable());
+    assertStatus(SteamiStatus::OK, d.status());
+    TEST_ASSERT_EQUAL_STRING("", d.error());
+    d.begin();
+    d.pixel(5, 5);
+    TEST_ASSERT_EQUAL_UINT32(1, mem.beginCalls());
+}
+
+static void test_backend_accessor(void) {
+    SteamiDisplay d(board);
+    TEST_ASSERT_NULL(d.backend());
+    SteamiMemoryBackend mem(128, 128);
+    board.setDisplayBackend(mem);
+    TEST_ASSERT_EQUAL_PTR(&mem, d.backend());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.beginCalls());
+}
+
+static void test_default_board_is_steami(void) {
+    Steami.end();
+    Steami.setLogger(&capture);
+    SteamiMemoryBackend mem(128, 128);
+    Steami.setDisplayBackend(mem);
+    SteamiDisplay d;
+    d.pixel(1, 1);
+    TEST_ASSERT_TRUE(mem.lit(1, 1));
+    Steami.end();
+    Steami.setLogger(nullptr);
+}
+
+static void pixelClippingCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
+    d.pixel(-1, 0);
+    d.pixel(0, -1);
+    d.pixel(300, 5);
+    d.pixel(5, 32767);
+    d.pixel(d.width(), 0);
+    d.pixel(0, d.height());
+    d.pixel(-32768, -32768);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    d.pixel(0, 0);
+    d.pixel(static_cast<int16_t>(d.width() - 1), static_cast<int16_t>(d.height() - 1));
+    TEST_ASSERT_TRUE(mem.lit(0, 0));
+    TEST_ASSERT_TRUE(
+        mem.lit(static_cast<int16_t>(d.width() - 1), static_cast<int16_t>(d.height() - 1)));
+    TEST_ASSERT_EQUAL_UINT32(2, mem.pixelCalls());
+}
+
+static void test_pixel_clipping(void) {
+    forEachPanel(pixelClippingCheck);
+}
+
+static void test_primitives_never_lift_colours(void) {  // 5.10
+    SteamiMemoryBackend mem(128, 128, false);
+    board.setDisplayBackend(mem);
+    SteamiDisplay d(board);
+    d.clear(STEAMI_DARK);
+    d.pixel(1, 1, STEAMI_BLUE);
+    TEST_ASSERT_EQUAL_HEX16(STEAMI_DARK.rgb565(), mem.at(1, 1));
+    TEST_ASSERT_EQUAL_HEX16(STEAMI_DARK.rgb565(), mem.at(2, 2));
+}
+
+static void test_clear_show_and_controls_forward(void) {
+    SteamiMemoryBackend mem(128, 128);
+    board.setDisplayBackend(mem);
+    SteamiDisplay d(board);
+    d.clear(STEAMI_DARK);
+    const std::vector<uint16_t> snap = snapshot(mem);
+    for (uint16_t p : snap) {
+        TEST_ASSERT_EQUAL_HEX16(STEAMI_DARK.rgb565(), p);
+    }
+    TEST_ASSERT_EQUAL_UINT32(1, mem.fillCalls());
+    d.clear();
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    d.show();
+    TEST_ASSERT_EQUAL_UINT32(1, mem.showCalls());
+    d.rotate(true);
+    TEST_ASSERT_TRUE(mem.upsideDown());
+    d.invert(true);
+    TEST_ASSERT_TRUE(mem.inverted());
+    d.powerOff();
+    TEST_ASSERT_FALSE(mem.poweredOn());
+    d.powerOn();
+    TEST_ASSERT_TRUE(mem.poweredOn());
+}
+
+static void test_two_objects_share_one_backend(void) {  // Review Focus 3
+    SteamiMemoryBackend mem(128, 128);
+    board.setDisplayBackend(mem);
+    SteamiDisplay a(board);
+    TestDisplay b(board);
+    a.pixel(1, 1);
+    b.pixel(2, 2);
+    TEST_ASSERT_TRUE(mem.lit(1, 1));
+    TEST_ASSERT_TRUE(mem.lit(2, 2));
+    TEST_ASSERT_EQUAL_UINT32(1, mem.beginCalls());
+}
+
+static void test_drawing_after_board_end_does_nothing(void) {  // Review Focus 3
+    SteamiMemoryBackend a(128, 128);
+    board.setDisplayBackend(a);
+    SteamiDisplay d(board);
+    TEST_ASSERT_TRUE(d.begin());
+    board.end();
+    board.setLogger(&capture);
+    d.pixel(1, 1);
+    d.clear(STEAMI_WHITE);
+    d.show();
+    TEST_ASSERT_EQUAL_INT16(0, d.width());
+    TEST_ASSERT_NULL(d.backend());
+    TEST_ASSERT_EQUAL_UINT32(0, a.fillCalls());
+    TEST_ASSERT_EQUAL_UINT32(0, a.pixelCalls());
+    TEST_ASSERT_EQUAL_UINT32(0, a.fillRectCalls());
+    TEST_ASSERT_EQUAL_UINT32(0, a.showCalls());
+    // Those draws ran beginDisplay() with no backend, which cached UNKNOWN_BOARD and locked
+    // injection: end again, inject a new backend, and the same object draws into it.
+    board.end();
+    board.setLogger(&capture);
+    SteamiMemoryBackend b(128, 128);
+    board.setDisplayBackend(b);
+    d.pixel(1, 1);
+    TEST_ASSERT_EQUAL_UINT32(1, b.beginCalls());
+    TEST_ASSERT_TRUE(b.lit(1, 1));
+}
+
+static void test_protected_name_in_messages(void) {
+    TestDisplay d(board);
+    TEST_ASSERT_FALSE(d.begin());
+    TEST_ASSERT_EQUAL_size_t(1, g_lines.size());
+    TEST_ASSERT_EQUAL_UINT32(0, g_lines[0].rfind("[STeaMi] SteamiTestDisplay: ", 0));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_rgb565_of_every_colour);
@@ -460,5 +705,17 @@ int main(int, char**) {
     RUN_TEST(test_set_backend_after_begin_display_is_ignored);
     RUN_TEST(test_unknown_board_locks_injection_until_end);
     RUN_TEST(test_board_end_forgets_backend_and_status);
+    RUN_TEST(test_geometry_before_begin);
+    RUN_TEST(test_no_backend_reports_e30_once);
+    RUN_TEST(test_failed_begin_reports_e31_and_draws_nothing);
+    RUN_TEST(test_auto_begin_on_first_draw);
+    RUN_TEST(test_backend_accessor);
+    RUN_TEST(test_default_board_is_steami);
+    RUN_TEST(test_pixel_clipping);
+    RUN_TEST(test_primitives_never_lift_colours);
+    RUN_TEST(test_clear_show_and_controls_forward);
+    RUN_TEST(test_two_objects_share_one_backend);
+    RUN_TEST(test_drawing_after_board_end_does_nothing);
+    RUN_TEST(test_protected_name_in_messages);
     return UNITY_END();
 }
