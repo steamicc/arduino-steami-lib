@@ -142,3 +142,17 @@ jobs:
         run: |
           echo "Dry run: no commit, tag or release was written."
           echo "Would publish ${TAG} (version ${VERSION}) to ${DIST_REPO}."
+
+  examples-archive:
+    name: Attach the compiled examples
+    # Not on a dry run: it writes to the distribution release.
+    # Recovery: if it fails after the package was published, re-run it from
+    # main with: gh workflow run examples-archive.yml -f tag=<tag>
+    if: ${{ !inputs.dry_run }}
+    needs: [resolve, publish]
+    uses: ./.github/workflows/examples-archive.yml
+    with:
+      tag: ${{ needs.resolve.outputs.tag }}
+    secrets:
+      RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
+      RELEASE_APP_SECRET: ${{ secrets.RELEASE_APP_SECRET }}
