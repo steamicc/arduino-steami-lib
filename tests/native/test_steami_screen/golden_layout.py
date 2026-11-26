@@ -1497,14 +1497,17 @@ for W in (128, 240):
         for label in gauge_layout(W, lo, hi)["labels"]:
             text, (px, _) = label["text"], label["point"]
             assert label["kept"] == count(text) and label["x"] == px - cell_width(text, count(text), LABEL, P.k) // 2
-# A long label slides inward and stays whole (10 glyphs at most): on 128 the two slid labels of
-# (-1e8, 1e8) overlap (min cell 10..69, max cell 65..118), as the plan accepts
+# A long label slides inward and stays whole (10 glyphs at most): on 128 and 240 the two slid labels
+# of (-1e8, 1e8) overlap (128: min cell 10..69, max cell 65..118; 240: min cell 20..139, max cell
+# 113..220), a known difference of the PR; no example draws such labels
 for W in (128, 240):
     for lo, hi in ((-100000000.0, 100000000.0), (-999999872, 999999872), (1e9, -1e9)):
         for label in gauge_layout(W, lo, hi)["labels"]:
             assert label["kept"] == count(label["text"]), (W, lo, hi, label["text"])
 L128 = gauge_layout(128, -100000000.0, 100000000.0)["labels"]
 assert [(l["x"], l["x"] + cell_width(l["text"], l["kept"], LABEL, 1) - 1) for l in L128] == [(10, 69), (65, 118)]
+L240 = gauge_layout(240, -100000000.0, 100000000.0)["labels"]
+assert [(l["x"], l["x"] + cell_width(l["text"], l["kept"], LABEL, 2) - 1) for l in L240] == [(20, 139), (113, 220)]
 # On 240 a min label of 3 digits such as "100" paints over the ring ends by a few pixels (known difference)
 P = Panel(240)
 touch = sorted(gauge_layout(240, 100, 500)["labels"][0]["lit"] & colour_set(gauge_render(240, 0, 0, 500), "DARK"))

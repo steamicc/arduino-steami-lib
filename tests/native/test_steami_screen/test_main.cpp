@@ -2436,7 +2436,7 @@ static void test_gauge_labels_golden(void) {
 }
 
 // Two "--" labels (|v| >= 1e9), and two long labels slid inward, whole, inside the circle (on 128
-// the two overlap, as the plan accepts).
+// and 240 the two overlap, a known difference of the PR).
 static const GaugeLabelCase kGaugeExtremeLabels[] = {
     {128, 0, 1e9f, -1e9f, 24, 93, 102, 93, 20},
     {128, 0, -100000000.0f, 100000000.0f, 10, 90, 117, 96, 325},
