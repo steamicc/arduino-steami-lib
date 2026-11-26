@@ -621,7 +621,7 @@ static void test_print_info_lists_chips(void) {
     TEST_ASSERT_TRUE(p.text.find("APDS-9960 0x39 ") != std::string::npos);
     TEST_ASSERT_TRUE(p.text.find("MCP23009E 0x20 ") != std::string::npos);
     TEST_ASSERT_TRUE(p.text.find("GC9A01") == std::string::npos);
-    TEST_ASSERT_TRUE(p.text.find("SSD1327") == std::string::npos);
+    TEST_ASSERT_TRUE(p.text.find("SSD1327 screen not started\n") != std::string::npos);
     TEST_ASSERT_TRUE(p.text.find("not responding") != std::string::npos);
 }
 
@@ -642,6 +642,9 @@ static void test_print_info_lists_the_chips_of_the_release(void) {
         TEST_ASSERT_TRUE(at >= previous);  // enum order
         previous = at;
     }
+    TEST_ASSERT_TRUE(p.text.find("GC9A01 screen not started\n") != std::string::npos);
+    TEST_ASSERT_TRUE(p.text.find("SSD1327") == std::string::npos);
+    TEST_ASSERT_FALSE(board.built(SteamiChip::GC9A01));  // printInfo() builds no slot
 
     restart();
     TEST_ASSERT_FALSE(board.begin());  // unknown: all nine I2C chips
@@ -651,6 +654,7 @@ static void test_print_info_lists_the_chips_of_the_release(void) {
         const SteamiChip c = static_cast<SteamiChip>(static_cast<size_t>(SteamiChip::BME280) + i);
         TEST_ASSERT_EQUAL_UINT32(1, countIn(q.text, std::string(steamiChipName(c)) + " 0x"));
     }
+    TEST_ASSERT_TRUE(q.text.find(" screen ") == std::string::npos);
 }
 
 static void test_print_info_replays_last_error(void) {

@@ -69,6 +69,11 @@ def _copy_sources(drivers: list[Path], out_dir: Path) -> list[str]:
     for driver in drivers:
         for source in _sources(driver):
             key = source.name.lower()
+            if key == "steami.h":
+                raise PackageError(
+                    f"{source.name} in {driver.name} collides with the generated"
+                    " umbrella header STeaMi.h (file names are compared ignoring case)"
+                )
             if key in origin:
                 raise PackageError(
                     f"{source.name} exists in both {origin[key].parent.parent.name}"

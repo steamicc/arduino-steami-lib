@@ -19,7 +19,9 @@
 #include <stdint.h>
 
 #include "SteamiDisplayBackend.h"
+#include "SteamiGc9a01Backend.h"
 #include "SteamiLazy.h"
+#include "SteamiSsd1327Backend.h"
 #include "SteamiTypes.h"
 
 #ifdef ARDUINO
@@ -113,7 +115,7 @@ class SteamiBoard {
     /// True when a calibration was applied to the chip.
     bool calibrated(SteamiChip c) const;
 
-    /// True when the slot of the chip is constructed.
+    /// True when the slot of the chip is constructed, the two display panels included.
     bool built(SteamiChip c) const;
 
     /// The shared driver of a chip, nullptr unless claim() gives OK.
@@ -127,8 +129,10 @@ class SteamiBoard {
     SteamiBQ27441* bq27441() { return claimed(SteamiChip::BQ27441, _bq27441); }
     SteamiMCP23009E* mcp23009e() { return claimed(SteamiChip::MCP23009E, _mcp23009e); }
 
-    /// Prints the banner, the I2C chips of the release and the last message to `out`. The banner
-    /// is always printed; the last message only when the logger did not deliver it.
+    /// Prints the banner, the I2C chips of the release, the screen line "<chip> screen <state>"
+    /// and the last message to `out`. The banner is always printed; the screen line unless the
+    /// release is UNKNOWN and no backend was injected; the last message only when the logger did
+    /// not deliver it. The screen line reads the cached display status and builds no slot.
     void printInfo(Print& out);
 
     /// Same list through the logger, without repeating the banner or the last message when the
@@ -153,18 +157,22 @@ class SteamiBoard {
     /// The I2C bus; begins it the first time.
     TwoWire& wire();
 
-    /// The injected display backend, nullptr when none was injected.
+    /// The injected display backend, without detecting the release; otherwise the panel slot of
+    /// the release (GC9A01 on V1c, SSD1327 on V1a/V1b), built but not begun; nullptr on an
+    /// UNKNOWN release. Before beginDisplay(), the slot of the other panel is destroyed first;
+    /// once it ran, the slot it began, even after a release forced since, until end().
     SteamiDisplayBackend* display();
 
-    /// Injects a display backend (tests, an external panel). Ignored once beginDisplay() ran,
-    /// until end().
+    /// Injects a display backend (tests, an external panel) and destroys the panel slots, which
+    /// nobody began yet. Ignored once beginDisplay() ran, until end().
     void setDisplayBackend(SteamiDisplayBackend& b);
 
     /// Begins display() once and caches the result: OK, NO_MEMORY (the backend did not begin) or
     /// UNKNOWN_BOARD (no backend). Reports nothing: the caller does, under its own name.
     SteamiStatus beginDisplay();
 
-    /// Destroys the slots and forgets reported pairs and delivered lines, the injected
+    /// Destroys the slots, the panel slots included (their drivers free the frame buffer, the
+    /// panel is not powered off), and forgets reported pairs and delivered lines, the injected
     /// display backend and the cached display status. The logger is kept.
     void end();
 
@@ -233,6 +241,8 @@ class SteamiBoard {
     SteamiLazy<SteamiBQ27441> _bq27441;
     SteamiLazy<SteamiMCP23009E> _mcp23009e;
     SteamiDisplayBackend* _displayInjected = nullptr;
+    SteamiLazy<SteamiSsd1327Backend> _ssd1327;
+    SteamiLazy<SteamiGc9a01Backend> _gc9a01;
     SteamiStatus _displayStatus = SteamiStatus::NOT_STARTED;
 };
 

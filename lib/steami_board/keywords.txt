@@ -33,6 +33,10 @@ SteamiGesture	KEYWORD1
 SteamiButtons	KEYWORD1
 SteamiVector	KEYWORD1
 SteamiButton	KEYWORD1
+SteamiDisplay	KEYWORD1
+SteamiDisplayBackend	KEYWORD1
+SteamiSsd1327Backend	KEYWORD1
+SteamiGc9a01Backend	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
@@ -71,6 +75,7 @@ steamiDecodeRevision	KEYWORD2
 steamiRoute	KEYWORD2
 steamiChipName	KEYWORD2
 steamiChipAddress	KEYWORD2
+steamiDisplayStateText	KEYWORD2
 read	KEYWORD2
 setOffset	KEYWORD2
 altitude	KEYWORD2
@@ -106,6 +111,32 @@ gray	KEYWORD2
 fromRgb565	KEYWORD2
 rgb565	KEYWORD2
 gray4	KEYWORD2
+display	KEYWORD2
+setDisplayBackend	KEYWORD2
+beginDisplay	KEYWORD2
+backend	KEYWORD2
+isColor	KEYWORD2
+width	KEYWORD2
+height	KEYWORD2
+centerX	KEYWORD2
+centerY	KEYWORD2
+radius	KEYWORD2
+clear	KEYWORD2
+pixel	KEYWORD2
+line	KEYWORD2
+hline	KEYWORD2
+vline	KEYWORD2
+rect	KEYWORD2
+circle	KEYWORD2
+triangle	KEYWORD2
+arc	KEYWORD2
+text	KEYWORD2
+textWidth	KEYWORD2
+show	KEYWORD2
+rotate	KEYWORD2
+invert	KEYWORD2
+powerOn	KEYWORD2
+powerOff	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)
@@ -121,3 +152,5 @@ STEAMI_RED	LITERAL1
 STEAMI_BLUE	LITERAL1
 STEAMI_YELLOW	LITERAL1
 STEAMI_GRID_DARK	LITERAL1
+CHAR_W	LITERAL1
+CHAR_H	LITERAL1

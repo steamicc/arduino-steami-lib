@@ -17,6 +17,8 @@
 // this sketch first claims every candidate chip of every function (the screen
 // aside): each line then shows whether the chip really answers, even when the
 // release stays unknown.
+// It also lists the screen of the release with "not started" (this sketch
+// does not use it).
 //
 // To force a V1c, uncomment the next line (it must come before the include):
 // #define STEAMI_BOARD_V1C

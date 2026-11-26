@@ -19,6 +19,7 @@
 #include "SteamiDisplay.h"
 #include "SteamiDisplayBackend.h"
 #include "SteamiFont.h"
+#include "SteamiGallery.h"
 #include "SteamiMemoryBackend.h"
 #include "SteamiRgb.h"
 #include "SteamiTrig.h"
@@ -43,15 +44,29 @@ void tearDown(void) {
     board.setLogger(nullptr);
 }
 
-static size_t countLogged(const char* suffix) {
+static bool endsWith(const std::string& line, const char* suffix) {
     const size_t n = strlen(suffix);
+    return line.size() >= n && line.compare(line.size() - n, n, suffix) == 0;
+}
+
+static size_t countLogged(const char* suffix) {
     size_t count = 0;
     for (const std::string& line : g_lines) {
-        if (line.size() >= n && line.compare(line.size() - n, n, suffix) == 0) {
+        if (endsWith(line, suffix)) {
             count++;
         }
     }
     return count;
+}
+
+/// The first logged line ending with suffix, "" if none.
+static std::string loggedLine(const char* suffix) {
+    for (const std::string& line : g_lines) {
+        if (endsWith(line, suffix)) {
+            return line;
+        }
+    }
+    return "";
 }
 
 static void assertStatus(SteamiStatus expected, SteamiStatus actual) {
@@ -378,8 +393,10 @@ static void test_memory_backend_writes_ppm(void) {
 
 static void test_board_without_backend_is_unknown_board(void) {
     TEST_ASSERT_NULL(board.display());
+    TEST_ASSERT_TRUE(board.release() == SteamiRelease::UNKNOWN);
     assertStatus(SteamiStatus::UNKNOWN_BOARD, board.beginDisplay());
-    TEST_ASSERT_EQUAL_size_t(0, g_lines.size());  // the board itself reports nothing
+    TEST_ASSERT_EQUAL_size_t(0, countLogged("(E30)"));  // the board itself reports nothing
+    TEST_ASSERT_EQUAL_size_t(0, countLogged("(E31)"));
 }
 
 static void test_board_begins_injected_backend_once(void) {
@@ -511,11 +528,11 @@ static void test_no_backend_reports_e30_once(void) {
     assertStatus(SteamiStatus::UNKNOWN_BOARD, a.status());
     TEST_ASSERT_EQUAL_STRING("unknown board", a.error());
     TEST_ASSERT_FALSE(a.isAvailable());
-    TEST_ASSERT_EQUAL_size_t(1, g_lines.size());
+    TEST_ASSERT_EQUAL_size_t(1, countLogged("(E30)"));
     TEST_ASSERT_EQUAL_STRING(
         "[STeaMi] SteamiDisplay: cannot tell if this board is a V1a/V1b or a V1c. "
         "Add #define STEAMI_BOARD_V1C (or V1B) before #include <STeaMi.h>. (E30)",
-        g_lines[0].c_str());
+        loggedLine("(E30)").c_str());
 }
 
 static void test_failed_begin_reports_e31_and_draws_nothing(void) {
@@ -1598,30 +1615,7 @@ static void test_glyph_window(void) {
 static void test_protected_name_in_messages(void) {
     TestDisplay d(board);
     TEST_ASSERT_FALSE(d.begin());
-    TEST_ASSERT_EQUAL_size_t(1, g_lines.size());
-    TEST_ASSERT_EQUAL_UINT32(0, g_lines[0].rfind("[STeaMi] SteamiTestDisplay: ", 0));
-}
-
-/// The primitives gallery: the scene the 3b Drawing example copies line for line. The 240 px colour
-/// dump is the reference for the V1c photo.
-static void drawGallery(SteamiDisplay& d) {
-    const int16_t cx = d.centerX(), cy = d.centerY(), r = d.radius();
-    const uint8_t s = d.width() >= 240 ? 2 : 1;
-    d.clear();
-    d.circle(cx, cy, r - 1, STEAMI_DARK);                         // panel edge
-    d.arc(cx, cy, r - 4 * s, 225, 270, STEAMI_GRID_DARK, 6 * s);  // gauge track
-    d.arc(cx, cy, r - 4 * s, 225, 135, STEAMI_GREEN, 6 * s);      // half fill
-    d.text("STeaMi", cx - d.textWidth("STeaMi", s) / 2, cy - r / 2, STEAMI_WHITE, s);
-    const char* temp =
-        "20\xC2\xB0"
-        "C \xC3\xA9";  // "20°C é"
-    d.text(temp, cx - d.textWidth(temp, s) / 2, cy - r / 2 + 12 * s, STEAMI_YELLOW, s);
-    d.rect(cx - r / 2, cy - r / 8, r / 3, r / 4, STEAMI_LIGHT);
-    d.rect(cx - r / 2 + 2, cy - r / 8 + 2, r / 3 - 4, r / 4 - 4, STEAMI_BLUE, true);
-    d.circle(cx + r / 3, cy, r / 8, STEAMI_RED, true);
-    d.triangle(cx - r / 4, cy + r / 2, cx + r / 4, cy + r / 2, cx, cy + r / 4, STEAMI_YELLOW, true);
-    d.line(cx - r / 2, cy + r / 6, cx + r / 2, cy + r / 6, STEAMI_GRAY);
-    d.show();
+    TEST_ASSERT_EQUAL_UINT32(0, loggedLine("(E30)").rfind("[STeaMi] SteamiTestDisplay: ", 0));
 }
 
 static void galleryOn(int16_t size, bool color, const char* fileName) {

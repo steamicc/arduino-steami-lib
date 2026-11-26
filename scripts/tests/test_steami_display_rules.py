@@ -56,6 +56,51 @@ class SteamiDisplayRulesTest(unittest.TestCase):
             with self.subTest(body=body):
                 self.assertFalse(self._compiles(body, "SteamiDisplay.h"))
 
+    def test_backends_never_call_driver_drawing(self) -> None:
+        # The layer draws; a backend only forwards pixels, rectangles and controls. Inline
+        # forwarding overrides live in the headers, so both files of each backend are checked.
+        src = ROOT / "lib" / "steami_board" / "src"
+        files = [
+            src / f"Steami{chip}Backend.{ext}"
+            for chip in ("Ssd1327", "Gc9a01")
+            for ext in ("h", "cpp")
+        ]
+        pattern = r"\.(line|text|scroll)\s*\("
+        # Positive controls: the pattern catches the calls it forbids, and no file is missing.
+        for call in ("_oled.line(", "_oled.text(", "_oled.scroll("):
+            with self.subTest(control=call):
+                self.assertRegex(call, pattern)
+        for path in files:
+            with self.subTest(path=path.name):
+                self.assertTrue(path.is_file() and path.stat().st_size > 0)
+                self.assertNotRegex(path.read_text(encoding="utf-8"), pattern)
+
+    def test_drawing_example_draws_the_gallery(self) -> None:
+        # The example copies the native gallery body line for line (comments and blanks aside).
+        def body(path: Path) -> list[str]:
+            lines = path.read_text(encoding="utf-8").splitlines()
+            marker = "drawGallery(SteamiDisplay& d) {"
+            start = next((i for i, line in enumerate(lines) if marker in line), None)
+            if start is None:
+                self.fail(f"{path.name} has no '{marker}': was drawGallery renamed?")
+            out: list[str] = []
+            for line in lines[start + 1 :]:
+                if line == "}":
+                    break
+                code = line.split("//")[0].strip()  # no string of the gallery holds "//"
+                if code:
+                    out.append(code)
+            return out
+
+        sketch = ROOT / "lib" / "steami_board" / "examples" / "Drawing" / "Drawing.ino"
+        gallery = ROOT / "tests" / "native" / "helpers" / "SteamiGallery.h"
+        self.assertTrue(sketch.is_file(), "Drawing.ino is missing")
+        sketch_body, gallery_body = body(sketch), body(gallery)
+        self.assertTrue(sketch_body)
+        self.assertTrue(gallery_body)
+        self.assertEqual(sketch_body, gallery_body)
+        self.assertIn("drawGallery(screen);", sketch.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

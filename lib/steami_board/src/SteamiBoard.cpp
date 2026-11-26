@@ -161,6 +161,21 @@ uint8_t steamiChipAddress(SteamiChip c) {
     }
 }
 
+const char* steamiDisplayStateText(SteamiStatus s) {
+    switch (s) {
+        case SteamiStatus::OK:
+            return "OK";
+        case SteamiStatus::NOT_STARTED:
+            return "not started";
+        case SteamiStatus::UNKNOWN_BOARD:
+            return "unknown board";
+        case SteamiStatus::NO_MEMORY:
+            return "no memory";
+        default:
+            return "not available";
+    }
+}
+
 SteamiBoardPins SteamiBoardPins::steami() {
     return {static_cast<uint32_t>(I2C_INT_SDA),  static_cast<uint32_t>(I2C_INT_SCL),
             static_cast<uint32_t>(RST_EXPANDER), static_cast<uint32_t>(INT_EXPANDER),
@@ -442,6 +457,10 @@ bool SteamiBoard::built(SteamiChip c) const {
             return _bq27441.built();
         case SteamiChip::MCP23009E:
             return _mcp23009e.built();
+        case SteamiChip::SSD1327:
+            return _ssd1327.built();
+        case SteamiChip::GC9A01:
+            return _gc9a01.built();
         default:
             return false;
     }
@@ -573,6 +592,16 @@ void SteamiBoard::printInfoTo(bool (*emit)(void* ctx, const char* line), void* c
                  calibrated(c) ? ", calibrated" : "");
         emit(ctx, line);
     }
+    const char* screen = steamiChipName(steamiRoute(_release, SteamiFunction::SCREEN, 0));
+    if (_displayInjected != nullptr || _displayStatus != SteamiStatus::NOT_STARTED) {
+        SteamiDisplayBackend* b = display();  // builds nothing: the injected or the begun backend
+        screen = b != nullptr ? b->chip() : "";
+    }
+    if (screen[0] != '\0') {
+        snprintf(line, sizeof(line), "%s screen %s", screen,
+                 steamiDisplayStateText(_displayStatus));
+        emit(ctx, line);
+    }
     if (_lastError[0] != '\0' && !_errorDelivered) {
         const bool sent = emit(ctx, _lastError);
         if (toLogger) {
@@ -597,12 +626,35 @@ void SteamiBoard::printInfo() {
 }
 
 SteamiDisplayBackend* SteamiBoard::display() {
-    return _displayInjected;
+    if (_displayInjected != nullptr) {
+        return _displayInjected;  // no release detection
+    }
+    if (_displayStatus != SteamiStatus::NOT_STARTED) {
+        // Once beginDisplay() ran, the slot it began, whatever release was forced since: routing
+        // again would build the other panel's slot next to it. nullptr if none was built.
+        if (_gc9a01.built()) {
+            return _gc9a01.get();
+        }
+        return _ssd1327.get();
+    }
+    // Before the panel is begun, a release forced since the last call never leaves both slots.
+    switch (steamiRoute(release(), SteamiFunction::SCREEN, 0)) {
+        case SteamiChip::GC9A01:
+            _ssd1327.reset();
+            return &_gc9a01.emplace();
+        case SteamiChip::SSD1327:
+            _gc9a01.reset();
+            return &_ssd1327.emplace();
+        default:
+            return nullptr;
+    }
 }
 
 void SteamiBoard::setDisplayBackend(SteamiDisplayBackend& b) {
     if (_displayStatus == SteamiStatus::NOT_STARTED) {
         _displayInjected = &b;
+        _ssd1327.reset();  // built by display() for its geometry, never begun
+        _gc9a01.reset();
     }
 }
 
@@ -621,6 +673,8 @@ SteamiStatus SteamiBoard::beginDisplay() {
 void SteamiBoard::end() {
     _displayInjected = nullptr;
     _displayStatus = SteamiStatus::NOT_STARTED;
+    _gc9a01.reset();  // the drivers free their frame buffers
+    _ssd1327.reset();
     if (_mcp23009e.built()) {
         // The driver attaches a handler that captures its address and never detaches it.
         detachInterrupt(digitalPinToInterrupt(static_cast<int>(pins().expanderIrq)));

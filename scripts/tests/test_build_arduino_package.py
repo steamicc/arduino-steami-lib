@@ -136,6 +136,29 @@ class BuildPackageTest(unittest.TestCase):
         ):
             self.assertIn(f'#include "{header}"', umbrella)
 
+    def test_umbrella_name_is_reserved(self) -> None:
+        write(self.lib / "aaa" / "src" / "Steami.h")
+        with self.assertRaises(self.mod.PackageError) as ctx:
+            self.build()
+        self.assertIn("STeaMi.h", str(ctx.exception))
+
+    def test_umbrella_includes_display_headers(self) -> None:
+        real_root = Path(__file__).resolve().parent.parent.parent
+        self.mod.build_package(real_root, self.out, "1.2.3")
+        umbrella = (self.out / "src" / "STeaMi.h").read_text()
+        for header in (
+            "SteamiDisplay.h",
+            "SteamiDisplayBackend.h",
+            "SteamiRgb.h",
+            "SteamiFont.h",
+            "SteamiTrig.h",
+            "SteamiSsd1327Backend.h",
+            "SteamiGc9a01Backend.h",
+            "SteamiSSD1327.h",
+            "SteamiGC9A01.h",
+        ):
+            self.assertIn(f'#include "{header}"', umbrella)
+
     def test_keywords_concatenated(self) -> None:
         write(self.lib / "aaa" / "keywords.txt", "AAA\tKEYWORD1\n")
         write(self.lib / "bbb" / "keywords.txt", "BBB\tKEYWORD1\n")
