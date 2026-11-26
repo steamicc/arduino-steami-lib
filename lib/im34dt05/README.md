@@ -225,9 +225,11 @@ window sizes and the datasheet sensitivity.
   that `tone()`, timers, `Serial` and `Wire` interrupts preempt it. Its
   share of the CPU at the STeaMi's 32 MHz clock: measured on a V1c,
   61.5 % before optimisation; with the optimised filter (block processing,
-  `SMLALD`, lookup tables in RAM, compiled with `-O2`):
-  (to be measured on a V1c; say whether the figure is the DWT count or the
-  busy loop). `conversionStats()` measures it in a sketch (handler only) and
+  `SMLALD`, lookup tables in RAM, compiled with `-O2`), measured on a V1c:
+  16.8 % (5393 cycles per 1 ms block, longest block 17.2 %) with the DWT
+  cycle counter around the handler, and 18.6 % with the busy loop, which
+  also counts the interrupt entry and the HAL DMA handler.
+  `conversionStats()` measures it in a sketch (handler only) and
   the hardware test `test_im34dt05_cpu_load` prints both figures. Heavy work such as
   drawing on the GC9A01 display runs slower while the microphone is on. A
   sketch that masks interrupts for more than about 1 ms loses audio.
