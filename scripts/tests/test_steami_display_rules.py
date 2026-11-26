@@ -56,6 +56,25 @@ class SteamiDisplayRulesTest(unittest.TestCase):
             with self.subTest(body=body):
                 self.assertFalse(self._compiles(body, "SteamiDisplay.h"))
 
+    def test_backends_never_call_driver_drawing(self) -> None:
+        # The layer draws; a backend only forwards pixels, rectangles and controls. Inline
+        # forwarding overrides live in the headers, so both files of each backend are checked.
+        src = ROOT / "lib" / "steami_board" / "src"
+        files = [
+            src / f"Steami{chip}Backend.{ext}"
+            for chip in ("Ssd1327", "Gc9a01")
+            for ext in ("h", "cpp")
+        ]
+        pattern = r"\.(line|text|scroll)\s*\("
+        # Positive controls: the pattern catches the calls it forbids, and no file is missing.
+        for call in ("_oled.line(", "_oled.text(", "_oled.scroll("):
+            with self.subTest(control=call):
+                self.assertRegex(call, pattern)
+        for path in files:
+            with self.subTest(path=path.name):
+                self.assertTrue(path.is_file() and path.stat().st_size > 0)
+                self.assertNotRegex(path.read_text(encoding="utf-8"), pattern)
+
 
 if __name__ == "__main__":
     unittest.main()

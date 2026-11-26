@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <SteamiGC9A01.h>
+#include <SteamiSSD1327.h>
 #include <Wire.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -18,6 +19,7 @@
 #include "SteamiGallery.h"
 #include "SteamiGc9a01Backend.h"
 #include "SteamiMemoryBackend.h"
+#include "SteamiSsd1327Backend.h"
 
 static std::vector<std::string> g_lines;
 static void capture(const char* line) {
@@ -228,6 +230,172 @@ static void test_gc9a01_frame_matches_the_memory_gallery(void) {
     }
 }
 
+static constexpr size_t kOledFrame = 128 * 128 / 2;
+
+/// The command byte that follows the first occurrence of cmd in the commands sent, -1 if none.
+static int commandAfter(uint8_t cmd) {
+    const std::vector<uint8_t> sent = commandsSent();
+    for (size_t i = 0; i + 1 < sent.size(); i++) {
+        if (sent[i] == cmd) {
+            return sent[i + 1];
+        }
+    }
+    return -1;
+}
+
+/// Every nibble of the OLED frame is the grey level of the memory backend's colour at that pixel.
+static void assertOledFrameEquals(const SteamiMemoryBackend& grey128,
+                                  const std::vector<uint8_t>& frame) {
+    TEST_ASSERT_EQUAL_size_t(kOledFrame, frame.size());
+    for (int16_t y = 0; y < 128; y++) {
+        for (int16_t x = 0; x < 128; x++) {
+            const uint8_t byte = frame[static_cast<size_t>(y) * 64 + static_cast<size_t>(x) / 2];
+            const uint8_t nibble =
+                (x % 2 == 0) ? static_cast<uint8_t>(byte >> 4) : static_cast<uint8_t>(byte & 0x0F);
+            TEST_ASSERT_EQUAL_UINT8(SteamiRgb::fromRgb565(grey128.at(x, y)).gray4(), nibble);
+        }
+    }
+}
+
+/// Primitives that start or end outside the panel; nothing may reach the buffer out of range.
+static void drawClippingCases(SteamiDisplay& d) {
+    d.pixel(-1, 0);
+    d.pixel(200, 5);
+    d.text("Clip", 10, 125);
+    d.text("Clip", -20, 10);
+    d.line(-50, -50, 300, 300);
+    d.rect(-10, -10, 300, 300);
+    d.circle(0, 0, 20);
+    d.circle(127, 127, 20, STEAMI_WHITE, true);
+    d.circle(64, -5, 30);
+    d.circle(-5, 64, 30, STEAMI_GRAY, true);
+    d.triangle(-50, -50, 300, 60, 60, 300, STEAMI_LIGHT, true);
+    d.arc(0, 0, 40, 0, 360, STEAMI_WHITE, 3);
+    d.arc(127, 0, 40, 90, 270, STEAMI_GREEN, 5);
+    d.arc(64, 127, 70, 180, 180, STEAMI_RED, 2);
+    d.arc(127, 127, 200, 0, 360, STEAMI_BLUE, 8);
+    d.show();
+}
+
+static void test_ssd1327_backend_identity(void) {
+    SteamiSsd1327Backend oled;
+    TEST_ASSERT_EQUAL_STRING("SSD1327", oled.chip());
+    TEST_ASSERT_EQUAL_INT16(128, oled.width());
+    TEST_ASSERT_EQUAL_INT16(128, oled.height());
+    TEST_ASSERT_FALSE(oled.isColor());
+}
+
+static void test_ssd1327_constructor_resets_without_spi(void) {
+    SteamiSsd1327Backend oled;
+    TEST_ASSERT_EQUAL_INT(OUTPUT, gpioPinMode()[RST_DISPLAY]);
+    TEST_ASSERT_EQUAL_INT(HIGH, gpioPinState()[RST_DISPLAY]);  // the pulse ended high
+    TEST_ASSERT_EQUAL_INT(HIGH, gpioPinState()[CS_DISPLAY]);
+    TEST_ASSERT_EQUAL_size_t(0, g_spi.size());
+}
+
+static void test_ssd1327_backend_begin(void) {
+    SteamiSsd1327Backend oled;
+    TEST_ASSERT_TRUE(oled.begin());
+    assertPanelBus(10000000);
+    for (uint8_t v : lastData(kOledFrame)) {
+        TEST_ASSERT_EQUAL_HEX8(0x00, v);  // initDisplay clears the panel
+    }
+}
+
+static void test_ssd1327_converts_colours_to_grey(void) {
+    SteamiSsd1327Backend oled;
+    TEST_ASSERT_TRUE(oled.begin());
+
+    g_spi.clear();
+    oled.fill(STEAMI_GRAY.rgb565());
+    oled.show();
+    for (uint8_t v : lastData(kOledFrame)) {
+        TEST_ASSERT_EQUAL_HEX8(0x99, v);
+    }
+
+    g_spi.clear();
+    oled.fill(0);
+    oled.pixel(0, 0, STEAMI_WHITE.rgb565());
+    oled.pixel(127, 127, STEAMI_BLUE.rgb565());
+    oled.fillRect(126, 0, 2, 1, STEAMI_RED.rgb565());
+    oled.show();
+    const std::vector<uint8_t> frame = lastData(kOledFrame);
+    TEST_ASSERT_EQUAL_HEX8(0xF0, frame[0]);
+    TEST_ASSERT_EQUAL_HEX8(0x88, frame[63]);
+    TEST_ASSERT_EQUAL_HEX8(0x06, frame[kOledFrame - 1]);
+}
+
+static void test_ssd1327_colour_cache_follows_every_colour(void) {
+    SteamiSsd1327Backend oled;
+    TEST_ASSERT_TRUE(oled.begin());
+    g_spi.clear();
+    oled.fill(0);
+    const uint16_t colours[] = {STEAMI_BLUE.rgb565(), STEAMI_WHITE.rgb565(),
+                                STEAMI_BLUE.rgb565(), STEAMI_DARK.rgb565(),
+                                STEAMI_DARK.rgb565(), SteamiRgb::gray(1).rgb565()};
+    for (int16_t x = 0; x < 6; x++) {
+        oled.pixel(x, 0, colours[x]);
+    }
+    oled.show();
+    const std::vector<uint8_t> frame = lastData(kOledFrame);
+    TEST_ASSERT_EQUAL_HEX8(0x6F, frame[0]);
+    TEST_ASSERT_EQUAL_HEX8(0x66, frame[1]);
+    TEST_ASSERT_EQUAL_HEX8(0x61, frame[2]);
+}
+
+static void test_ssd1327_controls_forward(void) {
+    SteamiSsd1327Backend oled;
+    TEST_ASSERT_TRUE(oled.begin());
+
+    g_spi.clear();
+    oled.invert(true);
+    assertCommands({SET_DISP_MODE_INVERSE});
+    g_spi.clear();
+    oled.invert(false);
+    assertCommands({SET_DISP_MODE_NORMAL});
+
+    g_spi.clear();
+    oled.rotate(true);
+    TEST_ASSERT_EQUAL_INT(128, commandAfter(SET_DISP_OFFSET));
+    TEST_ASSERT_EQUAL_INT(0x42, commandAfter(SET_SEG_REMAP));
+    g_spi.clear();
+    oled.rotate(false);
+    TEST_ASSERT_EQUAL_INT(0, commandAfter(SET_DISP_OFFSET));
+    TEST_ASSERT_EQUAL_INT(0x51, commandAfter(SET_SEG_REMAP));
+
+    g_spi.clear();
+    oled.powerOff();
+    assertCommands({SET_FN_SELECT_A, 0x00, SET_DISP});
+    g_spi.clear();
+    oled.powerOn();
+    assertCommands({SET_FN_SELECT_A, 0x01, SET_DISP | 1});
+}
+
+/// Draws on the OLED backend and on a grey memory backend, and compares the two frames.
+static void assertOledMatchesMemory(void (*draw)(SteamiDisplay&)) {
+    SteamiSsd1327Backend oled;
+    board.setDisplayBackend(oled);
+    SteamiDisplay d(board);
+    draw(d);
+    const std::vector<uint8_t> frame = lastData(kOledFrame);
+
+    SteamiMemoryBackend mem(128, 128, false);
+    drawOnMemory(mem, draw);
+    TEST_ASSERT_TRUE(mem.litCount() > 0);
+    assertOledFrameEquals(mem, frame);
+}
+
+static void test_ssd1327_frame_matches_the_grey_gallery(void) {
+    assertOledMatchesMemory(drawGallery);
+}
+
+static void test_ssd1327_clipping_cases_stay_in_the_buffer(void) {
+    assertOledMatchesMemory(drawClippingCases);
+}
+
+static_assert(sizeof(SteamiSsd1327Backend) < 128 && sizeof(SteamiGc9a01Backend) < 128,
+              "the slots hold drivers, not frame buffers");
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_gc9a01_backend_identity_and_quiet_constructor);
@@ -235,5 +403,13 @@ int main(int, char**) {
     RUN_TEST(test_gc9a01_backend_passes_rgb565_through);
     RUN_TEST(test_gc9a01_backend_controls_forward);
     RUN_TEST(test_gc9a01_frame_matches_the_memory_gallery);
+    RUN_TEST(test_ssd1327_backend_identity);
+    RUN_TEST(test_ssd1327_constructor_resets_without_spi);
+    RUN_TEST(test_ssd1327_backend_begin);
+    RUN_TEST(test_ssd1327_converts_colours_to_grey);
+    RUN_TEST(test_ssd1327_colour_cache_follows_every_colour);
+    RUN_TEST(test_ssd1327_controls_forward);
+    RUN_TEST(test_ssd1327_frame_matches_the_grey_gallery);
+    RUN_TEST(test_ssd1327_clipping_cases_stay_in_the_buffer);
     return UNITY_END();
 }
