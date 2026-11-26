@@ -129,7 +129,7 @@ class MockupReviewTest(unittest.TestCase):
             self.assertEqual(len(rows), 7)
             self.assertEqual(rows[0], "name,size,ssim")
             self.assertEqual(len(list(out.glob("*.png"))), 6)
-            self.assertIn("look", (out / "index.html").read_text())
+            self.assertIn("<strong>look</strong>", (out / "index.html").read_text())
 
     @skipUnless(HAVE_NUMPY_PIL, "Pillow and NumPy")
     def test_missing_ppm_fails(self) -> None:
