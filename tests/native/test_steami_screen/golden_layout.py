@@ -1327,3 +1327,205 @@ for W in (128, 240):
             W, heading, layout["tip"], layout["centres"]["N"], layout["cells"]["N"], layout["white"],
             colour_box(compass_render(W, heading, "RED"), "RED")))
     print("  %d compass(45): N tick start %s, NE tick start %s" % (W, P.polar(tick, 315), P.polar(tick, 0)))
+
+# ---- Widget of 4b Task 4: gauge() (spec 5.8 table, 5.9 "gauge", the decisions "gauge" and "gaugeLabel") ----
+# Track and fill are arc()s of the same outer radius and width from 225 degrees (noon, clockwise; device.py's
+# 135 in screen-math angles), drawn in device.py's order: track, fill, min label, max label. A label is the
+# integer part of minV or maxV ("--" past 1e9) in 5x7 x k GRAY, its top row on the point at 233 / 127
+# degrees, centred on it by its cell width, then slid into the chord at its inked rows shrunk by k (the 4a
+# corner rule B10, ruling 3). device.py truncates its label points with int(): its min point on 128 is
+# (29, 89) where Q14 rounding gives (30, 90). The cut in drawGaugeLabel (fitGlyphs) is a guard that no label
+# of at most 10 glyphs reaches: the chord at the label rows leaves about 109 / 201 px.
+GAUGE_START, GAUGE_SWEEP, GAUGE_MIN_ANGLE, GAUGE_MAX_ANGLE = 225, 270, 233, 127
+FLT_MAX = struct.unpack("<f", b"\xff\xff\x7f\x7f")[0]
+
+
+def f32(x):
+    """x rounded to a float32, as the C++ holds it (+-INF past FLT_MAX)."""
+    try:
+        return struct.unpack("<f", struct.pack("<f", x))[0]
+    except OverflowError:
+        return math.copysign(math.inf, x)
+
+
+def gauge_sweep(v, min_v, max_v):
+    """gaugeSweep(): lroundf(270.0f * ratio), ratio = (v - minV) / (maxV - minV) in float32, clamped to
+    [0, 1]; 0 when maxV == minV or the ratio is NAN (NAN in any argument, INF - INF). Halves away from zero,
+    never Python's round() (ruling 5: 270 * 0.75 = 202.5 gives 203)."""
+    v, min_v, max_v = f32(v), f32(min_v), f32(max_v)
+    if max_v == min_v:
+        return 0
+    ratio = f32(f32(v - min_v) / f32(max_v - min_v))
+    if math.isnan(ratio) or ratio <= 0:
+        return 0
+    if ratio >= 1:
+        return GAUGE_SWEEP
+    return math.floor(f32(GAUGE_SWEEP * ratio) + 0.5)
+
+
+def gauge_label_text(v):
+    """gaugeLabel()'s text: the integer part of the float32 v, truncated toward zero as device.py's int(),
+    when |v| < 1e9; otherwise "--" (NAN, +-INF, huge)."""
+    v = f32(v)
+    return str(int(v)) if abs(v) < 1e9 else "--"
+
+
+def gauge_layout(W, min_v, max_v, arc_width=0):
+    """The outer radius, the ring width, the label distance and, per label (min then max), its text, its
+    point, the glyphs kept, its left column, its lit pixels and their box."""
+    P = Panel(W)
+    outer = P.r - P.u(4)
+    w = arc_width if arc_width else min(max(5, P.r // 9), 255)
+    d = max(0, outer - w - P.u(10))
+    panel = (0, P.W - 1)
+    labels = []
+    for v, deg in ((min_v, GAUGE_MIN_ANGLE), (max_v, GAUGE_MAX_ANGLE)):
+        text = gauge_label_text(v)
+        px, py = P.polar(d, deg)
+        n = P.fit_glyphs(text, LABEL, P.k, py, panel, P.k, 0)
+        x = clamp_into(P, text, n, LABEL, py, P.k, panel, px - cell_width(text, n, LABEL, P.k) // 2)
+        lit = draw_glyphs(text, n, LABEL, x, py, P.k)
+        labels.append({"text": text, "point": (px, py), "kept": n, "x": x, "lit": lit,
+                       "box": box(lit) if lit else None})
+    return {"outer": outer, "width": w, "d": d, "labels": labels}
+
+
+def r_arc(cv, W, cx, cy, r, start, sweep, w, c):
+    """arc(cx, cy, r, start, sweep, c, w): the ring [ri - 1/2, r + 1/2] of r_ring, under a full turn cut to
+    the wedges [s, s + 180] and [s + 180, s + sweep] of SteamiDisplay.cpp's Sector (Q14 directions)."""
+    if sweep <= 0 or w == 0 or r < 0:
+        return
+    if sweep >= 360:
+        r_ring(cv, W, cx, cy, r, w, c)
+        return
+    end = start + sweep
+    mid = start + 180 if sweep > 180 else end
+    wedges = [(start, mid)] + ([(mid, end)] if mid != end else [])
+
+    def holds(dx, dy):
+        for s, e in wedges:
+            sx, sy, ex, ey = sin_q14(s), -cos_q14(s), sin_q14(e), -cos_q14(e)
+            if sx * dy - sy * dx >= 0 and dx * ey - dy * ex >= 0:
+                return True
+        return False
+
+    ring = {}
+    r_ring(ring, W, cx, cy, r, w, c)
+    for (x, y) in ring:
+        if holds(x - cx, y - cy):
+            cv[(x, y)] = c
+
+
+def gauge_render(W, v, min_v=0, max_v=100, fill="LIGHT", arc_width=0):
+    """The canvas of gauge(v, minV, maxV, c, arcWidth) on a cleared W panel; fill names the colour the
+    panel shows for c (lifted on the grey panel)."""
+    P = Panel(W)
+    layout = gauge_layout(W, min_v, max_v, arc_width)
+    cv = {}
+    r_arc(cv, W, P.cx, P.cy, layout["outer"], GAUGE_START, GAUGE_SWEEP, layout["width"], "DARK")
+    r_arc(cv, W, P.cx, P.cy, layout["outer"], GAUGE_START, gauge_sweep(v, min_v, max_v), layout["width"], fill)
+    for label in layout["labels"]:
+        for p in label["lit"]:
+            cv[p] = "GRAY"
+    return cv
+
+
+def colour_set(cv, c):
+    return {p for p, v in cv.items() if v == c}
+
+
+def gauge_gray(W, min_v, max_v):
+    """(GRAY box, GRAY count) of a gauge with these labels: the union of the two labels' ink."""
+    lit = set()
+    for label in gauge_layout(W, min_v, max_v)["labels"]:
+        lit |= label["lit"]
+    return box(lit), len(lit)
+
+
+def device_gauge_points(W):
+    """device.py's label points (927e96b l.200-223): int() of float trigonometry on r_label =
+    radius - arc_w // 2 - 1 - arc_w - 10, at 143 and 37 degrees in screen-math angles."""
+    cx = cy = W // 2
+    arc_w = max(5, (W // 2) // 9)
+    r_label = (W // 2 - arc_w // 2 - 1) - arc_w - 10
+    return tuple((int(cx + r_label * math.cos(math.radians(a))), int(cy + r_label * math.sin(math.radians(a))))
+                 for a in (143, 37))
+
+
+# ---- Self-check of 4b Task 4 ----
+G128, G240 = gauge_layout(128, 0, 100), gauge_layout(240, 0, 100)
+assert (G128["outer"], G128["width"], G128["d"]) == (60, 7, 43)  # ring 54..60, spec 5.8 table
+assert (G240["outer"], G240["width"], G240["d"]) == (113, 13, 82)  # ring 101..113
+assert [G128["outer"] - G128["width"] + 1, G240["outer"] - G240["width"] + 1] == [54, 101]
+assert [l["point"] for l in G128["labels"]] == [(30, 90), (98, 90)]
+assert [l["point"] for l in G240["labels"]] == [(55, 169), (185, 169)]
+assert device_gauge_points(128) == ((29, 89), (98, 89))  # int() against Q14's (30, 90) and (98, 90)
+assert gauge_sweep(342, 0, 500) == 185 and gauge_sweep(50, 0, 100) == 135
+assert gauge_sweep(2.5, 10, 0) == gauge_sweep(7.5, 0, 10) == 203  # ratio 0.75: 202.5 rounds away
+assert round(270 * 0.75) == 202  # why the script never uses round() (ruling 5)
+# Review Focus 2: an empty or a full fill, never a NAN sweep
+for v, lo, hi in ((NAN, 0, 500), (-INF, 0, 500), (-1, 0, 500), (5, 7, 7), (5, NAN, 10), (INF, 0, INF),
+                  (5, 0, NAN), (INF, INF, INF), (-INF, -INF, 10)):
+    assert gauge_sweep(v, lo, hi) == 0, (v, lo, hi)
+for v, lo, hi in ((INF, 0, 500), (600, 0, 500), (100, 0, 100), (-20, 10, -10)):
+    assert gauge_sweep(v, lo, hi) == GAUGE_SWEEP, (v, lo, hi)
+assert [gauge_label_text(v) for v in (-0.5, 99.9, 1e9, -1e9, NAN, INF, -INF, 999999999, -100000000.0)] == \
+    ["0", "99", "--", "--", "--", "--", "--", "--", "-100000000"]  # f32(999999999) is 1e9
+assert gauge_label_text(999999900) == "999999872"  # the float32 below 1e9 keeps its digits
+# The ring on row centerY(), left of the centre: x 4..10 / 7..19 for the default width, 4..6 / 7..9 for 3
+for W, ring, thin in ((128, (4, 10), (4, 6)), (240, (7, 19), (7, 9))):
+    P = Panel(W)
+    for width_, span in ((0, ring), (3, thin)):
+        row = sorted(x for (x, y), c in gauge_render(W, 0, arc_width=width_).items()
+                     if y == P.cy and x < P.cx and c == "DARK")
+        assert row == list(range(span[0], span[1] + 1)), (W, width_, row)
+    # the gap from 135 to 225: the bottom of the ring is not drawn
+    outer = gauge_layout(W, 0, 100)["outer"]
+    assert (P.cx, P.cy + outer - 2) not in gauge_render(W, 0)
+# Spec 7: gauge(50) lights half of the track within 2 %; track and fill of equal thickness
+for W in (128, 240):
+    half, full = colour_set(gauge_render(W, 50), "LIGHT"), colour_set(gauge_render(W, 100), "LIGHT")
+    assert 0.48 <= len(half) / len(full) <= 0.52, (W, len(half), len(full))
+    assert full == colour_set(gauge_render(W, 0), "DARK")
+# The labels of the examples stay centred on their point (the slide never moves them)
+for W in (128, 240):
+    P = Panel(W)
+    for lo, hi in ((0, 100), (0, 500), (0, 1050)):
+        for label in gauge_layout(W, lo, hi)["labels"]:
+            text, (px, _) = label["text"], label["point"]
+            assert label["kept"] == count(text) and label["x"] == px - cell_width(text, count(text), LABEL, P.k) // 2
+# A long label slides inward and stays whole (10 glyphs at most): on 128 the two slid labels of
+# (-1e8, 1e8) overlap (min cell 10..69, max cell 65..118), as the plan accepts
+for W in (128, 240):
+    for lo, hi in ((-100000000.0, 100000000.0), (-999999872, 999999872), (1e9, -1e9)):
+        for label in gauge_layout(W, lo, hi)["labels"]:
+            assert label["kept"] == count(label["text"]), (W, lo, hi, label["text"])
+L128 = gauge_layout(128, -100000000.0, 100000000.0)["labels"]
+assert [(l["x"], l["x"] + cell_width(l["text"], l["kept"], LABEL, 1) - 1) for l in L128] == [(10, 69), (65, 118)]
+# On 240 a min label of 3 digits such as "100" paints over the ring ends by a few pixels (known difference)
+P = Panel(240)
+touch = sorted(gauge_layout(240, 100, 500)["labels"][0]["lit"] & colour_set(gauge_render(240, 0, 0, 500), "DARK"))
+assert touch == [(39, 181), (39, 182), (40, 181), (40, 182)], touch
+assert not (gauge_layout(240, 0, 500)["labels"][0]["lit"] & colour_set(gauge_render(240, 0, 0, 500), "DARK"))
+# Review Focus 3: nothing outside radius() + 1, whatever the fill, the labels or the width
+for W in (128, 240):
+    P = Panel(W)
+    for lo, hi in ((0, 100), (-999, 99999), (-100000000.0, 100000000.0)):
+        for v in (-10, 50, 110):
+            assert not outside_circle(gauge_render(W, v, lo, hi), P), (W, v, lo, hi)
+    for width_ in (3, 64, 255):
+        assert not outside_circle(gauge_render(W, 100, 0, 100, arc_width=width_), P), (W, width_)
+
+# ---- Values pinned by test_steami_screen (4b Task 4) ----
+print("gauge (outer, width, label distance; label points)")
+for W, G in ((128, G128), (240, G240)):
+    print("  %d: %d %d %d; %s %s" % (W, G["outer"], G["width"], G["d"], *(l["point"] for l in G["labels"])))
+print("gauge GRAY labels (box, count): (minV, maxV) -> texts")
+for W in (128, 240):
+    for lo, hi in ((0, 100), (0, 500), (-0.5, 99.9), (1e9, -1e9), (-100000000.0, 100000000.0)):
+        texts = [l["text"] for l in gauge_layout(W, lo, hi)["labels"]]
+        print("  %d (%r, %r) %s: %s %d" % (W, lo, hi, texts, *gauge_gray(W, lo, hi)))
+for W in (128, 240):
+    print("  %d gauge(50) LIGHT %d, gauge(100) LIGHT %d, gauge(342, 0, 500) LIGHT %d" % (
+        W, len(colour_set(gauge_render(W, 50), "LIGHT")), len(colour_set(gauge_render(W, 100), "LIGHT")),
+        len(colour_set(gauge_render(W, 342, 0, 500), "LIGHT"))))

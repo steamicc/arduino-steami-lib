@@ -1906,6 +1906,17 @@ static void test_widgets_without_a_screen(void) {
         loggedLine("(E30)").c_str());
     TEST_ASSERT_EQUAL_STRING("unknown board", a.error());
     TEST_ASSERT_EQUAL_STRING("unknown board", b.error());
+    // Each round widget begins the display on its own (4b): one fresh screen per widget.
+    TestScreen c(board), d(board), e(board), f(board);
+    c.gauge(50);
+    TEST_ASSERT_TRUE(c.status() == SteamiStatus::UNKNOWN_BOARD);
+    d.compass(0);
+    TEST_ASSERT_TRUE(d.status() == SteamiStatus::UNKNOWN_BOARD);
+    e.watch(1, 2, 3);
+    TEST_ASSERT_TRUE(e.status() == SteamiStatus::UNKNOWN_BOARD);
+    f.face(SteamiFace::HAPPY);
+    TEST_ASSERT_TRUE(f.status() == SteamiStatus::UNKNOWN_BOARD);
+    TEST_ASSERT_EQUAL_size_t(1, countLogged("(E30)"));
 }
 
 static void test_screen_e31_message(void) {
@@ -1919,6 +1930,11 @@ static void test_screen_e31_message(void) {
     s.text("x", SteamiAt::E);
     s.bar(50);
     s.bar(50, 100, STEAMI_GREEN);
+    s.gauge(50);
+    s.compass(90);
+    s.watch(10, 10, 30);
+    s.face(SteamiFace::LOVE, true);
+    s.face(nullptr);
     TEST_ASSERT_EQUAL_UINT32(0, mem.fillRectCalls());
     TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
     TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
@@ -2327,6 +2343,206 @@ static void test_compass_stays_inside(void) {
     });
 }
 
+// ---- gauge() (4b) ----
+
+/// On row centerY(), left of the centre, the DARK pixels are exactly the columns from..to.
+static void expectRingRow(const SteamiMemoryBackend& mem, TestScreen& s, int16_t from, int16_t to) {
+    const uint16_t dark = mem.stored(STEAMI_DARK);
+    for (int16_t x = 0; x < s.centerX(); x++) {
+        const bool ring = x >= from && x <= to;
+        TEST_ASSERT_TRUE_MESSAGE(ring == (mem.at(x, s.centerY()) == dark), "ring on row centerY()");
+    }
+}
+
+static size_t countTrue(const std::vector<bool>& mask) {
+    size_t n = 0;
+    for (bool b : mask) {
+        n += b ? 1 : 0;
+    }
+    return n;
+}
+
+// Spec 5.8 table (values printed by golden_layout.py): outer radius 60 and width 7 on 128, 113 and
+// 13 on 240, so the ring is 54..60 / 101..113 from the centre; the gap from 135 to 225 leaves the
+// bottom of the ring empty.
+static void test_gauge_ring(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.gauge(0);
+        const bool small = s.width() == 128;
+        expectRingRow(mem, s, small ? 4 : 7, small ? 10 : 19);
+        const int32_t outer = s.radius() - s.u(STEAMI_GAUGE_INSET);
+        TEST_ASSERT_EQUAL_INT32(small ? 60 : 113, outer);
+        TEST_ASSERT_FALSE_MESSAGE(
+            mem.at(s.centerX(), static_cast<int16_t>(s.centerY() + outer - 2)) ==
+                mem.stored(STEAMI_DARK),
+            "the bottom gap");
+    });
+}
+
+// Spec 7: gauge(50, 0, 100) lights half of the track within 2 %, and track and fill have the same
+// thickness: the LIGHT mask of gauge(100) is the DARK mask of gauge(0) (the labels are GRAY). The
+// counts are printed by golden_layout.py.
+static void test_gauge_half_and_equal_thickness(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        const bool small = s.width() == 128;
+        s.gauge(0);
+        const std::vector<bool> track = colourMask(mem, STEAMI_DARK);
+        s.clear();
+        s.gauge(100);
+        const std::vector<bool> full = colourMask(mem, STEAMI_LIGHT);
+        TEST_ASSERT_TRUE_MESSAGE(full == track, "fill and track differ");
+        s.clear();
+        s.gauge(50, 0, 100);
+        const size_t half = inkBox(mem, STEAMI_LIGHT).count;
+        const size_t whole = countTrue(full);
+        TEST_ASSERT_EQUAL_size_t(small ? 948 : 3278, half);
+        TEST_ASSERT_EQUAL_size_t(small ? 1889 : 6543, whole);
+        TEST_ASSERT_TRUE(half * 100 >= whole * 48 && half * 100 <= whole * 52);
+    });
+}
+
+/// gauge(v, minV, maxV) on one panel: the box and count of its GRAY min and max labels (values
+/// printed by golden_layout.py).
+struct GaugeLabelCase {
+    int16_t size;
+    float v, minV, maxV;
+    int16_t x0, y0, x1, y1;
+    size_t count;
+};
+
+static void expectGaugeLabels(const GaugeLabelCase& c) {
+    onPanel(c.size, c.size == 240, [&c](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.gauge(c.v, c.minV, c.maxV);
+        const InkBox gray = inkBox(mem, STEAMI_GRAY);
+        expectBox(gray, c.x0, c.y0, c.x1, c.y1);
+        TEST_ASSERT_EQUAL_size_t(c.count, gray.count);
+        // Decision 3: no value, no unit.
+        TEST_ASSERT_EQUAL_size_t(0, inkBox(mem, STEAMI_WHITE).count);
+    });
+}
+
+static const GaugeLabelCase kGaugeLabels[] = {
+    {128, 0, 0, 100, 27, 90, 105, 96, 67},         {128, 342, 0, 500, 27, 90, 105, 96, 74},
+    {128, 0, -0.5f, 99.9f, 27, 90, 102, 96, 49},  // "0" and "99": truncated toward zero
+    {240, 0, 0, 100, 49, 169, 200, 182, 268},      {240, 342, 0, 500, 49, 169, 200, 182, 296},
+    {240, 0, -0.5f, 99.9f, 49, 169, 194, 182, 196}};
+
+// Spec 5.9: the labels are the integer part of minV and maxV in 5x7 x k GRAY, their top row on the
+// point at 233 / 127 degrees and distance outer - width - u(10), centred on it.
+static void test_gauge_labels_golden(void) {
+    for (const GaugeLabelCase& c : kGaugeLabels) {
+        expectGaugeLabels(c);
+    }
+}
+
+// Two "--" labels (|v| >= 1e9), and two long labels slid inward, whole, inside the circle (on 128
+// the two overlap, as the plan accepts).
+static const GaugeLabelCase kGaugeExtremeLabels[] = {
+    {128, 0, 1e9f, -1e9f, 24, 93, 102, 93, 20},
+    {128, 0, -100000000.0f, 100000000.0f, 10, 90, 117, 96, 325},
+    {240, 0, 1e9f, -1e9f, 43, 175, 194, 176, 80},
+    {240, 0, -100000000.0f, 100000000.0f, 20, 169, 218, 182, 1254}};
+
+// Review Focus 2: an empty or a full fill for non-finite, equal or reversed bounds, never a crash.
+static void test_gauge_extremes(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.gauge(100);
+        const std::vector<bool> full = colourMask(mem, STEAMI_LIGHT);
+        const struct {
+            float v, minV, maxV;
+            const char* what;
+        } empty[] = {{NAN, 0, 500, "v NAN"},   {-INFINITY, 0, 500, "v -INF"},
+                     {-1, 0, 500, "v -1"},     {5, 7, 7, "minV == maxV"},
+                     {5, NAN, 10, "minV NAN"}, {INFINITY, 0, INFINITY, "INF / INF"}};
+        for (const auto& e : empty) {
+            s.clear();
+            s.gauge(e.v, e.minV, e.maxV);
+            TEST_ASSERT_EQUAL_size_t_MESSAGE(0, inkBox(mem, STEAMI_LIGHT).count, e.what);
+        }
+        for (float v : {INFINITY, 600.0f}) {
+            s.clear();
+            s.gauge(v, 0, 500);
+            TEST_ASSERT_TRUE_MESSAGE(colourMask(mem, STEAMI_LIGHT) == full, "not full");
+        }
+        // Ratio 0.75 either way round: 202.5 degrees round to 203.
+        s.clear();
+        s.gauge(2.5f, 10, 0);
+        const std::vector<bool> reversed = colourMask(mem, STEAMI_LIGHT);
+        s.clear();
+        s.gauge(7.5f, 0, 10);
+        TEST_ASSERT_TRUE(reversed == colourMask(mem, STEAMI_LIGHT));
+        TEST_ASSERT_TRUE(countTrue(reversed) > 0 && reversed != full);
+    });
+    for (const GaugeLabelCase& c : kGaugeExtremeLabels) {
+        expectGaugeLabels(c);
+    }
+}
+
+// The ring width in physical pixels: 3 gives x 4..6 / 7..9; 64 and 255 fill the disc towards the
+// centre without a crash and stay inside the circle (onPanel).
+static void test_gauge_arc_width(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        const bool small = s.width() == 128;
+        s.gauge(0, 0, 100, STEAMI_LIGHT, 3);
+        expectRingRow(mem, s, small ? 4 : 7, small ? 6 : 9);
+        for (uint8_t w : {static_cast<uint8_t>(64), static_cast<uint8_t>(255)}) {
+            s.clear();
+            s.gauge(50, 0, 100, STEAMI_LIGHT, w);
+            TEST_ASSERT_TRUE(inkBox(mem, STEAMI_LIGHT).count > 0);
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mem.outsideCircle(), "outside the circle");
+        }
+    });
+}
+
+// Spec 5.10 and 7: on the grey panel a BLUE (6) or RED (8) fill over the DARK (6) track is lifted
+// to level 10; on the TFT the fill keeps its colour.
+static void test_gauge_contrast(void) {
+    onPanel(128, false, [](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.gauge(50, 0, 100);
+        const std::vector<bool> fill = colourMask(mem, STEAMI_LIGHT);
+        for (SteamiRgb c : {STEAMI_BLUE, STEAMI_RED}) {
+            s.clear();
+            s.gauge(50, 0, 100, c);
+            size_t lit = 0;
+            for (int16_t y = 0; y < s.height(); y++) {
+                for (int16_t x = 0; x < s.width(); x++) {
+                    const uint8_t level = SteamiRgb::fromRgb565(mem.at(x, y)).gray4();
+                    if (fill[static_cast<size_t>(y) * s.width() + x]) {
+                        TEST_ASSERT_EQUAL_UINT8(10, level);
+                        lit++;
+                    } else {
+                        TEST_ASSERT_TRUE(level < 10);  // track 6, labels 9, background 0
+                    }
+                }
+            }
+            TEST_ASSERT_EQUAL_size_t(948, lit);
+        }
+    });
+    onPanel(240, true, [](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.gauge(50, 0, 100);
+        const std::vector<bool> fill = colourMask(mem, STEAMI_LIGHT);
+        s.clear();
+        s.gauge(50, 0, 100, STEAMI_BLUE);
+        TEST_ASSERT_TRUE(colourMask(mem, STEAMI_BLUE) == fill);
+        TEST_ASSERT_EQUAL_size_t(3278, inkBox(mem, STEAMI_BLUE).count);
+    });
+}
+
+// Review Focus 3: every fill from -10 to 110 with short, long and huge labels, on the V1c's even
+// strokes too.
+static void test_gauge_stays_inside(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        const float bounds[][2] = {{0, 100}, {-999, 99999}, {-100000000.0f, 1e8f}};
+        for (const auto& b : bounds) {
+            for (int16_t v = -10; v <= 110; v += 5) {
+                s.gauge(v, b[0], b[1]);
+                TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mem.outsideCircle(), "outside the circle");
+            }
+        }
+        TEST_ASSERT_TRUE(mem.litCount() > 0);
+    });
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_format_integers);
@@ -2388,5 +2604,12 @@ int main(int, char**) {
     RUN_TEST(test_compass_heading_rounding);
     RUN_TEST(test_compass_rose_turns);
     RUN_TEST(test_compass_stays_inside);
+    RUN_TEST(test_gauge_ring);
+    RUN_TEST(test_gauge_half_and_equal_thickness);
+    RUN_TEST(test_gauge_labels_golden);
+    RUN_TEST(test_gauge_extremes);
+    RUN_TEST(test_gauge_arc_width);
+    RUN_TEST(test_gauge_contrast);
+    RUN_TEST(test_gauge_stays_inside);
     return UNITY_END();
 }

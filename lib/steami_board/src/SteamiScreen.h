@@ -88,6 +88,15 @@ class SteamiScreen : public SteamiDisplay {
     /// pivot, with no needle.
     void compass(float headingDeg, SteamiRgb c = STEAMI_LIGHT);
 
+    /// A round gauge near the edge: a DARK ring of 270 degrees with its gap at the bottom, filled
+    /// in c clockwise from the lower left in proportion to (v - minV) / (maxV - minV), clamped to
+    /// [0, 1]: with minV above maxV, the fill grows as v falls. The integer parts of minV and maxV
+    /// ("--" from 1e9) are written in small GRAY letters inside the two ends. NAN, or minV equal
+    /// to maxV, leaves it empty. arcWidth is the ring's width in pixels of this panel, 0 for the
+    /// default. No value and no unit: draw them with value().
+    void gauge(float v, float minV = 0, float maxV = 100, SteamiRgb c = STEAMI_LIGHT,
+               uint8_t arcWidth = 0);
+
    protected:  // the layout kernel of the widgets, not for the student
     /// A run of columns [left, right], inclusive; empty when right < left.
     struct Region {
@@ -242,6 +251,19 @@ class SteamiScreen : public SteamiDisplay {
     /// s in 8x8 glyphs at factor k(), its cell centred on the point at distance d and angle deg,
     /// never cut: the callers keep every cell inside the circle.
     void glyphsAt(const char* s, int32_t deg, int32_t d, SteamiRgb c);
+
+    /// The ring of gauge(): arc() of outer radius `outer` and width w from STEAMI_GAUGE_START,
+    /// `sweep` degrees long (nothing for 0); the track and the fill.
+    void gaugeArc(int32_t outer, int32_t sweep, SteamiRgb c, uint8_t w);
+
+    /// One label of gauge(): v's integer part, truncated toward zero ("--" when |v| >= 1e9, NAN
+    /// included), in 5x7 x k, its top row on the point at distance d and angle deg.
+    void gaugeLabel(float v, int16_t deg, int32_t d);
+
+    /// Draws the label run of gaugeLabel() in GRAY, centred on column px by its cell width, then
+    /// cut to the longest prefix that fits the chord at its inked rows shrunk by t.shrink, and
+    /// slid into that chord (the corner rule).
+    void drawGaugeLabel(Run& t, int32_t px);
 
     /// Fills columns [left, right] of the u(STEAMI_BAR_HEIGHT) rows from row top in c, each row
     /// cut to the panel and to the chord at that row; a row with nothing left draws nothing.

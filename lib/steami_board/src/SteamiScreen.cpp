@@ -68,6 +68,23 @@ int32_t roundedHeading(float h) {
     return static_cast<int32_t>(lroundf(fmodf(h, 360.0f)));
 }
 
+/// The fill of gauge(), in degrees 0..270: lroundf(270 * ratio), ratio = (v - minV) / (maxV -
+/// minV) clamped to [0, 1]. 0 when maxV == minV (tested before the division) or when the ratio is
+/// NAN (NAN in any argument, INF - INF, INF / INF), so lroundf only sees a value in [0, 270].
+int32_t gaugeSweep(float v, float minV, float maxV) {
+    if (maxV == minV) {
+        return 0;
+    }
+    const float ratio = (v - minV) / (maxV - minV);
+    if (isnan(ratio) || ratio <= 0.0f) {
+        return 0;
+    }
+    if (ratio >= 1.0f) {
+        return STEAMI_GAUGE_SWEEP;
+    }
+    return static_cast<int32_t>(lroundf(static_cast<float>(STEAMI_GAUGE_SWEEP) * ratio));
+}
+
 }  // namespace
 
 int32_t SteamiScreen::Region::width() const {
@@ -650,4 +667,53 @@ void SteamiScreen::compass(float headingDeg, SteamiRgb c) {
         pointer(180 - h, r * 85 / 100, u(STEAMI_PIVOT), STEAMI_DARK);
     }
     circle(centerX(), centerY(), static_cast<int16_t>(u(STEAMI_PIVOT)), STEAMI_GRAY, true);
+}
+
+void SteamiScreen::gauge(float v, float minV, float maxV, SteamiRgb c, uint8_t arcWidth) {
+    if (!widgetCanDraw()) {
+        return;
+    }
+    // Spec 5.9's gauge row: outer radius radius() - u(4); the width arcWidth in physical pixels,
+    // or max(5, radius() / 9). Track, fill, min label, max label: device.py's drawing order.
+    const int32_t outer = radius() - u(STEAMI_GAUGE_INSET);
+    const uint8_t w =
+        arcWidth != 0
+            ? arcWidth
+            : static_cast<uint8_t>(smaller(
+                  larger(STEAMI_GAUGE_MIN_WIDTH, radius() / STEAMI_GAUGE_WIDTH_DIVISOR), 255));
+    gaugeArc(outer, STEAMI_GAUGE_SWEEP, STEAMI_DARK, w);
+    // The fill over the track, of the same width, lifted on the grey panel (spec 5.10).
+    gaugeArc(outer, gaugeSweep(v, minV, maxV), lifted(c, STEAMI_DARK), w);
+    const int32_t d = larger(0, outer - w - u(STEAMI_GAUGE_LABEL_GAP));
+    gaugeLabel(minV, STEAMI_GAUGE_MIN_ANGLE, d);
+    gaugeLabel(maxV, STEAMI_GAUGE_MAX_ANGLE, d);
+}
+
+void SteamiScreen::gaugeArc(int32_t outer, int32_t sweep, SteamiRgb c, uint8_t w) {
+    arc(centerX(), centerY(), static_cast<int16_t>(outer), STEAMI_GAUGE_START,
+        static_cast<int16_t>(sweep), c, w);
+}
+
+void SteamiScreen::gaugeLabel(float v, int16_t deg, int32_t d) {
+    // The integer part, truncated toward zero as device.py's int() (-0.5 shows "0"); |v| < 1e9
+    // keeps the float-to-long cast defined. The frame holds the 16 B buffer and the run only:
+    // drawGaugeLabel() fits, places and draws.
+    char text[16];
+    if (fabsf(v) < 1e9f) {
+        SteamiValue(static_cast<long>(v)).format(text, sizeof text, 0);
+    } else {
+        SteamiValue(NAN).format(text, sizeof text, 0);  // "--"
+    }
+    Run t{text, glyphCount(text), polarY(d, deg), Ink::LABEL, k(), k()};
+    drawGaugeLabel(t, polarX(d, deg));
+}
+
+void SteamiScreen::drawGaugeLabel(Run& t, int32_t px) {
+    // Centred on px by its cell width, then the 4a corner rule (B10): the longest prefix that fits
+    // the chord at its inked rows shrunk by k (every label of at most 10 glyphs fits whole), slid
+    // into that chord.
+    Region room{0, static_cast<int32_t>(width()) - 1};
+    t.glyphs = fitGlyphs(t, &room);
+    const int32_t w = cellWidth(t.s, t.glyphs, Ink::LABEL, t.f);
+    drawGlyphs(t, larger(room.left, smaller(px - w / 2, room.right - w + 1)), STEAMI_GRAY);
 }

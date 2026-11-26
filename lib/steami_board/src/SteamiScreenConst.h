@@ -65,3 +65,18 @@ constexpr int16_t STEAMI_MINUTE_HALF_WIDTH = 2;
 constexpr int16_t STEAMI_COMPASS_INSET = 12;
 constexpr int16_t STEAMI_COMPASS_TICK = 6;
 constexpr int16_t STEAMI_COMPASS_LETTERS = 5;
+
+// gauge(): the ring's outer radius radius() - u(4); its labels sit u(10) inside the ring.
+constexpr int16_t STEAMI_GAUGE_INSET = 4;
+constexpr int16_t STEAMI_GAUGE_LABEL_GAP = 10;
+
+// gauge(), in degrees (0 = noon, clockwise), not scaled: the ring starts at 225 and sweeps 270,
+// leaving the gap at the bottom; the min label sits at 233, the max label at 127.
+constexpr int16_t STEAMI_GAUGE_START = 225;
+constexpr int16_t STEAMI_GAUGE_SWEEP = 270;
+constexpr int16_t STEAMI_GAUGE_MIN_ANGLE = 233;
+constexpr int16_t STEAMI_GAUGE_MAX_ANGLE = 127;
+
+// gauge(), in physical pixels: the default ring width is max(5, radius() / 9), 7 on 128, 13 on 240.
+constexpr int16_t STEAMI_GAUGE_MIN_WIDTH = 5;
+constexpr int16_t STEAMI_GAUGE_WIDTH_DIVISOR = 9;
