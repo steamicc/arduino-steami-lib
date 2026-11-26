@@ -12,6 +12,9 @@
 /// Where a widget sits on the round screen: the eight compass points and the centre.
 enum class SteamiAt : uint8_t { N, NE, E, SE, S, SW, W, NW, CENTER };
 
+/// The six pixel-art faces of face().
+enum class SteamiFace : uint8_t { HAPPY, SAD, SURPRISED, SLEEPING, ANGRY, LOVE };
+
 /// The layout layer over SteamiDisplay: every widget computes its place from width() in
 /// integers, the same rules on the 128 px grey panel and the 240 px colour panel, and draws
 /// through the inherited API only. Nothing a widget draws leaves the visible circle.
@@ -61,6 +64,15 @@ class SteamiScreen : public SteamiDisplay {
     /// outside the circle is cut off.
     void bar(float v, float maxV = 100, int16_t yOffset = 0, SteamiRgb c = STEAMI_LIGHT);
     void bar(float v, float maxV, SteamiRgb c);
+
+    /// A pixel-art face in c, centred: its 8x8 bitmap drawn as filled squares of 11 px on the
+    /// 128 px screen. A compact face has 8 px squares and sits half a square higher. A value of f
+    /// past LOVE draws nothing.
+    void face(SteamiFace f, bool compact = false, SteamiRgb c = STEAMI_LIGHT);
+    void face(SteamiFace f, SteamiRgb c);
+    /// The same with your own 8x8 bitmap: rows top to bottom, the most significant bit on the
+    /// left. nullptr draws nothing.
+    void face(const uint8_t bitmap[8], bool compact = false, SteamiRgb c = STEAMI_LIGHT);
 
    protected:  // the layout kernel of the widgets, not for the student
     /// A run of columns [left, right], inclusive; empty when right < left.

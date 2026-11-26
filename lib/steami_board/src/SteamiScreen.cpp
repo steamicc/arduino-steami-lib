@@ -526,3 +526,35 @@ void SteamiScreen::barRows(int32_t left, int32_t right, int32_t top, SteamiRgb c
         }
     }
 }
+
+void SteamiScreen::face(SteamiFace f, bool compact, SteamiRgb c) {
+    // An f past LOVE (a cast) has no bitmap and draws nothing, as device.py's FACES.get; the
+    // bitmap overload still begins the display first.
+    const size_t i = static_cast<size_t>(f);
+    face(i < sizeof(STEAMI_FACES) / sizeof(STEAMI_FACES[0]) ? STEAMI_FACES[i] : nullptr, compact,
+         c);
+}
+
+void SteamiScreen::face(SteamiFace f, SteamiRgb c) {
+    face(f, false, c);
+}
+
+void SteamiScreen::face(const uint8_t bitmap[8], bool compact, SteamiRgb c) {
+    if (!widgetCanDraw() || bitmap == nullptr) {
+        return;
+    }
+    // Cells of u(11), or u(8) when compact: device.py's W * 11 / 128 and W / 16 exactly. The grid
+    // is centred, a compact one raised by half a cell (spec 5.9).
+    const int32_t cell = u(compact ? STEAMI_FACE_COMPACT_CELL : STEAMI_FACE_CELL);
+    const int32_t ox = centerX() - 4 * cell;
+    const int32_t oy = centerY() - 4 * cell - (compact ? cell / 2 : 0);
+    // One flat loop over the 64 bits, row i / 8 and column i % 8 (MSB = left): a nested row and
+    // column loop around rect() takes more than the 64 B of stack of a widget.
+    for (int32_t i = 0; i < 64; i++) {
+        if ((bitmap[i / 8] & (0x80 >> (i % 8))) != 0) {
+            rect(static_cast<int16_t>(ox + (i % 8) * cell),
+                 static_cast<int16_t>(oy + (i / 8) * cell), static_cast<int16_t>(cell),
+                 static_cast<int16_t>(cell), c, true);
+        }
+    }
+}

@@ -1948,6 +1948,122 @@ static void test_two_screens_share_a_memory_backend(void) {
     TEST_ASSERT_EQUAL_UINT32(0, mem.outsideCircle());
 }
 
+// ---- face() (4b) ----
+
+// The FACES of micropython-steami-lib 927e96b const.py, rows top to bottom, MSB = left column.
+static const uint8_t kConstPyFaces[6][8] = {
+    {0x00, 0x24, 0x24, 0x00, 0x00, 0x42, 0x3C, 0x00},   // happy
+    {0x00, 0x24, 0x24, 0x00, 0x00, 0x3C, 0x42, 0x00},   // sad
+    {0x00, 0x24, 0x24, 0x00, 0x18, 0x24, 0x24, 0x18},   // surprised
+    {0x00, 0x00, 0x66, 0x00, 0x00, 0x18, 0x18, 0x00},   // sleeping
+    {0x00, 0x42, 0x24, 0x24, 0x00, 0x3C, 0x42, 0x00},   // angry
+    {0x00, 0x66, 0xFF, 0xFF, 0x7E, 0x3C, 0x18, 0x00}};  // love
+static_assert(sizeof(STEAMI_FACES) == 48, "spec 5.12: faces 48 B");
+
+/// The cell and the top-left corner of face()'s 8x8 grid.
+struct FaceGrid {
+    int32_t cell;
+    int32_t ox;
+    int32_t oy;
+};
+
+// Values printed by golden_layout.py (face_layout).
+static FaceGrid faceGrid(int16_t size, bool compact) {
+    if (size == 128) {
+        return compact ? FaceGrid{8, 32, 28} : FaceGrid{11, 20, 20};
+    }
+    return compact ? FaceGrid{15, 60, 53} : FaceGrid{20, 40, 40};
+}
+
+/// Every pixel of the panel holds c where `bitmap` laid out on `grid` has a set bit, 0 elsewhere.
+static void expectFace(const SteamiMemoryBackend& mem, const uint8_t bitmap[8], FaceGrid grid,
+                       SteamiRgb c) {
+    const uint16_t ink = mem.stored(c);
+    size_t lit = 0;
+    for (int16_t y = 0; y < mem.height(); y++) {
+        for (int16_t x = 0; x < mem.width(); x++) {
+            const int32_t col = x - grid.ox;
+            const int32_t row = y - grid.oy;
+            const bool inGrid = col >= 0 && row >= 0 && col < 8 * grid.cell && row < 8 * grid.cell;
+            const bool on = inGrid && (bitmap[row / grid.cell] & (0x80 >> (col / grid.cell))) != 0;
+            if (mem.at(x, y) != (on ? ink : 0)) {
+                TEST_FAIL_MESSAGE("a pixel differs from the face mask");
+            }
+            lit += on ? 1 : 0;
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(lit > 0, "empty mask");
+}
+
+static void test_faces_equal_const_py(void) {
+    TEST_ASSERT_EQUAL_MEMORY(kConstPyFaces, STEAMI_FACES, sizeof kConstPyFaces);
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        for (uint8_t f = 0; f < 6; f++) {
+            s.clear();
+            s.face(static_cast<SteamiFace>(f));
+            expectFace(mem, kConstPyFaces[f], faceGrid(s.width(), false), STEAMI_LIGHT);
+        }
+    });
+}
+
+static void test_face_compact(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.face(SteamiFace::HAPPY, true);
+        expectFace(mem, kConstPyFaces[0], faceGrid(s.width(), true), STEAMI_LIGHT);
+    });
+}
+
+// Review Focus 5: the three overloads agree; a nullptr bitmap or an f past LOVE draws nothing.
+static void test_face_overloads_and_bad_input(void) {
+    for (int16_t size : {128, 240}) {
+        const bool color = size == 240;
+        const std::vector<uint16_t> green =
+            rendered(size, color, [](TestScreen& s) { s.face(SteamiFace::SAD, STEAMI_GREEN); });
+        TEST_ASSERT_TRUE(green == rendered(size, color, [](TestScreen& s) {
+                             s.face(SteamiFace::SAD, false, STEAMI_GREEN);
+                         }));
+        TEST_ASSERT_FALSE(green ==
+                          rendered(size, color, [](TestScreen& s) { s.face(SteamiFace::SAD); }));
+        TEST_ASSERT_TRUE(rendered(size, color, [](TestScreen& s) { s.face(STEAMI_FACES[4]); }) ==
+                         rendered(size, color, [](TestScreen& s) { s.face(SteamiFace::ANGRY); }));
+        TEST_ASSERT_TRUE(
+            rendered(size, color, [](TestScreen& s) { s.face(STEAMI_FACES[5], true); }) ==
+            rendered(size, color, [](TestScreen& s) { s.face(SteamiFace::LOVE, true); }));
+    }
+    // The six faces are mirror images of themselves: an asymmetric bitmap pins MSB = left.
+    static const uint8_t kSteps[8] = {0x80, 0xC0, 0xE0, 0xF0, 0x01, 0x03, 0x07, 0x0F};
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.face(kSteps, true, STEAMI_GREEN);
+        expectFace(mem, kSteps, faceGrid(s.width(), true), STEAMI_GREEN);
+    });
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.face(nullptr);
+        s.face(nullptr, true, STEAMI_GREEN);
+        s.face(static_cast<SteamiFace>(6));
+        s.face(static_cast<SteamiFace>(255), true);
+        s.face(static_cast<SteamiFace>(6), STEAMI_GREEN);
+        TEST_ASSERT_EQUAL_UINT32(0, mem.fillRectCalls());
+        TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+        TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    });
+}
+
+// Review Focus 3: eight 0xFF rows, full and compact, stay inside the circle on every panel
+// (onPanel checks outsideCircle() == 0); one filled square per bit.
+static void test_faces_stay_inside(void) {
+    static const uint8_t kFull[8] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        for (bool compact : {false, true}) {
+            s.clear();
+            mem.clearCounters();
+            s.face(kFull, compact);
+            TEST_ASSERT_EQUAL_UINT32(64, mem.fillRectCalls());
+            TEST_ASSERT_EQUAL_UINT32(0, mem.outsideCircle());
+            expectFace(mem, kFull, faceGrid(s.width(), compact), STEAMI_LIGHT);
+        }
+    });
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_format_integers);
@@ -1994,5 +2110,9 @@ int main(int, char**) {
     RUN_TEST(test_widgets_without_a_screen);
     RUN_TEST(test_screen_e31_message);
     RUN_TEST(test_two_screens_share_a_memory_backend);
+    RUN_TEST(test_faces_equal_const_py);
+    RUN_TEST(test_face_compact);
+    RUN_TEST(test_face_overloads_and_bad_input);
+    RUN_TEST(test_faces_stay_inside);
     return UNITY_END();
 }

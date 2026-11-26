@@ -780,3 +780,58 @@ for W in (128, 240):
         print("  %d yOffset %d: %s; %s %s" % (W, y_offset, bar_rect(W, 72, 100, y_offset),
                                              *bar_boxes(W, 72, 100, y_offset)))
 print("bar(50, 100, 0) (fill box)", *("%d: %s" % (W, bar_boxes(W, 50, 100, 0)[1]) for W in (128, 240)))
+
+# ---- Widget of 4b Task 1: face() (spec 5.9 "face", the decision "face") ----
+# const.py's FACES at micropython-steami-lib 927e96b (lines 23-30), in SteamiFace order: rows top to
+# bottom, MSB = left column. Held here as literals, never parsed from SteamiScreenConst.h.
+FACES = {
+    "happy": (0x00, 0x24, 0x24, 0x00, 0x00, 0x42, 0x3C, 0x00),
+    "sad": (0x00, 0x24, 0x24, 0x00, 0x00, 0x3C, 0x42, 0x00),
+    "surprised": (0x00, 0x24, 0x24, 0x00, 0x18, 0x24, 0x24, 0x18),
+    "sleeping": (0x00, 0x00, 0x66, 0x00, 0x00, 0x18, 0x18, 0x00),
+    "angry": (0x00, 0x42, 0x24, 0x24, 0x00, 0x3C, 0x42, 0x00),
+    "love": (0x00, 0x66, 0xFF, 0xFF, 0x7E, 0x3C, 0x18, 0x00),
+}
+
+
+def face_layout(W, compact):
+    """(cell, ox, oy) of face(f, compact) on a W panel: cells of u(11), or u(8) when compact, the 8x8
+    grid centred, raised by half a cell when compact (device.py)."""
+    P = Panel(W)
+    cell = P.u(8 if compact else 11)
+    return cell, P.cx - 4 * cell, P.cy - 4 * cell - (cell // 2 if compact else 0)
+
+
+def face_cells(W, bitmap, compact):
+    """The filled squares (x, y, w, h) of face(bitmap, compact), in drawing order."""
+    cell, ox, oy = face_layout(W, compact)
+    return [(ox + (i % 8) * cell, oy + (i // 8) * cell, cell, cell)
+            for i in range(64) if bitmap[i // 8] & (0x80 >> (i % 8))]
+
+
+# ---- Self-check of 4b Task 1 ----
+assert list(FACES) == ["happy", "sad", "surprised", "sleeping", "angry", "love"]  # SteamiFace order
+assert all(len(b) == 8 for b in FACES.values()) and len(FACES) * 8 == 48  # spec 5.12: faces 48 B
+assert face_layout(128, False) == (11, 20, 20) and face_layout(240, False) == (20, 40, 40)
+assert face_layout(128, True) == (8, 32, 28) and face_layout(240, True) == (15, 60, 53)
+# Spec 5.9 and 5.12: 11 px cells (88 px) on 128, 20 px cells (160 px) on 240
+assert [8 * face_layout(W, False)[0] for W in (128, 240)] == [88, 160]
+# The cells u(11) and u(8) equal device.py's W * 11 // 128 and W // 16 on every width
+for W in range(0, 1025):
+    assert face_layout(W, False)[0] == W * 11 // 128 and face_layout(W, True)[0] == W // 16, W
+# Review Focus 3: eight 0xFF rows, full and compact, stay inside radius() + 1 (the memory backend's
+# test on the four corners of each square)
+for W in (128, 240):
+    P = Panel(W)
+    for compact in (False, True):
+        squares = face_cells(W, (0xFF,) * 8, compact)
+        assert len(squares) == 64
+        for x, y, w, h in squares:
+            for px, py in ((x, y), (x + w - 1, y), (x, y + h - 1), (x + w - 1, y + h - 1)):
+                assert (px - P.cx) ** 2 + (py - P.cy) ** 2 <= (P.r + 1) ** 2, (W, compact, px, py)
+
+# ---- Values pinned by test_steami_screen (4b Task 1) ----
+print("face_layout (cell, ox, oy)", *("%d %s: %s" % (W, "compact" if c else "full", face_layout(W, c))
+                                      for W in (128, 240) for c in (False, True)))
+for name, bitmap in FACES.items():
+    print("  %s: %d squares" % (name, len(face_cells(128, bitmap, False))))
