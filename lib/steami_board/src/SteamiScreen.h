@@ -81,8 +81,8 @@ class SteamiScreen : public SteamiDisplay {
 
     /// The first `glyphs` glyphs of s, drawn with `ink` at factor f, the top of their cells on row
     /// y; fitGlyphs() keeps `shrink` columns free at each end of the ink chord. A widget keeps its
-    /// string in one Run and hands it to the kernel by reference: no kernel call of a widget
-    /// passes arguments on the stack, which keeps each widget frame within 64 B.
+    /// string in one Run and hands it to the kernel by reference, which keeps the kernel calls'
+    /// stack arguments few and each widget frame within 64 B.
     struct Run {
         const char* s;
         size_t glyphs;
