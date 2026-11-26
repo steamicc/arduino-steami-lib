@@ -239,6 +239,162 @@ void test_filter_saturates_loud_input(void) {
     TEST_ASSERT_TRUE(clipped > 0);
 }
 
+// --- Filter: reference implementation --------------------------------------
+
+namespace {
+
+// ST's FIR taps (pdm2pcm.cpp, fir_taps), one row per volume, as ST's
+// code uses them: 37 taps, no padding.
+const int16_t ST_FIR_TAPS[7][37] = {
+    {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+    {7,    26,   66,   131,  229,  367,  551,  786,  1081, 1442, 1848, 2281, 2720,
+     3146, 3539, 3880, 4148, 4325, 4391, 4325, 4148, 3880, 3539, 3146, 2720, 2281,
+     1848, 1442, 1081, 786,  551,  367,  229,  131,  66,   26,   7},
+    {13,   52,   131,  262,  459,  734,  1101, 1573, 2163, 2884, 3696, 4561, 5439,
+     6291, 7078, 7759, 8297, 8651, 8782, 8651, 8297, 7759, 7078, 6291, 5439, 4561,
+     3696, 2884, 2163, 1573, 1101, 734,  459,  262,  131,  52,   13},
+    {20,   79,    197,   393,   688,   1101,  1652,  2359,  3244,  4325,  5544, 6842, 8159,
+     9437, 10617, 11639, 12445, 12976, 13173, 12976, 12445, 11639, 10617, 9437, 8159, 6842,
+     5544, 4325,  3244,  2359,  1652,  1101,  688,   393,   197,   79,    20},
+    {26,    105,   262,   524,   918,   1468,  2202,  3146,  4325,  5767,  7392,  9123,  10879,
+     12583, 14156, 15519, 16594, 17302, 17564, 17302, 16594, 15519, 14156, 12583, 10879, 9123,
+     7392,  5767,  4325,  3146,  2202,  1468,  918,   524,   262,   105,   26},
+    {33,    131,   328,   655,   1147,  1835,  2753,  3932,  5407,  7209,  9241,  11403, 13599,
+     15729, 17695, 19399, 20742, 21627, 21955, 21627, 20742, 19399, 17695, 15729, 13599, 11403,
+     9241,  7209,  5407,  3932,  2753,  1835,  1147,  655,   328,   131,   33},
+    {39,    157,   393,   786,   1376,  2202,  3303,  4719,  6488,  8651,  11089, 13684, 16318,
+     18874, 21234, 23278, 24891, 25952, 26345, 25952, 24891, 23278, 21234, 18874, 16318, 13684,
+     11089, 8651,  6488,  4719,  3303,  2202,  1376,  786,   393,   157,   39},
+};
+
+int16_t clamp16(int64_t value) {
+    if (value > INT16_MAX) {
+        return INT16_MAX;
+    }
+    if (value < INT16_MIN) {
+        return INT16_MIN;
+    }
+    return static_cast<int16_t>(value);
+}
+
+// The filter as first ported, one PDM byte at a time: sliding sinc3
+// window, circular FIR history (newest first against the taps), 64-bit
+// sums. The optimised SteamiPdmFilter must give exactly the same samples.
+class ReferenceFilter {
+   public:
+    explicit ReferenceFilter(uint8_t volume) : _volume(volume) {}
+
+    size_t process(const uint8_t* pdm, size_t count, size_t stride, int16_t* pcm) {
+        size_t written = 0;
+        for (size_t i = 0; i < count; i++) {
+            _window = (_window >> 8) | (static_cast<uint32_t>(pdm[i * stride]) << 16);
+            _newest = (_newest + 1) % IMP34DT05_FIR_TAPS;
+            _history[_newest] = SteamiPdmFilter::cicOutput(_window);
+            if (++_phase == IMP34DT05_FIR_DECIMATION) {
+                _phase = 0;
+                pcm[written++] = highPass(firOutput());
+            }
+        }
+        return written;
+    }
+
+   private:
+    uint8_t _volume;
+    uint32_t _window = 0;
+    int16_t _history[IMP34DT05_FIR_TAPS] = {};
+    size_t _newest = 0;
+    size_t _phase = 0;
+    int64_t _hpPrevIn = 0;
+    int64_t _hpPrevOut = 0;
+
+    int16_t firOutput() const {
+        int64_t sum = 0;
+        size_t index = _newest;
+        for (size_t k = 0; k < IMP34DT05_FIR_TAPS; k++) {
+            sum += static_cast<int64_t>(ST_FIR_TAPS[_volume][k]) * _history[index];
+            index = (index + IMP34DT05_FIR_TAPS - 1) % IMP34DT05_FIR_TAPS;
+        }
+        return clamp16(sum >> 15);
+    }
+
+    int16_t highPass(int16_t sample) {
+        int64_t acc = (sample - _hpPrevIn) * 32768 + 32113 * _hpPrevOut;
+        int16_t out = clamp16(acc >> 15);
+        _hpPrevIn = sample;
+        _hpPrevOut = out;
+        return out;
+    }
+};
+
+uint32_t nextRandom(uint32_t& seed) {
+    seed = seed * 1664525u + 1013904223u;
+    return seed >> 8;
+}
+
+// Feed both filters the same stream in random chunks; compare.
+void expectSameAsReference(const std::vector<uint8_t>& stream, size_t stride, uint8_t volume,
+                           uint32_t seed) {
+    SteamiPdmFilter filter;
+    TEST_ASSERT_TRUE(filter.setVolume(volume));
+    ReferenceFilter reference(volume);
+    size_t bytes = stream.size() / stride;
+    std::vector<int16_t> expected(bytes / IMP34DT05_PDM_BYTES_PER_SAMPLE + 1);
+    TEST_ASSERT_EQUAL_UINT(bytes / IMP34DT05_PDM_BYTES_PER_SAMPLE,
+                           reference.process(stream.data(), bytes, stride, expected.data()));
+
+    std::vector<int16_t> got(expected.size() + 1);
+    size_t written = 0;
+    size_t offset = 0;
+    while (offset < bytes) {
+        size_t chunk = 1 + nextRandom(seed) % 400;
+        if (chunk > bytes - offset) {
+            chunk = bytes - offset;
+        }
+        written +=
+            filter.process(stream.data() + offset * stride, chunk, stride, got.data() + written);
+        offset += chunk;
+    }
+    TEST_ASSERT_EQUAL_UINT(bytes / IMP34DT05_PDM_BYTES_PER_SAMPLE, written);
+    TEST_ASSERT_EQUAL_INT16_ARRAY(expected.data(), got.data(), written);
+}
+
+}  // namespace
+
+void test_filter_matches_reference_on_random_bytes(void) {
+    // Random bytes: a white, very loud stream that also drives the FIR
+    // and the high-pass filter into saturation at high volumes.
+    uint32_t seed = 2024;
+    for (uint8_t volume = IMP34DT05_VOLUME_MIN; volume <= IMP34DT05_VOLUME_MAX; volume++) {
+        for (size_t stride = 1; stride <= 2; stride++) {
+            std::vector<uint8_t> stream(6400 * stride);
+            for (uint8_t& value : stream) {
+                value = static_cast<uint8_t>(nextRandom(seed));
+            }
+            expectSameAsReference(stream, stride, volume, seed);
+        }
+    }
+}
+
+void test_filter_matches_reference_on_sigma_delta_streams(void) {
+    // Microphone-like streams: sines of random frequency and amplitude
+    // with an offset, interleaved with an idle slot as on the SAI.
+    uint32_t seed = 7;
+    for (int trial = 0; trial < 12; trial++) {
+        float frequency = 50.0f + static_cast<float>(nextRandom(seed) % 7000);
+        float amplitude = static_cast<float>(nextRandom(seed) % 700) / 1000.0f;
+        float offset = (static_cast<float>(nextRandom(seed) % 200) - 100.0f) / 1000.0f;
+        std::vector<uint8_t> mic = pdmSine(frequency, amplitude, 8000, offset);
+        uint8_t volume = static_cast<uint8_t>(trial % (IMP34DT05_VOLUME_MAX + 1));
+        expectSameAsReference(mic, 1, volume, seed);
+        uint8_t slot = static_cast<uint8_t>(trial & 1);
+        std::vector<uint8_t> frames = saiFrames(mic, slot, 0xFF);
+        std::vector<uint8_t> slotStream(frames.begin() + slot, frames.end());
+        slotStream.push_back(0xFF);  // keep the length even
+        expectSameAsReference(slotStream, 2, volume, seed);
+    }
+}
+
 // --- Pure helpers ----------------------------------------------------------
 
 void test_compute_rms(void) {
@@ -510,6 +666,8 @@ int main(int /* argc */, char** /* argv */) {
     RUN_TEST(test_filter_volume_zero_mutes);
     RUN_TEST(test_filter_rejects_volume_out_of_range);
     RUN_TEST(test_filter_saturates_loud_input);
+    RUN_TEST(test_filter_matches_reference_on_random_bytes);
+    RUN_TEST(test_filter_matches_reference_on_sigma_delta_streams);
 
     RUN_TEST(test_compute_rms);
     RUN_TEST(test_rms_to_dbfs);
