@@ -10,13 +10,13 @@
 // microphone work, and a demonstration of how a frequency is measured.
 //
 // The tones stay between 2000 and 4000 Hz, the useful range of the
-// buzzer. It is a small piezo that resonates near 3 kHz, and tone() drives
-// it with a square wave, rich in odd and even harmonics: for a low tone,
-// the harmonic that falls near 3 kHz comes out louder than the tone
-// itself. On a STeaMi V1c, 1000 Hz is heard at 3000 Hz (third harmonic)
-// and 1500 Hz at 3000 Hz (second harmonic), while 2000 to 4000 Hz are
-// heard within 0.1 %. If the measured frequency is a multiple of the
-// played one, the sketch says which harmonic it heard.
+// buzzer. It is a small piezo that resonates near 3 kHz. tone() drives it
+// with a square wave (odd harmonics), and the piezo itself adds even ones:
+// for a low tone, the harmonic that falls near 3 kHz comes out louder than
+// the tone itself. On a STeaMi V1c, 1000 Hz is heard at 3000 Hz (third
+// harmonic) and 1500 Hz at 3000 Hz (second harmonic), while 2000, 2500,
+// 3000 and 4000 Hz were heard within 0.1 %. If the measured frequency is a
+// multiple of the played one, the sketch says which harmonic it heard.
 //
 // Press RESET to run the test again. Open the serial monitor at 115200 baud.
 
