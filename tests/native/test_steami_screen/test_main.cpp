@@ -228,6 +228,8 @@ class TestScreen : public SteamiScreen {
     using SteamiScreen::marginEw;
     using SteamiScreen::marginNs;
     using SteamiScreen::Point;
+    using SteamiScreen::polarX;
+    using SteamiScreen::polarY;
     using SteamiScreen::Region;
     using SteamiScreen::resolve;
     using SteamiScreen::resolveX;
@@ -2064,6 +2066,147 @@ static void test_faces_stay_inside(void) {
     });
 }
 
+// ---- polarX, polarY and watch() (4b) ----
+
+// Values printed by golden_layout.py (polar).
+static void test_polar_points(void) {
+    onPanel(128, false, [](SteamiMemoryBackend&, TestScreen& s) {
+        TEST_ASSERT_EQUAL_INT32(30, s.polarX(43, 233));
+        TEST_ASSERT_EQUAL_INT32(90, s.polarY(43, 233));
+        TEST_ASSERT_EQUAL_INT32(98, s.polarX(43, 127));
+        TEST_ASSERT_EQUAL_INT32(90, s.polarY(43, 127));
+        TEST_ASSERT_EQUAL_INT32(64, s.polarX(44, 0));
+        TEST_ASSERT_EQUAL_INT32(20, s.polarY(44, 0));
+        TEST_ASSERT_EQUAL_INT32(64, s.polarX(0, 77));
+        TEST_ASSERT_EQUAL_INT32(64, s.polarY(0, 77));
+        TEST_ASSERT_EQUAL_INT32(20, s.polarX(44, -90));
+        TEST_ASSERT_EQUAL_INT32(64, s.polarY(44, -90));
+        TEST_ASSERT_EQUAL_INT32(20, s.polarX(44, 270));
+        TEST_ASSERT_EQUAL_INT32(64, s.polarY(44, 270));
+    });
+    onPanel(240, true, [](SteamiMemoryBackend&, TestScreen& s) {
+        TEST_ASSERT_EQUAL_INT32(55, s.polarX(82, 233));
+        TEST_ASSERT_EQUAL_INT32(169, s.polarY(82, 233));
+        TEST_ASSERT_EQUAL_INT32(120, s.polarX(83, 0));
+        TEST_ASSERT_EQUAL_INT32(37, s.polarY(83, 0));
+    });
+    // rnd is odd-symmetric: the point at deg + 180 is the mirror image about the centre.
+    forEachPanel([](SteamiMemoryBackend&, TestScreen& s) {
+        const int32_t cx = s.centerX();
+        const int32_t cy = s.centerY();
+        for (int32_t d : {3, 5, 44}) {
+            for (int32_t deg = 0; deg < 360; deg++) {
+                TEST_ASSERT_EQUAL_INT32(-(s.polarX(d, deg) - cx), s.polarX(d, deg + 180) - cx);
+                TEST_ASSERT_EQUAL_INT32(-(s.polarY(d, deg) - cy), s.polarY(d, deg + 180) - cy);
+            }
+        }
+    });
+}
+
+/// The pixel (x, y) holds c.
+static void expectAt(const SteamiMemoryBackend& mem, int16_t x, int16_t y, SteamiRgb c,
+                     const char* what) {
+    TEST_ASSERT_EQUAL_HEX16_MESSAGE(mem.stored(c), mem.at(x, y), what);
+}
+
+/// A hand tip of watch() on the 128 and the 240 panel.
+struct WatchTip {
+    int16_t x128, y128, x240, y240;
+};
+
+static void expectTip(const SteamiMemoryBackend& mem, WatchTip t, SteamiRgb c, const char* what) {
+    if (mem.width() == 128) {
+        expectAt(mem, t.x128, t.y128, c, what);
+    } else {
+        expectAt(mem, t.x240, t.y240, c, what);
+    }
+}
+
+// Spec 7's "watch(3, 0, 0) hand directions" (values printed by golden_layout.py). RED is level 8
+// on the grey panel, a grey no other part of the watch uses.
+static void test_watch_hands_at_three(void) {
+    for (int16_t size : {128, 240}) {
+        onPanel(size, size == 240, [](SteamiMemoryBackend& mem, TestScreen& s) {
+            s.watch(3, 0, 0, STEAMI_RED);
+            expectTip(mem, {92, 64, 172, 120}, STEAMI_RED, "hour tip");
+            TEST_ASSERT_EQUAL_INT(s.width() == 128 ? 92 : 172, inkBox(mem, STEAMI_RED).x1);
+            // The second hand, at the same 0 degrees and drawn after the minute hand (device.py's
+            // order), covers the minute tip.
+            expectTip(mem, {64, 22, 120, 42}, STEAMI_GRAY, "minute tip under the second hand");
+            expectTip(mem, {64, 17, 120, 31}, STEAMI_GRAY, "second tip");
+            expectAt(mem, s.centerX(), s.centerY(), STEAMI_GRAY, "pivot");
+        });
+        onPanel(size, size == 240, [](SteamiMemoryBackend& mem, TestScreen& s) {
+            // The minute hand at 3 degrees, the second hand pointing down: the minute tip is the
+            // topmost RED pixel (the hour hand's RED starts at row 61 / 115).
+            s.watch(3, 0, 30, STEAMI_RED);
+            expectTip(mem, {66, 22, 124, 42}, STEAMI_RED, "minute tip");
+            TEST_ASSERT_EQUAL_INT(s.width() == 128 ? 22 : 42, inkBox(mem, STEAMI_RED).y0);
+        });
+    }
+}
+
+// Values printed by golden_layout.py: m / 2 and s / 10 are integer divisions, so 10:11:59 puts the
+// hour at 305 degrees and the minute at 71.
+static void test_watch_integer_angles(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.watch(10, 10, 30);
+        expectTip(mem, {41, 48, 77, 90}, STEAMI_LIGHT, "10:10:30 hour tip");
+        expectTip(mem, {101, 45, 189, 85}, STEAMI_LIGHT, "10:10:30 minute tip");
+        expectTip(mem, {64, 111, 120, 209}, STEAMI_GRAY, "10:10:30 second tip");
+    });
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.watch(10, 11, 59);
+        expectTip(mem, {41, 48, 77, 90}, STEAMI_LIGHT, "10:11:59 hour tip");
+        expectTip(mem, {104, 50, 194, 95}, STEAMI_LIGHT, "10:11:59 minute tip");
+        expectTip(mem, {59, 17, 111, 31}, STEAMI_GRAY, "10:11:59 second tip");
+    });
+}
+
+// Values printed by golden_layout.py: at 1:37:05 no hand crosses a number, so the WHITE box is the
+// box of "12", "3", "6" and "9".
+static void test_watch_numbers_golden(void) {
+    onPanel(128, false, [](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.watch(1, 37, 5);
+        expectBox(inkBox(mem, STEAMI_WHITE), 20, 19, 107, 107);
+    });
+    onPanel(240, true, [](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.watch(1, 37, 5);
+        expectBox(inkBox(mem, STEAMI_WHITE), 37, 35, 202, 202);
+    });
+}
+
+// Review Focus 4: a time counted by hand past its range still gives integer angles, inside the
+// circle (onPanel checks outsideCircle() == 0).
+static void test_watch_out_of_range(void) {
+    for (int16_t size : {128, 240}) {
+        const bool color = size == 240;
+        TEST_ASSERT_TRUE(rendered(size, color, [](TestScreen& s) { s.watch(25, 61, 61); }) ==
+                         rendered(size, color, [](TestScreen& s) { s.watch(1, 61, 61); }));
+    }
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.watch(255, 255, 255);
+        TEST_ASSERT_TRUE(mem.litCount() > 0);
+        s.clear();
+        s.watch(0, 0, 0, STEAMI_BLUE);
+        TEST_ASSERT_TRUE(inkBox(mem, STEAMI_BLUE).count > 0);
+    });
+}
+
+// Review Focus 3: every hour, a spread of minutes and seconds, on the V1c's 2 px strokes too.
+static void test_watch_stays_inside(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        for (uint8_t h = 0; h < 12; h++) {
+            for (uint8_t m = 0; m < 60; m += 7) {
+                for (uint8_t sec = 0; sec < 60; sec += 13) {
+                    s.watch(h, m, sec);
+                    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mem.outsideCircle(), "outside the circle");
+                }
+            }
+        }
+    });
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_format_integers);
@@ -2114,5 +2257,11 @@ int main(int, char**) {
     RUN_TEST(test_face_compact);
     RUN_TEST(test_face_overloads_and_bad_input);
     RUN_TEST(test_faces_stay_inside);
+    RUN_TEST(test_polar_points);
+    RUN_TEST(test_watch_hands_at_three);
+    RUN_TEST(test_watch_integer_angles);
+    RUN_TEST(test_watch_numbers_golden);
+    RUN_TEST(test_watch_out_of_range);
+    RUN_TEST(test_watch_stays_inside);
     return UNITY_END();
 }

@@ -47,3 +47,15 @@ inline constexpr uint8_t STEAMI_FACES[6][8] = {
 // face(): the cell of a full face (88 px of 128) and of a compact one (64 px of 128).
 constexpr int16_t STEAMI_FACE_CELL = 11;
 constexpr int16_t STEAMI_FACE_COMPACT_CELL = 8;
+
+// The pivot of the watch and the compass: its radius, which is also the half width of the hour
+// hand and of the compass needle.
+constexpr int16_t STEAMI_PIVOT = 3;
+
+// watch(): the dial at radius() - u(8); the ticks at 3, 6, 9 and 12 start u(8) inside the dial,
+// the others u(5); the numbers sit u(15) inside it. The minute hand is u(2) wide on each side.
+constexpr int16_t STEAMI_WATCH_INSET = 8;
+constexpr int16_t STEAMI_WATCH_MAJOR_TICK = 8;
+constexpr int16_t STEAMI_WATCH_MINOR_TICK = 5;
+constexpr int16_t STEAMI_WATCH_NUMBERS = 15;
+constexpr int16_t STEAMI_MINUTE_HALF_WIDTH = 2;

@@ -558,3 +558,60 @@ void SteamiScreen::face(const uint8_t bitmap[8], bool compact, SteamiRgb c) {
         }
     }
 }
+
+int32_t SteamiScreen::polarX(int32_t d, int32_t deg) {
+    return centerX() + steamiRoundQ14(d * steamiSinQ14(deg));  // |d| <= 32767: fits int32_t
+}
+
+int32_t SteamiScreen::polarY(int32_t d, int32_t deg) {
+    return centerY() - steamiRoundQ14(d * steamiCosQ14(deg));
+}
+
+void SteamiScreen::ray(int32_t deg, int32_t from, int32_t to, SteamiRgb c) {
+    strokeLine(static_cast<int16_t>(polarX(from, deg)), static_cast<int16_t>(polarY(from, deg)),
+               static_cast<int16_t>(polarX(to, deg)), static_cast<int16_t>(polarY(to, deg)), k(),
+               c);
+}
+
+void SteamiScreen::pointer(int32_t deg, int32_t length, int32_t halfWidth, SteamiRgb c) {
+    // rnd is odd-symmetric, so the two base ends are mirror images about the centre.
+    triangle(static_cast<int16_t>(polarX(length, deg)), static_cast<int16_t>(polarY(length, deg)),
+             static_cast<int16_t>(polarX(halfWidth, deg + 90)),
+             static_cast<int16_t>(polarY(halfWidth, deg + 90)),
+             static_cast<int16_t>(polarX(halfWidth, deg - 90)),
+             static_cast<int16_t>(polarY(halfWidth, deg - 90)), c, true);
+}
+
+void SteamiScreen::glyphsAt(const char* s, int32_t deg, int32_t d, SteamiRgb c) {
+    // device.py's lx - tw // 2, ly - CHAR_H // 2, at factor k.
+    const uint8_t f = k();
+    SteamiDisplay::text(
+        s, static_cast<int16_t>(polarX(d, deg) - cellWidth(s, glyphCount(s), Ink::TEXT, f) / 2),
+        static_cast<int16_t>(polarY(d, deg) - SteamiDisplay::CHAR_H / 2 * f), c, f);
+}
+
+void SteamiScreen::watch(uint8_t h, uint8_t m, uint8_t s, SteamiRgb c) {
+    if (!widgetCanDraw()) {
+        return;
+    }
+    // device.py's drawing order: dial, ticks, numbers, hour hand, minute hand, second hand, pivot.
+    const int32_t r = radius() - u(STEAMI_WATCH_INSET);
+    strokeCircle(centerX(), centerY(), static_cast<int16_t>(r), k(), STEAMI_DARK);
+    for (int32_t i = 0; i < 12; i++) {
+        const bool major = i % 3 == 0;  // 12, 3, 6 and 9
+        ray(30 * i, r - u(major ? STEAMI_WATCH_MAJOR_TICK : STEAMI_WATCH_MINOR_TICK), r,
+            major ? STEAMI_LIGHT : STEAMI_GRAY);
+    }
+    const int32_t numbers = r - u(STEAMI_WATCH_NUMBERS);
+    glyphsAt("12", 0, numbers, STEAMI_WHITE);
+    glyphsAt("3", 90, numbers, STEAMI_WHITE);
+    glyphsAt("6", 180, numbers, STEAMI_WHITE);
+    glyphsAt("9", 270, numbers, STEAMI_WHITE);
+    // Integer angles, no clamping (spec 5.9): an out-of-range time still gives a whole degree,
+    // which the trigonometry normalises. The hand lengths R / 2, 3R / 4 and R * 85 / 100 of spec
+    // 5.9's watch row truncate, as device.py's int().
+    pointer((h % 12) * 30 + m / 2, r / 2, u(STEAMI_PIVOT), c);
+    pointer(m * 6 + s / 10, 3 * r / 4, u(STEAMI_MINUTE_HALF_WIDTH), c);
+    ray(s * 6, 0, r * 85 / 100, STEAMI_GRAY);
+    circle(centerX(), centerY(), static_cast<int16_t>(u(STEAMI_PIVOT)), STEAMI_GRAY, true);
+}

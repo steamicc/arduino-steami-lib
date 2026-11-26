@@ -159,6 +159,11 @@ class Panel:
                 return n
         return 0
 
+    def polar(self, d, deg):
+        """polarX/polarY (4b): the point at distance d and angle deg (0 = noon, clockwise), spec
+        5.6's (cx + rnd(d sin a), cy - rnd(d cos a)) with the Q14 table of SteamiTrig.cpp."""
+        return self.cx + round_q14(d * sin_q14(deg)), self.cy - round_q14(d * cos_q14(deg))
+
 
 def draw_glyphs(s, n, ink, x, y, f):
     """The pixels drawGlyphs() lights: a set of (x, y)."""
@@ -835,3 +840,300 @@ print("face_layout (cell, ox, oy)", *("%d %s: %s" % (W, "compact" if c else "ful
                                       for W in (128, 240) for c in (False, True)))
 for name, bitmap in FACES.items():
     print("  %s: %d squares" % (name, len(face_cells(128, bitmap, False))))
+
+# ---- Q14 trigonometry of 4b (SteamiTrig.cpp, spec 5.6) ----
+# kSinQ14[91] parsed from SteamiTrig.cpp (decimal values), and the three functions mirrored from it.
+TRIG_CPP = FONT_CPP.with_name("SteamiTrig.cpp")
+_SIN_BODY = TRIG_CPP.read_text(encoding="utf-8").split("kSinQ14[91] = {", 1)[1].split("};", 1)[0]
+SIN_Q14 = [int(v) for v in re.findall(r"-?\d+", _SIN_BODY)]
+assert len(SIN_Q14) == 91
+
+
+def sin_q14(deg):
+    """steamiSinQ14: round(16384 sin deg) for any integer degree."""
+    d = deg % 360  # Python's % is already in 0..359
+    if d <= 90:
+        return SIN_Q14[d]
+    if d <= 180:
+        return SIN_Q14[180 - d]
+    if d <= 270:
+        return -SIN_Q14[d - 180]
+    return -SIN_Q14[360 - d]
+
+
+def cos_q14(deg):
+    """steamiCosQ14: steamiSinQ14(deg + 90)."""
+    return sin_q14(deg % 360 + 90)
+
+
+def round_q14(v):
+    """steamiRoundQ14: v / 16384 rounded to nearest, halves away from zero."""
+    return (v + 8192) // 16384 if v >= 0 else -((-v + 8192) // 16384)
+
+
+assert [sin_q14(d) for d in (0, 30, 90, 180, 270, -90, 450)] == [0, 8192, 16384, 0, -16384, -16384, 16384]
+assert [cos_q14(d) for d in (0, 60, 90, 180, 360)] == [16384, 8192, 0, -16384, 16384]
+assert [round_q14(v) for v in (8191, 8192, -8191, -8192, 24576, -24576)] == [0, 1, 0, -1, 2, -2]
+# The gauge label points (4b Task 4) and their mirror images
+assert P128.polar(43, 233) == (30, 90) and P128.polar(43, 127) == (98, 90)
+assert P240.polar(82, 233) == (55, 169) and P240.polar(82, 127) == (185, 169)
+# rnd is odd-symmetric: the point at deg + 180 is the mirror image of the point at deg
+for P in (P128, P240):
+    for d in (3, 5, 44, 83):
+        for deg in range(360):
+            x, y = P.polar(d, deg)
+            mx, my = P.polar(d, deg + 180)
+            assert (mx - P.cx, my - P.cy) == (P.cx - x, P.cy - y), (P.W, d, deg)
+
+# ---- Values pinned by test_steami_screen (4b Task 2: polarX, polarY) ----
+print("polar (polarX, polarY)")
+print("  128 (43,233) (43,127) (44,0) (0,77) (44,-90) (44,270)",
+      *(P128.polar(d, a) for d, a in ((43, 233), (43, 127), (44, 0), (0, 77), (44, -90), (44, 270))))
+print("  240 (82,233) (83,0)", P240.polar(82, 233), P240.polar(83, 0))
+
+# ---- A raster of the primitives the round widgets draw through (SteamiDisplay.cpp) ----
+# Each function adds {(x, y): colour} to a canvas dict, later calls painting over earlier ones, cut to
+# the W x W panel. They mirror span(), walk() (strokeLine), triangle(..., true), arc() for a full
+# turn (strokeCircle), circle(..., true) and text(): the goldens below read their pixels.
+
+
+def r_span(cv, W, x, y, w, h, c):
+    for yy in range(max(y, 0), min(y + h, W)):
+        for xx in range(max(x, 0), min(x + w, W)):
+            cv[(xx, yy)] = c
+
+
+def r_stroke_line(cv, W, x1, y1, x2, y2, w, c):
+    """walk(): canonical order, Bresenham, a w x w brush with its top-left at p - (w - 1) / 2."""
+    if x2 < x1 or (x2 == x1 and y2 < y1):
+        x1, y1, x2, y2 = x2, y2, x1, y1
+    dx, dy = x2 - x1, -abs(y2 - y1)
+    sy = 1 if y1 < y2 else -1
+    err, x, y = dx + dy, x1, y1
+    while True:
+        r_span(cv, W, x - (w - 1) // 2, y - (w - 1) // 2, w, w, c)
+        if (x, y) == (x2, y2):
+            return
+        e2 = 2 * err
+        if e2 >= dy:
+            err += dy
+            x += 1
+        if e2 <= dx:
+            err += dx
+            y += sy
+
+
+def _edge_x(e, y):
+    xa, ya, xb, yb = e
+    num, den = (xb - xa) * (y - ya), yb - ya
+    q = (2 * abs(num) + den) // (2 * den)
+    return xa + (-q if num < 0 else q)
+
+
+def r_triangle(cv, W, pts, c):
+    """triangle(..., true): one span per row between the leftmost and rightmost edge crossing."""
+    edges = []
+    for (x1, y1), (x2, y2) in ((pts[0], pts[1]), (pts[1], pts[2]), (pts[2], pts[0])):
+        edges.append((x2, y2, x1, y1) if (y2, x2) < (y1, x1) else (x1, y1, x2, y2))
+    for y in range(max(min(e[1] for e in edges), 0), min(max(e[3] for e in edges), W - 1) + 1):
+        xs = []
+        for e in edges:
+            if e[1] <= y <= e[3]:
+                xs += [e[0], e[2]] if e[1] == e[3] else [_edge_x(e, y)]
+        r_span(cv, W, min(xs), y, max(xs) - min(xs) + 1, 1, c)
+
+
+def r_ring(cv, W, cx, cy, r, w, c):
+    """strokeCircle(cx, cy, r, w, c) = arc(..., 0, 360, c, w): the ring [ri - 1/2, r + 1/2]."""
+    ri = max(r - w + 1, 0)
+    outer, inner = (2 * r + 1) ** 2, (2 * ri - 1) ** 2
+    for dy in range(max(-r, -cy), min(r, W - 1 - cy) + 1):
+        xo = isqrt((outer - 4 * dy * dy) // 4)
+        xi = 0
+        if ri > 0 and inner > 4 * dy * dy:
+            q = (inner - 4 * dy * dy + 3) // 4
+            s = isqrt(q)
+            xi = s if s * s == q else s + 1
+        for lo, hi in (((-xo, xo),) if xi == 0 else ((-xo, -xi), (xi, xo))):
+            r_span(cv, W, cx + lo, cy + dy, hi - lo + 1, 1, c)
+
+
+def _half_width(r, k):
+    """circleHalfWidth() of SteamiDisplay.cpp: the filled disc's half span on row offset k."""
+    if 2 * k * k - k < r * r:
+        return (isqrt(4 * (r * r - k * k - 1) + 1) + 1) // 2
+    return isqrt(r * r - k * k + k - 1)
+
+
+def r_disc(cv, W, cx, cy, r, c):
+    for y in range(max(cy - r, 0), min(cy + r, W - 1) + 1):
+        h = _half_width(r, abs(y - cy))
+        r_span(cv, W, cx - h, y, 2 * h + 1, 1, c)
+
+
+def r_text(cv, W, s, x, y, f, c):
+    """SteamiDisplay::text(s, x, y, c, f): 8x8 glyphs advancing 8f."""
+    for code in glyphs(s):
+        for i, col in enumerate(FONT8[code - FIRST_CODE]):
+            for row in range(8):
+                if col >> row & 1:
+                    r_span(cv, W, x + i * f, y + row * f, f, f, c)
+        x += 8 * f
+
+
+def colour_box(cv, c):
+    lit = [p for p, v in cv.items() if v == c]
+    return box(lit) if lit else None
+
+
+def outside_circle(cv, P):
+    """The lit pixels beyond radius() + 1, as the memory backend counts them."""
+    return [p for p in cv if (p[0] - P.cx) ** 2 + (p[1] - P.cy) ** 2 > (P.r + 1) ** 2]
+
+
+# ---- Widget of 4b Task 2: watch() (spec 5.9 "watch", the decision "watch(h, m, s, c)") ----
+# Points use Q14 (spec 5.6), not device.py's int(); fractions of R truncate (R / 2, 3R / 4, R·85/100).
+WATCH_NUMBERS = (("12", 0), ("3", 90), ("6", 180), ("9", 270))
+
+
+def watch_radii(W):
+    """(R, major tick start, minor tick start, numbers, hour length, hour half width, minute length,
+    minute half width, second length)."""
+    P = Panel(W)
+    R = P.r - P.u(8)
+    return R, R - P.u(8), R - P.u(5), R - P.u(15), R // 2, P.u(3), 3 * R // 4, P.u(2), R * 85 // 100
+
+
+def watch_angles(h, m, s):
+    """Integer angles of the hour, minute and second hands; integer division, no clamping."""
+    return (h % 12) * 30 + m // 2, m * 6 + s // 10, s * 6
+
+
+def number_cell(P, text, deg, d):
+    """glyphsAt(): the top-left of the 8x8 x k cell of text centred on polar(d, deg)."""
+    x, y = P.polar(d, deg)
+    return x - cell_width(text, count(text), TEXT, P.k) // 2, y - 4 * P.k
+
+
+def pointer_points(P, deg, length, half_width):
+    """pointer(): tip at (length, deg), base from (half_width, deg + 90) to (half_width, deg - 90)."""
+    return P.polar(length, deg), P.polar(half_width, deg + 90), P.polar(half_width, deg - 90)
+
+
+def watch_render(W, h, m, s, c="LIGHT"):
+    """The canvas of watch(h, m, s, c) on a cleared W panel, in device.py's drawing order: dial,
+    ticks, numbers, hour hand, minute hand, second hand, pivot."""
+    P = Panel(W)
+    R, major, minor, numbers, h_len, h_half, m_len, m_half, s_len = watch_radii(W)
+    ha, ma, sa = watch_angles(h, m, s)
+    cv = {}
+    r_ring(cv, W, P.cx, P.cy, R, P.k, "DARK")
+    for i in range(12):
+        start, colour = (major, "LIGHT") if i % 3 == 0 else (minor, "GRAY")
+        r_stroke_line(cv, W, *P.polar(start, 30 * i), *P.polar(R, 30 * i), P.k, colour)
+    for text, deg in WATCH_NUMBERS:
+        r_text(cv, W, text, *number_cell(P, text, deg, numbers), P.k, "WHITE")
+    r_triangle(cv, W, pointer_points(P, ha, h_len, h_half), c)
+    r_triangle(cv, W, pointer_points(P, ma, m_len, m_half), c)
+    r_stroke_line(cv, W, *P.polar(0, sa), *P.polar(s_len, sa), P.k, "GRAY")
+    r_disc(cv, W, P.cx, P.cy, P.u(3), "GRAY")
+    return cv
+
+
+def watch_layout(W, h, m, s):
+    """The angles, the hand tips (hour, minute, second), the number cells and the WHITE ink box of
+    the numbers of watch(h, m, s) on a W panel."""
+    P = Panel(W)
+    R, _, _, numbers, h_len, _, m_len, _, s_len = watch_radii(W)
+    ha, ma, sa = watch_angles(h, m, s)
+    return {
+        "angles": (ha, ma, sa),
+        "tips": (P.polar(h_len, ha), P.polar(m_len, ma), P.polar(s_len, sa)),
+        "cells": {text: number_cell(P, text, deg, numbers) for text, deg in WATCH_NUMBERS},
+        "white": colour_box(watch_render(W, h, m, s), "WHITE"),
+    }
+
+
+def device_watch_tips(W, h, m, s):
+    """device.py's watch() tips (927e96b l.373-397), int() of float trigonometry."""
+    cx = cy = W // 2
+    r = W // 2 - 8 * W // 128
+
+    def tip(length, deg):
+        rad = math.radians(deg)
+        return cx + int(length * math.sin(rad)), cy - int(length * math.cos(rad))
+
+    return (tip(int(r * 0.50), (h % 12 + m / 60) * 30), tip(int(r * 0.75), (m + s / 60) * 6),
+            tip(int(r * 0.85), s * 6))
+
+
+# ---- Self-check of 4b Task 2 ----
+assert watch_radii(128) == (56, 48, 51, 41, 28, 3, 42, 2, 47)
+assert watch_radii(240) == (105, 90, 96, 77, 52, 5, 78, 3, 89)
+assert watch_angles(10, 10, 30) == (305, 63, 180) and watch_angles(3, 0, 0) == (90, 0, 0)
+assert watch_angles(3, 0, 30) == (90, 3, 180) and watch_angles(10, 11, 59) == (305, 71, 354)
+# Review Focus 4: an out-of-range time keeps integer angles; 25 h draws as 1 h
+assert watch_angles(25, 61, 61) == watch_angles(1, 61, 61) == (60, 372, 366)
+assert watch_angles(255, 255, 255) == (90 + 127, 1530 + 25, 1530)
+W128_300, W240_300 = watch_layout(128, 3, 0, 0), watch_layout(240, 3, 0, 0)
+assert W128_300["tips"] == ((92, 64), (64, 22), (64, 17))
+assert W240_300["tips"] == ((172, 120), (120, 42), (120, 31))
+# The cardinal points are exact in sin and cos: device.py's int() tips equal polar() at 128
+assert device_watch_tips(128, 3, 0, 0) == W128_300["tips"]
+assert W128_300["cells"] == {"12": (56, 19), "3": (101, 60), "6": (60, 101), "9": (19, 60)}
+assert W240_300["cells"] == {"12": (104, 35), "3": (189, 112), "6": (112, 189), "9": (35, 112)}
+assert watch_layout(128, 10, 10, 30)["tips"] == ((41, 48), (101, 45), (64, 111))
+assert watch_layout(240, 10, 10, 30)["tips"] == ((77, 90), (189, 85), (120, 209))
+# watch(3, 0, 0, RED): the hour tip is RED and ends the RED box; the GRAY second hand, at the same
+# 0 degrees and drawn after the minute hand, covers the minute tip; the second tip and the pivot GRAY
+for W, layout in ((128, W128_300), (240, W240_300)):
+    P = Panel(W)
+    cv = watch_render(W, 3, 0, 0, "RED")
+    (hour, minute, second) = layout["tips"]
+    assert cv[hour] == "RED" and colour_box(cv, "RED")[2] == hour[0]
+    assert cv[minute] == "GRAY" and cv[second] == "GRAY" and cv[(P.cx, P.cy)] == "GRAY"
+    assert not outside_circle(cv, P)
+# watch(3, 0, 30, RED): the minute hand at 3 degrees, the second hand pointing down; nothing covers
+# the minute tip and no RED lies above it (the hour hand's RED starts at row 61 / 115)
+MINUTE_TIP_330 = {128: (66, 22), 240: (124, 42)}
+for W in (128, 240):
+    cv = watch_render(W, 3, 0, 30, "RED")
+    tip = watch_layout(W, 3, 0, 30)["tips"][1]
+    assert tip == MINUTE_TIP_330[W] and cv[tip] == "RED" and colour_box(cv, "RED")[1] == tip[1]
+    hour_only = {}
+    P = Panel(W)
+    r_triangle(hour_only, W, pointer_points(P, 90, watch_radii(W)[4], watch_radii(W)[5]), "RED")
+    assert box(list(hour_only))[1] == {128: 61, 240: 115}[W]
+# 10:10:30 and 10:11:59: the hour and minute tips LIGHT, the second tip GRAY (nothing drawn later
+# covers them; the 10:11:59 second tip is clear of the "12" cell and the noon tick)
+for W in (128, 240):
+    for t in ((10, 10, 30), (10, 11, 59)):
+        cv = watch_render(W, *t)
+        hour, minute, second = watch_layout(W, *t)["tips"]
+        assert (cv[hour], cv[minute], cv[second]) == ("LIGHT", "LIGHT", "GRAY"), (W, t)
+# watch(1, 37, 5): no hand crosses a number, so the WHITE box is the box of the four numbers' ink
+for W in (128, 240):
+    P = Panel(W)
+    numbers = {}
+    for text, deg in WATCH_NUMBERS:
+        r_text(numbers, W, text, *number_cell(P, text, deg, watch_radii(W)[3]), P.k, "WHITE")
+    cv = watch_render(W, 1, 37, 5)
+    assert all(cv[p] == "WHITE" for p in numbers) and watch_layout(W, 1, 37, 5)["white"] == box(list(numbers))
+# Review Focus 3 and 4: nothing outside radius() + 1, the strokes k px wide on every time tested
+for W in (128, 240):
+    P = Panel(W)
+    for t in ((0, 0, 0), (3, 0, 0), (10, 10, 30), (10, 11, 59), (25, 61, 61), (255, 255, 255), (7, 22, 45)):
+        assert not outside_circle(watch_render(W, *t), P), (W, t)
+
+# ---- Values pinned by test_steami_screen (4b Task 2) ----
+print("watch (R, major, minor, numbers, hour len/half, minute len/half, second len)")
+for W in (128, 240):
+    print("  %d: %s" % (W, watch_radii(W)))
+for t in ((3, 0, 0), (3, 0, 30), (10, 10, 30), (10, 11, 59)):
+    print("  watch%s angles %s, tips (hour, minute, second) 128 %s 240 %s" % (
+        t, watch_angles(*t), watch_layout(128, *t)["tips"], watch_layout(240, *t)["tips"]))
+for W in (128, 240):
+    print("  %d number cells %s" % (W, watch_layout(W, 3, 0, 0)["cells"]))
+    print("  %d watch(3, 0, 0, RED) RED box %s; watch(3, 0, 30, RED) RED box %s" % (
+        W, colour_box(watch_render(W, 3, 0, 0, "RED"), "RED"), colour_box(watch_render(W, 3, 0, 30, "RED"), "RED")))
+    print("  %d watch(1, 37, 5) WHITE box %s" % (W, watch_layout(W, 1, 37, 5)["white"]))

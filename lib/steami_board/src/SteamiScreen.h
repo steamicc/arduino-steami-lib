@@ -74,6 +74,12 @@ class SteamiScreen : public SteamiDisplay {
     /// left. nullptr draws nothing.
     void face(const uint8_t bitmap[8], bool compact = false, SteamiRgb c = STEAMI_LIGHT);
 
+    /// An analog watch at h:m:s: a DARK dial with 12 ticks, the numbers 12, 3, 6 and 9 in WHITE,
+    /// the hour and minute hands in c, a GRAY second hand and pivot. The hour hand moves with the
+    /// minutes and the minute hand with the seconds, in whole degrees. A time past its range is
+    /// drawn as the angles it gives: watch(25, 0, 0) shows 1 o'clock.
+    void watch(uint8_t h, uint8_t m, uint8_t s = 0, SteamiRgb c = STEAMI_LIGHT);
+
    protected:  // the layout kernel of the widgets, not for the student
     /// A run of columns [left, right], inclusive; empty when right < left.
     struct Region {
@@ -178,6 +184,13 @@ class SteamiScreen : public SteamiDisplay {
     /// Glyphs (not bytes) of s; 0 for nullptr.
     static size_t glyphCount(const char* s);
 
+    /// The point at distance d from the centre and angle deg (integer degrees, 0 = noon,
+    /// clockwise): (centerX() + rnd(d sin deg), centerY() - rnd(d cos deg)), rnd rounding Q14 to
+    /// nearest with halves away from zero (spec 5.6). Two scalars, so that a widget's point never
+    /// goes through memory. |d| <= 32767.
+    int32_t polarX(int32_t d, int32_t deg);
+    int32_t polarY(int32_t d, int32_t deg);
+
    private:
     /// The entry of every widget: begins the display on first use; false when it draws nothing.
     bool widgetCanDraw();
@@ -209,6 +222,18 @@ class SteamiScreen : public SteamiDisplay {
     /// Cuts a label (LABEL ink, drawn GRAY) or unit (TEXT ink, drawn LIGHT) run of the value run
     /// and draws it as drawValueParts() says.
     void drawValuePart(Run& part, Run& value, SteamiAt at);
+
+    /// A stroke k() px wide on the ray at deg, from distance `from` to distance `to`: a tick, the
+    /// second hand.
+    void ray(int32_t deg, int32_t from, int32_t to, SteamiRgb c);
+
+    /// A filled triangle in c: its tip at distance `length` on deg, its base from halfWidth on
+    /// deg + 90 to halfWidth on deg - 90 (mirror images about the centre): a hand, a needle half.
+    void pointer(int32_t deg, int32_t length, int32_t halfWidth, SteamiRgb c);
+
+    /// s in 8x8 glyphs at factor k(), its cell centred on the point at distance d and angle deg,
+    /// never cut: the callers keep every cell inside the circle.
+    void glyphsAt(const char* s, int32_t deg, int32_t d, SteamiRgb c);
 
     /// Fills columns [left, right] of the u(STEAMI_BAR_HEIGHT) rows from row top in c, each row
     /// cut to the panel and to the chord at that row; a row with nothing left draws nothing.
