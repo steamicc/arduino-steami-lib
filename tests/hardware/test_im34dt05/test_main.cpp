@@ -7,8 +7,9 @@
  * at the right rate, and that its level is plausible for a room (above
  * the microphone noise floor, below clipping). The CPU load test prints
  * the share of the CPU the PDM to PCM conversion takes, measured twice:
- * with the DWT cycle counter around the conversion, and by the slowdown
- * of a busy loop. The buzzer test plays tones from 2 to 4 kHz and
+ * with the DWT cycle counter around the driver's block handler, and by
+ * the slowdown of a busy loop (which also counts the interrupt entry and
+ * the HAL DMA handler). The buzzer test plays tones from 2 to 4 kHz and
  * expects to hear each one, within 3 % (HSI clock tolerance plus
  * margin). Lower tones are left out: the piezo buzzer resonates near
  * 3 kHz, so below 2 kHz one of their harmonics is louder than the tone
@@ -114,7 +115,8 @@ void test_im34dt05_cpu_load() {
     uint32_t spinPermille =
         idle > busy ? static_cast<uint32_t>((static_cast<uint64_t>(idle - busy) * 1000) / idle) : 0;
 
-    // 2. DWT cycle counter around each block's conversion (same 500 ms).
+    // 2. DWT cycle counter around the driver's block handler (same 500 ms;
+    //    leaves out the interrupt entry and the HAL DMA handler).
     SteamiIMP34DT05::ConversionStats stats = mic.conversionStats();
     uint32_t averagePermille = cyclesToPermille(stats.averageCycles);
     uint32_t maxPermille = cyclesToPermille(stats.maxCycles);

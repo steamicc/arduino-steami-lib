@@ -75,7 +75,7 @@ class SteamiIMP34DT05 {
     void clear();
 
     // Samples lost because the buffer was full (read() not called often
-    // enough). Reset by begin() and powerOn().
+    // enough). Reset when begin() or powerOn() (re)starts the stream.
     uint32_t overruns() const;
 
     // Register (or remove with nullptr) the interrupt callback.
@@ -144,13 +144,16 @@ class SteamiIMP34DT05 {
 
     // --- Conversion cost -------------------------------------------------
 
-    // Processor cycles the DMA interrupt spent on each delivered block
-    // (PDM to PCM conversion, sample buffer, level, onReceive() callback),
-    // read from the DWT cycle counter. Warm-up, slot detection and the
-    // settling blocks after begin() / powerOn() are not counted. A block
-    // comes every millisecond, so averageCycles / (SystemCoreClock / 1000)
-    // is the share of the CPU the microphone takes. begin() and powerOn()
-    // reset the statistics. Always zero on the host (no cycle counter).
+    // Processor cycles spent in the driver's block handler on each
+    // delivered block (PDM to PCM conversion, sample buffer, level,
+    // onReceive() callback), read from the DWT cycle counter. The interrupt
+    // entry and exit and the HAL DMA handler are not counted, so
+    // averageCycles / (SystemCoreClock / 1000) (a block comes every
+    // millisecond) slightly underestimates the interrupt's share of the
+    // CPU. Warm-up, slot detection and the settling blocks after begin() /
+    // powerOn() are not counted. Reset when begin() or powerOn()
+    // (re)starts the stream; powerOn() does nothing while it runs. Always
+    // zero on the host (no cycle counter).
     struct ConversionStats {
         uint32_t blocks;         // blocks measured
         uint32_t averageCycles;  // mean cycles per block

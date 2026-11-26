@@ -168,7 +168,8 @@ The frequency is measured against the PDM clock, derived from the internal
 
 To test it with the STeaMi buzzer (`tone(SPEAKER, f)`), play **2000 to
 4000 Hz**. The buzzer is a small piezo that resonates near 3 kHz, driven
-with a square wave: for a lower tone, the harmonic that falls near 3 kHz is
+with a square wave (odd harmonics) to which the piezo itself adds even
+ones: for a lower tone, the harmonic that falls near 3 kHz is
 louder than the tone itself, and that harmonic is what the microphone
 reports. Measured on a V1c: 1000 Hz is heard at 2998 Hz (third harmonic),
 1500 Hz at 2998 Hz (second harmonic), while 2000, 2500, 3000 and 4000 Hz
@@ -195,7 +196,7 @@ sound.
 
 | Method | Description |
 |--------|-------------|
-| `ConversionStats conversionStats()` | `{blocks, averageCycles, maxCycles}`: processor cycles the DMA interrupt spent on each 1 ms block (conversion, buffer, level, `onReceive()` callback), read from the DWT cycle counter. Only the steady state counts: warm-up, slot detection and settling blocks are left out. `averageCycles / (SystemCoreClock / 1000)` is the share of the CPU. Reset by `begin()` and `powerOn()`; always zero on the host. |
+| `ConversionStats conversionStats()` | `{blocks, averageCycles, maxCycles}`: processor cycles spent in the driver's block handler on each 1 ms block (conversion, buffer, level, `onReceive()` callback), read from the DWT cycle counter. The interrupt entry and exit and the HAL DMA handler are not counted, so `averageCycles / (SystemCoreClock / 1000)` slightly underestimates the interrupt's share of the CPU (a busy loop reads a few points higher). Only the steady state counts: warm-up, slot detection and settling blocks are left out. Reset when `begin()` or `powerOn()` (re)starts the stream (`powerOn()` does nothing while it runs); always zero on the host. |
 | `void resetConversionStats()` | Start a new measurement. |
 
 ## Constants
@@ -225,8 +226,9 @@ window sizes and the datasheet sensitivity.
   share of the CPU at the STeaMi's 32 MHz clock: measured on a V1c,
   61.5 % before optimisation; with the optimised filter (block processing,
   `SMLALD`, lookup tables in RAM, compiled with `-O2`):
-  (to be measured on a V1c). `conversionStats()` measures it in a sketch and
-  the hardware test `test_im34dt05_cpu_load` prints it. Heavy work such as
+  (to be measured on a V1c; say whether the figure is the DWT count or the
+  busy loop). `conversionStats()` measures it in a sketch (handler only) and
+  the hardware test `test_im34dt05_cpu_load` prints both figures. Heavy work such as
   drawing on the GC9A01 display runs slower while the microphone is on. A
   sketch that masks interrupts for more than about 1 ms loses audio.
 * The filter's lookup tables take 1.5 KB of RAM (they are faster there than
