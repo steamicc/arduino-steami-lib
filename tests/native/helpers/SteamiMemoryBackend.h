@@ -13,6 +13,8 @@
 
 /// Test-only backend: an RGB565 array that counts what the layer asks of it.
 /// A grey backend stores what the OLED shows, so a dump matches the panel.
+/// A call that writes a pixel outside the round panel, (x - w/2)^2 + (y - h/2)^2 >
+/// (min(w, h)/2 + 1)^2, is counted when it is made, so ink painted over later still shows.
 class SteamiMemoryBackend final : public SteamiDisplayBackend {
    public:
     SteamiMemoryBackend(int16_t width, int16_t height, bool color = true, bool beginResult = true)
@@ -47,6 +49,9 @@ class SteamiMemoryBackend final : public SteamiDisplayBackend {
             return;
         }
         _area++;
+        if (outside(x, y)) {
+            _outsideCircle++;
+        }
         _px[index(x, y)] = store(v);
     }
 
@@ -58,6 +63,11 @@ class SteamiMemoryBackend final : public SteamiDisplayBackend {
             return;
         }
         _area += static_cast<uint64_t>(w) * static_cast<uint64_t>(h);
+        const int32_t x1 = static_cast<int32_t>(x) + w - 1;
+        const int32_t y1 = static_cast<int32_t>(y) + h - 1;
+        if (outside(x, y) || outside(x1, y) || outside(x, y1) || outside(x1, y1)) {
+            _outsideCircle++;  // the disc is convex: a rectangle leaves it at a corner
+        }
         const uint16_t s = store(v);
         for (int16_t j = y; j < y + h; j++) {
             for (int16_t i = x; i < x + w; i++) {
@@ -84,6 +94,11 @@ class SteamiMemoryBackend final : public SteamiDisplayBackend {
     }
     const std::vector<uint16_t>& pixels() const { return _px; }
     uint32_t outOfBounds() const { return _outOfBounds; }
+    /// pixel() and fillRect() calls on the panel that wrote a pixel outside the circle of radius
+    /// min(w, h)/2 + 1; a call rejected as off-panel counts in outOfBounds() only.
+    uint32_t outsideCircle() const { return _outsideCircle; }
+    /// The value a pixel drawn in c holds (a grey backend stores gray(c.gray4())).
+    uint16_t stored(SteamiRgb c) const { return store(c.rgb565()); }
     uint32_t pixelCalls() const { return _pixelCalls; }
     uint32_t fillRectCalls() const { return _fillRectCalls; }
     /// Pixel calls plus w*h of each accepted fillRect.
@@ -98,6 +113,7 @@ class SteamiMemoryBackend final : public SteamiDisplayBackend {
     /// Zeroes the call counters; the pixels and the state flags stay.
     void clearCounters() {
         _outOfBounds = 0;
+        _outsideCircle = 0;
         _pixelCalls = 0;
         _fillRectCalls = 0;
         _area = 0;
@@ -129,6 +145,12 @@ class SteamiMemoryBackend final : public SteamiDisplayBackend {
     size_t index(int16_t x, int16_t y) const {
         return static_cast<size_t>(y) * static_cast<size_t>(_w) + static_cast<size_t>(x);
     }
+    bool outside(int32_t x, int32_t y) const {
+        const int32_t dx = x - _w / 2;
+        const int32_t dy = y - _h / 2;
+        const int32_t r = (_w < _h ? _w : _h) / 2 + 1;
+        return dx * dx + dy * dy > r * r;
+    }
     uint16_t store(uint16_t v) const {
         return _color ? v : SteamiRgb::gray(SteamiRgb::fromRgb565(v).gray4()).rgb565();
     }
@@ -139,6 +161,7 @@ class SteamiMemoryBackend final : public SteamiDisplayBackend {
     bool _beginResult;
     std::vector<uint16_t> _px;
     uint32_t _outOfBounds = 0;
+    uint32_t _outsideCircle = 0;
     uint32_t _pixelCalls = 0;
     uint32_t _fillRectCalls = 0;
     uint64_t _area = 0;

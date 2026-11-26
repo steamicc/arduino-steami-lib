@@ -459,6 +459,104 @@ Messages of the display (`who` is `SteamiDisplay`):
 | `E30` | `[STeaMi] SteamiDisplay: cannot tell if this board is a V1a/V1b or a V1c. Add #define STEAMI_BOARD_V1C (or V1B) before #include <STeaMi.h>. (E30)` | `"unknown board"` |
 | `E31` | `[STeaMi] SteamiDisplay: not enough RAM for the colour screen (115200 bytes in one block). Call screen.begin() first in setup(). (E31)` | `"no memory"` |
 
+## Screen
+
+`SteamiScreen` is a `SteamiDisplay` (everything above works on it) that adds
+widgets placed for the round screen, on both panels. Include `SteamiScreen.h`
+(or `STeaMi.h`) and call `begin()` first in `setup()`.
+
+```cpp
+#include <Arduino.h>
+#include <SteamiScreen.h>
+#include <SteamiTemperature.h>
+
+SteamiScreen screen;
+SteamiTemperature temperature;
+
+void setup() {
+    Serial.begin(115200);  // the screen and the sensor report their errors here
+    screen.begin();
+    temperature.begin();
+}
+
+void loop() {
+    screen.clear();
+    screen.title("Temperature");
+    screen.value(temperature.read(), "°C");
+    screen.subtitle(temperature.chip());  // "WSEN-HIDS" on V1a/V1b, "BME280" on V1c
+    screen.show();
+    delay(500);
+}
+```
+
+Immediate mode, as in MicroPython: `clear()`, the widgets in call order (a later
+widget paints over an earlier one), then `show()`.
+
+| Method | Default colour | Description |
+|--------|----------------|-------------|
+| `explicit constexpr SteamiScreen(SteamiBoard& board = Steami)` | | Same as `SteamiDisplay`; touches no hardware. |
+| `void title(const char* text, SteamiRgb c = STEAMI_GRAY)` | `STEAMI_GRAY` | One line at the top. |
+| `void subtitle(const char* l1, const char* l2 = nullptr, const char* l3 = nullptr, SteamiRgb c = STEAMI_DARK)` | `STEAMI_DARK` | One to three lines at the bottom (3 lines at most). |
+| `void subtitle(const char* l1, SteamiRgb c)` | | One line, with a colour. |
+| `void subtitle(const char* l1, const char* l2, SteamiRgb c)` | | Two lines, with a colour. |
+| `void value(SteamiValue v, const char* unit = nullptr, SteamiAt at = SteamiAt::CENTER, const char* label = nullptr, SteamiRgb c = STEAMI_WHITE, uint8_t scale = 2, int16_t yOffset = 0)` | `STEAMI_WHITE` | A number or a text in large digits, with its unit (`STEAMI_LIGHT`) and its label (`STEAMI_GRAY`). |
+| `void value(SteamiValue v, const char* unit, SteamiRgb c)` | | The value at the centre, with a colour. |
+| `void setDecimals(uint8_t d)` | | Digits after the point for float values: 1 by default, 4 at most. Per object. |
+| `void bar(float v, float maxV = 100, int16_t yOffset = 0, SteamiRgb c = STEAMI_LIGHT)` | `STEAMI_LIGHT` | A horizontal bar filled from 0 to `maxV`. |
+| `void bar(float v, float maxV, SteamiRgb c)` | | The bar at the centre, with a colour. |
+| `void text(const char* s, SteamiAt at = SteamiAt::CENTER, SteamiRgb c = STEAMI_WHITE, uint8_t scale = 1)` | `STEAMI_WHITE` | Text at a position; `text(s, x, y, ...)` of `SteamiDisplay` is still there, in pixels. |
+| `uint8_t maxChars()` | | Characters of scale 1 across the panel: 16 on 128, 15 on 240. |
+
+`SteamiAt` names the nine positions: `N`, `NE`, `E`, `SE`, `S`, `SW`, `W`, `NW`
+and `CENTER` (as `"N"` ... `"CENTER"` in MicroPython).
+
+`SteamiValue` is what `value()` shows. It accepts `int`, `unsigned`, `long`,
+`unsigned long`, `float`, `double` and `const char*`; `uint8_t`, `int16_t`,
+`uint16_t` and `bool` become `int`, and `0` is the number 0, not a text. A
+`long long` is a compile error. A float is rounded to `setDecimals()` digits.
+`NAN`, `INF`, a float beyond 999999999 and a `nullptr` text show `--`. `format()`
+is the formatter `value()` uses, in `SteamiValue.h`.
+
+Layout rules:
+
+* The same sketch runs on 128 and 240 px: positions and `yOffset` are in the
+  units of the 128 px screen, and glyphs are twice as large on 240.
+* `yOffset` is in the units of the 128 px screen, also on 240 (an offset of 8
+  moves the value by 15 px there).
+* Text never leaves the circle: it is cut (no ellipsis), or `value()` drops to
+  a smaller size first.
+* A title of up to 11 characters stays at the top; the examples keep to that.
+* The values at `W` and `E` share one size, so two values side by side always
+  match.
+* A bar fill is lifted to at least 4 grey levels above its track on the V1a/V1b
+  grey screen (`STEAMI_BLUE` becomes visible). The primitives of `SteamiDisplay`
+  never adjust a colour.
+
+| MicroPython | Arduino |
+|-------------|---------|
+| `screen = Screen(display)` | `SteamiScreen screen;` then `screen.begin();` first in `setup()` |
+| `screen.value(v, unit="C", at="W", label="TEMP", color=C)` | `screen.value(v, "°C", SteamiAt::W, "TEMP", C)` |
+| `screen.subtitle("a", "b", color=C)` | `screen.subtitle("a", "b", C)` (3 lines at most) |
+| `screen.bar(v, max_val=100, color=C)` | `screen.bar(v, 100, C)` |
+| `screen.text("x", at="NE", scale=2)` | `screen.text("x", SteamiAt::NE, STEAMI_WHITE, 2)` |
+| `"N"` `"NE"` ... `"CENTER"`, `BLACK` ... `YELLOW` | `SteamiAt::N` ... `SteamiAt::CENTER`, `STEAMI_BLACK` ... `STEAMI_YELLOW` |
+| `screen.center`, `screen.radius`, `screen.width` | `centerX()`, `centerY()`, `radius()`, `width()` |
+
+Examples, each reproducing a mockup of the tutorials:
+
+| Example | Mockup |
+|---------|--------|
+| `ScreenTemperature` | `01_temperature_ref.png`: title, value with its unit, sensor name |
+| `ScreenBattery` | `02_battery_ref.png`: charge in percent, green bar, voltage and gauge name |
+| `ScreenComfort` | `03_comfort_dual_ref.png`: temperature and humidity side by side, comfort verdict |
+
+Messages of the screen are those of the display, with `who` = `SteamiScreen`:
+
+| Code | Text | `error()` |
+|------|------|-----------|
+| `E30` | `[STeaMi] SteamiScreen: cannot tell if this board is a V1a/V1b or a V1c. Add #define STEAMI_BOARD_V1C (or V1B) before #include <STeaMi.h>. (E30)` | `"unknown board"` |
+| `E31` | `[STeaMi] SteamiScreen: not enough RAM for the colour screen (115200 bytes in one block). Call screen.begin() first in setup(). (E31)` | `"no memory"` |
+
 ## Using your own drivers
 
 Some drivers are not shared by `Steami` yet. Build them on the board's bus:
@@ -493,6 +591,12 @@ void setup() {
 ```bash
 make test-native/steami_board   # detection, routing, messages, lazy slots
 make test-native/steami_display_board   # display primitives, E30, E31
+make test-native/steami_screen   # widgets, layout rules, SteamiValue, E30, E31
+make test-native/steami_screen_mockups   # the three mockups at 128 and 240 px
+# score the mockup renders against the tutorials' images (needs Pillow and NumPy)
+mkdir -p /tmp/mockups   # writePpm does not create the folder
+STEAMI_PPM_DIR=/tmp/mockups .venv/bin/pio test -e native -f native/test_steami_screen_mockups
+python3 scripts/mockup-review.py --ppm-dir /tmp/mockups --out /tmp/mockup-review
 .venv/bin/pio test -e native_asan
 .venv/bin/python3 scripts/check-footprint.py
 make test-examples/steami_board

@@ -616,7 +616,7 @@ SteamiBattery battery;
 void loop() {
   float v = battery.voltage();              // NAN when the gauge does not answer
   char volts[12] = "--";
-  if (!isnan(v)) snprintf(volts, sizeof volts, "%d mV", (int)(v * 1000));
+  if (!isnan(v)) snprintf(volts, sizeof volts, "%d mV", (int)lroundf(v * 1000.0f));
   screen.clear();
   screen.title("Battery");
   // yOffset -12 (128-px units) for both, as the tutorial: value, bar and two subtitle lines fit together

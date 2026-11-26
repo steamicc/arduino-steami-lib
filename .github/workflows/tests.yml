@@ -69,3 +69,54 @@ jobs:
           name: steami-display-gallery
           path: ${{ runner.temp }}/steami-display-ppm
           if-no-files-found: error
+
+  mockup-review:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout the tutorials mockups
+        uses: actions/checkout@v4
+        with:
+          repository: steamicc/micropython-steami-tutorials
+          ref: 83d8e2ca23abb0eeca7afca2d001cdd95b1df76b
+          sparse-checkout: docs/mockups
+          path: tutorials
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini', 'boards/steami.json', 'requirements.txt') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+
+      - name: Render the mockups
+        env:
+          STEAMI_PPM_DIR: ${{ runner.temp }}/steami-mockups
+        run: |
+          mkdir -p "$STEAMI_PPM_DIR"
+          make install-pio
+          .venv/bin/pio test -e native -f native/test_steami_screen_mockups
+
+      - name: Score them against the tutorials
+        continue-on-error: true
+        run: |
+          python -m pip install pillow==12.1.1 numpy==2.3.5
+          python scripts/mockup-review.py --ppm-dir "${{ runner.temp }}/steami-mockups" --refs tutorials/docs/mockups --out "${{ runner.temp }}/steami-mockup-review"
+          { echo '```'; cat "${{ runner.temp }}/steami-mockup-review/ssim.csv"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the mockup review page
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: steami-mockup-review
+          path: ${{ runner.temp }}/steami-mockup-review
+          if-no-files-found: warn

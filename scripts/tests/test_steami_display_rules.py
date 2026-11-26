@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import tempfile
@@ -24,6 +25,7 @@ class SteamiDisplayRulesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             unit = Path(tmp) / "colour_rule.cpp"
             unit.write_text(
+                '#include "SteamiRgb.h"\n'
                 f'#include "{header}"\n'
                 "void f(SteamiRgb) {}\n"
                 f"int main() {{ {body} }}\n",
@@ -55,6 +57,10 @@ class SteamiDisplayRulesTest(unittest.TestCase):
         for body in ("SteamiDisplay d; d.clear(15);", "SteamiDisplay d; d.pixel(1, 1, 15);"):
             with self.subTest(body=body):
                 self.assertFalse(self._compiles(body, "SteamiDisplay.h"))
+
+    def test_value_rejects_long_long(self) -> None:
+        self.assertTrue(self._compiles("SteamiValue v(1L); (void)v;", header="SteamiValue.h"))
+        self.assertFalse(self._compiles("SteamiValue v(1LL); (void)v;", header="SteamiValue.h"))
 
     def test_backends_never_call_driver_drawing(self) -> None:
         # The layer draws; a backend only forwards pixels, rectangles and controls. Inline
@@ -100,6 +106,77 @@ class SteamiDisplayRulesTest(unittest.TestCase):
         self.assertTrue(gallery_body)
         self.assertEqual(sketch_body, gallery_body)
         self.assertIn("drawGallery(screen);", sketch.read_text(encoding="utf-8"))
+
+    # One token of a statement: a string literal, a SteamiAt:: or STEAMI_ name, nullptr, an
+    # identifier (skipped, so that the digits of a name are no number) or a numeric literal.
+    _TOKEN = re.compile(
+        r'"(?:[^"\\]|\\.)*"'
+        r"|SteamiAt::\w+|\bSTEAMI_\w+|\bnullptr\b"
+        r"|(?P<ident>\b[A-Za-z_]\w*)"
+        r"|(?<![\w.])-?\d+(?:\.\d+)?[fFuUlL]*"
+    )
+
+    @classmethod
+    def _calls(cls, text: str) -> list[tuple[str, list[str]]]:
+        """Every statement of text that starts with "screen.": (method name, literal tokens)."""
+        code = "\n".join(line.split("//")[0] for line in text.splitlines())
+        out: list[tuple[str, list[str]]] = []
+        for statement in re.split(r"[;{}]", code):  # no string of the mockups holds ; { or }
+            statement = " ".join(statement.split())
+            method = re.match(r"screen\.(\w+)", statement)
+            if method is None:
+                continue
+            tokens = [
+                m.group(0) for m in cls._TOKEN.finditer(statement) if m.group("ident") is None
+            ]
+            out.append((method.group(1), tokens))
+        return out
+
+    def _body(self, path: Path, marker: str) -> str:
+        """The lines after the one holding marker, up to the first line "}"."""
+        lines = path.read_text(encoding="utf-8").splitlines()
+        start = next((i for i, line in enumerate(lines) if marker in line), None)
+        if start is None:
+            self.fail(f"{path.name} has no '{marker}'")
+        end = lines.index("}", start + 1)
+        return "\n".join(lines[start + 1 : end])
+
+    def test_calls_tokens(self) -> None:
+        # Positive control of the tokenizer: literals, names and signs; no digit of a name.
+        self.assertEqual(
+            self._calls(
+                'screen.value(battery.percent(), "%", SteamiAt::CENTER, nullptr, STEAMI_WHITE, 2,'
+                ' -12);  // rows 72..79\nif (x) {\n}\nscreen.vline(cx, cy - r / 2, r, STEAMI_DARK);'
+                " delay(500); x2 = 3;"
+            ),
+            [
+                ("value", ['"%"', "SteamiAt::CENTER", "nullptr", "STEAMI_WHITE", "2", "-12"]),
+                ("vline", ["2", "STEAMI_DARK"]),
+            ],
+        )
+
+    def test_screen_examples_draw_the_mockups(self) -> None:
+        # Each example's loop() makes the screen calls of its mockup helper, with the same
+        # literals; the helper takes the sensor readings as parameters.
+        helpers = ROOT / "tests" / "native" / "helpers" / "SteamiMockups.h"
+        examples = ROOT / "lib" / "steami_board" / "examples"
+        self.assertTrue(helpers.is_file(), "SteamiMockups.h is missing")
+        for example, helper in (
+            ("ScreenTemperature", "mockupTemperature"),
+            ("ScreenBattery", "mockupBattery"),
+            ("ScreenComfort", "mockupComfort"),
+        ):
+            with self.subTest(example=example):
+                sketch = examples / example / f"{example}.ino"
+                self.assertTrue(sketch.is_file(), f"{example}.ino is missing")
+                loop = self._body(sketch, "void loop() {")
+                drawing = self._body(helpers, f"inline void {helper}(")
+                sketch_calls, helper_calls = self._calls(loop), self._calls(drawing)
+                self.assertTrue(sketch_calls)
+                self.assertTrue(helper_calls)
+                self.assertEqual(sketch_calls, helper_calls)
+                self.assertIn("screen.show();", loop)
+                self.assertTrue(drawing.rstrip().endswith("screen.show();"))
 
 
 if __name__ == "__main__":
