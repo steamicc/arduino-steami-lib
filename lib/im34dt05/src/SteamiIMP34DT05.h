@@ -142,6 +142,23 @@ class SteamiIMP34DT05 {
     bool setSlot(uint8_t slot);
     uint8_t slot() const;
 
+    // --- Conversion cost -------------------------------------------------
+
+    // Processor cycles the DMA interrupt spent on each delivered block
+    // (PDM to PCM conversion, sample buffer, level, onReceive() callback),
+    // read from the DWT cycle counter. Warm-up, slot detection and the
+    // settling blocks after begin() / powerOn() are not counted. A block
+    // comes every millisecond, so averageCycles / (SystemCoreClock / 1000)
+    // is the share of the CPU the microphone takes. begin() and powerOn()
+    // reset the statistics. Always zero on the host (no cycle counter).
+    struct ConversionStats {
+        uint32_t blocks;         // blocks measured
+        uint32_t averageCycles;  // mean cycles per block
+        uint32_t maxCycles;      // longest block
+    };
+    ConversionStats conversionStats() const;
+    void resetConversionStats();
+
     // --- Pure helpers (no hardware) --------------------------------------
 
     // RMS of `count` samples (0 when count is 0).
@@ -199,6 +216,11 @@ class SteamiIMP34DT05 {
     volatile bool _levelValid = false;
     volatile bool _levelReady = false;
     float _levelOffset = 0.0f;
+
+    // Conversion cost (written by the interrupt).
+    volatile uint32_t _statBlocks = 0;
+    uint64_t _statCycles = 0;
+    uint32_t _statMaxCycles = 0;
 
     bool startAndWait();
     void detectSlot(const uint8_t* data, size_t perSlot, uint32_t detectBlock);

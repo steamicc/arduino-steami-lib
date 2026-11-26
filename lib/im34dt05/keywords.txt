@@ -10,6 +10,7 @@ SteamiIMP34DT05	KEYWORD1
 SteamiPdmFilter	KEYWORD1
 SteamiPdmSai	KEYWORD1
 LevelResult	KEYWORD1
+ConversionStats	KEYWORD1
 ReceiveCallback	KEYWORD1
 
 #######################################
@@ -41,6 +42,8 @@ level	KEYWORD2
 setLevelOffset	KEYWORD2
 dominantFrequencyHz	KEYWORD2
 setSlot	KEYWORD2
+conversionStats	KEYWORD2
+resetConversionStats	KEYWORD2
 slot	KEYWORD2
 computeRms	KEYWORD2
 rmsToDbfs	KEYWORD2

@@ -51,6 +51,25 @@ bool isLiveByte(uint8_t value) {
     return value != 0x00 && value != 0xFF;
 }
 
+// Processor cycle counter (DWT CYCCNT, which the STM32 core starts at
+// boot). 0 on the host: the conversion statistics stay at zero there.
+uint32_t cycleCounter() {
+#if defined(ARDUINO_ARCH_STM32) && defined(DWT_BASE)
+    return DWT->CYCCNT;
+#else
+    return 0;
+#endif
+}
+
+void enableCycleCounter() {
+#if defined(ARDUINO_ARCH_STM32) && defined(DWT_BASE)
+    if ((DWT->CTRL & DWT_CTRL_CYCCNTENA_Msk) == 0) {
+        CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+        DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+    }
+#endif
+}
+
 // Filter the `perSlot` bytes of one slot of a SAI block, one PCM block
 // (or less) at a time, and hand each batch of samples to `sink`.
 template <typename Sink>
@@ -91,6 +110,7 @@ bool SteamiIMP34DT05::begin(uint32_t sampleRate) {
         return false;
     }
 
+    enableCycleCounter();
     activeMic = this;
     if (!SteamiPdmSai::begin(handleBlock)) {
         activeMic = nullptr;
@@ -141,6 +161,7 @@ uint32_t SteamiIMP34DT05::sampleRate() const {
 bool SteamiIMP34DT05::startAndWait() {
     resetStream();
     resetLevel();
+    resetConversionStats();
     _filter.reset();
     _blocks = 0;
     _settleBlocks = IMP34DT05_SETTLE_BLOCKS;
@@ -182,6 +203,7 @@ bool SteamiIMP34DT05::startAndWait() {
 // --- Interrupt side ----------------------------------------------------------
 
 void SteamiIMP34DT05::processBlock(const uint8_t* data, size_t length) {
+    uint32_t startCycles = cycleCounter();
     size_t perSlot = length / IMP34DT05_SAI_SLOTS;
     if (perSlot == 0) {
         return;
@@ -206,6 +228,16 @@ void SteamiIMP34DT05::processBlock(const uint8_t* data, size_t length) {
     });
     if (_settleBlocks > 0) {
         _settleBlocks = _settleBlocks - 1;
+    }
+    if (deliver) {
+        // Steady state only: warm-up, slot detection (two filters) and
+        // settling blocks returned above or are not delivered.
+        uint32_t cycles = cycleCounter() - startCycles;
+        _statBlocks = _statBlocks + 1;
+        _statCycles += cycles;
+        if (cycles > _statMaxCycles) {
+            _statMaxCycles = cycles;
+        }
     }
 }
 
@@ -261,33 +293,47 @@ void SteamiIMP34DT05::detectSlot(const uint8_t* data, size_t perSlot, uint32_t d
 }
 
 void SteamiIMP34DT05::publish(const int16_t* samples, size_t count) {
+    // Runs in the interrupt: work on local copies, store them once.
+    uint16_t head = _head;
+    const uint16_t tail = _tail;  // read() only frees space meanwhile
+    uint32_t overruns = _overruns;
+    uint64_t accSquares = _accSquares;
+    uint32_t accCount = _accCount;
+    uint16_t accPeak = _accPeak;
+    const uint32_t windowSamples = _windowSamples;
+
     for (size_t i = 0; i < count; i++) {
         int16_t sample = samples[i];
 
-        uint16_t head = _head;
-        if (static_cast<uint16_t>(head - _tail) >= IMP34DT05_BUFFER_SAMPLES) {
-            _overruns = _overruns + 1;
+        if (static_cast<uint16_t>(head - tail) >= IMP34DT05_BUFFER_SAMPLES) {
+            overruns++;
         } else {
             _buffer[head & BUFFER_MASK] = sample;
-            _head = head + 1;
+            head++;
         }
 
         int32_t value = sample;
         uint16_t magnitude = static_cast<uint16_t>(value < 0 ? -value : value);
-        _accSquares += static_cast<uint64_t>(value * value);
-        if (magnitude > _accPeak) {
-            _accPeak = magnitude;
+        accSquares += static_cast<uint32_t>(value * value);
+        if (magnitude > accPeak) {
+            accPeak = magnitude;
         }
-        if (++_accCount >= _windowSamples) {
-            _meanSquare = static_cast<float>(_accSquares) / static_cast<float>(_accCount);
-            _windowPeak = _accPeak;
+        if (++accCount >= windowSamples) {
+            _meanSquare = static_cast<float>(accSquares) / static_cast<float>(accCount);
+            _windowPeak = accPeak;
             _levelValid = true;
             _levelReady = true;
-            _accSquares = 0;
-            _accCount = 0;
-            _accPeak = 0;
+            accSquares = 0;
+            accCount = 0;
+            accPeak = 0;
         }
     }
+
+    _head = head;
+    _overruns = overruns;
+    _accSquares = accSquares;
+    _accCount = accCount;
+    _accPeak = accPeak;
     if (_callback != nullptr) {
         _callback(samples, count);
     }
@@ -489,6 +535,32 @@ bool SteamiIMP34DT05::setSlot(uint8_t slot) {
 
 uint8_t SteamiIMP34DT05::slot() const {
     return _slot;
+}
+
+// --- Conversion cost ---------------------------------------------------------
+
+SteamiIMP34DT05::ConversionStats SteamiIMP34DT05::conversionStats() const {
+    uint32_t blocks;
+    uint64_t cycles;
+    uint32_t maxCycles;
+    {
+        IrqGuard guard;
+        blocks = _statBlocks;
+        cycles = _statCycles;
+        maxCycles = _statMaxCycles;
+    }
+    ConversionStats stats;
+    stats.blocks = blocks;
+    stats.averageCycles = blocks == 0 ? 0 : static_cast<uint32_t>(cycles / blocks);
+    stats.maxCycles = maxCycles;
+    return stats;
+}
+
+void SteamiIMP34DT05::resetConversionStats() {
+    IrqGuard guard;
+    _statBlocks = 0;
+    _statCycles = 0;
+    _statMaxCycles = 0;
 }
 
 // --- Pure helpers ------------------------------------------------------------

@@ -490,6 +490,23 @@ void test_warmup_and_detection_deliver_nothing(void) {
     TEST_ASSERT_EQUAL_UINT(IMP34DT05_SAMPLES_PER_BLOCK, mic.available());
 }
 
+void test_conversion_stats_count_delivered_blocks_only(void) {
+    // Warm-up, slot detection (which filters both slots) and settling
+    // are left out; the host has no cycle counter, so cycles stay at 0.
+    SteamiIMP34DT05 mic;
+    std::vector<uint8_t> frames = saiFrames(pdmSine(1000.0f, 0.25f, 16000), 0);
+    size_t position = 0;
+    feedBlocks(mic, frames, STARTUP_BLOCKS, position);
+    TEST_ASSERT_EQUAL_UINT32(0, mic.conversionStats().blocks);
+    feedBlocks(mic, frames, 5, position);
+    SteamiIMP34DT05::ConversionStats stats = mic.conversionStats();
+    TEST_ASSERT_EQUAL_UINT32(5, stats.blocks);
+    TEST_ASSERT_EQUAL_UINT32(0, stats.averageCycles);
+    TEST_ASSERT_EQUAL_UINT32(0, stats.maxCycles);
+    mic.resetConversionStats();
+    TEST_ASSERT_EQUAL_UINT32(0, mic.conversionStats().blocks);
+}
+
 void test_detection_finds_microphone_slot(void) {
     for (uint8_t micSlot = 0; micSlot < 2; micSlot++) {
         for (uint8_t idle : {static_cast<uint8_t>(0x00), static_cast<uint8_t>(0xFF)}) {
@@ -681,6 +698,7 @@ int main(int /* argc */, char** /* argv */) {
     RUN_TEST(test_level_is_nan_before_first_window);
 
     RUN_TEST(test_warmup_and_detection_deliver_nothing);
+    RUN_TEST(test_conversion_stats_count_delivered_blocks_only);
     RUN_TEST(test_detection_finds_microphone_slot);
     RUN_TEST(test_detection_rejects_random_slot);
     RUN_TEST(test_forced_slot);
