@@ -36,6 +36,7 @@ SteamiButton	KEYWORD1
 SteamiDisplay	KEYWORD1
 SteamiScreen	KEYWORD1
 SteamiAt	KEYWORD1
+SteamiFace	KEYWORD1
 SteamiValue	KEYWORD1
 SteamiDisplayBackend	KEYWORD1
 SteamiSsd1327Backend	KEYWORD1
@@ -140,6 +141,10 @@ subtitle	KEYWORD2
 value	KEYWORD2
 setDecimals	KEYWORD2
 bar	KEYWORD2
+gauge	KEYWORD2
+compass	KEYWORD2
+watch	KEYWORD2
+face	KEYWORD2
 maxChars	KEYWORD2
 format	KEYWORD2
 show	KEYWORD2

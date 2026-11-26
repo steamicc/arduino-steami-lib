@@ -506,6 +506,18 @@ widget paints over an earlier one), then `show()`.
 | `void bar(float v, float maxV, SteamiRgb c)` | | The bar at the centre, with a colour. |
 | `void text(const char* s, SteamiAt at = SteamiAt::CENTER, SteamiRgb c = STEAMI_WHITE, uint8_t scale = 1)` | `STEAMI_WHITE` | Text at a position; `text(s, x, y, ...)` of `SteamiDisplay` is still there, in pixels. |
 | `uint8_t maxChars()` | | Characters of scale 1 across the panel: 16 on 128, 15 on 240. |
+| `void gauge(float v, float minV = 0, float maxV = 100, SteamiRgb c = STEAMI_LIGHT, uint8_t arcWidth = 0)` | track `STEAMI_DARK`, labels `STEAMI_GRAY`, fill `STEAMI_LIGHT` | A ring of 270 degrees near the edge, gap at the bottom, filled clockwise from the lower left; the integer parts of `minV` and `maxV` sit inside its two ends. No value: draw it with `value()`. |
+| `void compass(float headingDeg, SteamiRgb c = STEAMI_LIGHT)` | rose `STEAMI_DARK`, N `STEAMI_WHITE`, E S W `STEAMI_GRAY`, needle `c` | A compass rose whose needle points to real north. |
+| `void watch(uint8_t h, uint8_t m, uint8_t s = 0, SteamiRgb c = STEAMI_LIGHT)` | dial `STEAMI_DARK`, 12 3 6 9 `STEAMI_WHITE`, seconds and pivot `STEAMI_GRAY`, hour and minute hands `c` | An analog watch. |
+| `void face(SteamiFace f, bool compact = false, SteamiRgb c = STEAMI_LIGHT)` | `STEAMI_LIGHT` | A pixel-art face, centred. |
+| `void face(SteamiFace f, SteamiRgb c)` | | The same, with a colour. |
+| `void face(const uint8_t bitmap[8], bool compact = false, SteamiRgb c = STEAMI_LIGHT)` | `STEAMI_LIGHT` | Your own 8x8 face. |
+
+`SteamiFace` names the six faces: `HAPPY`, `SAD`, `SURPRISED`, `SLEEPING`,
+`ANGRY` and `LOVE`. `compact` draws them with smaller squares (8 px instead of
+11 on the 128 px screen), half a square higher, to leave room for a title and
+a subtitle. `face(bitmap)` takes your own picture: 8 bytes, one per row from top
+to bottom, the leftmost pixel in the high bit (`0x80`); `nullptr` draws nothing.
 
 `SteamiAt` names the nine positions: `N`, `NE`, `E`, `SE`, `S`, `SW`, `W`, `NW`
 and `CENTER` (as `"N"` ... `"CENTER"` in MicroPython).
@@ -520,17 +532,27 @@ is the formatter `value()` uses, in `SteamiValue.h`.
 Layout rules:
 
 * The same sketch runs on 128 and 240 px: positions and `yOffset` are in the
-  units of the 128 px screen, and glyphs are twice as large on 240.
-* `yOffset` is in the units of the 128 px screen, also on 240 (an offset of 8
-  moves the value by 15 px there).
+  units of the 128 px screen, also on 240 (an offset of 8 moves the value by
+  15 px there), and glyphs are twice as large on 240.
 * Text never leaves the circle: it is cut (no ellipsis), or `value()` drops to
   a smaller size first.
 * A title of up to 11 characters stays at the top; the examples keep to that.
 * The values at `W` and `E` share one size, so two values side by side always
   match.
-* A bar fill is lifted to at least 4 grey levels above its track on the V1a/V1b
-  grey screen (`STEAMI_BLUE` becomes visible). The primitives of `SteamiDisplay`
-  never adjust a colour.
+* A bar fill or a gauge fill is lifted to at least 4 grey levels above its
+  track on the V1a/V1b grey screen (`STEAMI_BLUE` over the `STEAMI_DARK` gauge
+  track becomes grey 10; the bar's track is `STEAMI_GRID_DARK`). The primitives
+  of `SteamiDisplay` never adjust a colour.
+* `gauge()` draws the ring and the min/max labels only: call `value()` after it
+  to show the number (as in MicroPython). Its `arcWidth` is in pixels of the
+  panel, not in 128 px units; 0 keeps the default.
+* The needle of `compass()` points to real north and the rose turns, so the
+  letters stay upright (see [Heading convention](#heading-convention)): at
+  heading 90 the N is on the left. `NAN` (no sensor) draws the rose without a
+  needle.
+* `watch()` takes hours 0 to 23 and minutes and seconds 0 to 59; the hands move
+  in whole degrees (the hour hand with the minutes, the minute hand with the
+  seconds).
 
 | MicroPython | Arduino |
 |-------------|---------|
@@ -539,6 +561,8 @@ Layout rules:
 | `screen.subtitle("a", "b", color=C)` | `screen.subtitle("a", "b", C)` (3 lines at most) |
 | `screen.bar(v, max_val=100, color=C)` | `screen.bar(v, 100, C)` |
 | `screen.text("x", at="NE", scale=2)` | `screen.text("x", SteamiAt::NE, STEAMI_WHITE, 2)` |
+| `screen.gauge(v, min_val, max_val, color=C)` | `screen.gauge(v, min, max, C)` |
+| `screen.face("happy", color=C)` | `screen.face(SteamiFace::HAPPY, C)` |
 | `"N"` `"NE"` ... `"CENTER"`, `BLACK` ... `YELLOW` | `SteamiAt::N` ... `SteamiAt::CENTER`, `STEAMI_BLACK` ... `STEAMI_YELLOW` |
 | `screen.center`, `screen.radius`, `screen.width` | `centerX()`, `centerY()`, `radius()`, `width()` |
 
@@ -549,6 +573,10 @@ Examples, each reproducing a mockup of the tutorials:
 | `ScreenTemperature` | `01_temperature_ref.png`: title, value with its unit, sensor name |
 | `ScreenBattery` | `02_battery_ref.png`: charge in percent, green bar, voltage and gauge name |
 | `ScreenComfort` | `03_comfort_dual_ref.png`: temperature and humidity side by side, comfort verdict |
+| `ScreenGauge` | `04_circular_gauge_ref.png`: distance of the VL53L1X in a ring |
+| `ScreenCompass` | `07_compass_ref.png`: the rose turns with the compass heading |
+| `ScreenFaces` | `08_smiley_*_ref.png`: the six faces (button A shows the next) and the reactive smiley |
+| `ScreenWatch` | `09_watch_ref.png`: an analog watch |
 
 Messages of the screen are those of the display, with `who` = `SteamiScreen`:
 
@@ -592,7 +620,7 @@ void setup() {
 make test-native/steami_board   # detection, routing, messages, lazy slots
 make test-native/steami_display_board   # display primitives, E30, E31
 make test-native/steami_screen   # widgets, layout rules, SteamiValue, E30, E31
-make test-native/steami_screen_mockups   # the three mockups at 128 and 240 px
+make test-native/steami_screen_mockups   # mockups 01 to 04 and 07 to 09 at 128 and 240 px
 # score the mockup renders against the tutorials' images (needs Pillow and NumPy)
 mkdir -p /tmp/mockups   # writePpm does not create the folder
 STEAMI_PPM_DIR=/tmp/mockups .venv/bin/pio test -e native -f native/test_steami_screen_mockups
