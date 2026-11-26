@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.35.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.34.0...v0.35.0) (2026-11-26)
+
+
+### Features
+
+* **board:** Add SteamiDisplay primitives on a memory backend. ([#258](https://github.com/steamicc/arduino-steami-lib/issues/258)) ([649221b](https://github.com/steamicc/arduino-steami-lib/commit/649221b40ca5814ab72725806e57fb43e9da2d1f))
+
 # [0.34.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.33.0...v0.34.0) (2026-11-25)
 
 
