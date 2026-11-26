@@ -40,7 +40,7 @@ static void drawGallery(SteamiDisplay& d) {
 void setup() {
     Serial.begin(115200);
     while (!Serial && millis() < 2000) {
-        // Serial is ready as soon as Serial.begin() returns on the STeaMi.
+        // Up to 2 s for a serial monitor to open, so it sees a "No screen" error; never forever.
     }
 
     if (!screen.begin()) {
