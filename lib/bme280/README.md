@@ -65,13 +65,15 @@ includes `<SteamiBME280.h>` and uses `SteamiBME280`.
 
 ## Examples
 
-| Example                                        | What it does                                                                                  |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| [`BasicReader`](examples/BasicReader/)         | Baseline sketch: print temperature, humidity and pressure every second.                       |
-| [`Altitude`](examples/Altitude/)               | Estimate the altitude (absolute and since power-on) from the pressure, with filtering.        |
-| [`DewPointMonitor`](examples/DewPointMonitor/) | Compute the dew point from T and RH, warn when condensation risk is high (T - Td < 2 C).      |
-| [`ComfortZone`](examples/ComfortZone/)         | Classify the room as comfortable / too dry / too humid / too cold / too hot.                  |
-| [`WeatherStation`](examples/WeatherStation/)   | Continuous (normal mode) monitoring with pressure trend.                                      |
+| Example                                        | What it does                                                                             | Try it                                                                                   |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| [`BasicReader`](examples/BasicReader/)         | Baseline sketch: print temperature, humidity and pressure every second.                  | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/bme280#basicreader)     |
+| [`Altitude`](examples/Altitude/)               | Estimate the altitude (absolute and since power-on) from the pressure, with filtering.   | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/bme280#altitude)        |
+| [`DewPointMonitor`](examples/DewPointMonitor/) | Compute the dew point from T and RH, warn when condensation risk is high (T - Td < 2 C). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/bme280#dewpointmonitor) |
+| [`ComfortZone`](examples/ComfortZone/)         | Classify the room as comfortable / too dry / too humid / too cold / too hot.             | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/bme280#comfortzone)     |
+| [`WeatherStation`](examples/WeatherStation/)   | Continuous (normal mode) monitoring with pressure trend.                                 | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/bme280#weatherstation)  |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/bme280).
 
 ### Building an example
 

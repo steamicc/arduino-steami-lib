@@ -49,12 +49,14 @@ See [examples/BasicReader/](examples/BasicReader/) for the full sketch.
 
 ## Examples
 
-| Example                                        | What it does                                                                                |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| [`BasicReader`](examples/BasicReader/)         | Baseline sketch: print temperature and humidity every second.                               |
-| [`HumidityAlert`](examples/HumidityAlert/)     | Sound the on-board buzzer when humidity climbs past a mold-risk threshold.                  |
-| [`DewPointMonitor`](examples/DewPointMonitor/) | Compute the dew point from T and RH, warn when condensation risk is high (T − Td < 2 °C).   |
-| [`ComfortZone`](examples/ComfortZone/)         | Classify the room as comfortable / too dry / too humid / too cold / too hot.                |
+| Example                                        | What it does                                                                              | Try it                                                                                      |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [`BasicReader`](examples/BasicReader/)         | Baseline sketch: print temperature and humidity every second.                             | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-hids#basicreader)     |
+| [`HumidityAlert`](examples/HumidityAlert/)     | Sound the on-board buzzer when humidity climbs past a mold-risk threshold.                | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-hids#humidityalert)   |
+| [`DewPointMonitor`](examples/DewPointMonitor/) | Compute the dew point from T and RH, warn when condensation risk is high (T − Td < 2 °C). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-hids#dewpointmonitor) |
+| [`ComfortZone`](examples/ComfortZone/)         | Classify the room as comfortable / too dry / too humid / too cold / too hot.              | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-hids#comfortzone)     |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-hids).
 
 ### Building an example
 

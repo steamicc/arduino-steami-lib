@@ -49,12 +49,14 @@ for the full sketch.
 
 ## Examples
 
-| Example | What it does |
-|---------|--------------|
-| [`BasicReader`](examples/BasicReader/) | Read X/Y/Z magnetic field and temperature, then print the values to the Serial Monitor. |
-| [`DigitalCompass`](examples/DigitalCompass/) | Perform a 2D min/max calibration, compute the compass heading, and display the heading and cardinal direction on Serial (and OLED on STeaMi when available). |
-| [`MetalDetector`](examples/MetalDetector/) | Measure the magnetic field magnitude, learn a baseline, and detect nearby metallic or magnetic objects. |
-| [`MagneticCalibration`](examples/MagneticCalibration/) | Perform a guided hard-iron calibration by rotating the board, then compute and display the calibration offsets. |
+| Example | What it does | Try it |
+|---------|--------------|--------|
+| [`BasicReader`](examples/BasicReader/) | Read X/Y/Z magnetic field and temperature, then print the values to the Serial Monitor. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/lis2mdl#basicreader) |
+| [`DigitalCompass`](examples/DigitalCompass/) | Perform a 2D min/max calibration, compute the compass heading, and display the heading and cardinal direction on Serial (and OLED on STeaMi when available). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/lis2mdl#digitalcompass) |
+| [`MetalDetector`](examples/MetalDetector/) | Measure the magnetic field magnitude, learn a baseline, and detect nearby metallic or magnetic objects. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/lis2mdl#metaldetector) |
+| [`MagneticCalibration`](examples/MagneticCalibration/) | Perform a guided hard-iron calibration by rotating the board, then compute and display the calibration offsets. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/lis2mdl#magneticcalibration) |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/lis2mdl).
 
 ### Building an example
 

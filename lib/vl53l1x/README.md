@@ -51,13 +51,15 @@ void loop() {
 
 ## Examples
 
-| Example | What it does |
-|---------|--------------|
-| [`BasicDistance`](examples/BasicDistance/) | Print the measured distance in millimetres to the Serial Monitor. |
-| [`ProximityAlarm`](examples/ProximityAlarm/) | Sound the buzzer while an object is closer than a configurable threshold. |
-| [`ParkingSensor`](examples/ParkingSensor/) | Beep faster as an object gets closer, like a car parking sensor. |
-| [`ObjectCounter`](examples/ObjectCounter/) | Measure the background distance, then count each object passing in front of the sensor. |
-| [`GestureDetection`](examples/GestureDetection/) | Toggle the LED when a hand waves quickly in front of the sensor. |
+| Example | What it does | Try it |
+|---------|--------------|--------|
+| [`BasicDistance`](examples/BasicDistance/) | Print the measured distance in millimetres to the Serial Monitor. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/vl53l1x#basicdistance) |
+| [`ProximityAlarm`](examples/ProximityAlarm/) | Sound the buzzer while an object is closer than a configurable threshold. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/vl53l1x#proximityalarm) |
+| [`ParkingSensor`](examples/ParkingSensor/) | Beep faster as an object gets closer, like a car parking sensor. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/vl53l1x#parkingsensor) |
+| [`ObjectCounter`](examples/ObjectCounter/) | Measure the background distance, then count each object passing in front of the sensor. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/vl53l1x#objectcounter) |
+| [`GestureDetection`](examples/GestureDetection/) | Toggle the LED when a hand waves quickly in front of the sensor. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/vl53l1x#gesturedetection) |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/vl53l1x).
 
 `make list-examples DRIVER=vl53l1x` lists the ready-to-run
 `flash-vl53l1x/<example>` targets.
