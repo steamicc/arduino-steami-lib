@@ -17,10 +17,10 @@
 #include "SteamiScreen.h"
 #include "SteamiScreenCheck.h"
 
-// Suite 4 of the spec's section 7: mockups 01 to 03 drawn with the examples' calls, on the 128 px
-// grey panel of V1a/V1b and the 240 px colour panel of V1c. The boxes are those that
-// golden_layout.py's title_row/text_box, value_layout, bar_boxes and subtitle_rows give for the
-// same calls.
+// Suite 4 of the spec's section 7: mockups 01 to 04 and 07 to 09 drawn with the examples' calls, on
+// the 128 px grey panel of V1a/V1b and the 240 px colour panel of V1c. The boxes and points are
+// those that golden_layout.py prints under "Values pinned by test_steami_screen_mockups (4b Task
+// 5)", composed from its widget goldens for the same calls.
 
 static std::vector<std::string> g_lines;
 static void capture(const char* line) {
@@ -110,6 +110,29 @@ static bool any(const std::vector<bool>& mask) {
     return false;
 }
 
+/// The pixel (x, y) holds colour c.
+static void expectPixel(const SteamiMemoryBackend& mem, int16_t x, int16_t y, SteamiRgb c) {
+    TEST_ASSERT_EQUAL_HEX16(mem.stored(c), mem.at(x, y));
+}
+
+/// How many pixels hold colour c at a distance d from the panel's centre with from <= d <= to.
+static size_t countAtDistance(const SteamiMemoryBackend& mem, SteamiRgb c, int32_t from,
+                              int32_t to) {
+    const uint16_t v = mem.stored(c);
+    const int32_t cx = mem.width() / 2;
+    const int32_t cy = mem.height() / 2;
+    size_t n = 0;
+    for (int16_t y = 0; y < mem.height(); y++) {
+        for (int16_t x = 0; x < mem.width(); x++) {
+            const int32_t d2 = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+            if (mem.at(x, y) == v && d2 >= from * from && d2 <= to * to) {
+                n++;
+            }
+        }
+    }
+    return n;
+}
+
 static void test_mockup_01_temperature(void) {
     render("01_temperature", 128, false, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
         mockupTemperature(s, 23.5f, "WSEN-HIDS");
@@ -171,6 +194,92 @@ static void test_mockup_03_comfort(void) {
         expectBox(inkBox(mem, STEAMI_GRAY, 61, 239), 39, 75, 193, 88);      // "TEMP" and "HUM"
         expectBox(inkBox(mem, STEAMI_GREEN, 173, 192), 34, 173, 205, 186);  // "Comfortable"
         expectBox(inkBox(mem, STEAMI_GREEN, 193, 239), 74, 193, 165, 206);  // "BME280"
+    });
+}
+
+static void test_mockup_04_gauge(void) {
+    // gauge(342, 0, 500) fills 185 of 270 degrees: the fill ends at 50 degrees, between the
+    // golden's polar(57, 45) and polar(57, 55) on 128 (radius 107 on 240), mid-ring.
+    render("04_circular_gauge", 128, false, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
+        mockupGauge(s, 342);
+        expectBox(inkBox(mem, STEAMI_WHITE), 42, 50, 85, 63);           // "342"
+        expectBox(inkBox(mem, STEAMI_GRAY, 85, 100), 27, 90, 105, 96);  // labels "0" and "500"
+        expectPixel(mem, 104, 24, STEAMI_LIGHT);
+        expectPixel(mem, 111, 31, STEAMI_DARK);
+    });
+    render("04_circular_gauge", 240, true, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
+        mockupGauge(s, 342);
+        expectBox(inkBox(mem, STEAMI_WHITE), 76, 91, 163, 118);
+        expectBox(inkBox(mem, STEAMI_GRAY, 160, 190), 49, 169, 200, 182);
+        expectPixel(mem, 196, 44, STEAMI_LIGHT);
+        expectPixel(mem, 208, 59, STEAMI_DARK);
+    });
+}
+
+static void test_mockup_07_compass(void) {
+    render("07_compass", 128, false, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
+        mockupCompass(s, 0.0f);
+        expectBox(inkBox(mem, STEAMI_WHITE), 61, 3, 66, 9);  // N
+        expectPixel(mem, 64, 20, STEAMI_LIGHT);              // the needle tip
+    });
+    render("07_compass", 240, true, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
+        mockupCompass(s, 0.0f);
+        expectBox(inkBox(mem, STEAMI_WHITE), 114, 5, 125, 18);
+        expectPixel(mem, 120, 37, STEAMI_LIGHT);
+    });
+}
+
+static void test_mockup_08_faces(void) {
+    // Full render names in SteamiFace order (FACES), not in the review list's order.
+    const char* const kFaceNames[6] = {"08_smiley_happy",     "08_smiley_sad",
+                                       "08_smiley_surprised", "08_smiley_sleeping",
+                                       "08_smiley_angry",     "08_smiley_love"};
+    struct Panel {
+        int16_t size;
+        bool color;
+    };
+    for (const Panel p : {Panel{128, false}, Panel{240, true}}) {
+        for (int i = 0; i < 6; i++) {
+            const std::vector<bool> alone = maskAlone(p.size, p.color, STEAMI_LIGHT,
+                                                      [i](SteamiScreen& s) { s.face(FACES[i]); });
+            TEST_ASSERT_TRUE(any(alone));
+            render(kFaceNames[i], p.size, p.color, [&](SteamiMemoryBackend& mem, SteamiScreen& s) {
+                mockupFaces(s, i, 0);
+                TEST_ASSERT_TRUE(maskOf(mem, STEAMI_LIGHT) == alone);
+                TEST_ASSERT_EQUAL_size_t(0, inkBox(mem, STEAMI_GRAY).count);  // no title
+            });
+        }
+    }
+}
+
+static void test_mockup_08_reactive(void) {
+    render("08_smiley_reactive", 128, false, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
+        mockupFaces(s, 6, 100);
+        expectBox(inkBox(mem, STEAMI_GRAY), 49, 20, 78, 26);     // "Mood", row 20
+        expectBox(inkBox(mem, STEAMI_LIGHT), 31, 31, 96, 96);    // HAPPY
+        expectBox(inkBox(mem, STEAMI_GREEN), 45, 108, 82, 114);  // "HAPPY", row 108
+    });
+    render("08_smiley_reactive", 240, true, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
+        mockupFaces(s, 6, 100);
+        expectBox(inkBox(mem, STEAMI_GRAY), 90, 37, 149, 50);
+        expectBox(inkBox(mem, STEAMI_LIGHT), 60, 60, 179, 179);
+        expectBox(inkBox(mem, STEAMI_GREEN), 82, 202, 157, 215);
+    });
+}
+
+static void test_mockup_09_watch(void) {
+    // 10:10:30. The "12" is the WHITE ink above the "3" and "9" cells (rows 60 / 112 on).
+    render("09_watch", 128, false, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
+        mockupWatch(s, 10 * 3600UL + 10 * 60 + 30);
+        expectBox(inkBox(mem, STEAMI_WHITE, 0, 59), 57, 19, 70, 25);
+        expectPixel(mem, 41, 48, STEAMI_LIGHT);   // hour tip
+        expectPixel(mem, 101, 45, STEAMI_LIGHT);  // minute tip
+    });
+    render("09_watch", 240, true, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
+        mockupWatch(s, 10 * 3600UL + 10 * 60 + 30);
+        expectBox(inkBox(mem, STEAMI_WHITE, 0, 111), 106, 35, 133, 48);
+        expectPixel(mem, 77, 90, STEAMI_LIGHT);
+        expectPixel(mem, 189, 85, STEAMI_LIGHT);
     });
 }
 
@@ -237,6 +346,50 @@ static void test_mockups_without_sensors(void) {
             });
         TEST_ASSERT_TRUE(any(dashes03));
         TEST_ASSERT_TRUE(white == dashes03);
+
+        // 04 with d = -1: an empty gauge (no LIGHT on the ring, 54..60 / 101..113) and "-1 mm".
+        const int32_t inner = small ? 54 : 101;
+        const int32_t outer = small ? 60 : 113;
+        onPanel(p.size, p.color, [&](SteamiMemoryBackend& mem, SteamiScreen& s) {
+            mockupGauge(s, -1);
+            expectShownOnce(mem);
+            white = maskOf(mem, STEAMI_WHITE);
+            TEST_ASSERT_EQUAL_size_t(0, countAtDistance(mem, STEAMI_LIGHT, inner - 1, outer + 1));
+            TEST_ASSERT_TRUE(countAtDistance(mem, STEAMI_DARK, inner, outer) > 0);  // the track
+        });
+        const std::vector<bool> minusOne =
+            maskAlone(p.size, p.color, STEAMI_WHITE, [](SteamiScreen& s) { s.value(-1, "mm"); });
+        TEST_ASSERT_TRUE(any(minusOne));
+        TEST_ASSERT_TRUE(white == minusOne);
+
+        // 07 with NAN: the rose of heading 0 with its N, no needle (the LIGHT ticks start at 46 /
+        // 87, the needle reaches 44 / 83).
+        const int32_t near = small ? 45 : 84;
+        const std::vector<bool> north = maskAlone(p.size, p.color, STEAMI_WHITE,
+                                                  [](SteamiScreen& s) { mockupCompass(s, 0.0f); });
+        TEST_ASSERT_TRUE(any(north));
+        onPanel(p.size, p.color, [&](SteamiMemoryBackend& mem, SteamiScreen& s) {
+            mockupCompass(s, NAN);
+            expectShownOnce(mem);
+            TEST_ASSERT_TRUE(maskOf(mem, STEAMI_WHITE) == north);
+            TEST_ASSERT_EQUAL_size_t(0, countAtDistance(mem, STEAMI_LIGHT, 0, near));
+            TEST_ASSERT_TRUE(countAtDistance(mem, STEAMI_LIGHT, near + 1, p.size / 2) >
+                             0);  // ticks
+        });
+
+        // 08 with d = -1: the SURPRISED mood, its subtitle in YELLOW.
+        const std::vector<bool> surprised = maskAlone(
+            p.size, p.color, STEAMI_LIGHT, [](SteamiScreen& s) { s.face(SteamiFace::SURPRISED); });
+        onPanel(p.size, p.color, [&](SteamiMemoryBackend& mem, SteamiScreen& s) {
+            mockupFaces(s, 6, -1);
+            expectShownOnce(mem);
+            TEST_ASSERT_TRUE(maskOf(mem, STEAMI_LIGHT) == surprised);
+            if (small) {
+                expectBox(inkBox(mem, STEAMI_YELLOW), 29, 108, 98, 114);
+            } else {
+                expectBox(inkBox(mem, STEAMI_YELLOW), 50, 202, 189, 215);
+            }
+        });
     }
 }
 
@@ -245,6 +398,11 @@ int main(int, char**) {
     RUN_TEST(test_mockup_01_temperature);
     RUN_TEST(test_mockup_02_battery);
     RUN_TEST(test_mockup_03_comfort);
+    RUN_TEST(test_mockup_04_gauge);
+    RUN_TEST(test_mockup_07_compass);
+    RUN_TEST(test_mockup_08_faces);
+    RUN_TEST(test_mockup_08_reactive);
+    RUN_TEST(test_mockup_09_watch);
     RUN_TEST(test_mockups_without_sensors);
     return UNITY_END();
 }

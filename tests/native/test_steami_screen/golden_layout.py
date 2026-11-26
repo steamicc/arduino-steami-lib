@@ -552,16 +552,19 @@ def value_layout(W, t, at="CENTER", unit=None, label=None, scale=2, y_offset=0):
     out = dict(v)
     lit_value = draw_glyphs(t, v["n"], VALUE, v["x"], v["top"], v["f"])
     out["value"] = box(lit_value) if lit_value else None
+    out["value_lit"] = lit_value
     for name, s, ink, y in (("label", label, LABEL, v["top"] - P.u(4) - 7 * P.k),
                             ("unit", unit, TEXT, v["top"] + 8 * v["f"])):
         out[name] = None
         out[name + "_n"] = 0
+        out[name + "_lit"] = set()
         if has_text(s):
             centre = v["x"] + cell_width(t, v["n"], VALUE, v["f"]) // 2
             x, n, room = part_place(P, s, ink, y, at, centre)
             lit = draw_glyphs(s, n, ink, x, y, P.k)
             out[name] = box(lit) if lit else None
             out[name + "_n"], out[name + "_room"], out[name + "_x"] = n, room, x
+            out[name + "_lit"] = lit
     return out
 
 
@@ -1529,3 +1532,245 @@ for W in (128, 240):
     print("  %d gauge(50) LIGHT %d, gauge(100) LIGHT %d, gauge(342, 0, 500) LIGHT %d" % (
         W, len(colour_set(gauge_render(W, 50), "LIGHT")), len(colour_set(gauge_render(W, 100), "LIGHT")),
         len(colour_set(gauge_render(W, 342, 0, 500), "LIGHT"))))
+
+# ---- Mockups of spec section 6, as SteamiMockups.h draws them (4b Task 5) ----
+# Each mockup is composed from the widget goldens above in its program's drawing order, later calls
+# painting over earlier ones. Colours are names; on the grey panel each name is one grey level and the
+# names used here are distinct levels (GREY_LEVELS), so a box per name is the suite's inkBox per colour.
+GREY_LEVELS = {"GRID_DARK": 3, "DARK": 6, "GRAY": 9, "LIGHT": 11, "GREEN": 12, "YELLOW": 14, "WHITE": 15}
+MOOD_FACES = ("happy", "sad", "surprised", "sleeping", "angry", "love")  # SteamiFace order
+
+
+def paint(cv, lit, c):
+    for p in lit:
+        cv[p] = c
+
+
+def m_title(cv, W, s, c="GRAY"):
+    P = Panel(W)
+    x, y, n = text_layout(P, s, "N", 1)
+    paint(cv, draw_glyphs(s, n, TEXT, x, y, glyph_factor(P, 1)), c)
+
+
+def m_subtitle(cv, W, lines, c="DARK"):
+    P = Panel(W)
+    for line, (x, y, n) in zip(lines, subtitle_layout(P, lines)):
+        paint(cv, draw_glyphs(line, n, TEXT, x, y, P.k), c)
+
+
+def m_value(cv, W, t, unit=None, at="CENTER", label=None, scale=2, y_offset=0):
+    got = value_layout(W, t, at, unit, label, scale, y_offset)
+    paint(cv, got["value_lit"], "WHITE")
+    paint(cv, got["label_lit"], "GRAY")
+    paint(cv, got["unit_lit"], "LIGHT")
+
+
+def m_bar(cv, W, v, max_v, y_offset, c):
+    for y, ((t0, t1), f) in bar_spans(W, v, max_v, y_offset).items():
+        paint(cv, {(x, y) for x in range(t0, t1 + 1)}, "GRID_DARK")
+        if f:
+            paint(cv, {(x, y) for x in range(f[0], f[1] + 1)}, c)
+
+
+def mockup_01(W, t, chip):
+    cv = {}
+    m_title(cv, W, "Temperature")
+    m_value(cv, W, t, DEG_C)
+    m_subtitle(cv, W, (chip,))
+    return cv
+
+
+def mockup_02(W, percent, volts):
+    cv = {}
+    m_title(cv, W, "Battery")
+    m_value(cv, W, str(percent), "%", y_offset=-12)
+    m_bar(cv, W, percent, 100, -12, "GREEN")
+    m_subtitle(cv, W, (volts, "BQ27441"))
+    return cv
+
+
+def mockup_03(W, t, h, comfort, chip):
+    P = Panel(W)
+    cv = {}
+    m_title(cv, W, "Comfort")
+    r_span(cv, W, P.cx, P.cy - P.r // 2, 1, P.r, "DARK")  # vline(centerX(), centerY() - r / 2, r)
+    m_value(cv, W, t, DEG_C, "W", "TEMP")
+    m_value(cv, W, h, "%", "E", "HUM")
+    m_subtitle(cv, W, (comfort, chip), "GREEN")
+    return cv
+
+
+def mockup_04(W, d):
+    """mockupGauge(d): gauge(d, 0, 500) first, then the text paints over the ring."""
+    cv = gauge_render(W, d, 0, 500)
+    m_title(cv, W, "Distance")
+    m_value(cv, W, str(d), "mm")
+    m_subtitle(cv, W, ("VL53L1X ToF",))
+    return cv
+
+
+def mockup_08(W, shown, d):
+    """mockupFaces(shown, d): FACES[shown] alone for 0..5; 6 is the reactive mood of distance d."""
+    P = Panel(W)
+    cv = {}
+    if shown < 6:
+        mood, line = MOOD_FACES[shown], None
+    else:
+        m_title(cv, W, "Mood")
+        mood, line = (("surprised", ("SURPRISED", "YELLOW")) if d < 50 else
+                      ("happy", ("HAPPY", "GREEN")) if d < 150 else
+                      ("sleeping", ("SLEEPING", "LIGHT")) if d < 300 else ("sad", ("SAD", "RED")))
+    for x, y, w, h in face_cells(W, FACES[mood], False):
+        r_span(cv, W, x, y, w, h, "LIGHT")
+    if line:
+        m_subtitle(cv, W, (line[0],), line[1])
+    return cv
+
+
+def mockup_09(W, s):
+    return watch_render(W, (s // 3600) % 24, (s // 60) % 60, s % 60)
+
+
+def band_box(cv, c, row_from=0, row_to=10 ** 6):
+    lit = [p for p, v in cv.items() if v == c and row_from <= p[1] <= row_to]
+    return box(lit) if lit else None
+
+
+WATCH_START = 10 * 3600 + 10 * 60 + 30  # mockup 09: 10:10:30
+# The suite's own literals for mockups 01 to 03 (test_steami_screen_mockups): name, W, colour, rows,
+# box. The composed renders must give them back.
+PINNED_4A = (
+    ("01", 128, "GRAY", None, (21, 20, 106, 27)), ("01", 128, "WHITE", None, (38, 50, 89, 63)),
+    ("01", 128, "LIGHT", None, (57, 66, 70, 72)), ("01", 128, "DARK", None, (29, 108, 98, 114)),
+    ("01", 240, "GRAY", None, (34, 41, 205, 56)), ("01", 240, "WHITE", None, (68, 91, 171, 118)),
+    ("01", 240, "LIGHT", None, (106, 123, 133, 136)), ("01", 240, "DARK", None, (74, 202, 165, 215)),
+    ("02", 128, "WHITE", None, (50, 38, 77, 51)), ("02", 128, "LIGHT", None, (61, 54, 66, 60)),
+    ("02", 128, "GRID_DARK", None, (83, 72, 107, 79)), ("02", 128, "GREEN", None, (20, 72, 82, 79)),
+    ("02", 128, "DARK", (95, 105), (37, 95, 90, 101)), ("02", 128, "DARK", (106, 127), (37, 106, 90, 112)),
+    ("02", 240, "WHITE", None, (92, 69, 147, 96)), ("02", 240, "LIGHT", None, (114, 101, 125, 114)),
+    ("02", 240, "GRID_DARK", None, (156, 135, 202, 149)), ("02", 240, "GREEN", None, (38, 135, 155, 149)),
+    ("02", 240, "DARK", (177, 196), (66, 177, 173, 190)), ("02", 240, "DARK", (197, 239), (66, 197, 173, 210)),
+    ("03", 128, "DARK", None, (64, 32, 64, 95)), ("03", 128, "WHITE", None, (6, 50, 122, 63)),
+    ("03", 128, "LIGHT", None, (24, 66, 99, 72)), ("03", 128, "GRAY", (0, 30), (37, 20, 90, 26)),
+    ("03", 128, "GRAY", (31, 127), (22, 39, 102, 45)), ("03", 128, "GREEN", (95, 105), (21, 95, 106, 101)),
+    ("03", 128, "GREEN", (106, 127), (29, 106, 98, 112)),
+    ("03", 240, "DARK", None, (120, 60, 120, 179)), ("03", 240, "WHITE", None, (21, 96, 219, 116)),
+    ("03", 240, "LIGHT", None, (45, 120, 187, 133)), ("03", 240, "GRAY", (0, 60), (66, 37, 173, 50)),
+    ("03", 240, "GRAY", (61, 239), (39, 75, 193, 88)), ("03", 240, "GREEN", (173, 192), (34, 173, 205, 186)),
+    ("03", 240, "GREEN", (193, 239), (74, 193, 165, 206)),
+    # test_mockups_without_sensors: 02 with no gauge, 03 with no sensor
+    ("02 none", 128, "GRID_DARK", None, (20, 72, 107, 79)), ("02 none", 128, "DARK", (95, 105), (57, 98, 70, 98)),
+    ("02 none", 128, "DARK", (106, 127), (37, 106, 90, 112)),
+    ("02 none", 240, "GRID_DARK", None, (38, 135, 202, 149)),
+    ("02 none", 240, "DARK", (177, 196), (106, 183, 133, 184)),
+    ("02 none", 240, "DARK", (197, 239), (66, 197, 173, 210)),
+    ("03 none", 128, "GREEN", None, (13, 86, 114, 92)), ("03 none", 240, "GREEN", None, (18, 151, 221, 164)),
+)
+CHIP_OF = {128: "WSEN-HIDS", 240: "BME280"}
+
+
+def mockup_4a(name, W):
+    return {"01": lambda: mockup_01(W, "23.5", CHIP_OF[W]),
+            "02": lambda: mockup_02(W, 72, "3842 mV"),
+            "03": lambda: mockup_03(W, "23.5", "45.3", "Comfortable", CHIP_OF[W]),
+            "02 none": lambda: mockup_02(W, 0, "--"),
+            "03 none": lambda: mockup_03(W, "--", "--", "Uncomfortable", "")}[name]()
+
+
+# ---- Self-check of 4b Task 5 ----
+assert len(set(GREY_LEVELS.values())) == len(GREY_LEVELS)
+for name, W, c, rows, expected in PINNED_4A:
+    got = band_box(mockup_4a(name, W), c, *(rows or ()))
+    assert got == expected, (name, W, c, rows, got)
+for W in (128, 240):
+    assert not outside_circle(mockup_4a("01", W), Panel(W))
+# 04: the fill ends at 50 degrees (sweep 185 from 225), in the middle of the ring; the text paints over
+# the ring but leaves the two points clear
+FILL_END = {128: ((104, 24), (111, 31)), 240: ((196, 44), (208, 59))}
+for W in (128, 240):
+    P = Panel(W)
+    G = gauge_layout(W, 0, 500)
+    mid = G["outer"] - G["width"] // 2  # 57 / 107
+    assert mid == {128: 57, 240: 107}[W] and gauge_sweep(342, 0, 500) == 185 and (225 + 185) % 360 == 50
+    assert (P.polar(mid, 45), P.polar(mid, 55)) == FILL_END[W]
+    cv = mockup_04(W, 342)
+    assert cv[P.polar(mid, 45)] == "LIGHT" and cv[P.polar(mid, 55)] == "DARK", W
+    assert not outside_circle(cv, P)
+    # the GRAY band holds the two labels "0" and "500" only
+    band = (85, 100) if W == 128 else (160, 190)
+    assert band_box(cv, "GRAY", *band) == gauge_gray(W, 0, 500)[0]
+    assert band_box(cv, "WHITE") == value_layout(W, "342", "CENTER", "mm")["value"]
+    # Review Focus 1, d = -1: no fill, and the WHITE "-1" of value(-1, "mm") alone
+    none = mockup_04(W, -1)
+    assert "LIGHT" not in {c for p, c in none.items() if (G["outer"] - G["width"]) ** 2 <=
+                           (p[0] - P.cx) ** 2 + (p[1] - P.cy) ** 2 <= (G["outer"] + 1) ** 2}
+    assert colour_set(none, "WHITE") == value_layout(W, "-1", "CENTER", "mm")["value_lit"]
+# 07 at heading 0: the needle tip LIGHT, the N WHITE. Review Focus 1, NAN: the same N, and no LIGHT
+# within 45 / 84 px of the centre (the needle is gone; the LIGHT ticks start at 46 / 87)
+for W, tip, near in ((128, (64, 20), 45), (240, (120, 37), 84)):
+    P = Panel(W)
+    cv, none = compass_render(W, 0.0), compass_render(W, NAN)
+    assert cv[tip] == "LIGHT" and colour_set(none, "WHITE") == colour_set(cv, "WHITE")
+    assert all((x - P.cx) ** 2 + (y - P.cy) ** 2 > near * near for (x, y) in colour_set(none, "LIGHT"))
+    assert any((x - P.cx) ** 2 + (y - P.cy) ** 2 <= near * near for (x, y) in colour_set(cv, "LIGHT"))
+    assert compass_radii(W)[2] == {128: 46, 240: 87}[W]
+# 08: each face alone is LIGHT only; the reactive mood at 100 mm is HAPPY under "Mood", "HAPPY" in GREEN;
+# at -1 mm SURPRISED in YELLOW
+for W in (128, 240):
+    P = Panel(W)
+    for i, mood in enumerate(MOOD_FACES):
+        cv = mockup_08(W, i, 0)
+        assert set(cv.values()) == {"LIGHT"} and not outside_circle(cv, P)
+    cv = mockup_08(W, 6, 100)
+    assert subtitle_rows(W, ("HAPPY",))[0][0] == {128: 108, 240: 202}[W]
+    assert title_row(W, "Mood")[0] == {128: 20, 240: 37}[W]
+    assert colour_box(cv, "GREEN") == subtitle_rows(W, ("HAPPY",))[0][2]
+    assert colour_box(cv, "GRAY") == text_box(W, "Mood", "N")
+    assert colour_set(cv, "LIGHT") == colour_set(mockup_08(W, 0, 0), "LIGHT")  # the title is clear of the face
+    none = mockup_08(W, 6, -1)
+    assert colour_box(none, "YELLOW") == subtitle_rows(W, ("SURPRISED",))[0][2]
+    assert colour_set(none, "LIGHT") == colour_set(mockup_08(W, 2, 0), "LIGHT")
+    assert not outside_circle(cv, P) and not outside_circle(none, P)
+# 09 at 10:10:30: the "12" is the WHITE ink in the rows above the "3" and "9" cells (rows 0..59 / 0..111;
+# the rows above centerY() would also hold the top of the "3" and the "9"); hour and minute tips LIGHT
+TWELVE_ROWS = {128: (0, 59), 240: (0, 111)}
+for W in (128, 240):
+    P = Panel(W)
+    cv = mockup_09(W, WATCH_START)
+    cells = watch_layout(W, 10, 10, 30)["cells"]
+    assert TWELVE_ROWS[W][1] == cells["3"][1] - 1 == cells["9"][1] - 1
+    twelve = {}
+    r_text(twelve, W, "12", *cells["12"], P.k, "WHITE")
+    assert all(cv[p] == "WHITE" for p in twelve)
+    assert band_box(cv, "WHITE", *TWELVE_ROWS[W]) == box(list(twelve))
+    assert band_box(cv, "WHITE", 0, P.cy - 1) != box(list(twelve))
+    hour, minute, _ = watch_layout(W, 10, 10, 30)["tips"]
+    assert (cv[hour], cv[minute]) == ("LIGHT", "LIGHT")
+
+# ---- Values pinned by test_steami_screen_mockups (4b Task 5) ----
+print("mockups 01 to 03 (suite literals regenerated: name W colour rows box)")
+for name, W, c, rows, _ in PINNED_4A:
+    print("  %-7s %d %-9s %-10s %s" % (name, W, c, rows or "", band_box(mockup_4a(name, W), c, *(rows or ()))))
+print("mockup 04 gauge(342, 0, 500): WHITE box, GRAY labels box (rows), fill end polar(mid, 45) LIGHT, (mid, 55) DARK")
+for W in (128, 240):
+    P = Panel(W)
+    cv = mockup_04(W, 342)
+    mid = gauge_layout(W, 0, 500)["outer"] - gauge_layout(W, 0, 500)["width"] // 2
+    band = (85, 100) if W == 128 else (160, 190)
+    print("  %d: WHITE %s, GRAY %s %s, polar(%d, 45) %s, polar(%d, 55) %s; d -1 WHITE %s" % (
+        W, colour_box(cv, "WHITE"), band, band_box(cv, "GRAY", *band), mid, P.polar(mid, 45), mid,
+        P.polar(mid, 55), colour_box(mockup_04(W, -1), "WHITE")))
+print("mockup 07 compass(0): WHITE N box, needle tip")
+for W in (128, 240):
+    print("  %d: WHITE %s, tip %s" % (W, colour_box(compass_render(W, 0.0), "WHITE"), compass_layout(W, 0)["tip"]))
+print("mockup 08 reactive at 100 mm: GRAY Mood, LIGHT face, GREEN HAPPY; at -1 mm YELLOW SURPRISED")
+for W in (128, 240):
+    cv = mockup_08(W, 6, 100)
+    print("  %d: GRAY %s, LIGHT %s, GREEN %s; YELLOW %s" % (
+        W, colour_box(cv, "GRAY"), colour_box(cv, "LIGHT"), colour_box(cv, "GREEN"),
+        colour_box(mockup_08(W, 6, -1), "YELLOW")))
+print("mockup 09 watch at 10:10:30: WHITE 12 (rows above the 3 and 9 cells), hour and minute tips")
+for W in (128, 240):
+    print("  %d: WHITE %s %s, tips %s %s" % (W, TWELVE_ROWS[W], band_box(mockup_09(W, WATCH_START), "WHITE",
+                                                                       *TWELVE_ROWS[W]),
+                                           *watch_layout(W, 10, 10, 30)["tips"][:2]))
