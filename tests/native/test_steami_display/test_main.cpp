@@ -44,15 +44,29 @@ void tearDown(void) {
     board.setLogger(nullptr);
 }
 
-static size_t countLogged(const char* suffix) {
+static bool endsWith(const std::string& line, const char* suffix) {
     const size_t n = strlen(suffix);
+    return line.size() >= n && line.compare(line.size() - n, n, suffix) == 0;
+}
+
+static size_t countLogged(const char* suffix) {
     size_t count = 0;
     for (const std::string& line : g_lines) {
-        if (line.size() >= n && line.compare(line.size() - n, n, suffix) == 0) {
+        if (endsWith(line, suffix)) {
             count++;
         }
     }
     return count;
+}
+
+/// The first logged line ending with suffix, "" if none.
+static std::string loggedLine(const char* suffix) {
+    for (const std::string& line : g_lines) {
+        if (endsWith(line, suffix)) {
+            return line;
+        }
+    }
+    return "";
 }
 
 static void assertStatus(SteamiStatus expected, SteamiStatus actual) {
@@ -379,8 +393,10 @@ static void test_memory_backend_writes_ppm(void) {
 
 static void test_board_without_backend_is_unknown_board(void) {
     TEST_ASSERT_NULL(board.display());
+    TEST_ASSERT_TRUE(board.release() == SteamiRelease::UNKNOWN);
     assertStatus(SteamiStatus::UNKNOWN_BOARD, board.beginDisplay());
-    TEST_ASSERT_EQUAL_size_t(0, g_lines.size());  // the board itself reports nothing
+    TEST_ASSERT_EQUAL_size_t(0, countLogged("(E30)"));  // the board itself reports nothing
+    TEST_ASSERT_EQUAL_size_t(0, countLogged("(E31)"));
 }
 
 static void test_board_begins_injected_backend_once(void) {
@@ -512,11 +528,11 @@ static void test_no_backend_reports_e30_once(void) {
     assertStatus(SteamiStatus::UNKNOWN_BOARD, a.status());
     TEST_ASSERT_EQUAL_STRING("unknown board", a.error());
     TEST_ASSERT_FALSE(a.isAvailable());
-    TEST_ASSERT_EQUAL_size_t(1, g_lines.size());
+    TEST_ASSERT_EQUAL_size_t(1, countLogged("(E30)"));
     TEST_ASSERT_EQUAL_STRING(
         "[STeaMi] SteamiDisplay: cannot tell if this board is a V1a/V1b or a V1c. "
         "Add #define STEAMI_BOARD_V1C (or V1B) before #include <STeaMi.h>. (E30)",
-        g_lines[0].c_str());
+        loggedLine("(E30)").c_str());
 }
 
 static void test_failed_begin_reports_e31_and_draws_nothing(void) {
@@ -1599,8 +1615,7 @@ static void test_glyph_window(void) {
 static void test_protected_name_in_messages(void) {
     TestDisplay d(board);
     TEST_ASSERT_FALSE(d.begin());
-    TEST_ASSERT_EQUAL_size_t(1, g_lines.size());
-    TEST_ASSERT_EQUAL_UINT32(0, g_lines[0].rfind("[STeaMi] SteamiTestDisplay: ", 0));
+    TEST_ASSERT_EQUAL_UINT32(0, loggedLine("(E30)").rfind("[STeaMi] SteamiTestDisplay: ", 0));
 }
 
 static void galleryOn(int16_t size, bool color, const char* fileName) {

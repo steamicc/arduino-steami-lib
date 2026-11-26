@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <Arduino.h>
+#include <Print.h>
 #include <SPI.h>
 #include <SteamiGC9A01.h>
 #include <SteamiSSD1327.h>
 #include <Wire.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include <unity.h>
 
 #include <cstddef>
@@ -396,6 +398,311 @@ static void test_ssd1327_clipping_cases_stay_in_the_buffer(void) {
 static_assert(sizeof(SteamiSsd1327Backend) < 128 && sizeof(SteamiGc9a01Backend) < 128,
               "the slots hold drivers, not frame buffers");
 
+static size_t countLogged(const char* suffix) {
+    const size_t n = strlen(suffix);
+    size_t count = 0;
+    for (const std::string& line : g_lines) {
+        if (line.size() >= n && line.compare(line.size() - n, n, suffix) == 0) {
+            count++;
+        }
+    }
+    return count;
+}
+
+static void assertStatus(SteamiStatus expected, SteamiStatus actual) {
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(expected), static_cast<uint8_t>(actual));
+}
+
+static void presentBme280(void) {  // detected as a V1c
+    Wire.setRegister(0x76, 0xD0, 0x60);
+}
+static void presentHids(void) {  // detected as a V1a/V1b
+    Wire.setRegister(0x5F, 0x0F, 0xBC);
+}
+
+// Starts the next case of a test on a fresh bus and a fresh board.
+static void restart(void) {
+    board.end();
+    Wire = TwoWire();
+    g_lines.clear();
+}
+
+/// How many times cmd was sent with D/C low.
+static size_t commandCount(uint8_t cmd) {
+    size_t count = 0;
+    for (uint8_t sent : commandsSent()) {
+        count += (sent == cmd) ? 1 : 0;
+    }
+    return count;
+}
+
+/// What printInfo(Print&) prints.
+static std::string printedInfo() {
+    StringPrint p;
+    board.printInfo(p);
+    return p.text;
+}
+
+static bool printed(const std::string& text, const char* what) {
+    return text.find(what) != std::string::npos;
+}
+
+/// display() builds the slot of `chip`, only that one, sends no SPI byte and keeps it.
+static void assertOnlySlot(const char* chip, SteamiChip slot, SteamiChip other) {
+    SteamiDisplayBackend* b = board.display();
+    TEST_ASSERT_NOT_NULL(b);
+    TEST_ASSERT_EQUAL_STRING(chip, b->chip());
+    TEST_ASSERT_TRUE(board.built(slot));
+    TEST_ASSERT_FALSE(board.built(other));
+    TEST_ASSERT_EQUAL_PTR(b, board.display());
+    TEST_ASSERT_EQUAL_size_t(0, g_spi.size());  // built, not begun
+}
+
+static void test_v1c_builds_only_the_gc9a01_slot(void) {
+    presentBme280();
+    assertOnlySlot("GC9A01", SteamiChip::GC9A01, SteamiChip::SSD1327);
+}
+
+static void test_v1ab_builds_only_the_ssd1327_slot(void) {
+    presentHids();
+    TEST_ASSERT_TRUE(board.release() == SteamiRelease::V1AB);
+    assertOnlySlot("SSD1327", SteamiChip::SSD1327, SteamiChip::GC9A01);
+    for (SteamiRelease r : {SteamiRelease::V1A, SteamiRelease::V1B}) {
+        board.end();
+        TEST_ASSERT_FALSE(board.built(SteamiChip::SSD1327));
+        board.begin(r);
+        assertOnlySlot("SSD1327", SteamiChip::SSD1327, SteamiChip::GC9A01);
+    }
+}
+
+/// Claims the first chip of every function but the screen, as a sensor sketch does.
+static void useEverythingButTheScreen(void) {
+    const SteamiRelease r = board.release();
+    for (uint8_t f = 0; f < static_cast<uint8_t>(SteamiFunction::COUNT); f++) {
+        if (static_cast<SteamiFunction>(f) != SteamiFunction::SCREEN) {
+            board.claim(steamiRoute(r, static_cast<SteamiFunction>(f), 0));
+        }
+    }
+    TEST_ASSERT_TRUE(board.has(SteamiFunction::SCREEN));
+    StringPrint p;
+    board.printInfo(p);
+    TEST_ASSERT_FALSE(board.built(SteamiChip::SSD1327));
+    TEST_ASSERT_FALSE(board.built(SteamiChip::GC9A01));
+    TEST_ASSERT_EQUAL_size_t(0, g_spi.size());
+}
+
+static void test_sketch_without_screen_builds_neither(void) {
+    presentBme280();
+    TEST_ASSERT_TRUE(board.release() == SteamiRelease::V1C);
+    useEverythingButTheScreen();
+
+    restart();
+    presentHids();
+    TEST_ASSERT_TRUE(board.release() == SteamiRelease::V1AB);
+    useEverythingButTheScreen();
+}
+
+static void test_unknown_gives_e30_and_no_slot(void) {  // Review Focus 1
+    SteamiDisplay d(board);
+    TEST_ASSERT_EQUAL_INT16(0, d.width());
+    TEST_ASSERT_EQUAL_INT16(0, d.radius());
+    TEST_ASSERT_FALSE(d.begin());
+    d.clear(STEAMI_WHITE);
+    d.show();
+    TEST_ASSERT_EQUAL_size_t(1, countLogged("(E30)"));
+    TEST_ASSERT_EQUAL_STRING("unknown board", d.error());
+    TEST_ASSERT_FALSE(board.built(SteamiChip::SSD1327));
+    TEST_ASSERT_FALSE(board.built(SteamiChip::GC9A01));
+    TEST_ASSERT_EQUAL_size_t(0, g_spi.size());
+    TEST_ASSERT_EQUAL_size_t(0, gpioPinMode().count(CS_DISPLAY) + gpioPinMode().count(RST_DISPLAY));
+}
+
+static void test_v1c_geometry_before_begin(void) {  // Review Focus 2
+    board.begin(SteamiRelease::V1C);
+    SteamiDisplay d(board);
+    TEST_ASSERT_EQUAL_INT16(240, d.width());
+    TEST_ASSERT_EQUAL_INT16(240, d.height());
+    TEST_ASSERT_EQUAL_INT16(120, d.radius());
+    TEST_ASSERT_TRUE(d.isColor());
+    TEST_ASSERT_TRUE(board.built(SteamiChip::GC9A01));
+    TEST_ASSERT_EQUAL_size_t(0, g_spi.size());
+    for (int pin : {CS_DISPLAY, RST_DISPLAY, SPI_INT_MISO}) {
+        TEST_ASSERT_EQUAL_size_t(0, gpioPinMode().count(pin));
+    }
+
+    TEST_ASSERT_TRUE(d.begin());
+    TEST_ASSERT_EQUAL_size_t(1, commandCount(GC9A01_CMD_DISPON));
+    const size_t sent = g_spi.size();
+    assertStatus(SteamiStatus::OK, board.beginDisplay());
+    TEST_ASSERT_EQUAL_size_t(sent, g_spi.size());
+}
+
+static void test_release_forced_after_geometry_keeps_one_slot(void) {
+    board.begin(SteamiRelease::V1B);
+    TEST_ASSERT_NOT_NULL(board.display());
+    TEST_ASSERT_TRUE(board.built(SteamiChip::SSD1327));
+
+    board.begin(SteamiRelease::V1C);
+    SteamiDisplayBackend* b = board.display();
+    TEST_ASSERT_NOT_NULL(b);
+    TEST_ASSERT_EQUAL_STRING("GC9A01", b->chip());
+    TEST_ASSERT_TRUE(board.built(SteamiChip::GC9A01));
+    TEST_ASSERT_FALSE(board.built(SteamiChip::SSD1327));
+}
+
+static void test_v1ab_geometry_before_begin(void) {  // Review Focus 2
+    board.begin(SteamiRelease::V1B);
+    SteamiDisplay d(board);
+    TEST_ASSERT_EQUAL_INT16(128, d.width());
+    TEST_ASSERT_EQUAL_INT16(64, d.radius());
+    TEST_ASSERT_FALSE(d.isColor());
+    TEST_ASSERT_TRUE(board.built(SteamiChip::SSD1327));
+    TEST_ASSERT_EQUAL_size_t(0, g_spi.size());
+    TEST_ASSERT_EQUAL_INT(OUTPUT, gpioPinMode()[RST_DISPLAY]);  // the constructor's reset pulse
+    TEST_ASSERT_EQUAL_INT(HIGH, gpioPinState()[RST_DISPLAY]);
+
+    TEST_ASSERT_TRUE(d.begin());
+    TEST_ASSERT_FALSE(g_spi.empty());
+    const size_t sent = g_spi.size();
+    assertStatus(SteamiStatus::OK, board.beginDisplay());
+    TEST_ASSERT_EQUAL_size_t(sent, g_spi.size());
+}
+
+static void test_injected_backend_skips_detection(void) {  // Review Focus 3
+    SteamiMemoryBackend mem(240, 240);
+    board.setDisplayBackend(mem);
+    TEST_ASSERT_EQUAL_PTR(&mem, board.display());
+    TEST_ASSERT_EQUAL_UINT32(0, Wire.totalTransactions());
+    TEST_ASSERT_FALSE(board.built(SteamiChip::GC9A01));
+    TEST_ASSERT_FALSE(board.built(SteamiChip::SSD1327));
+}
+
+static void test_injection_frees_an_unbegun_slot(void) {  // Review Focus 3
+    board.begin(SteamiRelease::V1B);
+    TEST_ASSERT_NOT_NULL(board.display());
+    TEST_ASSERT_TRUE(board.built(SteamiChip::SSD1327));
+    SteamiMemoryBackend mem(240, 240);
+    board.setDisplayBackend(mem);
+    TEST_ASSERT_FALSE(board.built(SteamiChip::SSD1327));
+    TEST_ASSERT_EQUAL_PTR(&mem, board.display());
+
+    board.end();
+    board.begin(SteamiRelease::V1C);
+    SteamiDisplay d(board);
+    TEST_ASSERT_TRUE(d.begin());
+    board.setDisplayBackend(mem);  // ignored: the panel is begun
+    SteamiDisplayBackend* b = board.display();
+    TEST_ASSERT_NOT_NULL(b);
+    TEST_ASSERT_EQUAL_STRING("GC9A01", b->chip());
+    TEST_ASSERT_TRUE(board.built(SteamiChip::GC9A01));
+}
+
+static void test_injected_failing_backend_gives_e31(void) {
+    board.begin(SteamiRelease::V1C);
+    SteamiMemoryBackend mem(240, 240, true, false);
+    board.setDisplayBackend(mem);
+    SteamiDisplay d(board);
+    d.clear(STEAMI_WHITE);
+    d.pixel(1, 1);
+    d.show();
+    assertStatus(SteamiStatus::NO_MEMORY, d.status());
+    TEST_ASSERT_EQUAL_STRING("no memory", d.error());
+    TEST_ASSERT_EQUAL_size_t(1, countLogged("(E31)"));
+    TEST_ASSERT_EQUAL_UINT32(0, mem.fillCalls());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.showCalls());
+    TEST_ASSERT_FALSE(board.built(SteamiChip::GC9A01));
+    TEST_ASSERT_EQUAL_size_t(0, g_spi.size());
+}
+
+// Spec section 7, suite 2, with two SteamiDisplay objects: SteamiScreen comes in 4a.
+static void test_two_displays_share_the_gc9a01_slot(void) {
+    board.begin(SteamiRelease::V1C);
+    SteamiDisplay a(board), b(board);
+    a.pixel(1, 1);
+    b.pixel(2, 2);
+    b.show();
+    TEST_ASSERT_NOT_NULL(a.backend());
+    TEST_ASSERT_EQUAL_PTR(a.backend(), b.backend());
+    TEST_ASSERT_EQUAL_PTR(board.display(), a.backend());
+    TEST_ASSERT_EQUAL_size_t(1, commandCount(GC9A01_CMD_DISPON));
+    const std::vector<uint8_t> frame = lastData(kGc9a01Frame);
+    for (size_t xy = 1; xy <= 2; xy++) {
+        const size_t i = 2 * (xy * 240 + xy);
+        TEST_ASSERT_EQUAL_HEX8(0xFF, frame[i]);
+        TEST_ASSERT_EQUAL_HEX8(0xFF, frame[i + 1]);
+    }
+    TEST_ASSERT_EQUAL_HEX8(0x00, frame[2 * (3 * 240 + 3)]);  // nothing else drawn
+}
+
+static void test_v1ab_slot_clipping_cases(void) {  // the SSD1327 under ASan through the real slot
+    board.begin(SteamiRelease::V1B);
+    SteamiDisplay d(board);
+    drawClippingCases(d);
+    TEST_ASSERT_TRUE(board.built(SteamiChip::SSD1327));
+    const std::vector<uint8_t> frame = lastData(kOledFrame);
+
+    SteamiMemoryBackend mem(128, 128, false);
+    drawOnMemory(mem, drawClippingCases);
+    assertOledFrameEquals(mem, frame);
+}
+
+static void test_end_destroys_panel_slots_and_restarts(void) {  // Review Focus 4
+    board.begin(SteamiRelease::V1C);
+    SteamiDisplay d(board);
+    TEST_ASSERT_TRUE(d.begin());
+    TEST_ASSERT_TRUE(board.built(SteamiChip::GC9A01));
+    board.end();
+    TEST_ASSERT_FALSE(board.built(SteamiChip::GC9A01));
+
+    board.setLogger(&capture);
+    board.begin(SteamiRelease::V1C);
+    d.pixel(1, 1);
+    TEST_ASSERT_TRUE(board.built(SteamiChip::GC9A01));
+    TEST_ASSERT_EQUAL_size_t(2, commandCount(GC9A01_CMD_DISPON));
+}
+
+static void test_print_info_lists_the_screen_state(void) {
+    presentBme280();
+    TEST_ASSERT_TRUE(printed(printedInfo(), "GC9A01 screen not started\n"));
+    TEST_ASSERT_FALSE(board.built(SteamiChip::GC9A01));  // printInfo() builds no slot
+
+    SteamiDisplay d(board);
+    TEST_ASSERT_TRUE(d.begin());
+    TEST_ASSERT_TRUE(printed(printedInfo(), "GC9A01 screen OK\n"));
+
+    // An injected backend gives its own name; the line comes after the chips and before the
+    // last error, replayed here because no logger delivered it.
+    board.end();
+    board.setLogger(nullptr);
+    SteamiMemoryBackend mem(128, 128, true, false);
+    board.setDisplayBackend(mem);
+    SteamiDisplay m(board);
+    TEST_ASSERT_FALSE(m.begin());
+    const std::string text = printedInfo();
+    const size_t screen = text.find("memory screen no memory\n");
+    TEST_ASSERT_TRUE(screen != std::string::npos);
+    TEST_ASSERT_TRUE(text.find("MCP23009E 0x20 ") < screen);
+    TEST_ASSERT_TRUE(screen < text.find("(E31)\n"));
+
+    restart();
+    TEST_ASSERT_FALSE(board.begin());
+    TEST_ASSERT_FALSE(printed(printedInfo(), " screen "));
+}
+
+static void test_claim_stays_not_started_for_panels(void) {
+    board.begin(SteamiRelease::V1C);
+    TEST_ASSERT_NOT_NULL(board.display());
+    assertStatus(SteamiStatus::NOT_STARTED, board.claim(SteamiChip::GC9A01));
+    assertStatus(SteamiStatus::NOT_STARTED, board.claim(SteamiChip::SSD1327));
+    TEST_ASSERT_TRUE(board.built(SteamiChip::GC9A01));
+}
+
+// Spec section 7, suite 2 lists this gate in this suite, beside test_steami_board's.
+static void test_sizeof_board_with_panel_slots(void) {
+    TEST_ASSERT_LESS_THAN(2560, sizeof(SteamiBoard));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_gc9a01_backend_identity_and_quiet_constructor);
@@ -411,5 +718,21 @@ int main(int, char**) {
     RUN_TEST(test_ssd1327_controls_forward);
     RUN_TEST(test_ssd1327_frame_matches_the_grey_gallery);
     RUN_TEST(test_ssd1327_clipping_cases_stay_in_the_buffer);
+    RUN_TEST(test_v1c_builds_only_the_gc9a01_slot);
+    RUN_TEST(test_v1ab_builds_only_the_ssd1327_slot);
+    RUN_TEST(test_sketch_without_screen_builds_neither);
+    RUN_TEST(test_unknown_gives_e30_and_no_slot);
+    RUN_TEST(test_v1c_geometry_before_begin);
+    RUN_TEST(test_release_forced_after_geometry_keeps_one_slot);
+    RUN_TEST(test_v1ab_geometry_before_begin);
+    RUN_TEST(test_injected_backend_skips_detection);
+    RUN_TEST(test_injection_frees_an_unbegun_slot);
+    RUN_TEST(test_injected_failing_backend_gives_e31);
+    RUN_TEST(test_two_displays_share_the_gc9a01_slot);
+    RUN_TEST(test_v1ab_slot_clipping_cases);
+    RUN_TEST(test_end_destroys_panel_slots_and_restarts);
+    RUN_TEST(test_print_info_lists_the_screen_state);
+    RUN_TEST(test_claim_stays_not_started_for_panels);
+    RUN_TEST(test_sizeof_board_with_panel_slots);
     return UNITY_END();
 }

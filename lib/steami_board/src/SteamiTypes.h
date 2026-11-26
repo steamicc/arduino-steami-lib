@@ -163,3 +163,7 @@ const char* steamiChipName(SteamiChip c);
 
 /// 7-bit I2C address of a chip (0 for the displays and NONE). Defined in SteamiBoard.cpp.
 uint8_t steamiChipAddress(SteamiChip c);
+
+/// State of a display status for messages: "OK", "not started", "unknown board", "no memory",
+/// otherwise "not available". Defined in SteamiBoard.cpp.
+const char* steamiDisplayStateText(SteamiStatus s);

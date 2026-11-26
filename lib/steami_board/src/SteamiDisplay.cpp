@@ -88,18 +88,7 @@ bool SteamiDisplay::begin() {
 }
 
 const char* SteamiDisplay::error() const {
-    switch (_status) {
-        case SteamiStatus::OK:
-            return "";
-        case SteamiStatus::NOT_STARTED:
-            return "not started";
-        case SteamiStatus::UNKNOWN_BOARD:
-            return "unknown board";
-        case SteamiStatus::NO_MEMORY:
-            return "no memory";
-        default:
-            return "not available";
-    }
+    return _status == SteamiStatus::OK ? "" : steamiDisplayStateText(_status);
 }
 
 SteamiDisplayBackend* SteamiDisplay::backend() {
