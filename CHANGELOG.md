@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.39.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.38.0...v0.39.0) (2026-11-26)
+
+
+### Features
+
+* **im34dt05:** Add the IMP34DT05 microphone driver. ([#276](https://github.com/steamicc/arduino-steami-lib/issues/276)) ([e1a11a0](https://github.com/steamicc/arduino-steami-lib/commit/e1a11a0ed06edda78dae2cb196ea63c3fcdd2da8)), closes [#16](https://github.com/steamicc/arduino-steami-lib/issues/16) [#82](https://github.com/steamicc/arduino-steami-lib/issues/82) [hi#pass](https://github.com/hi/issues/pass) [hi#pass](https://github.com/hi/issues/pass) [hi#pass](https://github.com/hi/issues/pass)
+
 # [0.38.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.37.0...v0.38.0) (2026-11-26)
 
 
