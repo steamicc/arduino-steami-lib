@@ -142,6 +142,10 @@ class MockupReviewTest(unittest.TestCase):
                 )
             self.assertEqual(code, 1)
 
+    def test_ci_pins_the_tutorials_commit(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "tests.yml").read_text()
+        self.assertIn("ref: " + mr.TUTORIALS_COMMIT, workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
