@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.37.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.36.3...v0.37.0) (2026-11-26)
+
+
+### Features
+
+* **board:** Draw on the SSD1327 and GC9A01 screens. ([#270](https://github.com/steamicc/arduino-steami-lib/issues/270)) ([50d789a](https://github.com/steamicc/arduino-steami-lib/commit/50d789ab77ba2f5e6e51739743afaefe58a812aa)), closes [#266](https://github.com/steamicc/arduino-steami-lib/issues/266)
+
 ## [0.36.3](https://github.com/steamicc/arduino-steami-lib/compare/v0.36.2...v0.36.3) (2026-11-26)
 
 
