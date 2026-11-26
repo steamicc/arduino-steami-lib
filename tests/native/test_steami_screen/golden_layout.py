@@ -697,3 +697,86 @@ for W in (128, 240):
 got = value_layout(128, "8", "NE", None, None, 1)
 print("  128 value(8, nullptr, NE, nullptr, WHITE, 1): f %d top %d x %d region %s; %s" % (
     got["f"], got["top"], got["x"], got["region"], got["value"]))
+
+# ---- Widget of Task 6: bar() (spec 5.9 "bar", the decision "bar() geometry") ----
+
+
+def bar_fill(w, v, max_v):
+    """device.py's int(w * clamp(v, 0, maxV) / maxV), truncated: NAN v or maxV not above 0 (NAN
+    included) gives 0, v >= maxV (+INF included) w, v <= 0 (-INF included) 0."""
+    if math.isnan(v) or not max_v > 0 or v <= 0:
+        return 0
+    if v >= max_v:
+        return w
+    return min(int(w * v / max_v), w)
+
+
+def bar_rect(W, v, max_v=100, y_offset=0):
+    """(x, top, w, h, fill) of bar(v, maxV, yOffset) on a W panel, before any clipping."""
+    P = Panel(W)
+    w = P.W - P.u(40)
+    return P.cx - w // 2, P.cy + P.u(20) + P.u(y_offset), w, P.u(8), bar_fill(w, v, max_v)
+
+
+def bar_spans(W, v, max_v=100, y_offset=0):
+    """{row: ((track x0, x1), (fill x0, x1) or None)}: each row of the bar on the panel, its span
+    cut to the chord at that row; a row whose cut track is empty is left out."""
+    P = Panel(W)
+    x, top, w, h, fill = bar_rect(W, v, max_v, y_offset)
+    rows = {}
+    for y in range(max(top, 0), min(top + h, P.H)):
+        c = P.chord(y, y)
+        if c is None:
+            continue
+        left, right = max(x, c[0], 0), min(x + w - 1, c[1], P.W - 1)
+        if right < left:
+            continue
+        f_right = min(x + fill - 1, c[1], P.W - 1)
+        rows[y] = ((left, right), (left, f_right) if f_right >= left else None)
+    return rows
+
+
+def bar_boxes(W, v, max_v=100, y_offset=0):
+    """(unfilled track box, fill box) as the native tests see them: the fill is drawn over the
+    track, so GRID_DARK keeps only the unfilled columns; None when nothing is lit."""
+    track, filled = set(), set()
+    for y, ((t0, t1), f) in bar_spans(W, v, max_v, y_offset).items():
+        lit = set(range(f[0], f[1] + 1)) if f else set()
+        filled |= {(xx, y) for xx in lit}
+        track |= {(xx, y) for xx in range(t0, t1 + 1) if xx not in lit}
+    return (box(track) if track else None), (box(filled) if filled else None)
+
+
+# ---- Self-check of Task 6 ----
+assert bar_rect(128, 72, 100, 0)[:4] == (20, 84, 88, 8) and bar_rect(128, 72, 100, -12)[1] == 72
+assert bar_rect(240, 72, 100, -12)[:4] == (38, 135, 165, 15)
+assert bar_rect(128, 72)[4] == 63 and bar_rect(240, 72)[4] == 118
+for y_offset, rows in ((0, (84, 91)), (-12, (72, 79))):
+    spans = bar_spans(128, 72, 100, y_offset)
+    assert (min(spans), max(spans)) == rows and all(t == (20, 107) for t, _ in spans.values())
+assert bar_boxes(128, 72, 100, -12) == ((83, 72, 107, 79), (20, 72, 82, 79))
+spans = bar_spans(240, 72, 100, -12)
+assert (min(spans), max(spans)) == (135, 149) and all(t == (38, 202) for t, _ in spans.values())
+# Review Focus 5: an empty or a full bar, never a crash
+INF = float("inf")
+NAN = float("nan")
+for v, max_v, fill in ((-5, 100, 0), (-INF, 100, 0), (150, 100, 88), (INF, 100, 88), (NAN, 100, 0),
+                       (50, 0, 0), (50, -10, 0), (50, NAN, 0), (50, INF, 0), (INF, INF, 88)):
+    assert bar_rect(128, v, max_v)[4] == fill, (v, max_v)
+assert bar_rect(128, 3e38, 3.4e38)[4] == 77  # 88 * 3e38 overflows a float: the C++ takes the ratio first
+# yOffset 0: the whole track is inside the disc (88 / 165 px on every row)
+for W, whole in ((128, 88), (240, 165)):
+    spans = bar_spans(W, 50, 100, 0)
+    assert len(spans) == Panel(W).u(8) and all(t[1] - t[0] + 1 == whole for t, _ in spans.values())
+# Review Focus 4: rows at the int16_t limits leave the panel, nothing is drawn
+for W in (128, 240):
+    for y_offset in (32767, -32767, 20000, -20000):
+        assert bar_spans(W, 50, 100, y_offset) == {}, (W, y_offset)
+
+# ---- Values pinned by test_steami_screen (Task 6) ----
+print("bar(72, 100, yOffset) (x top w h fill; unfilled track box, fill box)")
+for W in (128, 240):
+    for y_offset in (0, -12):
+        print("  %d yOffset %d: %s; %s %s" % (W, y_offset, bar_rect(W, 72, 100, y_offset),
+                                             *bar_boxes(W, 72, 100, y_offset)))
+print("bar(50, 100, 0) (fill box)", *("%d: %s" % (W, bar_boxes(W, 50, 100, 0)[1]) for W in (128, 240)))

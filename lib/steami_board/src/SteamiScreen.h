@@ -55,6 +55,13 @@ class SteamiScreen : public SteamiDisplay {
                int16_t yOffset = 0);
     void value(SteamiValue v, const char* unit, SteamiRgb c);
 
+    /// A horizontal bar below the centre: a GRID_DARK track, filled in c from the left in
+    /// proportion to v / maxV (v is clamped to [0, maxV]). NAN, or a maxV not above 0, leaves it
+    /// empty. yOffset moves it down (up when negative), in pixels of the 128 px screen; any part
+    /// outside the circle is cut off.
+    void bar(float v, float maxV = 100, int16_t yOffset = 0, SteamiRgb c = STEAMI_LIGHT);
+    void bar(float v, float maxV, SteamiRgb c);
+
    protected:  // the layout kernel of the widgets, not for the student
     /// A run of columns [left, right], inclusive; empty when right < left.
     struct Region {
@@ -190,6 +197,10 @@ class SteamiScreen : public SteamiDisplay {
     /// Cuts a label (LABEL ink, drawn GRAY) or unit (TEXT ink, drawn LIGHT) run of the value run
     /// and draws it as drawValueParts() says.
     void drawValuePart(Run& part, Run& value, SteamiAt at);
+
+    /// Fills columns [left, right] of the u(STEAMI_BAR_HEIGHT) rows from row top in c, each row
+    /// cut to the panel and to the chord at that row; a row with nothing left draws nothing.
+    void barRows(int32_t left, int32_t right, int32_t top, SteamiRgb c);
 
     uint8_t _decimals = 1;
 };

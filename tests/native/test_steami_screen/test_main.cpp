@@ -1743,6 +1743,211 @@ static void test_value_corners_stay_inside(void) {
     });
 }
 
+// ---- bar(), contrast, messages and two screens on one backend ----
+
+/// The lit pixels of row y.
+static size_t litOnRow(const SteamiMemoryBackend& mem, int16_t y) {
+    return steami_screen_check::boxOf(mem, y, y, [](uint16_t p) { return p != 0; }).count;
+}
+
+// Values printed by golden_layout.py: bar(72, 100, -12, STEAMI_GREEN) on 128 grey and 240 colour.
+// The fill is drawn over the track, so GRID_DARK keeps only the track's unfilled part.
+static void test_bar_golden(void) {
+    onPanel(128, false, [](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.bar(72, 100, -12, STEAMI_GREEN);
+        expectBox(inkBox(mem, STEAMI_GRID_DARK), 83, 72, 107, 79);
+        expectBox(inkBox(mem, STEAMI_GREEN), 20, 72, 82, 79);
+        TEST_ASSERT_EQUAL_size_t(25 * 8, inkBox(mem, STEAMI_GRID_DARK).count);
+        TEST_ASSERT_EQUAL_size_t(63 * 8, inkBox(mem, STEAMI_GREEN).count);
+        TEST_ASSERT_EQUAL_size_t(88 * 8, inkBoxAll(mem).count);
+        s.clear();
+        s.bar(72, 100, 0, STEAMI_GREEN);
+        expectBox(inkBoxAll(mem), 20, 84, 107, 91);
+    });
+    onPanel(240, true, [](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.bar(72, 100, -12, STEAMI_GREEN);
+        expectBox(inkBox(mem, STEAMI_GRID_DARK), 156, 135, 202, 149);
+        expectBox(inkBox(mem, STEAMI_GREEN), 38, 135, 155, 149);
+        TEST_ASSERT_EQUAL_size_t(47 * 15, inkBox(mem, STEAMI_GRID_DARK).count);
+        TEST_ASSERT_EQUAL_size_t(118 * 15, inkBox(mem, STEAMI_GREEN).count);
+        TEST_ASSERT_EQUAL_size_t(165 * 15, inkBoxAll(mem).count);
+    });
+}
+
+// Spec 7: "a BLUE bar fill at least 7" on the grey panel; the track stays level 3.
+static void test_bar_contrast(void) {
+    onPanel(128, false, [](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.bar(50, 100, 0, STEAMI_BLUE);
+        expectBox(inkBoxAll(mem), 20, 84, 107, 91);
+        size_t fill = 0;
+        for (int16_t y = 84; y <= 91; y++) {
+            for (int16_t x = 20; x <= 107; x++) {
+                const uint8_t level = SteamiRgb::fromRgb565(mem.at(x, y)).gray4();
+                if (x <= 63) {  // 88 * 50 / 100 = 44 columns of fill
+                    TEST_ASSERT_TRUE(level >= 7);
+                    fill++;
+                } else {
+                    TEST_ASSERT_EQUAL_UINT8(3, level);
+                }
+            }
+        }
+        TEST_ASSERT_EQUAL_size_t(44 * 8, fill);
+    });
+    onPanel(240, true, [](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.bar(50, 100, 0, STEAMI_BLUE);
+        expectBox(inkBox(mem, STEAMI_BLUE), 38, 157, 119, 171);
+        TEST_ASSERT_EQUAL_size_t(82 * 15, inkBox(mem, STEAMI_BLUE).count);
+        expectBox(inkBox(mem, STEAMI_GRID_DARK), 120, 157, 202, 171);
+    });
+}
+
+// Review Focus 5: an empty or a full bar, never a crash.
+static void test_bar_extremes(void) {
+    for (int16_t size : {128, 240}) {
+        const bool color = size == 240;
+        const std::vector<uint16_t> track = rendered(size, color, [](TestScreen& s) { s.bar(0); });
+        const std::vector<uint16_t> full = rendered(size, color, [](TestScreen& s) { s.bar(100); });
+        TEST_ASSERT_FALSE(track == full);
+        TEST_ASSERT_TRUE(track == rendered(size, color, [](TestScreen& s) { s.bar(-5); }));
+        TEST_ASSERT_TRUE(track == rendered(size, color, [](TestScreen& s) { s.bar(-INFINITY); }));
+        TEST_ASSERT_TRUE(full == rendered(size, color, [](TestScreen& s) { s.bar(150); }));
+        TEST_ASSERT_TRUE(full == rendered(size, color, [](TestScreen& s) { s.bar(INFINITY); }));
+        TEST_ASSERT_TRUE(track == rendered(size, color, [](TestScreen& s) { s.bar(NAN); }));
+        TEST_ASSERT_TRUE(track == rendered(size, color, [](TestScreen& s) { s.bar(50, 0); }));
+        TEST_ASSERT_TRUE(track == rendered(size, color, [](TestScreen& s) { s.bar(50, -10); }));
+        TEST_ASSERT_TRUE(track == rendered(size, color, [](TestScreen& s) { s.bar(50, NAN); }));
+        TEST_ASSERT_TRUE(track ==
+                         rendered(size, color, [](TestScreen& s) { s.bar(50, INFINITY); }));
+        TEST_ASSERT_TRUE(full ==
+                         rendered(size, color, [](TestScreen& s) { s.bar(INFINITY, INFINITY); }));
+        // The colour shortcut is bar(v, maxV, 0, c); the default colour is LIGHT.
+        const std::vector<uint16_t> green =
+            rendered(size, color, [](TestScreen& s) { s.bar(50, 100, STEAMI_GREEN); });
+        TEST_ASSERT_TRUE(
+            green == rendered(size, color, [](TestScreen& s) { s.bar(50, 100, 0, STEAMI_GREEN); }));
+        TEST_ASSERT_TRUE(
+            rendered(size, color, [](TestScreen& s) { s.bar(50); }) ==
+            rendered(size, color, [](TestScreen& s) { s.bar(50, 100, 0, STEAMI_LIGHT); }));
+        TEST_ASSERT_FALSE(green == rendered(size, color, [](TestScreen& s) { s.bar(50); }));
+    }
+    // The empty bar is the track alone.
+    onPanel(128, false, [](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.bar(NAN);
+        TEST_ASSERT_EQUAL_size_t(88 * 8, inkBox(mem, STEAMI_GRID_DARK).count);
+        TEST_ASSERT_EQUAL_size_t(88 * 8, inkBoxAll(mem).count);
+    });
+    // 88 * 3e38 overflows a float: the ratio is taken first, 88 * 0.882 = 77 columns.
+    onPanel(128, true, [](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.bar(3e38f, 3.4e38f);
+        expectBox(inkBox(mem, STEAMI_LIGHT), 20, 84, 96, 91);
+    });
+}
+
+// Spec 5.12 rule 7 for any yOffset; at yOffset 0 the track is whole on every row.
+static void test_bar_stays_in_the_circle(void) {
+    // onPanel checks outsideCircle() == 0 and outOfBounds() == 0 after every panel.
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        for (int16_t y = -60; y <= 60; y += 4) {
+            s.bar(50, 100, y, STEAMI_GREEN);
+            s.bar(100, 100, y);
+        }
+        TEST_ASSERT_TRUE(mem.litCount() > 0);
+        s.clear();
+        s.bar(0);
+        const bool small = s.width() == 128;
+        const int16_t top = small ? 84 : 157;
+        const int16_t rows = small ? 8 : 15;
+        for (int16_t y = top; y < top + rows; y++) {
+            TEST_ASSERT_EQUAL_size_t(small ? 88 : 165, litOnRow(mem, y));
+        }
+        TEST_ASSERT_EQUAL_size_t(static_cast<size_t>((small ? 88 : 165) * rows), mem.litCount());
+    });
+}
+
+// Review Focus 4: no int16_t wrap draws a bar elsewhere.
+static void test_bar_offsets_at_int16_limits(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        for (int16_t y : {static_cast<int16_t>(32767), static_cast<int16_t>(-32767),
+                          static_cast<int16_t>(-32768), static_cast<int16_t>(20000),
+                          static_cast<int16_t>(-20000)}) {
+            s.bar(50, 100, y);
+            s.bar(100, 100, y, STEAMI_GREEN);
+        }
+        TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+        TEST_ASSERT_EQUAL_UINT32(0, mem.fillRectCalls());
+        TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+    });
+}
+
+// Review Focus 2: no screen at all (UNKNOWN release, nothing injected).
+static void test_widgets_without_a_screen(void) {
+    TestScreen a(board), b(board);
+    TEST_ASSERT_EQUAL_INT16(0, a.width());
+    TEST_ASSERT_EQUAL_UINT8(1, a.k());
+    TEST_ASSERT_EQUAL_UINT8(0, a.maxChars());
+    // The floor is 0 and the cap clamped to r + 2: no isqrt of a negative number, which UBSan
+    // could not see through the uint32_t argument.
+    TEST_ASSERT_EQUAL_INT32(2, a.marginNs(8, 1));
+    TEST_ASSERT_EQUAL_INT32(2, a.marginNs(160, 1));
+    a.title("T");
+    a.subtitle("s");
+    a.value(23.5f, kDegC, SteamiAt::W, "L");
+    b.bar(50);  // b begins through its first widget
+    b.text("x", SteamiAt::NE);
+    a.show();
+    TEST_ASSERT_TRUE(a.status() == SteamiStatus::UNKNOWN_BOARD);
+    TEST_ASSERT_TRUE(b.status() == SteamiStatus::UNKNOWN_BOARD);
+    TEST_ASSERT_EQUAL_size_t(1, countLogged("(E30)"));  // deduplicated by who and code
+    TEST_ASSERT_EQUAL_STRING(
+        "[STeaMi] SteamiScreen: cannot tell if this board is a V1a/V1b or a V1c. "
+        "Add #define STEAMI_BOARD_V1C (or V1B) before #include <STeaMi.h>. (E30)",
+        loggedLine("(E30)").c_str());
+    TEST_ASSERT_EQUAL_STRING("unknown board", a.error());
+    TEST_ASSERT_EQUAL_STRING("unknown board", b.error());
+}
+
+static void test_screen_e31_message(void) {
+    SteamiMemoryBackend mem(240, 240, true, false);
+    board.setDisplayBackend(mem);
+    TestScreen s(board);
+    s.title("Comfort");
+    s.subtitle("a", "b");
+    s.value(23.5f, kDegC, SteamiAt::W, "TEMP");
+    s.value(8, "C", SteamiAt::NE, "TEMP");
+    s.text("x", SteamiAt::E);
+    s.bar(50);
+    s.bar(50, 100, STEAMI_GREEN);
+    TEST_ASSERT_EQUAL_UINT32(0, mem.fillRectCalls());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT32(1, mem.beginCalls());
+    TEST_ASSERT_EQUAL_size_t(1, countLogged("(E31)"));
+    TEST_ASSERT_EQUAL_STRING(
+        "[STeaMi] SteamiScreen: not enough RAM for the colour screen (115200 bytes in one block). "
+        "Call screen.begin() first in setup(). (E31)",
+        loggedLine("(E31)").c_str());
+    TEST_ASSERT_EQUAL_STRING("no memory", s.error());
+}
+
+// Values printed by golden_layout.py: title "Comfort" and value(45.3, "%", E, "HUM") on 128.
+static void test_two_screens_share_a_memory_backend(void) {
+    SteamiMemoryBackend mem(128, 128, false);
+    board.setDisplayBackend(mem);
+    SteamiScreen a(board), b(board);
+    a.title("Comfort");
+    b.value(45.3f, "%", SteamiAt::E, "HUM");
+    a.show();
+    TEST_ASSERT_EQUAL_UINT32(1, mem.beginCalls());
+    TEST_ASSERT_EQUAL_UINT32(1, mem.showCalls());
+    TEST_ASSERT_EQUAL_PTR(&mem, a.backend());
+    TEST_ASSERT_EQUAL_PTR(&mem, b.backend());
+    TEST_ASSERT_TRUE(a.status() == SteamiStatus::OK);
+    TEST_ASSERT_TRUE(b.status() == SteamiStatus::OK);
+    expectBox(inkBox(mem, STEAMI_GRAY, 20, 27), 37, 20, 90, 26);  // the title, above the label
+    expectBox(inkBox(mem, STEAMI_WHITE), 71, 50, 122, 63);
+    TEST_ASSERT_EQUAL_UINT32(0, mem.outsideCircle());
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_format_integers);
@@ -1781,5 +1986,13 @@ int main(int, char**) {
     RUN_TEST(test_value_corner_worked_examples);
     RUN_TEST(test_value_corner_golden);
     RUN_TEST(test_value_corners_stay_inside);
+    RUN_TEST(test_bar_golden);
+    RUN_TEST(test_bar_contrast);
+    RUN_TEST(test_bar_extremes);
+    RUN_TEST(test_bar_stays_in_the_circle);
+    RUN_TEST(test_bar_offsets_at_int16_limits);
+    RUN_TEST(test_widgets_without_a_screen);
+    RUN_TEST(test_screen_e31_message);
+    RUN_TEST(test_two_screens_share_a_memory_backend);
     return UNITY_END();
 }

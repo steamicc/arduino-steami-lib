@@ -2,6 +2,8 @@
 
 #include "SteamiScreen.h"
 
+#include <math.h>
+
 #include "SteamiFont.h"
 #include "SteamiTrig.h"
 
@@ -37,6 +39,23 @@ bool isCorner(SteamiAt at) {
 uint8_t glyphFactor(uint8_t scale, uint8_t k) {
     const int32_t s = smaller(larger(scale, 1), 255 / k);
     return static_cast<uint8_t>(s * k);
+}
+
+/// The filled columns of a bar w px wide: device.py's int(w * clamp(v, 0, maxV) / maxV) in float,
+/// truncated. NAN v, or maxV not above 0 (NAN included), gives 0; v >= maxV (+INF included) gives
+/// w and v <= 0 (-INF included) gives 0, so v is finite below and the result never NAN.
+int32_t filledColumns(int32_t w, float v, float maxV) {
+    if (isnan(v) || !(maxV > 0.0f) || v <= 0.0f) {
+        return 0;
+    }
+    if (v >= maxV) {
+        return w;
+    }
+    // 0 < v < maxV: the fill is below w. Only a v past FLT_MAX / w makes the product overflow,
+    // and then the ratio is taken first.
+    const float wide = static_cast<float>(w) * v;
+    const float fill = isinf(wide) ? static_cast<float>(w) * (v / maxV) : wide / maxV;
+    return smaller(static_cast<int32_t>(fill), w);
 }
 
 }  // namespace
@@ -472,4 +491,38 @@ void SteamiScreen::drawValuePart(Run& part, Run& value, SteamiAt at) {
         x = larger(room.left, smaller(centre - w / 2, room.right - w + 1));
     }
     drawGlyphs(part, x, part.ink == Ink::LABEL ? STEAMI_GRAY : STEAMI_LIGHT);
+}
+
+void SteamiScreen::bar(float v, float maxV, int16_t yOffset, SteamiRgb c) {
+    if (!widgetCanDraw()) {
+        return;
+    }
+    // W - u(40) wide, centred, its top u(20) + u(yOffset) below centerY(). int32_t rows: no
+    // int16_t wrap draws the bar elsewhere (Review Focus 4).
+    const int32_t w = width() - u(STEAMI_BAR_SIDE);
+    const int32_t x = centerX() - w / 2;
+    const int32_t top = centerY() + u(STEAMI_BAR_DROP) + u(yOffset);
+    barRows(x, x + w - 1, top, STEAMI_GRID_DARK);
+    // The fill over the track, lifted on the grey panel so that it stands out (spec 5.10).
+    barRows(x, x + filledColumns(w, v, maxV) - 1, top, lifted(c, STEAMI_GRID_DARK));
+}
+
+void SteamiScreen::bar(float v, float maxV, SteamiRgb c) {
+    bar(v, maxV, 0, c);
+}
+
+void SteamiScreen::barRows(int32_t left, int32_t right, int32_t top, SteamiRgb c) {
+    const int32_t from = larger(top, 0);
+    const int32_t to = smaller(top + u(STEAMI_BAR_HEIGHT), height()) - 1;
+    for (int32_t y = from; y <= to; y++) {
+        // The chord of a row is {0, -1} outside the disc; on the centre row it reaches column
+        // width(), one past the panel.
+        const Region inside = chord(y, y);
+        const int32_t x0 = larger(left, inside.left);
+        const int32_t x1 = smaller(right, smaller(inside.right, width() - 1));
+        if (x1 >= x0) {
+            rect(static_cast<int16_t>(x0), static_cast<int16_t>(y),
+                 static_cast<int16_t>(x1 - x0 + 1), 1, c, true);
+        }
+    }
 }
