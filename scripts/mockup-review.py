@@ -4,6 +4,7 @@
 
 Usage:
 
+    mkdir -p /tmp/mockups
     STEAMI_PPM_DIR=/tmp/mockups pio test -e native -f native/test_steami_screen_mockups
     python3 scripts/mockup-review.py --ppm-dir /tmp/mockups --out /tmp/mockup-review \\
         [--refs DIR]

@@ -592,6 +592,7 @@ make test-native/steami_display_board   # display primitives, E30, E31
 make test-native/steami_screen   # widgets, layout rules, SteamiValue, E30, E31
 make test-native/steami_screen_mockups   # the three mockups at 128 and 240 px
 # score the mockup renders against the tutorials' images (needs Pillow and NumPy)
+mkdir -p /tmp/mockups   # writePpm does not create the folder
 STEAMI_PPM_DIR=/tmp/mockups .venv/bin/pio test -e native -f native/test_steami_screen_mockups
 python3 scripts/mockup-review.py --ppm-dir /tmp/mockups --out /tmp/mockup-review
 .venv/bin/pio test -e native_asan
