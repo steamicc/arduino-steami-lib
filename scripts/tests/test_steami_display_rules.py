@@ -75,6 +75,29 @@ class SteamiDisplayRulesTest(unittest.TestCase):
                 self.assertTrue(path.is_file() and path.stat().st_size > 0)
                 self.assertNotRegex(path.read_text(encoding="utf-8"), pattern)
 
+    def test_drawing_example_draws_the_gallery(self) -> None:
+        # The example copies the native gallery body line for line (comments and blanks aside).
+        def body(path: Path) -> list[str]:
+            lines = path.read_text(encoding="utf-8").splitlines()
+            start = next(i for i, line in enumerate(lines) if "drawGallery(SteamiDisplay& d) {" in line)
+            out: list[str] = []
+            for line in lines[start + 1 :]:
+                if line == "}":
+                    break
+                code = line.split("//")[0].strip()  # no string of the gallery holds "//"
+                if code:
+                    out.append(code)
+            return out
+
+        sketch = ROOT / "lib" / "steami_board" / "examples" / "Drawing" / "Drawing.ino"
+        gallery = ROOT / "tests" / "native" / "helpers" / "SteamiGallery.h"
+        self.assertTrue(sketch.is_file(), "Drawing.ino is missing")
+        sketch_body, gallery_body = body(sketch), body(gallery)
+        self.assertTrue(sketch_body)
+        self.assertTrue(gallery_body)
+        self.assertEqual(sketch_body, gallery_body)
+        self.assertIn("drawGallery(screen);", sketch.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()
