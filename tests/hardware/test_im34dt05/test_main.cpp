@@ -6,9 +6,13 @@
  * No sound is required: the tests check that the PDM stream comes back,
  * at the right rate, and that its level is plausible for a room (above
  * the microphone noise floor, below clipping). The CPU load test prints
- * the share of the CPU the PDM to PCM conversion takes. The buzzer test
- * plays a tone and expects to hear it, within 3 % (HSI clock tolerance
- * plus margin).
+ * the share of the CPU the PDM to PCM conversion takes, measured twice:
+ * with the DWT cycle counter around the conversion, and by the slowdown
+ * of a busy loop. The buzzer test plays tones from 2 to 4 kHz and
+ * expects to hear each one, within 3 % (HSI clock tolerance plus
+ * margin). Lower tones are left out: the piezo buzzer resonates near
+ * 3 kHz, so below 2 kHz one of their harmonics is louder than the tone
+ * itself (1000 Hz is heard at 3 kHz, 1500 Hz at 3 kHz too).
  */
 
 #include <Arduino.h>
@@ -88,32 +92,75 @@ static uint32_t spinCount(uint32_t ms) {
     return count;
 }
 
+// Share of the CPU, in per mille, that `cycles` per millisecond take.
+static uint32_t cyclesToPermille(uint32_t cycles) {
+    uint32_t cyclesPerMs = SystemCoreClock / 1000;
+    return static_cast<uint32_t>((static_cast<uint64_t>(cycles) * 1000) / cyclesPerMs);
+}
+
 void test_im34dt05_cpu_load() {
-    // The loop runs slower while the DMA interrupt converts the stream:
-    // the difference is the share of the CPU the conversion takes.
+    // Measured once the stream runs steadily: powerOn() returns after the
+    // warm-up and settling blocks, and the conversion statistics leave
+    // out the slot detection (begin() only) and those blocks anyway.
     mic.powerOff();
     uint32_t idle = spinCount(500);
     mic.powerOn();
     TEST_ASSERT_TRUE(mic.isRunning());
+    mic.resetConversionStats();
+
+    // 1. Busy loop: it runs slower while the DMA interrupt converts the
+    //    stream. Includes the interrupt entry and the HAL DMA handler.
     uint32_t busy = spinCount(500);
-    uint32_t permille =
+    uint32_t spinPermille =
         idle > busy ? static_cast<uint32_t>((static_cast<uint64_t>(idle - busy) * 1000) / idle) : 0;
-    char msg[96];
-    snprintf(msg, sizeof(msg), "PDM to PCM conversion: %lu.%lu %% of the CPU (%lu us per ms)",
-             static_cast<unsigned long>(permille / 10), static_cast<unsigned long>(permille % 10),
-             static_cast<unsigned long>(permille));
+
+    // 2. DWT cycle counter around each block's conversion (same 500 ms).
+    SteamiIMP34DT05::ConversionStats stats = mic.conversionStats();
+    uint32_t averagePermille = cyclesToPermille(stats.averageCycles);
+    uint32_t maxPermille = cyclesToPermille(stats.maxCycles);
+
+    char msg[160];
+    snprintf(msg, sizeof(msg),
+             "PDM to PCM conversion at %lu MHz: %lu cycles per 1 ms block (%lu.%lu %% of the "
+             "CPU, longest block %lu.%lu %%, %lu blocks); busy loop: %lu.%lu %%",
+             static_cast<unsigned long>(SystemCoreClock / 1000000),
+             static_cast<unsigned long>(stats.averageCycles),
+             static_cast<unsigned long>(averagePermille / 10),
+             static_cast<unsigned long>(averagePermille % 10),
+             static_cast<unsigned long>(maxPermille / 10),
+             static_cast<unsigned long>(maxPermille % 10), static_cast<unsigned long>(stats.blocks),
+             static_cast<unsigned long>(spinPermille / 10),
+             static_cast<unsigned long>(spinPermille % 10));
     TEST_MESSAGE(msg);
-    TEST_ASSERT_LESS_THAN_UINT32(500, permille);
+
+    // About 500 blocks in 500 ms, all of them after the start-up phase.
+    TEST_ASSERT_UINT32_WITHIN(20, 500, stats.blocks);
+    // Each block must be done well before the next one (1 ms).
+    TEST_ASSERT_LESS_THAN_UINT32(1000, maxPermille);
+    // Under 30 % on average, whichever way it is measured.
+    TEST_ASSERT_LESS_THAN_UINT32(300, averagePermille);
+    TEST_ASSERT_LESS_THAN_UINT32(300, spinPermille);
 }
 
 void test_im34dt05_hears_buzzer() {
-    const uint16_t played = 2000;
-    tone(SPEAKER, played);
-    delay(100);
-    float heard = mic.dominantFrequencyHz();
-    noTone(SPEAKER);
-    TEST_ASSERT_FALSE(isnan(heard));
-    TEST_ASSERT_FLOAT_WITHIN(0.03f * played, played, heard);
+    // The buzzer's useful range: it resonates near 3 kHz, and below
+    // 2 kHz a harmonic near 3 kHz dominates what the microphone hears.
+    const uint16_t tones[] = {2000, 2500, 3000, 3500, 4000};
+    for (uint16_t played : tones) {
+        tone(SPEAKER, played);
+        delay(100);
+        float heard = mic.dominantFrequencyHz();
+        noTone(SPEAKER);
+        delay(50);
+        TEST_ASSERT_FALSE(isnan(heard));
+        // No %f: the core's printf is built without float support.
+        long tenths = lroundf(heard * 10.0f);
+        char msg[64];
+        snprintf(msg, sizeof(msg), "played %u Hz, heard %ld.%ld Hz", static_cast<unsigned>(played),
+                 tenths / 10, tenths % 10);
+        TEST_MESSAGE(msg);
+        TEST_ASSERT_FLOAT_WITHIN(0.03f * played, played, heard);
+    }
 }
 
 void test_im34dt05_end() {
