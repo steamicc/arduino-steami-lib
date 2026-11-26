@@ -42,3 +42,6 @@ jobs:
 
       - name: Compile examples
         run: make test-examples
+
+      - name: Check the flash and RAM footprint
+        run: .venv/bin/python3 scripts/check-footprint.py
