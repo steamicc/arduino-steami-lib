@@ -135,6 +135,7 @@ Test fixture (`tests/native/test_steami_screen/test_main.cpp`):
   - Then, in `drawGaugeLabel(t, px)`, the 4a corner rule (B10): `fitGlyphs(t, &room)` with the whole panel as room keeps the longest prefix that fits the chord at its inked rows, shrunk by k. x is clamped into `[room.left, room.right − w + 1]`. It is drawn with `drawGlyphs(t, x, STEAMI_GRAY)`.
   - Labels of the examples ("0", "100", "500", "1050") never move. A long label such as "-100000000" slides inward and stays whole: a label has at most 10 glyphs (60 px on 128, 120 px on 240), and the chord at the label rows leaves about 109 / 201 px at every reachable d (d only shrinks as `arcWidth` grows). The cut in `fitGlyphs` is a guard no label reaches; if it ever did, rule 7 would win over "never a cut number", which 4a applied to `format()`, not to the display.
   - Accepted: on 128 the two slid labels of (−1e8, 1e8) overlap at about x 65..69 on rows 90..96 (min label cell at 10..69, max label cell at 65..118). The golden prints the box; no example comes near it.
+  - Found in the final review, for the PR's known differences: on 240 the same two labels also overlap, at x 113..139 on rows 169..182 (min label cell at 20..139, max label cell at 113..220; golden box (20, 169, 218, 182), 1254 GRAY pixels). Both labels stay inside the circle, and no example draws such labels.
   - Accepted, for the PR's known differences: on 240 a min label of 3 or more digits whose first glyph inks its bottom-left (such as "100" as a minimum) touches the ring by a few pixels (4 GRAY pixels at (39..40, 181..182) for "100"). The examples' labels (0 as min; 100, 500, 1050 as max) are clear.
 - **face:**
   - `enum class SteamiFace : uint8_t { HAPPY, SAD, SURPRISED, SLEEPING, ANGRY, LOVE };` in `SteamiScreen.h` (5.1, 5.7).
@@ -476,7 +477,7 @@ git commit -m "feat(board): Add compass(), a rose turned to real north."
   - Assert label distance 43 / 82 and points (30, 90), (98, 90) / (55, 169), (185, 169).
   - Assert sweep 185 for 342 of 0..500 and 135 for 50 of 0..100.
   - Assert the label texts: −0.5 gives "0", 99.9 gives "99", 1e9 gives "--".
-  - Print the GRAY label boxes for (0, 100), (0, 500), (−0.5, 99.9), (1e9, −1e9) (two "--") and (−1e8, 1e8) (slid inward, whole; on 128 the two labels overlap at about x 65..69) on both panels. Assert that gauge(2.5, 10, 0) and gauge(7.5, 0, 10) both give sweep 203. Note in a comment that device.py's truncated min point is x 29, and that the cut in `drawGaugeLabel` is a guard no label of at most 10 glyphs reaches.
+  - Print the GRAY label boxes for (0, 100), (0, 500), (−0.5, 99.9), (1e9, −1e9) (two "--") and (−1e8, 1e8) (slid inward, whole; the two labels overlap at about x 65..69 on 128 and x 113..139 on 240) on both panels. Assert that gauge(2.5, 10, 0) and gauge(7.5, 0, 10) both give sweep 203. Note in a comment that device.py's truncated min point is x 29, and that the cut in `drawGaugeLabel` is a guard no label of at most 10 glyphs reaches.
 
 - [ ] **Step 2: Write the failing tests**
 
@@ -761,7 +762,7 @@ git commit -m "docs(board): Document gauge, compass, watch and face."
   - the north measurements (H, B, φ, the photos), and whether Step 4 ran or is pending;
   - the stack frames (widgets, bound helpers and recorded helpers) and the flash figures of Task 6, with the baseline at b960407;
   - the maintainer's decision on program 04's text over the ring, with the photo, and the `docs(docs)` section 6 entry if it was accepted;
-  - the known difference of a 3-digit gauge min label touching the ring on 240 (decision "gaugeLabel"), and the overlap of two slid long labels on 128;
+  - the known difference of a 3-digit gauge min label touching the ring on 240 (decision "gaugeLabel"), and the overlap of two slid long labels such as (−1e8, 1e8) on 128 and 240 (x 113..139 on rows 169..182 on the V1c; no example draws such labels);
   - the rounding of points (Q14, not device.py's `int()`), the gauge label rule (integer part, "--", slid inward and whole inside the circle; the cut is a guard no label reaches), and ScreenFaces' design;
   - the departure from section 6's program 08: its delay goes from 200 to 50 ms because of the A-button face cycle that spec 13 leaves to the builder;
   - the paths outside row 4b's list and why (Global Constraints, "Scope");
