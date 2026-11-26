@@ -1,16 +1,21 @@
 name: Examples archive
 
 # Build the archive of compiled examples (steami-exemples-<tag>.zip: index.json
-# plus one .bin per example) and attach it to the release <tag> of
-# steamicc/arduino-steami. Called by publish-arduino-package.yml once the
-# package is published, and runnable by hand on an existing tag (backfill):
-#   gh workflow run examples-archive.yml -f tag=v0.34.0
+# plus one .bin per example) and attach it to the DRAFT release <tag> of
+# steamicc/arduino-steami. The organization enforces immutable releases there:
+# once a release is published, no asset can be added, so the archive can only be
+# attached while the release is a draft. publish-arduino-package.yml creates the
+# draft, calls this workflow, then publishes the draft.
+#
+# Manual run (retry of a failed attach on a draft release; main only):
+#   gh workflow run examples-archive.yml -f tag=v0.35.0 [-f dry_run=true]
+# A release that is already published cannot be backfilled.
 #
 # The scripts that compile and archive come from the ref the workflow runs on
-# (the tag when called by the publication; the dispatched ref is main for a
-# backfill, any other ref is refused); the package is built with the builder
-# of the tag, checked out in tagged/ (the repository already has a src/
-# directory). An archive already attached to the release is never replaced.
+# (the tag when called by the publication; main for a direct run, any other ref
+# is refused); the package is built with the builder of the tag, checked out
+# in tagged/ (the repository already has a src/ directory). An archive already
+# attached to the release is never replaced.
 # The zip is always uploaded as a workflow artifact before any write; a manual
 # run with dry_run stops there.
 
@@ -21,6 +26,11 @@ on:
         description: 'Release tag (vX.Y.Z)'
         required: true
         type: string
+      depuis_publication:
+        description: 'Set by publish-arduino-package.yml (skips the main-only guard)'
+        required: false
+        type: boolean
+        default: false
     secrets:
       RELEASE_APP_ID:
         required: true
@@ -62,9 +72,12 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           REF: ${{ github.ref }}
+          FROM_PUBLICATION: ${{ inputs.depuis_publication && 'true' || 'false' }}
         run: |
           set -euo pipefail
-          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$REF" != "refs/heads/main" ]; then
+          # Under workflow_call, event_name and ref are the caller's: the
+          # main-only guard applies to direct manual runs only.
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$FROM_PUBLICATION" != "true" ] && [ "$REF" != "refs/heads/main" ]; then
             echo "::error::Run this workflow on main (got '$REF'): the scripts come from the dispatched ref"
             exit 1
           fi
@@ -73,13 +86,29 @@ jobs:
             exit 1
           fi
 
-      - name: Check that the release exists
+      # The app token is needed early: the default token cannot see the drafts
+      # of another repository. It lasts one hour, longer than the compilation.
+      - name: Generate token
+        id: generate_token
+        uses: tibdex/github-app-token@v2
+        with:
+          app_id: ${{ secrets.RELEASE_APP_ID }}
+          private_key: ${{ secrets.RELEASE_APP_SECRET }}
+          repositories: >-
+            ["arduino-steami"]
+
+      - name: Check that the release is a draft
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
         run: |
           set -euo pipefail
-          if ! gh release view "$TAG" -R "$DIST_REPO" > /dev/null; then
+          if ! is_draft="$(gh release view "$TAG" -R "$DIST_REPO" --json isDraft --jq '.isDraft')"; then
             echo "::error::Cannot read release ${TAG} in ${DIST_REPO} (missing release or no access)"
+            exit 1
+          fi
+          if [ "$is_draft" != "true" ] && [ "$DRY_RUN" != "true" ]; then
+            echo "::error::Release ${TAG} in ${DIST_REPO} is already published: releases are immutable, no asset can be added. Only a draft release can receive the archive."
             exit 1
           fi
 
@@ -118,16 +147,6 @@ jobs:
           name: steami-exemples-${{ inputs.tag }}
           path: steami-exemples-${{ inputs.tag }}.zip
           if-no-files-found: error
-
-      - name: Generate token
-        if: ${{ !inputs.dry_run }}
-        id: generate_token
-        uses: tibdex/github-app-token@v2
-        with:
-          app_id: ${{ secrets.RELEASE_APP_ID }}
-          private_key: ${{ secrets.RELEASE_APP_SECRET }}
-          repositories: >-
-            ["arduino-steami"]
 
       - name: Attach the archive to the release
         if: ${{ !inputs.dry_run }}

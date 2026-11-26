@@ -12,6 +12,15 @@ name: Publish Arduino package
 # Manual recovery: run the workflow on the tag itself, so the code that is
 # built and tested is the tagged code:
 #   gh workflow run publish-arduino-package.yml --ref v0.25.0 [-f dry_run=true]
+#
+# The organization enforces immutable releases on steamicc/arduino-steami: no
+# asset can be added once a release is published. So the release is created as
+# a draft, examples-archive.yml attaches the compiled examples to it, and the
+# last job publishes it (marked Latest). If the archive job fails, the release
+# stays a draft: re-run the failed jobs, or run
+#   gh workflow run examples-archive.yml -f tag=<tag>      (from main)
+#   gh release edit <tag> --draft=false --latest -R steamicc/arduino-steami
+# A release that already exists and is published is left as it is (no archive).
 
 on:
   release:
@@ -69,6 +78,10 @@ jobs:
     name: Publish the package
     needs: [resolve, check]
     runs-on: ubuntu-latest
+    outputs:
+      # 'true' when the release is a draft that the following jobs complete,
+      # 'false' when it was already published, empty on a dry run.
+      brouillon: ${{ steps.release.outputs.brouillon }}
     env:
       TAG: ${{ needs.resolve.outputs.tag }}
       VERSION: ${{ needs.resolve.outputs.version }}
@@ -125,16 +138,25 @@ jobs:
           git push origin "${TAG}"
 
       - name: Ensure the release in the distribution repository
+        id: release
         if: env.DRY_RUN != 'true'
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
           set -euo pipefail
-          if gh release view "$TAG" -R "$DIST_REPO" > /dev/null 2>&1; then
-            echo "Release ${TAG} already exists in ${DIST_REPO}."
+          if is_draft="$(gh release view "$TAG" -R "$DIST_REPO" --json isDraft --jq '.isDraft' 2> /dev/null)"; then
+            if [ "$is_draft" = "true" ]; then
+              echo "Release ${TAG} already exists in ${DIST_REPO} as a draft: kept."
+              echo "brouillon=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::notice::Release ${TAG} is already published in ${DIST_REPO}: releases are immutable, the examples archive cannot be attached to it."
+              echo "brouillon=false" >> "$GITHUB_OUTPUT"
+            fi
           else
-            gh release create "$TAG" -R "$DIST_REPO" --verify-tag --title "$TAG" \
+            # Draft: the examples archive is attached before publication.
+            gh release create "$TAG" -R "$DIST_REPO" --verify-tag --draft --title "$TAG" \
               --notes "Arduino package of the STeaMi drivers. Release notes: https://github.com/${SOURCE_REPO}/releases/tag/${TAG}"
+            echo "brouillon=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Dry run summary
@@ -145,14 +167,41 @@ jobs:
 
   examples-archive:
     name: Attach the compiled examples
-    # Not on a dry run: it writes to the distribution release.
-    # Recovery: if it fails after the package was published, re-run it from
-    # main with: gh workflow run examples-archive.yml -f tag=<tag>
-    if: ${{ !inputs.dry_run }}
+    # Not on a dry run (it writes to the draft release), and only when the
+    # release is a draft: a published release is immutable.
+    if: ${{ !inputs.dry_run && needs.publish.outputs.brouillon == 'true' }}
     needs: [resolve, publish]
     uses: ./.github/workflows/examples-archive.yml
     with:
       tag: ${{ needs.resolve.outputs.tag }}
+      depuis_publication: true
     secrets:
       RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
       RELEASE_APP_SECRET: ${{ secrets.RELEASE_APP_SECRET }}
+
+  publish-release:
+    name: Publish the draft release
+    # success() is false if a needed job failed or was skipped (dry run,
+    # published release): the release then stays as it is.
+    if: ${{ success() && !inputs.dry_run && needs.publish.outputs.brouillon == 'true' }}
+    needs: [resolve, publish, examples-archive]
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ needs.resolve.outputs.tag }}
+      DIST_REPO: steamicc/arduino-steami
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: tibdex/github-app-token@v2
+        with:
+          app_id: ${{ secrets.RELEASE_APP_ID }}
+          private_key: ${{ secrets.RELEASE_APP_SECRET }}
+          repositories: >-
+            ["arduino-steami"]
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+        run: |
+          set -euo pipefail
+          gh release edit "$TAG" -R "$DIST_REPO" --draft=false --latest
