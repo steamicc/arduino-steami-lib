@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.36.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.35.0...v0.36.0) (2026-11-26)
+
+
+### Features
+
+* **tooling:** Attach compiled examples to the distribution release. ([#262](https://github.com/steamicc/arduino-steami-lib/issues/262)) ([23d4a97](https://github.com/steamicc/arduino-steami-lib/commit/23d4a971573105294c30db718bdfd7989d4caf4f)), closes [#261](https://github.com/steamicc/arduino-steami-lib/issues/261)
+
 # [0.35.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.34.0...v0.35.0) (2026-11-26)
 
 
