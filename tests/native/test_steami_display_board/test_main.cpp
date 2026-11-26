@@ -23,6 +23,7 @@
 #include "SteamiGallery.h"
 #include "SteamiGc9a01Backend.h"
 #include "SteamiMemoryBackend.h"
+#include "SteamiScreen.h"
 #include "SteamiSsd1327Backend.h"
 
 // Every operator new of this program, counted: a slot built by display() allocates.
@@ -694,6 +695,48 @@ static void test_two_displays_share_the_gc9a01_slot(void) {
     TEST_ASSERT_EQUAL_HEX8(0x00, frame[2 * (3 * 240 + 3)]);  // nothing else drawn
 }
 
+static const char kDegC[] =
+    "\xC2\xB0"
+    "C";
+
+// Spec section 7, suite 2: two SteamiScreen objects draw into the one GC9A01 slot.
+static void test_two_screens_share_the_gc9a01_slot(void) {
+    board.begin(SteamiRelease::V1C);
+    SteamiScreen a(board), b(board);
+    a.setDecimals(2);
+    a.title("Comfort");
+    a.value(23.456f, kDegC, SteamiAt::W, "TEMP");
+    b.value(45.3f, "%", SteamiAt::E, "HUM");  // b keeps 1 decimal: _decimals is per object
+    b.show();
+    TEST_ASSERT_NOT_NULL(a.backend());
+    TEST_ASSERT_EQUAL_PTR(a.backend(), b.backend());
+    TEST_ASSERT_EQUAL_PTR(board.display(), a.backend());
+    TEST_ASSERT_EQUAL_size_t(1, commandCount(GC9A01_CMD_DISPON));  // begun once
+    assertStatus(SteamiStatus::OK, a.status());
+    assertStatus(SteamiStatus::OK, b.status());
+    const std::vector<uint8_t> frame = lastData(kGc9a01Frame);
+    board.end();  // frees the one slot (ASan/LSan: no double free)
+
+    board.setLogger(&capture);
+    SteamiMemoryBackend mem(240, 240);
+    board.setDisplayBackend(mem);
+    SteamiScreen m(board);
+    m.setDecimals(2);
+    m.title("Comfort");
+    m.value(23.456f, kDegC, SteamiAt::W, "TEMP");
+    m.setDecimals(1);
+    m.value(45.3f, "%", SteamiAt::E, "HUM");
+    m.show();
+    TEST_ASSERT_TRUE(mem.litCount() > 0);
+    for (int16_t y = 0; y < 240; y++) {
+        for (int16_t x = 0; x < 240; x++) {
+            const size_t i = 2 * (static_cast<size_t>(y) * 240 + static_cast<size_t>(x));
+            const uint16_t sent = static_cast<uint16_t>((frame[i] << 8) | frame[i + 1]);
+            TEST_ASSERT_EQUAL_HEX16(mem.at(x, y), sent);
+        }
+    }
+}
+
 static void test_v1ab_slot_clipping_cases(void) {  // the SSD1327 under ASan through the real slot
     board.begin(SteamiRelease::V1B);
     SteamiDisplay d(board);
@@ -789,6 +832,7 @@ int main(int, char**) {
     RUN_TEST(test_injection_frees_an_unbegun_slot);
     RUN_TEST(test_injected_failing_backend_gives_e31);
     RUN_TEST(test_two_displays_share_the_gc9a01_slot);
+    RUN_TEST(test_two_screens_share_the_gc9a01_slot);
     RUN_TEST(test_v1ab_slot_clipping_cases);
     RUN_TEST(test_end_destroys_panel_slots_and_restarts);
     RUN_TEST(test_print_info_lists_the_screen_state);
