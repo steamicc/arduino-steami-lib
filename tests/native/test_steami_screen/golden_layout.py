@@ -209,6 +209,96 @@ def device_resolve(W, at, tw):
     return positions.get(at, positions["CENTER"])
 
 
+# ---- Widgets of Task 3: text(s, at), title and subtitle ----
+
+def glyph_factor(P, scale):
+    """f of a widget at `scale`: min(max(scale, 1), 255 // k) * k, so f always fits a uint8_t."""
+    return min(max(scale, 1), 255 // P.k) * P.k
+
+
+def clamp_into(P, s, n, ink, y, f, limit, x):
+    """x clamped into the region of the prefix (its ink chord shrunk by k, within limit)."""
+    if ink_rows(s, n, ink) == 0:
+        return x
+    c = P.ink_chord(s, n, ink, y, f)
+    left, right = max(c[0] + P.k, limit[0]), min(c[1] - P.k, limit[1])
+    return max(left, min(x, right - cell_width(s, n, ink, f) + 1))
+
+
+def text_layout(P, s, at, scale):
+    """(x, y, n): the cell top-left and the glyphs kept by text(s, at, c, scale); None draws nothing."""
+    if not s:
+        return None
+    f = glyph_factor(P, scale)
+    tw = cell_width(s, count(s), TEXT, f)
+    px, py = P.resolve(at, tw, f)
+    panel = (0, P.W - 1)
+    if at in ("N", "S", "CENTER"):
+        n = P.fit_glyphs(s, TEXT, f, py, panel, 0, 0)
+        return P.cx - cell_width(s, n, TEXT, f) // 2, py, n
+    limit = {"W": (px, P.W - 1), "E": (0, px + tw - 1)}.get(at, panel)
+    n = P.fit_glyphs(s, TEXT, f, py, limit, P.k, 0)
+    w = cell_width(s, n, TEXT, f)
+    x = {"W": px, "E": px + tw - w}[at] if at in ("W", "E") else P.resolve(at, w, f)[0]
+    return clamp_into(P, s, n, TEXT, py, f, limit, x), py, n
+
+
+def text_box(W, s, at, scale=1):
+    """The ink box (x0, y0, x1, y1) of text(s, at, c, scale) alone on a W panel; None if no ink."""
+    P = Panel(W)
+    place = text_layout(P, s, at, scale)
+    if place is None:
+        return None
+    x, y, n = place
+    lit = draw_glyphs(s, n, TEXT, x, y, glyph_factor(P, scale))
+    return box(lit) if lit else None
+
+
+def title_row(W, s):
+    """(row, kept): the cell row of title(s) and the glyphs it keeps."""
+    _, y, n = text_layout(Panel(W), s, "N", 1)
+    return y, n
+
+
+def subtitle_layout(P, lines):
+    """[(x, y, n)] per line of subtitle(*lines): the block rises (B7), then each line is cut."""
+    block = []
+    for line in lines:
+        if line is None:
+            break
+        block.append(line)
+    if not block:
+        return []
+    f, panel = P.k, (0, P.W - 1)
+    S = P.resolve("S", max(cell_width(l, count(l), TEXT, f) for l in block), f)[1]
+    pitch, n = P.u(11), len(block)
+
+    def fits(line, y):
+        return P.fit_glyphs(line, TEXT, f, y, panel, 0, 0) == count(line)
+
+    start = S + P.u(8) if n == 1 else S - (pitch * (n - 1)) // 2
+    lowest = S - (n - 1) * pitch
+    y = start
+    while y > lowest and any(ink_rows(l, count(l), TEXT) and not fits(l, y + i * pitch)
+                             for i, l in enumerate(block)):
+        y -= 1
+    out = []
+    for i, line in enumerate(block):
+        kept = P.fit_glyphs(line, TEXT, f, y + i * pitch, panel, 0, 0)
+        out.append((P.cx - cell_width(line, kept, TEXT, f) // 2, y + i * pitch, kept))
+    return out
+
+
+def subtitle_rows(W, lines):
+    """[(row, kept, ink box or None)] per line of subtitle(*lines) on a W panel."""
+    P = Panel(W)
+    out = []
+    for line, (x, y, n) in zip(lines, subtitle_layout(P, lines)):
+        lit = draw_glyphs(line, n, TEXT, x, y, P.k)
+        out.append((y, n, box(lit) if lit else None))
+    return out
+
+
 ANCHORS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "CENTER"]
 P128, P240, P0, P96 = Panel(128), Panel(240), Panel(0), Panel(96)
 
@@ -276,3 +366,55 @@ for s in ("8.8", "8:8"):
     second = {p for p in lit if p[0] >= 34}
     print("  %s box %s, middle glyph box %s, third glyph first column %d" % (
         s, box(lit), box(narrow), min(p[0] for p in second)))
+
+# ---- Self-check of Task 3: titles, text at a scale, subtitles (spec 5.8 rule 7, 5.9, B7, B8) ----
+assert title_row(128, "Temperature") == (20, 11) and title_row(240, "Temperature") == (41, 11)
+assert all(title_row(W, s) == (row, 7) for s in ("Comfort", "Battery") for W, row in ((128, 20), (240, 37)))
+for s in ("ABCDEFGHIJKLM", "ABCDEFGHIJKLMNOPQRST"):
+    assert title_row(128, s) == (29, 13) and title_row(240, s) == (63, 13), s
+assert title_row(128, "_" * 14) == (29, 14) and title_row(240, "_" * 14) == (63, 13)
+assert title_row(128, "_" * 14 + "T") == (29, 14) and title_row(240, "_" * 14 + "T") == (63, 13)
+assert text_layout(P128, "ABCDEFGH", "N", 2)[1:] == (36, 7) and text_layout(P240, "ABCDEFGH", "N", 2)[1:] == (67, 6)
+CHIPS = ("WSEN-HIDS", "BME280", "APDS-9960")
+ONE_LINE = {("WSEN-HIDS",): (108, 202), ("BME280",): (108, 202), ("BQ27441",): (108, 202),
+            ("VL53L1X",): (108, 202), ("SURPRISED",): (108, 202), ("Comfortable",): (104, 188),
+            ("VL53L1X ToF",): (104, 188), ("Uncomfortable",): (95, 166), ("20s window",): (107, 196)}
+TWO_LINES = {("3842 mV", "BQ27441"): ((95, 106), (177, 197))}
+for chip in CHIPS:
+    TWO_LINES[("Comfortable", chip)] = ((95, 106), (173, 193))
+    TWO_LINES[("Uncomfortable", chip)] = ((86, 97), (151, 171))
+    TWO_LINES[(chip, "20s window")] = ((95, 106), (176, 196))
+for lines, rows in ONE_LINE.items():
+    for W, row in zip((128, 240), rows):
+        assert [(y, n) for y, n, _ in subtitle_rows(W, lines)] == [(row, count(lines[0]))], (W, lines)
+for lines, rows in TWO_LINES.items():
+    for W, pair in zip((128, 240), rows):
+        got = subtitle_rows(W, lines)
+        assert tuple(y for y, _, _ in got) == pair, (W, lines, got)
+        assert all(n == count(l) for (_, n, _), l in zip(got, lines)), (W, lines)  # every line whole
+# Review Focus 3: 15 glyphs (20 bytes), 13 kept, cells 12..115, ink 13..114 ('T' column 0, 'e' column 7)
+assert text_layout(P128, "Températureéééé", "N", 1) == (12, 29, 13)
+assert text_box(128, "Températureéééé", "N")[0::2] == (13, 114)
+# the available width of a lowercase-only title comes from the rows it inks
+assert width(P128.ink_chord("acemnorsuvwxz", 13, TEXT, 29, 1)) == 109
+assert width(P128.ink_chord("ABCDEFGHIJKLM", 13, TEXT, 29, 1)) == 107
+assert width(P240.ink_chord("acemnorsuvwxz", 13, TEXT, 63, 2)) == 215
+assert width(P240.ink_chord("ABCDEFGHIJKLM", 13, TEXT, 63, 2)) == 211
+assert title_row(128, "acemnorsuvwxzacemnorsuvwxz")[1] == 13 and title_row(240, "acemnorsuvwxzacem")[1] == 13
+
+# ---- Values pinned by test_steami_screen (Task 3) ----
+print("text_box of Hi at the nine anchors (x0 y0 x1 y1)")
+for W in (128, 240):
+    for scale in (1, 2):
+        print("  %d scale %d:" % (W, scale), *("%s %s" % (at, text_box(W, "Hi", at, scale)) for at in ANCHORS))
+TITLES = ("Temperature", "Comfort", "Battery", "ABCDEFGHIJKLM", "ABCDEFGHIJKLMNOPQRST", "_" * 14,
+          "_" * 14 + "T", "Températureéééé")
+print("titles (row, kept, ink box)")
+for s in TITLES:
+    print("  %-22r" % s, *("%d: %s %s" % (W, title_row(W, s), text_box(W, s, "N")) for W in (128, 240)))
+print("  text('ABCDEFGH', N, 2)", *("%d: %s %s" % (W, text_layout(Panel(W), "ABCDEFGH", "N", 2),
+                                                      text_box(W, "ABCDEFGH", "N", 2)) for W in (128, 240)))
+print("subtitles (row, kept, ink box) per line")
+for lines in list(ONE_LINE) + list(TWO_LINES):
+    for W in (128, 240):
+        print("  %d %r:" % (W, lines), *subtitle_rows(W, lines))

@@ -27,6 +27,22 @@ class SteamiScreen : public SteamiDisplay {
     /// Digits after the '.' of float values, 1 by default, at most STEAMI_VALUE_MAX_DECIMALS.
     void setDecimals(uint8_t d);
 
+    /// A title at the top of the screen, GRAY by default. A long title moves down until it fits,
+    /// never lower than the row of 13 characters, and is cut there.
+    void title(const char* text, SteamiRgb c = STEAMI_GRAY);
+
+    /// One to three centred lines at the bottom of the screen, DARK by default; the list ends at
+    /// the first nullptr and "" keeps its place. The block rises until every line fits, then a
+    /// line that still does not fit is cut.
+    void subtitle(const char* l1, const char* l2 = nullptr, const char* l3 = nullptr,
+                  SteamiRgb c = STEAMI_DARK);
+    void subtitle(const char* l1, SteamiRgb c);
+    void subtitle(const char* l1, const char* l2, SteamiRgb c);
+
+    /// s at a compass point or at the centre, 8x8 glyphs at `scale`; cut to the longest part that
+    /// fits inside the circle. text(s, x, y, ...) below draws in pixels and is never cut.
+    void text(const char* s, SteamiAt at = SteamiAt::CENTER, SteamiRgb c = STEAMI_WHITE,
+              uint8_t scale = 1);
     using SteamiDisplay::text;
 
    protected:  // the layout kernel of the widgets, not for the student
@@ -95,5 +111,11 @@ class SteamiScreen : public SteamiDisplay {
     static size_t glyphCount(const char* s);
 
    private:
+    /// The entry of every widget: begins the display on first use; false when it draws nothing.
+    bool widgetCanDraw();
+
+    /// True when every inked line of the block, its first line's top at row y, fits whole.
+    bool linesFit(const char* const* lines, int32_t count, int32_t y, int32_t pitch);
+
     uint8_t _decimals = 1;
 };

@@ -24,6 +24,13 @@ bool isNarrow(uint8_t code) {
     return code == '.' || code == ':';
 }
 
+/// The physical glyph factor of a widget at `scale`: max(scale, 1) times k, the scale capped at
+/// 255 / k so that the factor always fits a uint8_t.
+uint8_t glyphFactor(uint8_t scale, uint8_t k) {
+    const int32_t s = smaller(larger(scale, 1), 255 / k);
+    return static_cast<uint8_t>(s * k);
+}
+
 }  // namespace
 
 int32_t SteamiScreen::Region::width() const {
@@ -224,4 +231,97 @@ SteamiRgb SteamiScreen::lifted(SteamiRgb fg, SteamiRgb bg) {
     }
     const int32_t level = smaller(bg.gray4() + STEAMI_MIN_CONTRAST, 15);
     return fg.gray4() < level ? SteamiRgb::gray(static_cast<uint8_t>(level)) : fg;
+}
+
+bool SteamiScreen::widgetCanDraw() {
+    if (status() == SteamiStatus::NOT_STARTED) {
+        begin();
+    }
+    return isAvailable() && width() > 0;
+}
+
+void SteamiScreen::text(const char* s, SteamiAt at, SteamiRgb c, uint8_t scale) {
+    if (!widgetCanDraw() || s == nullptr) {
+        return;
+    }
+    const uint8_t f = glyphFactor(scale, k());
+    const int32_t tw = cellWidth(s, glyphCount(s), Ink::TEXT, f);
+    const Point p = resolve(at, tw, f);
+    const bool centred = at == SteamiAt::N || at == SteamiAt::S || at == SteamiAt::CENTER;
+    // W runs from the anchor to the chord's right edge - k, E is its mirror image, and a corner
+    // takes the chord shrunk by k at each end; N, S and CENTER take the whole chord.
+    const int32_t limitLeft = at == SteamiAt::W ? p.x : 0;
+    const int32_t limitRight = at == SteamiAt::E ? p.x + tw - 1 : width() - 1;
+    const size_t n =
+        fitGlyphs(s, Ink::TEXT, f, p.y, Region{limitLeft, limitRight}, centred ? 0 : k(), 0);
+    const int32_t w = cellWidth(s, n, Ink::TEXT, f);
+    int32_t x = centerX() - w / 2;  // the kept prefix fits the chord, so centring keeps it inside
+    if (!centred) {
+        // resolve()'s x for the kept width: margin_ew on the west side; on the east side the
+        // kept prefix stays right-aligned at the anchor.
+        const bool west = at == SteamiAt::W || at == SteamiAt::NW || at == SteamiAt::SW;
+        x = west ? p.x : p.x + tw - w;
+        // Clamped into the region at the prefix's inked rows, which fitGlyphs() found w px wide
+        // or more; a prefix without ink draws nothing wherever it is.
+        const Region ink = inkChord(s, n, Ink::TEXT, p.y, f);
+        const int32_t right = smaller(ink.right - k(), limitRight);
+        x = larger(larger(ink.left + k(), limitLeft), smaller(x, right - w + 1));
+    }
+    drawGlyphs(s, n, Ink::TEXT, x, p.y, c, f);
+}
+
+void SteamiScreen::title(const char* s, SteamiRgb c) {
+    text(s, SteamiAt::N, c, 1);
+}
+
+bool SteamiScreen::linesFit(const char* const* lines, int32_t count, int32_t y, int32_t pitch) {
+    const Region panel{0, static_cast<int32_t>(width()) - 1};
+    for (int32_t i = 0; i < count; i++) {
+        const size_t glyphs = glyphCount(lines[i]);
+        if (inkRows(lines[i], glyphs, Ink::TEXT) != 0 &&
+            fitGlyphs(lines[i], Ink::TEXT, k(), y + i * pitch, panel, 0, 0) != glyphs) {
+            return false;
+        }
+    }
+    return true;
+}
+
+void SteamiScreen::subtitle(const char* l1, const char* l2, const char* l3, SteamiRgb c) {
+    if (!widgetCanDraw() || l1 == nullptr) {
+        return;
+    }
+    const char* const lines[3] = {l1, l2, l3};
+    int32_t count = 1;  // the list ends at the first nullptr
+    while (count < 3 && lines[count] != nullptr) {
+        count++;
+    }
+    const uint8_t f = k();
+    int32_t widest = 0;
+    for (int32_t i = 0; i < count; i++) {
+        widest = larger(widest, cellWidth(lines[i], glyphCount(lines[i]), Ink::TEXT, f));
+    }
+    const int32_t rowS = resolve(SteamiAt::S, widest, f).y;
+    const int32_t pitch = u(STEAMI_SUBTITLE_PITCH);
+    // device.py's place, then the block rises a row at a time (B7) until every line fits, never
+    // higher than its last line's top on the S row.
+    const int32_t highest = rowS - (count - 1) * pitch;
+    int32_t y = count == 1 ? rowS + u(STEAMI_SUBTITLE_DROP) : rowS - pitch * (count - 1) / 2;
+    while (y > highest && !linesFit(lines, count, y, pitch)) {
+        y--;
+    }
+    const Region panel{0, static_cast<int32_t>(width()) - 1};
+    for (int32_t i = 0; i < count; i++) {
+        const int32_t row = y + i * pitch;
+        const size_t n = fitGlyphs(lines[i], Ink::TEXT, f, row, panel, 0, 0);
+        drawGlyphs(lines[i], n, Ink::TEXT, centerX() - cellWidth(lines[i], n, Ink::TEXT, f) / 2,
+                   row, c, f);
+    }
+}
+
+void SteamiScreen::subtitle(const char* l1, SteamiRgb c) {
+    subtitle(l1, nullptr, nullptr, c);
+}
+
+void SteamiScreen::subtitle(const char* l1, const char* l2, SteamiRgb c) {
+    subtitle(l1, l2, nullptr, c);
 }

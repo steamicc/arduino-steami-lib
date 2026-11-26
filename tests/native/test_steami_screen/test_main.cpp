@@ -13,6 +13,7 @@
 
 #include "SteamiBoard.h"
 #include "SteamiDisplay.h"
+#include "SteamiFont.h"
 #include "SteamiMemoryBackend.h"
 #include "SteamiRgb.h"
 #include "SteamiScreen.h"
@@ -237,7 +238,8 @@ using Ink = TestScreen::Ink;
 
 /// Runs `check` on a fresh board state with a size x size memory panel injected and cleared, then
 /// asserts that nothing reached the backend off the panel or outside the circle.
-static void onPanel(int16_t size, bool color, void (*check)(SteamiMemoryBackend&, TestScreen&)) {
+template <typename Check>
+static void onPanel(int16_t size, bool color, Check check) {
     board.end();
     board.setLogger(&capture);
     SteamiMemoryBackend mem(size, size, color);
@@ -252,7 +254,8 @@ static void onPanel(int16_t size, bool color, void (*check)(SteamiMemoryBackend&
 }
 
 /// onPanel on a 128 grey, a 128 colour, a 240 colour and a 240 grey panel.
-[[maybe_unused]] static void forEachPanel(void (*check)(SteamiMemoryBackend&, TestScreen&)) {
+template <typename Check>
+static void forEachPanel(Check check) {
     onPanel(128, false, check);
     onPanel(128, true, check);
     onPanel(240, true, check);
@@ -469,6 +472,445 @@ static void test_lifted_contrast(void) {
     });
 }
 
+// ---- text(s, at), title and subtitle ----
+
+/// The pixels of a fresh, cleared size x size panel after `draw` (the "A == B" of the plan).
+template <typename Draw>
+static std::vector<uint16_t> rendered(int16_t size, bool color, Draw draw) {
+    std::vector<uint16_t> out;
+    onPanel(size, color, [&](SteamiMemoryBackend& mem, TestScreen& s) {
+        draw(s);
+        out = mem.pixels();
+    });
+    return out;
+}
+
+/// The pixels the whole of s lights in 8x8 glyphs at factor f, read from the font table.
+static size_t wholeInk(const char* s, uint8_t f) {
+    size_t n = 0;
+    for (uint8_t code = steamiNextGlyph(s); code != 0; code = steamiNextGlyph(s)) {
+        const uint8_t* g = steamiGlyph8x8(code);
+        for (uint8_t c = 0; c < 8; c++) {
+            for (uint8_t row = 0; row < 8; row++) {
+                n += (g[c] >> row) & 1;
+            }
+        }
+    }
+    return n * f * f;
+}
+
+/// The first glyph row that the 8x8 glyphs of s ink (0 = top of the cell).
+static int32_t firstInkRow(const char* s) {
+    const uint8_t m = TestScreen::inkRows(s, TestScreen::glyphCount(s), Ink::TEXT);
+    int32_t row = 0;
+    while (row < 8 && ((m >> row) & 1) == 0) {
+        row++;
+    }
+    return row;
+}
+
+static const SteamiAt kAnchors[] = {SteamiAt::N,  SteamiAt::NE, SteamiAt::E,
+                                    SteamiAt::SE, SteamiAt::S,  SteamiAt::SW,
+                                    SteamiAt::W,  SteamiAt::NW, SteamiAt::CENTER};
+
+// Values printed by golden_layout.py: text("Hi", at, STEAMI_WHITE, scale), [panel][scale - 1][at].
+static const int16_t kHiBoxes[2][2][9][4] = {{{{57, 20, 68, 26},
+                                               {95, 20, 106, 26},
+                                               {101, 60, 112, 66},
+                                               {97, 100, 108, 106},
+                                               {57, 100, 68, 106},
+                                               {18, 100, 29, 106},
+                                               {13, 60, 24, 66},
+                                               {20, 20, 31, 26},
+                                               {57, 60, 68, 66}},
+                                              {{50, 36, 73, 49},
+                                               {78, 36, 101, 49},
+                                               {78, 56, 101, 69},
+                                               {78, 76, 101, 89},
+                                               {50, 76, 73, 89},
+                                               {22, 76, 45, 89},
+                                               {22, 56, 45, 69},
+                                               {22, 36, 45, 49},
+                                               {50, 56, 73, 69}}},
+                                             {{{106, 37, 129, 50},
+                                               {175, 37, 198, 50},
+                                               {188, 112, 211, 125},
+                                               {178, 187, 201, 200},
+                                               {106, 187, 129, 200},
+                                               {35, 187, 58, 200},
+                                               {24, 112, 47, 125},
+                                               {38, 37, 61, 50},
+                                               {106, 112, 129, 125}},
+                                              {{92, 67, 139, 94},
+                                               {143, 67, 190, 94},
+                                               {143, 105, 190, 132},
+                                               {143, 141, 190, 168},
+                                               {92, 141, 139, 168},
+                                               {41, 141, 88, 168},
+                                               {41, 105, 88, 132},
+                                               {41, 67, 88, 94},
+                                               {92, 105, 139, 132}}}};
+
+static void test_text_every_anchor_golden(void) {
+    for (int panel = 0; panel < 2; panel++) {
+        const int16_t size = panel == 0 ? 128 : 240;
+        onPanel(size, panel == 1, [panel](SteamiMemoryBackend& mem, TestScreen& s) {
+            for (uint8_t scale = 1; scale <= 2; scale++) {
+                for (SteamiAt at : kAnchors) {
+                    s.clear();
+                    s.text("Hi", at, STEAMI_WHITE, scale);
+                    const int16_t* b = kHiBoxes[panel][scale - 1][static_cast<int>(at)];
+                    expectBox(inkBox(mem, STEAMI_WHITE), b[0], b[1], b[2], b[3]);
+                }
+            }
+        });
+    }
+}
+
+struct TitleCase {
+    const char* s;
+    int16_t box128[4];
+    int16_t box240[4];
+};
+
+// Values printed by golden_layout.py: the GRAY ink box of title(s) on 128 and on 240.
+static const TitleCase kTitles[] = {
+    {"Temperature", {21, 20, 106, 27}, {34, 41, 205, 56}},  // whole: cells 20..107 / 32..207
+    {"Comfort", {37, 20, 90, 26}, {66, 37, 173, 50}},
+    {"Battery", {37, 20, 90, 27}, {66, 37, 173, 52}},
+    {"ABCDEFGHIJKLM", {13, 29, 115, 35}, {18, 63, 223, 76}},         // 13 cells, at the cap
+    {"ABCDEFGHIJKLMNOPQRST", {13, 29, 115, 35}, {18, 63, 223, 76}},  // 13 cells kept, centred
+    {"______________", {8, 35, 119, 36}, {16, 75, 223, 78}},         // 14 kept / 13 kept
+    {"______________T", {8, 35, 119, 36}, {16, 75, 223, 78}},        // 14 kept / 13 kept
+};
+
+static void test_title_rows(void) {
+    for (int panel = 0; panel < 2; panel++) {
+        onPanel(
+            panel == 0 ? 128 : 240, panel == 1, [panel](SteamiMemoryBackend& mem, TestScreen& s) {
+                for (const TitleCase& t : kTitles) {
+                    s.clear();
+                    s.title(t.s);
+                    const int16_t* b = panel == 0 ? t.box128 : t.box240;
+                    expectBox(inkBox(mem, STEAMI_GRAY), b[0], b[1], b[2], b[3]);
+                    TEST_ASSERT_EQUAL_size_t(inkBoxAll(mem).count, inkBox(mem, STEAMI_GRAY).count);
+                }
+                // 13 cells kept of 20, centred on centerX(): the same pixels as the 13 alone.
+                s.clear();
+                s.title("ABCDEFGHIJKLM");
+                const std::vector<uint16_t> thirteen = mem.pixels();
+                s.clear();
+                s.title("ABCDEFGHIJKLMNOPQRST");
+                TEST_ASSERT_TRUE(thirteen == mem.pixels());
+                // Scale 2 sits at its floor and is cut there: 7 cells on 128, 6 on 240.
+                s.clear();
+                s.text("ABCDEFGH", SteamiAt::N, STEAMI_WHITE, 2);
+                if (panel == 0) {
+                    expectBox(inkBox(mem, STEAMI_WHITE), 10, 36, 117, 49);  // cells 8..119
+                } else {
+                    expectBox(inkBox(mem, STEAMI_WHITE), 28, 67, 211, 94);  // cells 24..215
+                }
+            });
+    }
+    // 14 '_' on 128: whole, cells 8..119, ink on every column.
+    onPanel(128, false, [](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.title("______________");
+        expectBox(inkBox(mem, STEAMI_GRAY), 8, 35, 119, 36);
+        TEST_ASSERT_EQUAL_size_t(wholeInk("______________", 1), inkBox(mem, STEAMI_GRAY).count);
+    });
+}
+
+static void test_title_band(void) {
+    static const char* const kKinds[] = {"ABCDEFGHIJKLMNOPQRST", "acemnorsuvwxzacemnor",
+                                         "gjpqygjpqygjpqygjpqy", "                    "};
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        const bool big = s.width() == 240;
+        const int32_t topMin = big ? 37 : 20;
+        const int32_t topMax = big ? 63 : 29;
+        const int32_t inkMax = big ? 78 : 36;
+        char buf[21];
+        for (const char* kind : kKinds) {
+            for (size_t len = 1; len <= 20; len++) {
+                memcpy(buf, kind, len);
+                buf[len] = '\0';
+                s.clear();
+                s.title(buf);
+                const int32_t tw = TestScreen::cellWidth(buf, len, Ink::TEXT, s.k());
+                const int32_t top = s.resolve(SteamiAt::N, tw, s.k()).y;
+                TEST_ASSERT_TRUE_MESSAGE(top >= topMin && top <= topMax, buf);
+                const InkBox b = inkBox(mem, STEAMI_GRAY);
+                if (kind[0] == ' ') {
+                    TEST_ASSERT_EQUAL_size_t_MESSAGE(0, inkBoxAll(mem).count,
+                                                     "spaces draw nothing");
+                    continue;
+                }
+                TEST_ASSERT_TRUE_MESSAGE(b.count > 0, buf);
+                TEST_ASSERT_TRUE_MESSAGE(b.y0 >= topMin && b.y1 <= inkMax, buf);
+                if (kind[0] == 'A') {
+                    TEST_ASSERT_EQUAL_INT_MESSAGE(top, b.y0, buf);  // capitals ink their top row
+                }
+            }
+        }
+        // A lowercase-only title takes its width from the rows it inks, not from its cell row.
+        const int32_t capRow = topMax;
+        const uint8_t f = s.k();
+        const int32_t lower = s.inkChord("acemnorsuvwxz", 13, Ink::TEXT, capRow, f).width();
+        const int32_t upper = s.inkChord("ABCDEFGHIJKLM", 13, Ink::TEXT, capRow, f).width();
+        TEST_ASSERT_EQUAL_INT32(big ? 215 : 109, lower);
+        TEST_ASSERT_EQUAL_INT32(big ? 211 : 107, upper);
+        // Both still keep 13 cells at the cap.
+        s.clear();
+        s.title("acemnorsuvwxz");
+        const std::vector<uint16_t> thirteen = mem.pixels();
+        s.clear();
+        s.title("acemnorsuvwxzacemnor");
+        TEST_ASSERT_TRUE(thirteen == mem.pixels());
+    });
+}
+
+// Review Focus 3: a cut counts glyphs and never splits a code point; no '?' is drawn.
+static void test_title_cut_keeps_whole_code_points(void) {
+    static const char kAccented[] = "Temp\xC3\xA9rature\xC3\xA9\xC3\xA9\xC3\xA9\xC3\xA9";
+    TEST_ASSERT_EQUAL_size_t(20, strlen(kAccented));
+    TEST_ASSERT_EQUAL_size_t(15, TestScreen::glyphCount(kAccented));
+    // Values printed by golden_layout.py: 13 glyphs kept, cells 12..115 (104 px); the ink is
+    // 102 px wide, since the 8x8 'T' leaves column 0 empty and the 13th glyph, 'é' folded to 'e',
+    // leaves column 7 empty.
+    onPanel(128, false, [](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.title(kAccented);
+        expectBox(inkBox(mem, STEAMI_GRAY), 13, 29, 114, 36);
+    });
+    onPanel(240, true, [](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.title(kAccented);
+        expectBox(inkBox(mem, STEAMI_GRAY), 18, 63, 221, 78);
+    });
+    for (int16_t size : {128, 240}) {
+        const std::vector<uint16_t> accented =
+            rendered(size, size == 240, [](TestScreen& s) { s.title(kAccented); });
+        const std::vector<uint16_t> ascii = rendered(size, size == 240, [](TestScreen& s) {
+            s.text("Temperatureeee", SteamiAt::N, STEAMI_GRAY);
+        });
+        TEST_ASSERT_TRUE(accented == ascii);
+    }
+}
+
+static void test_text_cut_at_every_anchor(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        for (SteamiAt at : {SteamiAt::NE, SteamiAt::NW, SteamiAt::SE, SteamiAt::SW}) {
+            s.clear();
+            s.text("Hi", at);
+            TEST_ASSERT_TRUE(inkBox(mem, STEAMI_WHITE).count > 0);
+        }
+        const int32_t k = s.k();
+        // W: the text ends at or before the chord's right edge - k at its rows.
+        s.clear();
+        s.text("ABCDEFGHIJKLMNO", SteamiAt::W);
+        InkBox b = inkBox(mem, STEAMI_WHITE);
+        TEST_ASSERT_TRUE(b.count > 0);
+        TEST_ASSERT_TRUE(b.x1 <= s.chord(b.y0, b.y1).right - k);
+        TEST_ASSERT_TRUE(b.x0 >= s.marginEw(s.k()));  // anchored at the W margin
+        // E: the text starts at or after the chord's left edge + k at its rows.
+        s.clear();
+        s.text("ABCDEFGHIJKLMNO", SteamiAt::E);
+        b = inkBox(mem, STEAMI_WHITE);
+        TEST_ASSERT_TRUE(b.count > 0);
+        TEST_ASSERT_TRUE(b.x0 >= s.chord(b.y0, b.y1).left + k);
+        TEST_ASSERT_TRUE(b.x1 < s.width() - s.marginEw(s.k()));  // right-aligned at the anchor
+        // A huge scale is clamped, f never wraps: nothing outside the circle (onPanel).
+        s.clear();
+        s.text("x", SteamiAt::N, STEAMI_WHITE, 200);
+        s.text("x", SteamiAt::CENTER, STEAMI_WHITE, 255);
+    });
+}
+
+struct SubtitleCase {
+    const char* l1;
+    const char* l2;
+    int16_t box128[2][4];
+    int16_t box240[2][4];
+};
+
+// Values printed by golden_layout.py: the DARK ink box of each line on 128 and on 240. The script
+// asserts the spec's cell rows and that every line is whole.
+static const SubtitleCase kSubtitles[] = {
+    {"WSEN-HIDS", nullptr, {{29, 108, 98, 114}}, {{50, 202, 189, 215}}},
+    {"BME280", nullptr, {{41, 108, 86, 114}}, {{74, 202, 165, 215}}},
+    {"BQ27441", nullptr, {{37, 108, 90, 114}}, {{66, 202, 173, 215}}},
+    {"VL53L1X", nullptr, {{37, 108, 90, 114}}, {{66, 202, 173, 215}}},
+    {"SURPRISED", nullptr, {{29, 108, 98, 114}}, {{50, 202, 189, 215}}},
+    {"Comfortable", nullptr, {{21, 104, 106, 110}}, {{34, 188, 205, 201}}},
+    {"VL53L1X ToF", nullptr, {{21, 104, 106, 110}}, {{34, 188, 205, 201}}},
+    {"Uncomfortable", nullptr, {{13, 95, 114, 101}}, {{18, 166, 221, 179}}},
+    {"20s window", nullptr, {{25, 107, 103, 113}}, {{42, 196, 199, 209}}},
+    {"3842 mV",
+     "BQ27441",
+     {{37, 95, 90, 101}, {37, 106, 90, 112}},
+     {{66, 177, 173, 190}, {66, 197, 173, 210}}},
+    {"Comfortable",
+     "WSEN-HIDS",
+     {{21, 95, 106, 101}, {29, 106, 98, 112}},
+     {{34, 173, 205, 186}, {50, 193, 189, 206}}},
+    {"Uncomfortable",
+     "WSEN-HIDS",
+     {{13, 86, 114, 92}, {29, 97, 98, 103}},
+     {{18, 151, 221, 164}, {50, 171, 189, 184}}},
+    {"WSEN-HIDS",
+     "20s window",
+     {{29, 95, 98, 101}, {25, 106, 103, 112}},
+     {{50, 176, 189, 189}, {42, 196, 199, 209}}},
+    {"Comfortable",
+     "BME280",
+     {{21, 95, 106, 101}, {41, 106, 86, 112}},
+     {{34, 173, 205, 186}, {74, 193, 165, 206}}},
+    {"Uncomfortable",
+     "BME280",
+     {{13, 86, 114, 92}, {41, 97, 86, 103}},
+     {{18, 151, 221, 164}, {74, 171, 165, 184}}},
+    {"BME280",
+     "20s window",
+     {{41, 95, 86, 101}, {25, 106, 103, 112}},
+     {{74, 176, 165, 189}, {42, 196, 199, 209}}},
+    {"Comfortable",
+     "APDS-9960",
+     {{21, 95, 106, 101}, {29, 106, 98, 112}},
+     {{34, 173, 205, 186}, {50, 193, 189, 206}}},
+    {"Uncomfortable",
+     "APDS-9960",
+     {{13, 86, 114, 92}, {29, 97, 98, 103}},
+     {{18, 151, 221, 164}, {50, 171, 189, 184}}},
+    {"APDS-9960",
+     "20s window",
+     {{29, 95, 98, 101}, {25, 106, 103, 112}},
+     {{50, 176, 189, 189}, {42, 196, 199, 209}}},
+};
+
+static void test_subtitle_rows(void) {
+    for (int panel = 0; panel < 2; panel++) {
+        onPanel(panel == 0 ? 128 : 240, panel == 1,
+                [panel](SteamiMemoryBackend& mem, TestScreen& s) {
+                    const int16_t cell = static_cast<int16_t>(8 * s.k());
+                    for (const SubtitleCase& t : kSubtitles) {
+                        s.clear();
+                        s.subtitle(t.l1, t.l2);
+                        const int16_t (*boxes)[4] = panel == 0 ? t.box128 : t.box240;
+                        const char* lines[] = {t.l1, t.l2};
+                        size_t total = 0;
+                        for (int i = 0; i < 2 && lines[i] != nullptr; i++) {
+                            const int16_t* b = boxes[i];
+                            // The band of the line's cell rows; capitals ink the top row of the
+                            // cell.
+                            const InkBox got = inkBox(mem, STEAMI_DARK, b[1], b[1] + cell - 1);
+                            expectBox(got, b[0], b[1], b[2], b[3]);
+                            TEST_ASSERT_EQUAL_size_t_MESSAGE(wholeInk(lines[i], s.k()), got.count,
+                                                             lines[i]);
+                            total += got.count;
+                        }
+                        TEST_ASSERT_EQUAL_size_t(total, inkBoxAll(mem).count);
+                    }
+                });
+    }
+}
+
+static void test_subtitle_block_limits(void) {
+    static const char kCaps[] = "ABCDEFGHIJKLMNOPQRST";  // every line starts with 'A': ink on row 0
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        const uint8_t k = s.k();
+        const int32_t pitch = s.u(STEAMI_SUBTITLE_PITCH);
+        const int32_t cell = 8 * k;
+        char a[21];
+        char b[21];
+        char c[21];
+        for (size_t n = 1; n <= 3; n++) {
+            for (size_t len = 3; len <= 20; len++) {
+                const size_t lens[3] = {len, 23 - len, 10};
+                char* lines[3] = {a, b, c};
+                int32_t widest = 0;
+                for (size_t i = 0; i < 3; i++) {
+                    memcpy(lines[i], kCaps, lens[i]);
+                    lines[i][lens[i]] = '\0';
+                    if (i < n) {
+                        const int32_t w = TestScreen::cellWidth(lines[i], lens[i], Ink::TEXT, k);
+                        widest = w > widest ? w : widest;
+                    }
+                }
+                s.clear();
+                if (n == 1) {
+                    s.subtitle(a);
+                } else if (n == 2) {
+                    s.subtitle(a, b);
+                } else {
+                    s.subtitle(a, b, c);
+                }
+                const int32_t S = s.resolve(SteamiAt::S, widest, k).y;
+                const int32_t start = n == 1 ? S + s.u(STEAMI_SUBTITLE_DROP)
+                                             : S - pitch * static_cast<int32_t>(n - 1) / 2;
+                const int32_t first = inkBoxAll(mem).y0;
+                const int32_t last = first + pitch * static_cast<int32_t>(n - 1);
+                TEST_ASSERT_TRUE_MESSAGE(last >= S, a);
+                TEST_ASSERT_TRUE_MESSAGE(last <= start + pitch * static_cast<int32_t>(n - 1), a);
+                bool cut = false;
+                size_t total = 0;
+                for (size_t i = 0; i < n; i++) {
+                    const int32_t top = first + pitch * static_cast<int32_t>(i);
+                    const InkBox line = inkBox(mem, STEAMI_DARK, static_cast<int16_t>(top),
+                                               static_cast<int16_t>(top + cell - 1));
+                    TEST_ASSERT_EQUAL_INT_MESSAGE(top, line.y0, "pitch u(11)");
+                    cut = cut || line.count < wholeInk(lines[i], k);
+                    total += line.count;
+                }
+                TEST_ASSERT_EQUAL_size_t(total, inkBoxAll(mem).count);
+                if (cut) {
+                    TEST_ASSERT_EQUAL_INT_MESSAGE(S, last, "a line is cut only at the S row");
+                }
+            }
+        }
+    });
+}
+
+static void test_subtitle_colour_and_shortcuts(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.subtitle("a", STEAMI_GREEN);
+        TEST_ASSERT_TRUE(inkBoxAll(mem).count > 0);
+        TEST_ASSERT_EQUAL_size_t(inkBoxAll(mem).count, inkBox(mem, STEAMI_GREEN).count);
+        s.clear();
+        s.subtitle("a", "b", STEAMI_GREEN);
+        TEST_ASSERT_TRUE(inkBoxAll(mem).count > 0);
+        TEST_ASSERT_EQUAL_size_t(inkBoxAll(mem).count, inkBox(mem, STEAMI_GREEN).count);
+        // "" is a line: the block keeps three lines, and the empty one draws nothing.
+        s.clear();
+        s.subtitle("a", "", "c");
+        const uint8_t k = s.k();
+        const int32_t pitch = s.u(STEAMI_SUBTITLE_PITCH);
+        const int32_t S = s.resolve(SteamiAt::S, 8 * k, k).y;
+        const int32_t top = S - pitch;  // first line of a three-line block; "a" and "c" fit there
+        const int32_t aRow = top + firstInkRow("a") * k;
+        const int32_t cRow = top + 2 * pitch + firstInkRow("c") * k;
+        const InkBox first = inkBox(mem, STEAMI_DARK, static_cast<int16_t>(top),
+                                    static_cast<int16_t>(top + 8 * k - 1));
+        const InkBox middle = inkBox(mem, STEAMI_DARK, static_cast<int16_t>(top + pitch),
+                                     static_cast<int16_t>(top + pitch + 8 * k - 1));
+        const InkBox last = inkBox(mem, STEAMI_DARK, static_cast<int16_t>(top + 2 * pitch),
+                                   static_cast<int16_t>(top + 2 * pitch + 8 * k - 1));
+        TEST_ASSERT_EQUAL_INT(aRow, first.y0);
+        TEST_ASSERT_EQUAL_size_t(0, middle.count);
+        TEST_ASSERT_EQUAL_INT(cRow, last.y0);
+        TEST_ASSERT_EQUAL_size_t(first.count + last.count, inkBoxAll(mem).count);
+        // Empty and nullptr strings draw nothing and reach no backend call.
+        s.clear();
+        mem.clearCounters();
+        s.subtitle(nullptr);
+        s.subtitle(nullptr, "b");
+        s.subtitle("");
+        s.title(nullptr);
+        s.title("");
+        s.text(nullptr, SteamiAt::N);
+        s.text("", SteamiAt::NE);
+        TEST_ASSERT_EQUAL_size_t(0, inkBoxAll(mem).count);
+        TEST_ASSERT_EQUAL_UINT32(0, mem.fillRectCalls());
+        TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+    });
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_format_integers);
@@ -487,5 +929,13 @@ int main(int, char**) {
     RUN_TEST(test_resolve_every_anchor);
     RUN_TEST(test_draw_glyphs_value_window);
     RUN_TEST(test_lifted_contrast);
+    RUN_TEST(test_text_every_anchor_golden);
+    RUN_TEST(test_title_rows);
+    RUN_TEST(test_title_band);
+    RUN_TEST(test_title_cut_keeps_whole_code_points);
+    RUN_TEST(test_text_cut_at_every_anchor);
+    RUN_TEST(test_subtitle_rows);
+    RUN_TEST(test_subtitle_block_limits);
+    RUN_TEST(test_subtitle_colour_and_shortcuts);
     return UNITY_END();
 }
