@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.36.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.36.0...v0.36.1) (2026-11-26)
+
+
+### Bug Fixes
+
+* **ssd1327:** Mark the writeCmd and writeData overrides. ([#264](https://github.com/steamicc/arduino-steami-lib/issues/264)) ([187ac10](https://github.com/steamicc/arduino-steami-lib/commit/187ac10b3ec125b39a4b27a0e8f5ea7fe8867381))
+
 # [0.36.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.35.0...v0.36.0) (2026-11-26)
 
 
