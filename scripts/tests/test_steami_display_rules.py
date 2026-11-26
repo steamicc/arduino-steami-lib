@@ -24,6 +24,7 @@ class SteamiDisplayRulesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             unit = Path(tmp) / "colour_rule.cpp"
             unit.write_text(
+                '#include "SteamiRgb.h"\n'
                 f'#include "{header}"\n'
                 "void f(SteamiRgb) {}\n"
                 f"int main() {{ {body} }}\n",
@@ -55,6 +56,10 @@ class SteamiDisplayRulesTest(unittest.TestCase):
         for body in ("SteamiDisplay d; d.clear(15);", "SteamiDisplay d; d.pixel(1, 1, 15);"):
             with self.subTest(body=body):
                 self.assertFalse(self._compiles(body, "SteamiDisplay.h"))
+
+    def test_value_rejects_long_long(self) -> None:
+        self.assertTrue(self._compiles("SteamiValue v(1L); (void)v;", header="SteamiValue.h"))
+        self.assertFalse(self._compiles("SteamiValue v(1LL); (void)v;", header="SteamiValue.h"))
 
     def test_backends_never_call_driver_drawing(self) -> None:
         # The layer draws; a backend only forwards pixels, rectangles and controls. Inline
