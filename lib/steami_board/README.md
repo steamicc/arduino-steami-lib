@@ -124,17 +124,20 @@ The default logger prints on `Serial` only once `Serial` is started
 | `uint8_t schematicIndex()` | Units digit of a valid revision, `0xFF` when there is none. |
 | `bool has(SteamiFunction f)` | True when a chip on this release serves the function (`TEMPERATURE`, `HUMIDITY`, `PRESSURE`, `DISTANCE`, `ACCELEROMETER`, `GYROSCOPE`, `MAGNETOMETER`, `COMPASS`, `LIGHT`, `COLOR`, `GESTURE`, `BATTERY`, `BUTTONS`, `SCREEN`). |
 | `SteamiConfig* config()` | The board config, non-null only after it was loaded during detection. |
-| `SteamiStatus claim(SteamiChip c)` | Build the driver of a chip on the first call and begin it once. `OK` or `NOT_RESPONDING` for the nine I2C chips, `NOT_STARTED` for the displays. |
+| `SteamiStatus claim(SteamiChip c)` | Build the driver of a chip on the first call and begin it once. `OK` or `NOT_RESPONDING` for the nine I2C chips, `NOT_STARTED` for the displays: they go through `beginDisplay()`. |
 | `bool built(SteamiChip c)` | True when the driver of the chip is constructed. |
 | `bme280()`, `wsenHids()`, `wsenPads()`, `apds9960()`, `ism330dl()`, `lis2mdl()`, `vl53l1x()`, `bq27441()`, `mcp23009e()` | The shared driver of a chip, `nullptr` unless `claim()` gives `OK`. |
-| `void printInfo()` | Through the logger: the banner (unless the logger already delivered it), the I2C chips of the release, then the last message (unless the logger already delivered it). |
-| `void printInfo(Print& out)` | A full report to `out`: always the banner, the I2C chips of the release, then the last message unless the logger already delivered it. |
+| `void printInfo()` | Through the logger: the banner (unless the logger already delivered it), the I2C chips of the release, the screen line `<chip> screen <state>`, then the last message (unless the logger already delivered it). |
+| `void printInfo(Print& out)` | A full report to `out`: always the banner, the I2C chips of the release, the screen line `<chip> screen <state>`, then the last message unless the logger already delivered it. |
 | `void setLogger(void (*log)(const char*))` | Where messages go; `nullptr` keeps the library silent. |
 | `const char* lastError()` | The last message reported, `""` when none. |
 | `void report(const char* who, SteamiStatus s, const char* detail, uint8_t code)` | Store and log a coded message (once per pair). `who` must be a literal. |
 | `TwoWire& wire()` | The internal I2C bus; begins it the first time. |
 | `const SteamiBoardPins& pins()` | The pins the board layer uses. |
-| `void end()` | Destroy the shared drivers and forget reported messages. The logger is kept. |
+| `void end()` | Destroy the shared drivers, free the screen buffer and forget reported messages. The logger is kept. |
+| `SteamiDisplayBackend* display()` | The backend of the screen of the release, built but not begun; `nullptr` on an unknown board. |
+| `void setDisplayBackend(SteamiDisplayBackend& b)` | Use `b` as the screen (tests, other panels). |
+| `SteamiStatus beginDisplay()` | Begin the screen once and keep the result: `OK`, `UNKNOWN_BOARD` or `NO_MEMORY`. |
 
 Free functions: `steamiDecodeRevision(int32_t)`, `steamiRoute(release,
 function, candidate)`, `steamiChipName(chip)`, `steamiChipAddress(chip)` and
@@ -367,6 +370,92 @@ uint8_t level = orange.gray4();       // grey level 0..15, what an OLED shows
 * The primitives never adjust a colour. `STEAMI_BLUE` on `STEAMI_DARK` is
   invisible on the OLED, where both are grey level 6.
 
+## Display
+
+`SteamiDisplay` draws on the screen of the board, V1a/V1b or V1c, with the
+same calls. Include `SteamiBoard.h`, call `begin()` first in `setup()`, draw,
+then `show()`.
+
+```cpp
+#include <SteamiBoard.h>
+#include <SteamiDisplay.h>
+
+SteamiDisplay screen;
+
+void setup() {
+    screen.begin();                       // first in setup(), never from a global initialiser
+}
+
+void loop() {
+    screen.clear();
+    screen.circle(screen.centerX(), screen.centerY(), 30, STEAMI_GREEN);
+    screen.text("Hello", 40, 60, STEAMI_WHITE);
+    screen.show();                        // nothing reaches the panel before this
+    delay(1000);
+}
+```
+
+| | V1a / V1b | V1c |
+|-|-----------|-----|
+| Panel | SSD1327, 128x128, 16 greys | GC9A01, 240x240, RGB565 |
+| Frame buffer | 8 192 B, allocated when the screen is first used | 115 200 B, allocated by `begin()` |
+| `show()` | 10 to 15 ms | at least 57.6 ms |
+
+All coordinates are physical pixels of the panel: origin top-left, `x` to the
+right, `y` down. On the OLED a colour becomes its grey level.
+
+| Method | Description |
+|--------|-------------|
+| `explicit constexpr SteamiDisplay(SteamiBoard& board = Steami)` | Stores the address of the board only; touches no hardware. |
+| `bool begin()` | Begin the screen once and keep the result. `false` with one message (`E30`, `E31`). Idempotent. |
+| `bool isAvailable() const` | True once the screen began. |
+| `SteamiStatus status() const` | `OK`, `NOT_STARTED`, `UNKNOWN_BOARD` or `NO_MEMORY`. |
+| `const char* error() const` | `""` when `OK`, else `"not started"`, `"unknown board"` or `"no memory"`. |
+| `bool isColor()` | True on a V1c. |
+| `int16_t width()` / `int16_t height()` | Size of the panel: 128 or 240. |
+| `int16_t centerX()` / `int16_t centerY()` | Centre of the panel. |
+| `int16_t radius()` | Half the width. |
+| `void clear(SteamiRgb c = STEAMI_BLACK)` | Fill the screen. |
+| `void pixel(int16_t x, int16_t y, SteamiRgb c = STEAMI_WHITE)` | One pixel. |
+| `void line(int16_t x1, int16_t y1, int16_t x2, int16_t y2, SteamiRgb c = STEAMI_WHITE)` | A line, ends included. |
+| `void hline(int16_t x, int16_t y, int16_t w, SteamiRgb c = STEAMI_WHITE)` | A horizontal line of `w` pixels. |
+| `void vline(int16_t x, int16_t y, int16_t h, SteamiRgb c = STEAMI_WHITE)` | A vertical line of `h` pixels. |
+| `void rect(int16_t x, int16_t y, int16_t w, int16_t h, SteamiRgb c = STEAMI_WHITE, bool fill = false)` | A rectangle, outline or filled. |
+| `void circle(int16_t cx, int16_t cy, int16_t r, SteamiRgb c = STEAMI_WHITE, bool fill = false)` | A circle, outline or filled. |
+| `void triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, SteamiRgb c = STEAMI_WHITE, bool fill = false)` | A triangle, outline or filled. |
+| `void arc(int16_t cx, int16_t cy, int16_t r, int16_t startDeg, int16_t sweepDeg, SteamiRgb c = STEAMI_WHITE, uint8_t width = 1)` | A ring segment. Degrees, 0 = noon, clockwise; `r` is the outer radius and the ring is `width` thick inward. |
+| `void text(const char* s, int16_t x, int16_t y, SteamiRgb c = STEAMI_WHITE, uint8_t scale = 1)` | Text in 8x8 glyphs (`CHAR_W`, `CHAR_H`). UTF-8: accents are folded to their plain letter, and `°` is drawn. |
+| `int16_t textWidth(const char* s, uint8_t scale = 1) const` | Width in pixels; counts glyphs, not bytes. |
+| `void show()` | Send the drawing to the panel. |
+| `void rotate(bool upsideDown)` | Turn the picture by 180 degrees. |
+| `void invert(bool on)` | Invert the panel. |
+| `void powerOn()` / `void powerOff()` | Switch the panel on or off. |
+| `SteamiDisplayBackend* backend()` | The backend of the board, built but not begun; `nullptr` without one. |
+
+Rules:
+
+* Everything is clipped to the panel: a shape that goes off the edge is cut,
+  never wrapped.
+* The first drawing call begins the screen if your sketch did not.
+* After a failure nothing is drawn and `show()` does nothing; `error()` says
+  why.
+* Every `SteamiDisplay` shares the one screen of the board.
+* The geometry (`width()`, `height()`, ...) is valid before `begin()`. On a
+  V1a/V1b this already allocates the 8 KB buffer.
+* Use it from `setup()` onwards only, never from a global initialiser: it
+  detects the release over I2C before the core is initialised.
+* V1a/V1b never report `E31`.
+* To avoid the detection, force the release before the first drawing call
+  (`Steami.begin(SteamiRelease::V1C)` or `#define STEAMI_BOARD_V1C`).
+* Checked on a V1c; V1a/V1b only by the native tests.
+
+Messages of the display (`who` is `SteamiDisplay`):
+
+| Code | Text | `error()` |
+|------|------|-----------|
+| `E30` | `[STeaMi] SteamiDisplay: cannot tell if this board is a V1a/V1b or a V1c. Add #define STEAMI_BOARD_V1C (or V1B) before #include <STeaMi.h>. (E30)` | `"unknown board"` |
+| `E31` | `[STeaMi] SteamiDisplay: not enough RAM for the colour screen (115200 bytes in one block). Call screen.begin() first in setup(). (E31)` | `"no memory"` |
+
 ## Using your own drivers
 
 Some drivers are not shared by `Steami` yet. Build them on the board's bus:
@@ -387,6 +476,10 @@ void setup() {
   from a global initialiser (`SteamiBME280 bme(Steami.wire());`): the bus
   object is built and begun on first use. Checked on a V1c with STM32duino
   3.1.0.
+* Do not build a `SteamiGC9A01` or a `SteamiSSD1327` next to `SteamiDisplay`:
+  that is a second frame buffer (115 200 B on a V1c, 8 KB on a V1a/V1b) and two
+  drivers drawing to the same panel. The screen shows whichever called `show()`
+  last.
 * Never create a second `TwoWire` on `I2C_INT_SDA` / `I2C_INT_SCL`. On
   STM32duino 3.1.0 the last `TwoWire` to call `begin()` owns the I2C1
   interrupt (`i2c_handles[I2C1_INDEX]` in `twi.c`); the transfers of the other
@@ -396,6 +489,9 @@ void setup() {
 
 ```bash
 make test-native/steami_board   # detection, routing, messages, lazy slots
+make test-native/steami_display_board   # display primitives, E30, E31
+.venv/bin/pio test -e native_asan
+.venv/bin/python3 scripts/check-footprint.py
 make test-examples/steami_board
 make build
 make lint
