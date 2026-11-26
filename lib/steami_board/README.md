@@ -136,13 +136,14 @@ The default logger prints on `Serial` only once `Serial` is started
 | `const SteamiBoardPins& pins()` | The pins the board layer uses. |
 | `void end()` | Destroy the shared drivers, free the screen buffer and forget reported messages. The logger is kept. |
 | `SteamiDisplayBackend* display()` | The backend of the screen of the release, built but not begun; `nullptr` on an unknown board. |
-| `void setDisplayBackend(SteamiDisplayBackend& b)` | Use `b` as the screen (tests, other panels). |
+| `void setDisplayBackend(SteamiDisplayBackend& b)` | Use `b` as the screen (tests, other panels). Ignored once `beginDisplay()` ran, until `end()`. |
 | `SteamiStatus beginDisplay()` | Begin the screen once and keep the result: `OK`, `UNKNOWN_BOARD` or `NO_MEMORY`. |
 
 Free functions: `steamiDecodeRevision(int32_t)`, `steamiRoute(release,
-function, candidate)`, `steamiChipName(chip)`, `steamiChipAddress(chip)` and
-`steamiForceRelease(release)` (used by the `#define` mechanism, do not call
-it).
+function, candidate)`, `steamiChipName(chip)`, `steamiChipAddress(chip)`,
+`steamiDisplayStateText(status)` (`"OK"`, `"not started"`, `"unknown board"`,
+`"no memory"`) and `steamiForceRelease(release)` (used by the `#define`
+mechanism, do not call it).
 
 ## Function classes
 
@@ -373,8 +374,8 @@ uint8_t level = orange.gray4();       // grey level 0..15, what an OLED shows
 ## Display
 
 `SteamiDisplay` draws on the screen of the board, V1a/V1b or V1c, with the
-same calls. Include `SteamiBoard.h`, call `begin()` first in `setup()`, draw,
-then `show()`.
+same calls. Include `SteamiDisplay.h` (or `STeaMi.h`), call `begin()` first in
+`setup()`, draw, then `show()`.
 
 ```cpp
 #include <SteamiBoard.h>

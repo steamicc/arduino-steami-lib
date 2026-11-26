@@ -75,6 +75,7 @@ steamiDecodeRevision	KEYWORD2
 steamiRoute	KEYWORD2
 steamiChipName	KEYWORD2
 steamiChipAddress	KEYWORD2
+steamiDisplayStateText	KEYWORD2
 read	KEYWORD2
 setOffset	KEYWORD2
 altitude	KEYWORD2
