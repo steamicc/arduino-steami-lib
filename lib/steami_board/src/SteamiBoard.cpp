@@ -596,7 +596,31 @@ void SteamiBoard::printInfo() {
         this, true);
 }
 
+SteamiDisplayBackend* SteamiBoard::display() {
+    return _displayInjected;
+}
+
+void SteamiBoard::setDisplayBackend(SteamiDisplayBackend& b) {
+    if (_displayStatus == SteamiStatus::NOT_STARTED) {
+        _displayInjected = &b;
+    }
+}
+
+SteamiStatus SteamiBoard::beginDisplay() {
+    if (_displayStatus == SteamiStatus::NOT_STARTED) {
+        SteamiDisplayBackend* backend = display();
+        if (backend == nullptr) {
+            _displayStatus = SteamiStatus::UNKNOWN_BOARD;
+        } else {
+            _displayStatus = backend->begin() ? SteamiStatus::OK : SteamiStatus::NO_MEMORY;
+        }
+    }
+    return _displayStatus;
+}
+
 void SteamiBoard::end() {
+    _displayInjected = nullptr;
+    _displayStatus = SteamiStatus::NOT_STARTED;
     if (_mcp23009e.built()) {
         // The driver attaches a handler that captures its address and never detaches it.
         detachInterrupt(digitalPinToInterrupt(static_cast<int>(pins().expanderIrq)));

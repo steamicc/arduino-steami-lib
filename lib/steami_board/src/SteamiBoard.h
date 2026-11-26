@@ -18,6 +18,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "SteamiDisplayBackend.h"
 #include "SteamiLazy.h"
 #include "SteamiTypes.h"
 
@@ -152,7 +153,19 @@ class SteamiBoard {
     /// The I2C bus; begins it the first time.
     TwoWire& wire();
 
-    /// Destroys the slots and forgets reported pairs and delivered lines. The logger is kept.
+    /// The injected display backend, nullptr when none was injected.
+    SteamiDisplayBackend* display();
+
+    /// Injects a display backend (tests, an external panel). Ignored once beginDisplay() ran,
+    /// until end().
+    void setDisplayBackend(SteamiDisplayBackend& b);
+
+    /// Begins display() once and caches the result: OK, NO_MEMORY (the backend did not begin) or
+    /// UNKNOWN_BOARD (no backend). Reports nothing: the caller does, under its own name.
+    SteamiStatus beginDisplay();
+
+    /// Destroys the slots and forgets reported pairs and delivered lines, the injected
+    /// display backend and the cached display status. The logger is kept.
     void end();
 
    private:
@@ -219,6 +232,8 @@ class SteamiBoard {
     SteamiLazy<SteamiVL53L1X> _vl53l1x;
     SteamiLazy<SteamiBQ27441> _bq27441;
     SteamiLazy<SteamiMCP23009E> _mcp23009e;
+    SteamiDisplayBackend* _displayInjected = nullptr;
+    SteamiStatus _displayStatus = SteamiStatus::NOT_STARTED;
 };
 
 extern SteamiBoard Steami;

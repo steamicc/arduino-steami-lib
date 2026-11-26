@@ -34,3 +34,38 @@ jobs:
 
       - name: Run native tests
         run: make test-native
+
+  display-sanitizers:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini', 'boards/steami.json', 'requirements.txt') }}
+          restore-keys: |
+            pio-${{ runner.os }}-
+
+      - name: Run the display suites under ASan and UBSan
+        env:
+          STEAMI_PPM_DIR: ${{ runner.temp }}/steami-display-ppm
+        run: |
+          mkdir -p "$STEAMI_PPM_DIR"
+          make install-pio
+          .venv/bin/pio test -e native_asan
+
+      - name: Upload the primitives gallery
+        uses: actions/upload-artifact@v4
+        with:
+          name: steami-display-gallery
+          path: ${{ runner.temp }}/steami-display-ppm
+          if-no-files-found: error

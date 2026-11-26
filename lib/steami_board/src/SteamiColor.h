@@ -4,6 +4,7 @@
 
 #include "SteamiBoard.h"
 #include "SteamiHandle.h"
+#include "SteamiRgb.h"
 #include "SteamiTypes.h"
 
 /// Red, green and blue counts from the APDS-9960, shared with SteamiLight and SteamiGesture.
@@ -26,6 +27,10 @@ class SteamiColor {
     uint16_t red();
     uint16_t green();
     uint16_t blue();
+
+    /// Hue of the object: the largest channel scaled to 255, the others in proportion.
+    /// STEAMI_BLACK when unavailable or when all three counts are zero.
+    SteamiRgb rgb();
 
    private:
     SteamiHandle _handle;

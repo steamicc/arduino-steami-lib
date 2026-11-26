@@ -51,3 +51,24 @@ uint16_t SteamiColor::blue() {
     read(r, g, b);
     return b;
 }
+
+SteamiRgb SteamiColor::rgb() {
+    uint16_t r, g, b;
+    if (!read(r, g, b)) {
+        return STEAMI_BLACK;
+    }
+    uint32_t largest = r;
+    if (g > largest) {
+        largest = g;
+    }
+    if (b > largest) {
+        largest = b;
+    }
+    if (largest == 0) {
+        return STEAMI_BLACK;
+    }
+    auto scale = [largest](uint32_t c) {
+        return static_cast<uint8_t>((c * 255 + largest / 2) / largest);
+    };
+    return SteamiRgb(scale(r), scale(g), scale(b));
+}
