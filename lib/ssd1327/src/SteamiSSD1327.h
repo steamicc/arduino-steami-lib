@@ -55,8 +55,8 @@ class SSD1327_I2C : public SSD1327 {
    private:
     TwoWire* _wire;
     uint8_t _address;
-    uint8_t _cmdArr[2];
-    uint8_t _dataList[2];
+    uint8_t _cmdArr[2] = {REG_CMD, 0};
+    uint8_t _dataList[2] = {REG_DATA, 0};
 
     void writeCmd(uint8_t cmd) override;
     void writeData(const uint8_t* data, size_t len) override;

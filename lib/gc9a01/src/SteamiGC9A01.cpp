@@ -351,7 +351,7 @@ void GC9A01::text(const char* str, int16_t x, int16_t y, uint16_t color) {
 }
 
 GC9A01_SPI::GC9A01_SPI(SPIClass& spi, uint8_t dc, uint8_t rst, uint8_t cs)
-    : _spi(&spi), _dc(dc), _rst(rst), _cs(cs), _rate(16000000) {}
+    : _spi(&spi), _dc(dc), _rst(rst), _cs(cs) {}
 
 void GC9A01_SPI::reset() {
     pinMode(_cs, OUTPUT);
