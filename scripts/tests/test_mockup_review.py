@@ -10,7 +10,6 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
-from unittest import skipUnless
 
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -84,20 +83,20 @@ class MockupReviewTest(unittest.TestCase):
             mr.ppm_name("02_battery", 240, "color"), "steami-mockup-02_battery-240-color.ppm"
         )
 
-    @skipUnless(HAVE_NUMPY_PIL, "Pillow and NumPy")
+    @unittest.skipUnless(HAVE_NUMPY_PIL, "Pillow and NumPy")
     def test_ssim_identity_symmetry_and_noise(self) -> None:
         a, b = noise_pair()
         self.assertAlmostEqual(mr.ssim(a, a), 1.0, places=6)
         self.assertAlmostEqual(mr.ssim(a, b), mr.ssim(b, a), places=12)
         self.assertLess(mr.ssim(a, b), 0.9)
 
-    @skipUnless(HAVE_SKIMAGE, "scikit-image")
+    @unittest.skipUnless(HAVE_SKIMAGE, "scikit-image")
     def test_ssim_matches_scikit_image(self) -> None:
         a, b = noise_pair()
         expected = structural_similarity(a, b, channel_axis=-1)
         self.assertAlmostEqual(mr.ssim(a, b), expected, delta=1e-6)
 
-    @skipUnless(HAVE_NUMPY_PIL, "Pillow and NumPy")
+    @unittest.skipUnless(HAVE_NUMPY_PIL, "Pillow and NumPy")
     def test_oled_grey_levels(self) -> None:
         px = np.array([[[85, 85, 255], [51, 51, 51], [255, 255, 255]]], dtype=np.uint8)
         out = mr.oled_grey(px)
@@ -106,7 +105,7 @@ class MockupReviewTest(unittest.TestCase):
         self.assertEqual(out[0, 1].tolist(), [49, 48, 49])
         self.assertEqual(out[0, 2].tolist(), [255, 255, 255])
 
-    @skipUnless(HAVE_NUMPY_PIL, "Pillow and NumPy")
+    @unittest.skipUnless(HAVE_NUMPY_PIL, "Pillow and NumPy")
     def test_disc_mask(self) -> None:
         mask = mr.disc_mask(128, 0.95)
         self.assertEqual(mask.shape, (128, 128))
@@ -115,7 +114,7 @@ class MockupReviewTest(unittest.TestCase):
         self.assertFalse(mask[2, 64])
         self.assertTrue(mask[4, 64])
 
-    @skipUnless(HAVE_NUMPY_PIL, "Pillow and NumPy")
+    @unittest.skipUnless(HAVE_NUMPY_PIL, "Pillow and NumPy")
     def test_review_writes_the_page_and_never_fails_on_scores(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -131,7 +130,7 @@ class MockupReviewTest(unittest.TestCase):
             self.assertEqual(len(list(out.glob("*.png"))), 6)
             self.assertIn("<strong>look</strong>", (out / "index.html").read_text())
 
-    @skipUnless(HAVE_NUMPY_PIL, "Pillow and NumPy")
+    @unittest.skipUnless(HAVE_NUMPY_PIL, "Pillow and NumPy")
     def test_missing_ppm_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
