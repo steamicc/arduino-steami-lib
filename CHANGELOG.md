@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.36.3](https://github.com/steamicc/arduino-steami-lib/compare/v0.36.2...v0.36.3) (2026-11-26)
+
+
+### Bug Fixes
+
+* **gc9a01,ssd1327:** Initialise the panel driver members in place. ([#267](https://github.com/steamicc/arduino-steami-lib/issues/267)) ([f22b255](https://github.com/steamicc/arduino-steami-lib/commit/f22b255206a3129aaa4553ee410df7c25f653dfe)), closes [#266](https://github.com/steamicc/arduino-steami-lib/issues/266)
+
 ## [0.36.2](https://github.com/steamicc/arduino-steami-lib/compare/v0.36.1...v0.36.2) (2026-11-26)
 
 
