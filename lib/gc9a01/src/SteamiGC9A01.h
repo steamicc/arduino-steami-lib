@@ -85,7 +85,7 @@ class GC9A01_SPI : public GC9A01 {
     uint8_t _dc;
     uint8_t _rst;
     uint8_t _cs;
-    uint32_t _rate;
+    uint32_t _rate = 16000000;
 
     void beginWrite(bool data);
     void endWrite();

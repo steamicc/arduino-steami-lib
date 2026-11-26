@@ -272,11 +272,7 @@ void SSD1327::text(const char* str, int16_t x, uint8_t y, uint8_t color) {
 }
 
 SSD1327_I2C::SSD1327_I2C(uint8_t width, uint8_t height, TwoWire& wire, uint8_t address)
-    : SSD1327(width, height),
-      _wire(&wire),
-      _address(address),
-      _cmdArr{REG_CMD, 0},
-      _dataList{REG_DATA, 0} {}
+    : SSD1327(width, height), _wire(&wire), _address(address) {}
 
 void SSD1327_I2C::writeCmd(uint8_t cmd) {
     _cmdArr[1] = cmd;
