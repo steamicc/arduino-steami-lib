@@ -19,6 +19,7 @@
 #include "SteamiDisplay.h"
 #include "SteamiDisplayBackend.h"
 #include "SteamiFont.h"
+#include "SteamiGallery.h"
 #include "SteamiMemoryBackend.h"
 #include "SteamiRgb.h"
 #include "SteamiTrig.h"
@@ -1600,28 +1601,6 @@ static void test_protected_name_in_messages(void) {
     TEST_ASSERT_FALSE(d.begin());
     TEST_ASSERT_EQUAL_size_t(1, g_lines.size());
     TEST_ASSERT_EQUAL_UINT32(0, g_lines[0].rfind("[STeaMi] SteamiTestDisplay: ", 0));
-}
-
-/// The primitives gallery: the scene the 3b Drawing example copies line for line. The 240 px colour
-/// dump is the reference for the V1c photo.
-static void drawGallery(SteamiDisplay& d) {
-    const int16_t cx = d.centerX(), cy = d.centerY(), r = d.radius();
-    const uint8_t s = d.width() >= 240 ? 2 : 1;
-    d.clear();
-    d.circle(cx, cy, r - 1, STEAMI_DARK);                         // panel edge
-    d.arc(cx, cy, r - 4 * s, 225, 270, STEAMI_GRID_DARK, 6 * s);  // gauge track
-    d.arc(cx, cy, r - 4 * s, 225, 135, STEAMI_GREEN, 6 * s);      // half fill
-    d.text("STeaMi", cx - d.textWidth("STeaMi", s) / 2, cy - r / 2, STEAMI_WHITE, s);
-    const char* temp =
-        "20\xC2\xB0"
-        "C \xC3\xA9";  // "20°C é"
-    d.text(temp, cx - d.textWidth(temp, s) / 2, cy - r / 2 + 12 * s, STEAMI_YELLOW, s);
-    d.rect(cx - r / 2, cy - r / 8, r / 3, r / 4, STEAMI_LIGHT);
-    d.rect(cx - r / 2 + 2, cy - r / 8 + 2, r / 3 - 4, r / 4 - 4, STEAMI_BLUE, true);
-    d.circle(cx + r / 3, cy, r / 8, STEAMI_RED, true);
-    d.triangle(cx - r / 4, cy + r / 2, cx + r / 4, cy + r / 2, cx, cy + r / 4, STEAMI_YELLOW, true);
-    d.line(cx - r / 2, cy + r / 6, cx + r / 2, cy + r / 6, STEAMI_GRAY);
-    d.show();
 }
 
 static void galleryOn(int16_t size, bool color, const char* fileName) {
