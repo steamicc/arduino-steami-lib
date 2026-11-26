@@ -8,6 +8,7 @@ Run: python3 golden_layout.py
 import math
 import pathlib
 import re
+import struct
 from math import isqrt
 
 FONT_CPP = pathlib.Path(__file__).resolve().parents[3] / "lib/steami_board/src/SteamiFont.cpp"
@@ -1137,3 +1138,192 @@ for W in (128, 240):
     print("  %d watch(3, 0, 0, RED) RED box %s; watch(3, 0, 30, RED) RED box %s" % (
         W, colour_box(watch_render(W, 3, 0, 0, "RED"), "RED"), colour_box(watch_render(W, 3, 0, 30, "RED"), "RED")))
     print("  %d watch(1, 37, 5) WHITE box %s" % (W, watch_layout(W, 1, 37, 5)["white"]))
+
+# ---- Widget of 4b Task 3: compass() (spec 5.9 "compass", decision 2, the decision "compass") ----
+# A real rose: every element at angle a is drawn at a - h. Points use Q14 (spec 5.6), not device.py's
+# int(); fractions of R truncate (R·7/10, R·85/100). Draw order: circles, ticks, letters, north half,
+# south half, pivot (the spec's listing order, so letters paint over ticks at diagonal headings).
+COMPASS_LETTERS = (("N", 0, "WHITE"), ("E", 90, "GRAY"), ("S", 180, "GRAY"), ("W", 270, "GRAY"))
+
+
+def compass_radii(W):
+    """(R, inner circle, tick start, letters, needle length, needle half width, pivot)."""
+    P = Panel(W)
+    R = P.r - P.u(12)
+    return R, R * 7 // 10, R - P.u(6), R + P.u(5), R * 85 // 100, P.u(3), P.u(3)
+
+
+def compass_heading(heading):
+    """roundedHeading(): lroundf(fmodf(h, 360)) on the float32 value of h, halves away from zero;
+    None (no needle, rose at 0) for NAN and +-INF."""
+    h = struct.unpack("<f", struct.pack("<f", heading))[0]
+    if math.isnan(h) or math.isinf(h):
+        return None
+    m = math.fmod(h, 360.0)  # exact, as fmodf; m keeps the sign of h
+    return int(math.copysign(math.floor(abs(m) + 0.5), m))
+
+
+def compass_render(W, heading, c="LIGHT"):
+    """The canvas of compass(heading, c) on a cleared W panel."""
+    P = Panel(W)
+    R, inner, tick, letters, needle, half, pivot = compass_radii(W)
+    h = compass_heading(heading)
+    turn = 0 if h is None else h
+    cv = {}
+    r_ring(cv, W, P.cx, P.cy, R, P.k, "DARK")
+    r_ring(cv, W, P.cx, P.cy, inner, P.k, "DARK")
+    for i in range(8):
+        deg = 45 * i - turn
+        r_stroke_line(cv, W, *P.polar(tick, deg), *P.polar(R, deg), P.k, "LIGHT" if i % 2 == 0 else "DARK")
+    for text, deg, colour in COMPASS_LETTERS:
+        r_text(cv, W, text, *number_cell(P, text, deg - turn, letters), P.k, colour)
+    if h is not None:
+        r_triangle(cv, W, pointer_points(P, -h, needle, half), c)
+        r_triangle(cv, W, pointer_points(P, 180 - h, needle, half), "DARK")
+    r_disc(cv, W, P.cx, P.cy, pivot, "GRAY")
+    return cv
+
+
+def compass_layout(W, heading):
+    """R, the inner radius, the tick ends, the letter centres and cells, the needle tip and base,
+    and the WHITE ink box of N of compass(heading) on a W panel."""
+    P = Panel(W)
+    R, inner, tick, letters, needle, half, _ = compass_radii(W)
+    h = compass_heading(heading)
+    turn = 0 if h is None else h
+    return {
+        "R": R,
+        "inner": inner,
+        "ticks": [(P.polar(tick, 45 * i - turn), P.polar(R, 45 * i - turn)) for i in range(8)],
+        "centres": {text: P.polar(letters, deg - turn) for text, deg, _ in COMPASS_LETTERS},
+        "cells": {text: number_cell(P, text, deg - turn, letters) for text, deg, _ in COMPASS_LETTERS},
+        "tip": None if h is None else P.polar(needle, -h),
+        "base": None if h is None else pointer_points(P, -h, needle, half)[1:],
+        "white": colour_box(compass_render(W, heading), "WHITE"),
+    }
+
+
+def device_compass_points(W):
+    """device.py's compass() at heading 0 (927e96b l.303-341), int() of float trigonometry: the two
+    radii, the eight ticks, the letter cells (lx - CHAR_W // 2, ly - CHAR_H // 2), the needle tip
+    and base. device.py keeps the rose fixed and turns the needle by +heading (decision 2 turns the
+    whole rose by -heading), so only heading 0 compares."""
+    cx = cy = W // 2
+    r = W // 2 - 12
+
+    def at(d, deg):
+        rad = math.radians(deg)
+        return cx + int(d * math.sin(rad)), cy - int(d * math.cos(rad))
+
+    cells = {}
+    for text, deg, _ in COMPASS_LETTERS:
+        lx, ly = at(r + 5, deg)
+        cells[text] = (lx - 4, ly - 4)
+    half = 3
+    return {
+        "R": r,
+        "inner": int(r * 0.7),
+        "ticks": [(at(r - 6, a), at(r, a)) for a in range(0, 360, 45)],
+        "cells": cells,
+        "tip": at(int(r * 0.85), 0),
+        "base": {(cx - int(half * math.cos(0)), cy - int(half * math.sin(0))),
+                 (cx + int(half * math.cos(0)), cy + int(half * math.sin(0)))},
+    }
+
+
+# Mockup 07 (micropython-steami-tutorials 83d8e2c docs/mockups/07_compass.svg): a 200 px drawing of
+# the 128 px screen, centre (100, 100). Its numbers, held here as literals: rose circles r 81.2 and
+# 56.2, the north tip at y 31.2, the needle base x 95.3 .. 104.7, the pivot r 4.7.
+SVG07_SCALE = 200 / 128
+SVG07 = {"R": 81.2, "inner": 56.2, "tip": 100 - 31.2, "half": 104.7 - 100, "pivot": 4.7}
+
+# ---- Self-check of 4b Task 3 ----
+assert compass_radii(128) == (52, 36, 46, 57, 44, 3, 3)
+assert compass_radii(240) == (98, 68, 87, 107, 83, 5, 5)
+# The needle tip and the N centre at 0, 90, 180 and 270 (spec 7: "compass() at 0, 90, 180, 270")
+COMPASS_POINTS = {
+    128: {0: ((64, 20), (64, 7)), 90: ((20, 64), (7, 64)), 180: ((64, 108), (64, 121)),
+          270: ((108, 64), (121, 64))},
+    240: {0: ((120, 37), (120, 13)), 90: ((37, 120), (13, 120)), 180: ((120, 203), (120, 227)),
+          270: ((203, 120), (227, 120))},
+}
+for W, points in COMPASS_POINTS.items():
+    for heading, (tip, north) in points.items():
+        layout = compass_layout(W, heading)
+        assert (layout["tip"], layout["centres"]["N"]) == (tip, north), (W, heading)
+# The N cell's top-left is its centre - 4k: (60, 3) on 128 and (112, 5) on 240 at heading 0
+assert compass_layout(128, 0)["cells"]["N"] == (60, 3) and compass_layout(240, 0)["cells"]["N"] == (112, 5)
+# Spec 5.9: at 90 the N letter is on the left
+for W in (128, 240):
+    assert compass_layout(W, 90)["white"][2] < Panel(W).cx
+# device.py's int() equals polar() at 128, heading 0, wherever sin and cos are exact: the circles,
+# the four cardinal ticks, the letters, the needle tip and base. The four diagonal ticks differ:
+# Q14 rounds to nearest where int() truncates (inner end x 97 here against 96 in device.py at 45
+# degrees, outer offset 37 against 36), so they are not compared.
+DEV07, OURS07 = device_compass_points(128), compass_layout(128, 0)
+assert (DEV07["R"], DEV07["inner"]) == (OURS07["R"], OURS07["inner"])
+assert DEV07["ticks"][0::2] == OURS07["ticks"][0::2]
+assert DEV07["ticks"][1][0] == (96, 32) and OURS07["ticks"][1][0] == (97, 31)
+assert DEV07["cells"] == OURS07["cells"] and DEV07["tip"] == OURS07["tip"]
+assert DEV07["base"] == set(OURS07["base"])
+# Mockup 07's SVG agrees at 128: circles 52 and 36, tip 44, half width 3, pivot 3
+R7, I7, _, _, N7, H7, PV7 = compass_radii(128)
+SVG07_PX = [round(SVG07[key] / SVG07_SCALE) for key in ("R", "inner", "tip", "half", "pivot")]
+assert SVG07_PX == [R7, I7, N7, H7, PV7]
+# roundedHeading (Review Focus 2): NAN and +-INF draw no needle; halves and wraps
+assert [compass_heading(v) for v in (NAN, INF, -INF)] == [None, None, None]
+assert [compass_heading(v) for v in (359.6, 0.4, -90.4, 450, 270, 0.5, -0.5)] == [360, 0, -90, 90, 270, 1, -1]
+assert compass_heading(1e30) is not None
+# Drawings that the rounding makes equal (test_compass_heading_rounding)
+for W in (128, 240):
+    assert compass_render(W, 359.6) == compass_render(W, 0) == compass_render(W, 0.4)
+    assert compass_render(W, -90.4) == compass_render(W, 270)
+    assert compass_render(W, 450) == compass_render(W, 90)
+    assert "RED" in compass_render(W, 1e30, "RED").values()
+# compass(NAN): no needle, the rose and the letters of heading 0, the pivot
+for W in (128, 240):
+    P = Panel(W)
+    for v in (NAN, INF, -INF):
+        cv = compass_render(W, v, "RED")
+        assert "RED" not in cv.values() and cv[(P.cx, P.cy)] == "GRAY"
+        north = {p for p, c in compass_render(W, 0).items() if c == "WHITE"}
+        assert {p for p, c in cv.items() if c == "WHITE"} == north
+# compass(h, RED): the tip is RED and the RED box reaches it on its side; the WHITE box is the N box
+# (nothing is drawn over the letter); the pivot GRAY
+SIDE = {0: 1, 90: 0, 180: 3, 270: 2}  # index into (x0, y0, x1, y1)
+for W in (128, 240):
+    P = Panel(W)
+    for heading in (0, 90, 180, 270):
+        cv, layout = compass_render(W, heading, "RED"), compass_layout(W, heading)
+        tip = layout["tip"]
+        assert cv[tip] == "RED" and colour_box(cv, "RED")[SIDE[heading]] == tip[SIDE[heading] % 2]
+        n_only = {}
+        r_text(n_only, W, "N", *layout["cells"]["N"], P.k, "WHITE")
+        assert all(cv[p] == "WHITE" for p in n_only) and colour_box(cv, "WHITE") == box(list(n_only))
+        assert cv[(P.cx, P.cy)] == "GRAY"
+# compass(45): the N tick turned to 315 is LIGHT, the NE diagonal tick turned to 0 DARK, at the
+# tick start R - u(6); the needle (44 / 83) reaches neither
+for W in (128, 240):
+    P = Panel(W)
+    R, _, tick, _, needle, _, _ = compass_radii(W)
+    cv = compass_render(W, 45, "RED")
+    assert cv[P.polar(tick, 315)] == "LIGHT" and cv[P.polar(tick, 0)] == "DARK" and needle < tick
+# Review Focus 3: nothing outside radius() + 1 at any heading
+for W in (128, 240):
+    P = Panel(W)
+    for heading in range(360):
+        assert not outside_circle(compass_render(W, heading), P), (W, heading)
+
+# ---- Values pinned by test_steami_screen (4b Task 3) ----
+print("compass (R, inner, tick start, letters, needle, half width, pivot)")
+for W in (128, 240):
+    print("  %d: %s" % (W, compass_radii(W)))
+for W in (128, 240):
+    P = Panel(W)
+    R, _, tick, _, _, _, _ = compass_radii(W)
+    for heading in (0, 90, 180, 270):
+        layout = compass_layout(W, heading)
+        print("  %d heading %d: tip %s, N centre %s, N cell %s, WHITE box %s, RED box %s" % (
+            W, heading, layout["tip"], layout["centres"]["N"], layout["cells"]["N"], layout["white"],
+            colour_box(compass_render(W, heading, "RED"), "RED")))
+    print("  %d compass(45): N tick start %s, NE tick start %s" % (W, P.polar(tick, 315), P.polar(tick, 0)))

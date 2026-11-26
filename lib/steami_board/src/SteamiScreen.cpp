@@ -58,6 +58,16 @@ int32_t filledColumns(int32_t w, float v, float maxV) {
     return smaller(static_cast<int32_t>(fill), w);
 }
 
+/// A compass heading in whole degrees, in [-360, 360]: fmodf first, so that lroundf never sees a
+/// huge value, then rounded to nearest with halves away from zero. 0 for NAN or +-INF, which
+/// point nowhere: the caller draws no needle then.
+int32_t roundedHeading(float h) {
+    if (isnan(h) || isinf(h)) {
+        return 0;
+    }
+    return static_cast<int32_t>(lroundf(fmodf(h, 360.0f)));
+}
+
 }  // namespace
 
 int32_t SteamiScreen::Region::width() const {
@@ -613,5 +623,31 @@ void SteamiScreen::watch(uint8_t h, uint8_t m, uint8_t s, SteamiRgb c) {
     pointer((h % 12) * 30 + m / 2, r / 2, u(STEAMI_PIVOT), c);
     pointer(m * 6 + s / 10, 3 * r / 4, u(STEAMI_MINUTE_HALF_WIDTH), c);
     ray(s * 6, 0, r * 85 / 100, STEAMI_GRAY);
+    circle(centerX(), centerY(), static_cast<int16_t>(u(STEAMI_PIVOT)), STEAMI_GRAY, true);
+}
+
+void SteamiScreen::compass(float headingDeg, SteamiRgb c) {
+    if (!widgetCanDraw()) {
+        return;
+    }
+    // A real rose (decision 2): every element at angle a is drawn at a - h. Drawing order of spec
+    // 5.9's compass row: circles, ticks, letters, north half, south half, pivot. The inner circle
+    // R * 7 / 10 and the needle R * 85 / 100 of that row truncate, as device.py's int().
+    const int32_t h = roundedHeading(headingDeg);
+    const int32_t r = radius() - u(STEAMI_COMPASS_INSET);
+    strokeCircle(centerX(), centerY(), static_cast<int16_t>(r), k(), STEAMI_DARK);
+    strokeCircle(centerX(), centerY(), static_cast<int16_t>(r * 7 / 10), k(), STEAMI_DARK);
+    for (int32_t i = 0; i < 8; i++) {
+        ray(45 * i - h, r - u(STEAMI_COMPASS_TICK), r, i % 2 == 0 ? STEAMI_LIGHT : STEAMI_DARK);
+    }
+    const int32_t letters = r + u(STEAMI_COMPASS_LETTERS);
+    glyphsAt("N", -h, letters, STEAMI_WHITE);
+    glyphsAt("E", 90 - h, letters, STEAMI_GRAY);
+    glyphsAt("S", 180 - h, letters, STEAMI_GRAY);
+    glyphsAt("W", 270 - h, letters, STEAMI_GRAY);
+    if (!isnan(headingDeg) && !isinf(headingDeg)) {  // a heading that points nowhere: no needle
+        pointer(-h, r * 85 / 100, u(STEAMI_PIVOT), c);
+        pointer(180 - h, r * 85 / 100, u(STEAMI_PIVOT), STEAMI_DARK);
+    }
     circle(centerX(), centerY(), static_cast<int16_t>(u(STEAMI_PIVOT)), STEAMI_GRAY, true);
 }

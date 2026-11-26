@@ -59,3 +59,9 @@ constexpr int16_t STEAMI_WATCH_MAJOR_TICK = 8;
 constexpr int16_t STEAMI_WATCH_MINOR_TICK = 5;
 constexpr int16_t STEAMI_WATCH_NUMBERS = 15;
 constexpr int16_t STEAMI_MINUTE_HALF_WIDTH = 2;
+
+// compass(): the rose at radius() - u(12); its eight ticks run u(6) inward from the rose; the
+// letters N, E, S and W are centred u(5) outside it.
+constexpr int16_t STEAMI_COMPASS_INSET = 12;
+constexpr int16_t STEAMI_COMPASS_TICK = 6;
+constexpr int16_t STEAMI_COMPASS_LETTERS = 5;

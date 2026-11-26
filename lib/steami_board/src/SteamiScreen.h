@@ -80,6 +80,14 @@ class SteamiScreen : public SteamiDisplay {
     /// drawn as the angles it gives: watch(25, 0, 0) shows 1 o'clock.
     void watch(uint8_t h, uint8_t m, uint8_t s = 0, SteamiRgb c = STEAMI_LIGHT);
 
+    /// A compass rose turned so that its N points to real north: headingDeg is the direction the
+    /// top of the screen points to, in degrees clockwise from north (0 = north), rounded to a whole
+    /// degree. Two DARK circles, 8 ticks, the letters N (WHITE), E, S and W (GRAY), upright; a
+    /// needle whose north half in c points to N, its south half DARK; a GRAY pivot. At heading 90
+    /// the N is on the left. NAN (no sensor) or an infinite heading draws the rose at 0 and the
+    /// pivot, with no needle.
+    void compass(float headingDeg, SteamiRgb c = STEAMI_LIGHT);
+
    protected:  // the layout kernel of the widgets, not for the student
     /// A run of columns [left, right], inclusive; empty when right < left.
     struct Region {

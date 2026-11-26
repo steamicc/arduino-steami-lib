@@ -2207,6 +2207,126 @@ static void test_watch_stays_inside(void) {
     });
 }
 
+// ---- compass() (4b) ----
+
+/// compass(heading, STEAMI_RED) on one panel: the needle tip and the box of the N letter, the only
+/// WHITE ink (values printed by golden_layout.py).
+struct CompassCase {
+    int16_t size;
+    int16_t heading;
+    int16_t tipX, tipY;
+    int16_t nX0, nY0, nX1, nY1;
+};
+
+static const CompassCase kCompassCases[] = {
+    {128, 0, 64, 20, 61, 3, 66, 9},           {128, 90, 20, 64, 4, 60, 9, 66},
+    {128, 180, 64, 108, 61, 117, 66, 123},    {128, 270, 108, 64, 118, 60, 123, 66},
+    {240, 0, 120, 37, 114, 5, 125, 18},       {240, 90, 37, 120, 7, 112, 18, 125},
+    {240, 180, 120, 203, 114, 219, 125, 232}, {240, 270, 203, 120, 221, 112, 232, 125}};
+
+// Spec 7's "compass() at 0, 90, 180, 270: needle tip and N letter positions", on the 128 grey and
+// the 240 colour panel. RED is level 8 on the grey panel and WHITE level 15: no other part of the
+// compass uses them.
+static void test_compass_needle_and_north(void) {
+    for (const CompassCase& c : kCompassCases) {
+        onPanel(c.size, c.size == 240, [&c](SteamiMemoryBackend& mem, TestScreen& s) {
+            s.compass(c.heading, STEAMI_RED);
+            const InkBox north = inkBox(mem, STEAMI_WHITE);
+            expectBox(north, c.nX0, c.nY0, c.nX1, c.nY1);
+            expectAt(mem, c.tipX, c.tipY, STEAMI_RED, "needle tip");
+            // The north half ends at the tip: the RED box reaches it on the tip's side.
+            const InkBox red = inkBox(mem, STEAMI_RED);
+            const int16_t side[] = {red.y0, red.x0, red.y1, red.x1};
+            TEST_ASSERT_EQUAL_INT16(c.heading % 180 == 0 ? c.tipY : c.tipX, side[c.heading / 90]);
+            if (c.heading == 90) {
+                TEST_ASSERT_TRUE_MESSAGE(north.x1 < s.centerX(), "at 90 the N is on the left");
+            }
+            expectAt(mem, s.centerX(), s.centerY(), STEAMI_GRAY, "pivot");
+        });
+    }
+}
+
+/// The pixels of mem that hold c, in row order.
+static std::vector<bool> colourMask(const SteamiMemoryBackend& mem, SteamiRgb c) {
+    const uint16_t v = mem.stored(c);
+    std::vector<bool> out;
+    for (uint16_t p : mem.pixels()) {
+        out.push_back(p == v);
+    }
+    return out;
+}
+
+// Review Focus 2: a heading that points nowhere (NAN, which heading() returns without a sensor,
+// and +-INF) draws the rose at 0 and the pivot, with no needle.
+static void test_compass_without_a_heading(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.compass(0.0f);
+        const std::vector<bool> north = colourMask(mem, STEAMI_WHITE);
+        for (float h : {NAN, INFINITY, -INFINITY}) {
+            s.clear();
+            s.compass(h, STEAMI_RED);
+            TEST_ASSERT_EQUAL_size_t_MESSAGE(0, inkBox(mem, STEAMI_RED).count, "a needle");
+            TEST_ASSERT_TRUE_MESSAGE(colourMask(mem, STEAMI_WHITE) == north, "N not at heading 0");
+            expectAt(mem, s.centerX(), s.centerY(), STEAMI_GRAY, "pivot");
+        }
+    });
+}
+
+// Review Focus 2: the heading is rounded to a whole degree after fmodf, and wraps.
+static void test_compass_heading_rounding(void) {
+    for (int16_t size : {128, 240}) {
+        const bool color = size == 240;
+        const std::vector<uint16_t> north =
+            rendered(size, color, [](TestScreen& s) { s.compass(0.0f); });
+        TEST_ASSERT_TRUE(rendered(size, color, [](TestScreen& s) { s.compass(359.6f); }) == north);
+        TEST_ASSERT_TRUE(rendered(size, color, [](TestScreen& s) { s.compass(0.4f); }) == north);
+        TEST_ASSERT_TRUE(rendered(size, color, [](TestScreen& s) { s.compass(-90.4f); }) ==
+                         rendered(size, color, [](TestScreen& s) { s.compass(270.0f); }));
+        const std::vector<uint16_t> east =
+            rendered(size, color, [](TestScreen& s) { s.compass(90.0f); });
+        TEST_ASSERT_TRUE(rendered(size, color, [](TestScreen& s) { s.compass(450.0f); }) == east);
+        TEST_ASSERT_FALSE(east == north);
+    }
+    // A finite huge heading still draws a needle: fmodf first, so lroundf never sees 1e30.
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.compass(1e30f, STEAMI_RED);
+        TEST_ASSERT_TRUE(inkBox(mem, STEAMI_RED).count > 0);
+        s.clear();
+        s.compass(-1e30f, STEAMI_RED);
+        TEST_ASSERT_TRUE(inkBox(mem, STEAMI_RED).count > 0);
+    });
+}
+
+// Decision 2, a real rose: at heading 45 the whole rose turns by -45. At the tick start R - u(6)
+// (values printed by golden_layout.py), the N tick now lies at 315 and the NE diagonal at the top;
+// the needle (44 / 83 long) reaches neither point.
+static void test_compass_rose_turns(void) {
+    for (int16_t size : {128, 240}) {
+        onPanel(size, size == 240, [](SteamiMemoryBackend& mem, TestScreen& s) {
+            s.compass(45.0f, STEAMI_RED);
+            const int32_t r = s.radius() - s.u(STEAMI_COMPASS_INSET);
+            const int32_t tick = r - s.u(STEAMI_COMPASS_TICK);
+            TEST_ASSERT_TRUE(r * 85 / 100 < tick);
+            TEST_ASSERT_EQUAL_INT32(s.width() == 128 ? 31 : 58, s.polarX(tick, 315));
+            TEST_ASSERT_EQUAL_INT32(s.width() == 128 ? 18 : 33, s.polarY(tick, 0));
+            expectAt(mem, static_cast<int16_t>(s.polarX(tick, 315)),
+                     static_cast<int16_t>(s.polarY(tick, 315)), STEAMI_LIGHT, "N tick at 315");
+            expectAt(mem, static_cast<int16_t>(s.polarX(tick, 0)),
+                     static_cast<int16_t>(s.polarY(tick, 0)), STEAMI_DARK, "NE tick at the top");
+        });
+    }
+}
+
+// Review Focus 3: every whole heading, on the V1c's 2 px strokes too.
+static void test_compass_stays_inside(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        for (int16_t h = 0; h < 360; h++) {
+            s.compass(static_cast<float>(h));
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mem.outsideCircle(), "outside the circle");
+        }
+    });
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_format_integers);
@@ -2263,5 +2383,10 @@ int main(int, char**) {
     RUN_TEST(test_watch_numbers_golden);
     RUN_TEST(test_watch_out_of_range);
     RUN_TEST(test_watch_stays_inside);
+    RUN_TEST(test_compass_needle_and_north);
+    RUN_TEST(test_compass_without_a_heading);
+    RUN_TEST(test_compass_heading_rounding);
+    RUN_TEST(test_compass_rose_turns);
+    RUN_TEST(test_compass_stays_inside);
     return UNITY_END();
 }
