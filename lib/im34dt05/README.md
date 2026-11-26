@@ -120,7 +120,7 @@ callback.
 | `bool dataReady()` | `available() > 0`. |
 | `size_t read(int16_t* samples, size_t count)` | Copy up to `count` waiting samples, oldest first. Never blocks; returns the number copied. |
 | `void clear()` | Drop the waiting samples. |
-| `uint32_t overruns()` | Samples lost because the buffer was full. |
+| `uint32_t overruns()` | Samples lost because the buffer was full, counted since `begin()` or `powerOn()` (`clear()` does not reset it). |
 | `void onReceive(ReceiveCallback callback)` | `void callback(const int16_t* samples, size_t count)`, called **from the interrupt** with each block. Keep it short (no `Serial`, no `delay()`). `nullptr` removes it. |
 
 ### Volume
@@ -169,7 +169,17 @@ The frequency is measured against the PDM clock, derived from the internal
 | Method | Description |
 |--------|-------------|
 | `uint8_t slot()` | SAI slot (0 or 1) found by `begin()`. |
-| `bool setSlot(uint8_t slot)` | Force slot 0 or 1 (skips the detection), or `IMP34DT05_SLOT_AUTO` to detect again at the next `begin()`. |
+| `bool setSlot(uint8_t slot)` | Force slot 0 or 1 at once (skips the detection), or `IMP34DT05_SLOT_AUTO` to detect again at the next `begin()` or `powerOn()`. |
+
+The SAI samples the data line on both clock edges: one slot carries the
+microphone, the other reads the line while nothing drives it (PA10 has no pull
+resistor). Depending on the board, that slot holds a copy of the stream, long
+runs of 0 or 1, or a random bit stream picked up from the clock. `begin()`
+filters both slots for 16 ms, keeps those whose bits toggle and picks the
+quietest: a random stream reads far louder than a microphone in a room. A very
+loud sound right at the microphone during `begin()` could fool it; force the
+slot with `setSlot()` if `levelDbfs()` stays high and does not follow the
+sound.
 
 ## Constants
 
@@ -182,12 +192,24 @@ window sizes and the datasheet sensitivity.
 
 * 16 kHz only (PDM clock 1.28 MHz, decimation 80, the configuration ST's
   filter is built for).
-* The driver owns SAI1, PLLSAI1 (its "P" output), DMA1 channel 1 and its
-  interrupt handler `DMA1_Channel1_IRQHandler()`: a sketch or another
-  library using them cannot run at the same time.
-* The conversion runs in the DMA interrupt (a small part of the CPU time at
-  the STeaMi's 32 MHz clock). A sketch that masks interrupts for more than
-  about 1 ms loses audio.
+* The driver owns SAI1, PLLSAI1 (stopped again by `end()`), DMA1 channel 1
+  and its interrupt handler: a sketch or another library using them cannot
+  run at the same time as the microphone.
+* The library defines `DMA1_Channel1_IRQHandler()`, and arduino-cli links
+  every object of a library into the sketch, so that handler is in every
+  sketch that includes the STeaMi library, microphone used or not. A sketch
+  or library that defines its own gets a "multiple definition" link error:
+  add `-DSTEAMI_IMP34DT05_NO_DMA_IRQ_HANDLER` to a `build_opt.h` file in the
+  sketch folder (or to `build_flags` with PlatformIO), and call
+  `SteamiPdmSai::handleDmaInterrupt()` from your handler if the microphone
+  is still needed.
+* The conversion runs in the DMA interrupt, at the lowest priority (15) so
+  that `tone()`, timers, `Serial` and `Wire` interrupts preempt it. It takes
+  about a quarter of the CPU at the STeaMi's 32 MHz clock (estimate; the
+  hardware test `test_im34dt05_cpu_load` prints the measured share), so
+  heavy work such as drawing on the GC9A01 display runs slower while the
+  microphone is on. A sketch that masks interrupts for more than about
+  1 ms loses audio.
 * `levelDbSpl()` is an estimate, not a calibrated sound level meter.
 * STM32WB55 only: on another board `begin()` returns `false` (the sources
   still compile, for host tests and for the Library Manager package).
