@@ -418,3 +418,185 @@ print("subtitles (row, kept, ink box) per line")
 for lines in list(ONE_LINE) + list(TWO_LINES):
     for W in (128, 240):
         print("  %d %r:" % (W, lines), *subtitle_rows(W, lines))
+
+# ---- Widget of Task 4: value() at CENTER, N, S, W and E (spec 5.9, B2, B6, B9) ----
+REFERENCE = "88.8"  # the widest value that keeps the same f at W and E (B6)
+
+
+def has_text(s):
+    """device.py's `if unit:`: None and "" are no text."""
+    return bool(s)
+
+
+def block_height(P, f, has_unit):
+    """The value block, physical for any f: 8f + 8f/3 + 8k with a unit, 8f without."""
+    return 8 * f + 8 * f // 3 + 8 * P.k if has_unit else 8 * f
+
+
+def region_width(r):
+    return max(0, r[1] - r[0] + 1)
+
+
+def half_limit(P, at):
+    """The side of centerX() that a W or E value takes: W ends at cx - u(3) - 1, E mirrors it."""
+    return (0, P.cx - P.u(3) - 1) if at == "W" else (P.cx + P.u(3) + 1, P.W - 1)
+
+
+def half_region(P, at, c):
+    """The W/E half region of a chord: [left edge + k, cx - u(3) - 1], E mirrored; (0, -1) if empty."""
+    if c is None:
+        return (0, -1)
+    lo, hi = half_limit(P, at)
+    return (max(c[0] + P.k, lo), min(c[1] - P.k, hi))
+
+
+def kept_room(P, s, n, ink, y, f, limit, shrink):
+    """fitGlyphs()'s room on return: the kept prefix's ink chord (the panel without ink) shrunk by
+    `shrink`, within limit."""
+    c = P.ink_chord(s, n, ink, y, f) if n and ink_rows(s, n, ink) else (0, P.W - 1)
+    return (max(c[0] + shrink, limit[0]), min(c[1] - shrink, limit[1]))
+
+
+def value_place(P, t, at, unit, scale, y_offset):
+    """f, top, region, kept glyphs and x of the value text t (the decision "Scale", 5.9)."""
+    side = at in ("W", "E")
+    pad = 0 if side else P.u(4)
+    f = glyph_factor(P, scale)
+    while True:
+        vw = value_width(t, f)
+        if at in ("N", "S"):
+            top = P.resolve(at, vw, f)[1]
+        else:  # CENTER, W, E; the corners take the CENTER branch until Task 5
+            top = P.cy + P.u(y_offset) - block_height(P, f, has_text(unit)) // 2
+        if side:
+            region = half_region(P, at, P.chord(top, top + 8 * f - 1))
+            fits = max(vw, value_width(REFERENCE, f)) <= region_width(region)
+        else:
+            region = (0, P.W - 1)
+            c = P.ink_chord(t, count(t), VALUE, top, f)
+            fits = ink_rows(t, count(t), VALUE) == 0 or (c is not None and vw + pad <= width(c))
+        if fits or f == 1:
+            break
+        f -= 1
+    n = P.fit_glyphs(t, VALUE, f, top, region, 0, pad)  # whole whenever it fits; else cut at f 1
+    w = cell_width(t, n, VALUE, f)
+    x = region[0] + (region_width(region) - w) // 2 if side else P.cx - w // 2
+    return {"f": f, "top": top, "region": region, "n": n, "x": x}
+
+
+def part_place(P, s, ink, y, at):
+    """(x, kept, room) of a label (LABEL) or unit (TEXT) at row y, factor k."""
+    if at in ("W", "E"):
+        limit, shrink = half_limit(P, at), P.k
+    else:
+        limit, shrink = (0, P.W - 1), 0
+    n = P.fit_glyphs(s, ink, P.k, y, limit, shrink, 0)
+    room = kept_room(P, s, n, ink, y, P.k, limit, shrink)
+    w = cell_width(s, n, ink, P.k)
+    x = room[0] + (region_width(room) - w) // 2 if at in ("W", "E") else P.cx - w // 2
+    return x, n, room
+
+
+def value_layout(W, t, at="CENTER", unit=None, label=None, scale=2, y_offset=0):
+    """Boxes (value, label, unit) of value(t, unit, at, label, c, scale, yOffset) alone on a W panel,
+    each None without ink, and the placement: f, top, region, kept glyphs of each part."""
+    P = Panel(W)
+    v = value_place(P, t, at, unit, scale, y_offset)
+    out = dict(v)
+    lit_value = draw_glyphs(t, v["n"], VALUE, v["x"], v["top"], v["f"])
+    out["value"] = box(lit_value) if lit_value else None
+    for name, s, ink, y in (("label", label, LABEL, v["top"] - P.u(4) - 7 * P.k),
+                            ("unit", unit, TEXT, v["top"] + 8 * v["f"])):
+        out[name] = None
+        out[name + "_n"] = 0
+        if has_text(s):
+            x, n, room = part_place(P, s, ink, y, at)
+            lit = draw_glyphs(s, n, ink, x, y, P.k)
+            out[name] = box(lit) if lit else None
+            out[name + "_n"], out[name + "_room"] = n, room
+    return out
+
+
+def value_cut(W, t, at="CENTER", unit=None, y_offset=0):
+    """True when value(t) keeps fewer glyphs than t has."""
+    return value_layout(W, t, at, unit, None, 2, y_offset)["n"] < count(t)
+
+
+def first_cut(W, t, unit, step):
+    """The first yOffset from 0 (by step -1 or +1) at which the value is cut."""
+    y = 0
+    while not value_cut(W, t, "CENTER", unit, y):
+        y += step
+    return y
+
+
+# ---- Self-check of Task 4 ----
+DEG_C = "°C"
+assert all(value_width("23.5", f) == 28 * f for f in range(1, 9))
+v01 = value_layout(128, "23.5", "CENTER", DEG_C)
+assert (v01["f"], v01["top"], v01["x"]) == (2, 50, 36)
+assert v01["value"][1::2] == (50, 63) and v01["unit"][1::2] == (66, 72)
+assert value_layout(240, "23.5", "CENTER", DEG_C)["f"] == 4
+for W, f, top, west, east in ((128, 2, 50, (3, 60), (68, 125)), (240, 3, 96, (5, 114), (126, 235))):
+    a = value_layout(W, "23.5", "W", DEG_C, "TEMP")
+    b = value_layout(W, "45", "E", "%", "HUM")
+    assert (a["f"], a["top"], a["region"]) == (f, top, west), (W, a)
+    assert (b["f"], b["top"], b["region"]) == (f, top, east), (W, b)
+    assert value_layout(W, "1", "W", DEG_C)["f"] == f
+for t, f128, f240 in (("1", 2, 3), ("8888", 1, 3), ("123456", 1, 2)):
+    for W, f in ((128, f128), (240, f240)):
+        for at in ("W", "E"):
+            got = value_layout(W, t, at, DEG_C)
+            assert got["f"] == f and got["n"] == count(t), (W, t, at, got)
+assert value_layout(128, "8888", "W", DEG_C)["region"] == (2, 60)  # the x1 W region, 59 px
+assert value_layout(240, "8888", "W", DEG_C, scale=1)["f"] == 2
+assert value_layout(128, "12:34:56", "W", DEG_C)["n"] == 8
+for t in ("12345678", "-1234.56", "Uncomfortable"):
+    assert value_cut(128, t, "W", DEG_C) and value_cut(128, t, "E", DEG_C), t
+assert not value_cut(240, "Uncomfortable", "W", DEG_C) and value_cut(240, "ABCDEFGHIJKLMNO", "W", DEG_C)
+FIFTEEN, NUMERIC = "888888888888888", "-999999936.0000"
+assert value_width(FIFTEEN, 1) == 120 and value_width(NUMERIC, 1) == 116
+assert value_cut(128, FIFTEEN, "CENTER", DEG_C, -12) and value_cut(240, FIFTEEN, "CENTER", DEG_C, -50)
+assert not value_cut(128, FIFTEEN, "CENTER", DEG_C) and not value_cut(240, FIFTEEN, "CENTER", DEG_C)
+THRESHOLDS = {128: ((-7, 19), (-12, 14), (-14, 26)), 240: ((-48, 59), (-53, 54), (-49, 60))}
+for W, expected in THRESHOLDS.items():
+    got = tuple((first_cut(W, t, unit, -1), first_cut(W, t, unit, 1))
+                for t, unit in ((FIFTEEN, DEG_C), (FIFTEEN, None), (NUMERIC, DEG_C)))
+    assert got == expected, (W, got)
+for W, whole in ((128, "TEMPERATU"), (240, "TEMPERAT")):
+    for at in ("W", "E"):
+        assert value_layout(W, "23.5", at, DEG_C, whole)["label_n"] == len(whole), (W, at)
+        assert value_layout(W, "23.5", at, DEG_C, whole + "R")["label_n"] == len(whole), (W, at)
+        assert value_layout(W, "23.5", at, DEG_C, "TEMPERATURE")["label_n"] == len(whole), (W, at)
+
+# ---- Values pinned by test_steami_screen (Task 4) ----
+VALUE_CASES = (
+    ("01", "23.5", "CENTER", DEG_C, None, 0),
+    ("02", "72", "CENTER", "%", None, -12),
+    ("03 W", "23.5", "W", DEG_C, "TEMP", 0),
+    ("03 E", "45.3", "E", "%", "HUM", 0),
+    ("N unit", "23.5", "N", DEG_C, None, 0),
+    ("N", "23.5", "N", None, None, 0),
+    ("S unit", "23.5", "S", DEG_C, None, 0),
+    ("S", "23.5", "S", None, None, 0),
+)
+print("value boxes (f top x; value, label, unit)")
+for name, t, at, unit, label, y_offset in VALUE_CASES:
+    for W in (128, 240):
+        got = value_layout(W, t, at, unit, label, 2, y_offset)
+        print("  %-6s %d: f %d top %d x %d region %s; %s %s %s" % (
+            name, W, got["f"], got["top"], got["x"], got["region"], got["value"], got["label"], got["unit"]))
+print("value regions and cuts")
+for W in (128, 240):
+    for t in ("1", "8888", "123456", "12:34:56", "Uncomfortable", "ABCDEFGHIJKLMNO"):
+        for at in ("W", "E"):
+            got = value_layout(W, t, at, DEG_C)
+            print("  %d %-16r %s: f %d region %s kept %d box %s" % (
+                W, t, at, got["f"], got["region"], got["n"], got["value"]))
+    for at in ("W", "E"):
+        got = value_layout(W, "23.5", at, DEG_C, "TEMPERATURE")
+        print("  %d TEMPERATURE label %s: kept %d room %s box %s" % (
+            W, at, got["label_n"], got["label_room"], got["label"]))
+    for y_offset in (0, -12, -50):
+        got = value_layout(W, FIFTEEN, "CENTER", DEG_C, None, 2, y_offset)
+        print("  %d %s CENTER yOffset %d: kept %d box %s" % (W, FIFTEEN, y_offset, got["n"], got["value"]))

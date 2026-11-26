@@ -45,6 +45,16 @@ class SteamiScreen : public SteamiDisplay {
               uint8_t scale = 1);
     using SteamiDisplay::text;
 
+    /// v at `at`, formatted with setDecimals() ("--" for NAN), in c; its unit below in LIGHT and
+    /// its label above in small GRAY letters. The glyphs shrink from `scale` until the value
+    /// fits the circle, then a value still too wide is cut. At W and E every value no wider than
+    /// "88.8" keeps the same size, so two values side by side match. yOffset moves a CENTER, W or
+    /// E value down (up when negative), in pixels of the 128 px screen.
+    void value(SteamiValue v, const char* unit = nullptr, SteamiAt at = SteamiAt::CENTER,
+               const char* label = nullptr, SteamiRgb c = STEAMI_WHITE, uint8_t scale = 2,
+               int16_t yOffset = 0);
+    void value(SteamiValue v, const char* unit, SteamiRgb c);
+
    protected:  // the layout kernel of the widgets, not for the student
     /// A run of columns [left, right], inclusive; empty when right < left.
     struct Region {
@@ -125,6 +135,23 @@ class SteamiScreen : public SteamiDisplay {
     /// Draws the run (fewer glyphs if s ends first), its first cell's left column at x.
     void drawGlyphs(const Run& t, int32_t x, SteamiRgb c);
 
+    /// Height of a value block at factor f: 8f + 8f/3 + 8k with a unit (the unit hangs 8f/3 below
+    /// the value), 8f without. A unit is a non-empty string, as device.py's `if unit:`.
+    int32_t blockHeight(uint8_t f, bool hasUnit);
+
+    /// The columns a value run may take at its factor and row: at W and E the half region of
+    /// the chord at its cell rows, [left edge + k, centerX() - u(3)) and its mirror image (empty
+    /// when those rows leave the circle); elsewhere the whole panel.
+    Region valueRegion(const Run& value, SteamiAt at);
+
+    /// Places a value run whose f and top row value() chose, then draws its label (5x7 x k, GRAY,
+    /// its top u(4) + 7k above the value), the value in c and its unit (8x8 x k, LIGHT, its top 8f
+    /// below the value's). The value keeps the longest prefix that fits valueRegion() (less u(4)
+    /// at CENTER, N and S), centred in it at W and E and on centerX() elsewhere. Label and unit
+    /// are cut to the chord at their own inked rows; at W and E also to the half region taken at
+    /// those rows, and centred in what remains; elsewhere centred on centerX().
+    void drawValueParts(Run& value, SteamiRgb c, const char* unit, const char* label, SteamiAt at);
+
     /// fg, or on the grey panel a grey STEAMI_MIN_CONTRAST levels above bg when fg is darker.
     SteamiRgb lifted(SteamiRgb fg, SteamiRgb bg);
 
@@ -142,6 +169,17 @@ class SteamiScreen : public SteamiDisplay {
     /// True when every inked line of the block, its first line's top at row y and the next ones
     /// u(STEAMI_SUBTITLE_PITCH) lower, fits whole.
     bool linesFit(const char* const* lines, int32_t count, int32_t y);
+
+    /// Puts the value run's block at its f: counts the glyphs of value.s, then sets value.y to the
+    /// block's top, on resolve()'s row at N and S, elsewhere centred on centerY() + value.y
+    /// (value.y holds u(yOffset) on entry; blockHeight() with a non-empty unit). Returns true when
+    /// the value fits there or f is 1; otherwise false, value.y back to u(yOffset). It fits when,
+    /// at W and E, max(its width, the width of "88.8") fits valueRegion(); elsewhere when its
+    /// width plus u(4) fits the chord at the rows it inks (a value without ink always fits).
+    bool placeValue(Run& value, SteamiAt at, const char* unit);
+
+    /// Cuts a label or unit run and draws it as drawValueParts() says.
+    void drawValuePart(Run& part, SteamiAt at, SteamiRgb c);
 
     uint8_t _decimals = 1;
 };

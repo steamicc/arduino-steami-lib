@@ -214,6 +214,7 @@ class TestScreen : public SteamiScreen {
    public:
     explicit TestScreen(SteamiBoard& b) : SteamiScreen(b) {}
     using SteamiDisplay::textSmall;
+    using SteamiScreen::blockHeight;
     using SteamiScreen::cellWidth;
     using SteamiScreen::chord;
     using SteamiScreen::drawGlyphs;
@@ -963,6 +964,483 @@ static void test_subtitle_colour_and_shortcuts(void) {
     });
 }
 
+// ---- value() at CENTER, N, S, W and E ----
+
+static const char kDegC[] =
+    "\xC2\xB0"
+    "C";
+
+/// The pixels the first `glyphs` glyphs of s light with `ink` at factor f, read from the font
+/// tables: 5x7 for LABEL, the column window (2, 4) of '.' and ':' for VALUE.
+static size_t runInk(const char* s, size_t glyphs, Ink ink, uint8_t f) {
+    size_t n = 0;
+    size_t i = 0;
+    for (uint8_t code = steamiNextGlyph(s); code != 0 && i < glyphs;
+         code = steamiNextGlyph(s), i++) {
+        const bool small = ink == Ink::LABEL;
+        const uint8_t* g = small ? steamiGlyph5x7(code) : steamiGlyph8x8(code);
+        const bool window = ink == Ink::VALUE && (code == '.' || code == ':');
+        const uint8_t first = window ? 2 : 0;
+        const uint8_t end = small ? 5 : (window ? 6 : 8);
+        for (uint8_t c = first; c < end; c++) {
+            for (uint8_t row = 0; row < (small ? 7 : 8); row++) {
+                n += (g[c] >> row) & 1;
+            }
+        }
+    }
+    return n * f * f;
+}
+
+static size_t valueInk(const char* s, uint8_t f) {
+    return runInk(s, TestScreen::glyphCount(s), Ink::VALUE, f);
+}
+
+struct ValueCase {
+    const char* text;
+    SteamiAt at;
+    const char* unit;
+    const char* label;
+    int16_t yOffset;
+    int16_t value128[4];
+    int16_t label128[4];  // all -1: no label
+    int16_t unit128[4];   // all -1: no unit
+    int16_t value240[4];
+    int16_t label240[4];
+    int16_t unit240[4];
+};
+
+#define NO_BOX {-1, -1, -1, -1}
+
+// Values printed by golden_layout.py: the WHITE (value), GRAY (label) and LIGHT (unit) ink boxes of
+// value(text, unit, at, label, STEAMI_WHITE, 2, yOffset) drawn alone, on 128 and on 240. 01's
+// "23.5" is 56 px of cells from x 36 on 128 (the 8x8 '2' leaves columns 0 and 1 empty).
+static const ValueCase kValues[] = {
+    {"23.5",
+     SteamiAt::CENTER,
+     kDegC,
+     nullptr,
+     0,
+     {38, 50, 89, 63},
+     NO_BOX,
+     {57, 66, 70, 72},
+     {68, 91, 171, 118},
+     NO_BOX,
+     {106, 123, 133, 136}},
+    {"72",
+     SteamiAt::CENTER,
+     "%",
+     nullptr,
+     -12,
+     {50, 38, 77, 51},
+     NO_BOX,
+     {61, 54, 66, 60},
+     {92, 69, 147, 96},
+     NO_BOX,
+     {114, 101, 125, 114}},
+    {"23.5",
+     SteamiAt::W,
+     kDegC,
+     "TEMP",
+     0,
+     {6, 50, 57, 63},
+     {22, 39, 44, 45},
+     {24, 66, 37, 72},
+     {21, 96, 98, 116},
+     {39, 75, 84, 88},
+     {45, 120, 72, 133}},
+    {"45.3",
+     SteamiAt::E,
+     "%",
+     "HUM",
+     0,
+     {71, 50, 122, 63},
+     {86, 39, 102, 45},
+     {94, 66, 99, 72},
+     {142, 96, 219, 116},
+     {160, 75, 193, 88},
+     {176, 120, 187, 133}},
+    {"23.5",
+     SteamiAt::N,
+     kDegC,
+     nullptr,
+     0,
+     {38, 36, 89, 49},
+     NO_BOX,
+     {57, 52, 70, 58},
+     {68, 67, 171, 94},
+     NO_BOX,
+     {106, 99, 133, 112}},
+    {"23.5",
+     SteamiAt::N,
+     nullptr,
+     nullptr,
+     0,
+     {38, 36, 89, 49},
+     NO_BOX,
+     NO_BOX,
+     {68, 67, 171, 94},
+     NO_BOX,
+     NO_BOX},
+    {"23.5",
+     SteamiAt::S,
+     kDegC,
+     nullptr,
+     0,
+     {38, 76, 89, 89},
+     NO_BOX,
+     {57, 92, 70, 98},
+     {68, 141, 171, 168},
+     NO_BOX,
+     {106, 173, 133, 186}},
+    {"23.5",
+     SteamiAt::S,
+     nullptr,
+     nullptr,
+     0,
+     {38, 76, 89, 89},
+     NO_BOX,
+     NO_BOX,
+     {68, 141, 171, 168},
+     NO_BOX,
+     NO_BOX},
+};
+
+#undef NO_BOX
+
+/// The box b, or no pixel of colour c when b[0] is -1.
+static void expectPart(const SteamiMemoryBackend& mem, SteamiRgb c, const int16_t* b) {
+    const InkBox got = inkBox(mem, c);
+    if (b[0] < 0) {
+        TEST_ASSERT_EQUAL_size_t(0, got.count);
+        return;
+    }
+    expectBox(got, b[0], b[1], b[2], b[3]);
+}
+
+static void test_value_center_golden(void) {
+    for (int panel = 0; panel < 2; panel++) {
+        // 128 grey and 240 colour.
+        onPanel(
+            panel == 0 ? 128 : 240, panel == 1, [panel](SteamiMemoryBackend& mem, TestScreen& s) {
+                for (const ValueCase& v : kValues) {
+                    s.clear();
+                    s.value(v.text, v.unit, v.at, v.label, STEAMI_WHITE, 2, v.yOffset);
+                    expectPart(mem, STEAMI_WHITE, panel == 0 ? v.value128 : v.value240);
+                    expectPart(mem, STEAMI_GRAY, panel == 0 ? v.label128 : v.label240);
+                    expectPart(mem, STEAMI_LIGHT, panel == 0 ? v.unit128 : v.unit240);
+                    // Every part is whole here, and nothing else is drawn.
+                    const uint8_t f = static_cast<uint8_t>(
+                        v.at == SteamiAt::W || v.at == SteamiAt::E ? (panel == 0 ? 2 : 3)
+                                                                   : (panel == 0 ? 2 : 4));
+                    const uint8_t k = s.k();
+                    const size_t total = valueInk(v.text, f) +
+                                         (v.label ? runInk(v.label, 99, Ink::LABEL, k) : 0) +
+                                         (v.unit ? runInk(v.unit, 99, Ink::TEXT, k) : 0);
+                    TEST_ASSERT_EQUAL_size_t(valueInk(v.text, f), inkBox(mem, STEAMI_WHITE).count);
+                    TEST_ASSERT_EQUAL_size_t(total, inkBoxAll(mem).count);
+                }
+            });
+    }
+    // The block: 8f + 8f/3 + 8k with a unit, 8f without (29 on 128 at f 2: top row 50).
+    onPanel(128, false, [](SteamiMemoryBackend&, TestScreen& s) {
+        TEST_ASSERT_EQUAL_INT32(29, s.blockHeight(2, true));
+        TEST_ASSERT_EQUAL_INT32(16, s.blockHeight(2, false));
+        TEST_ASSERT_EQUAL_INT32(18, s.blockHeight(1, true));
+    });
+    onPanel(240, true, [](SteamiMemoryBackend&, TestScreen& s) {
+        TEST_ASSERT_EQUAL_INT32(58, s.blockHeight(4, true));
+        TEST_ASSERT_EQUAL_INT32(48, s.blockHeight(3, true));
+        TEST_ASSERT_EQUAL_INT32(24, s.blockHeight(3, false));
+    });
+}
+
+struct SideCase {
+    const char* text;
+    uint8_t f128;
+    uint8_t f240;
+    int16_t w128[4];  // at W; E is the mirror image of the half region
+    int16_t e128[4];
+    int16_t w240[4];
+    int16_t e240[4];
+};
+
+// Values printed by golden_layout.py: value(text, "°C", W or E) alone; every text is whole.
+static const SideCase kSides[] = {
+    {"1", 2, 3, {26, 50, 37, 63}, {91, 50, 102, 63}, {51, 96, 68, 116}, {172, 96, 189, 116}},
+    {"8888", 1, 3, {16, 55, 45, 61}, {82, 55, 111, 61}, {15, 96, 104, 116}, {136, 96, 225, 116}},
+    {"123456", 1, 2, {8, 55, 53, 61}, {74, 55, 119, 61}, {13, 102, 104, 115}, {135, 102, 226, 115}},
+    {"12:34:56",
+     1,
+     1,
+     {4, 55, 57, 61},
+     {70, 55, 123, 61},
+     {32, 107, 85, 113},
+     {155, 107, 208, 113}},
+};
+
+static void test_value_glyph_scale_side_by_side(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        const bool big = s.width() == 240;
+        const int32_t f = big ? 3 : 2;
+        // "23.5" and "45" side by side get the same f: ink height 7f.
+        s.value(23.5f, kDegC, SteamiAt::W, "TEMP");
+        InkBox west = inkBox(mem, STEAMI_WHITE);
+        s.value(45, "%", SteamiAt::E, "HUM");
+        const InkBox both = inkBox(mem, STEAMI_WHITE);
+        TEST_ASSERT_EQUAL_INT(7 * f, west.y1 - west.y0 + 1);
+        TEST_ASSERT_EQUAL_INT(7 * f, both.y1 - both.y0 + 1);
+        TEST_ASSERT_EQUAL_size_t(valueInk("23.5", f) + valueInk("45", f), both.count);
+        const std::vector<uint16_t> westThenEast = mem.pixels();
+        s.clear();
+        s.value(45, "%", SteamiAt::E, "HUM");
+        s.value(23.5f, kDegC, SteamiAt::W, "TEMP");
+        TEST_ASSERT_TRUE(westThenEast == mem.pixels());
+        // A value no wider than "88.8" gets the f of "88.8".
+        s.clear();
+        s.value("88.8", kDegC, SteamiAt::W);
+        west = inkBox(mem, STEAMI_WHITE);
+        TEST_ASSERT_EQUAL_INT(7 * f, west.y1 - west.y0 + 1);
+        for (const SideCase& v : kSides) {
+            for (SteamiAt at : {SteamiAt::W, SteamiAt::E}) {
+                s.clear();
+                s.value(v.text, kDegC, at);
+                const int16_t* b =
+                    at == SteamiAt::W ? (big ? v.w240 : v.w128) : (big ? v.e240 : v.e128);
+                const InkBox got = inkBox(mem, STEAMI_WHITE);
+                expectBox(got, b[0], b[1], b[2], b[3]);
+                const uint8_t vf = big ? v.f240 : v.f128;
+                TEST_ASSERT_EQUAL_size_t_MESSAGE(valueInk(v.text, vf), got.count, v.text);
+                // Inside the half region: W ends before centerX() - u(3), E starts after it.
+                if (at == SteamiAt::W) {
+                    TEST_ASSERT_TRUE(got.x1 <= s.centerX() - s.u(3) - 1);
+                } else {
+                    TEST_ASSERT_TRUE(got.x0 >= s.centerX() + s.u(3) + 1);
+                }
+            }
+        }
+    });
+}
+
+/// True when value(text, unit, CENTER, nullptr, WHITE, 2, yOffset) draws fewer value pixels than
+/// the whole text at f 1 (the f every 15-character value falls to).
+static bool centerCut(TestScreen& s, SteamiMemoryBackend& mem, const char* text, const char* unit,
+                      int16_t yOffset) {
+    s.clear();
+    s.value(text, unit, SteamiAt::CENTER, nullptr, STEAMI_WHITE, 2, yOffset);
+    return inkBox(mem, STEAMI_WHITE).count < valueInk(text, 1);
+}
+
+static void test_value_truncation(void) {
+    static const char kFifteen[] = "888888888888888";  // 120 px at f 1
+    static const char kNumeric[] = "-999999936.0000";  // 116 px at f 1
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        const bool big = s.width() == 240;
+        // W/E texts wider than the x1 half region (59 px on 128) are cut to their longest fitting
+        // prefix.
+        for (const char* t : {"12345678", "-1234.56", "Uncomfortable", "ABCDEFGHIJKLMNO"}) {
+            for (SteamiAt at : {SteamiAt::W, SteamiAt::E}) {
+                s.clear();
+                s.value(t, kDegC, at);
+                const InkBox got = inkBox(mem, STEAMI_WHITE);
+                TEST_ASSERT_TRUE_MESSAGE(got.count > 0, t);
+                const Region half =
+                    at == SteamiAt::W
+                        ? Region{s.chord(got.y0, got.y1).left + s.k(), s.centerX() - s.u(3) - 1}
+                        : Region{s.centerX() + s.u(3) + 1, s.chord(got.y0, got.y1).right - s.k()};
+                TEST_ASSERT_TRUE_MESSAGE(got.x0 >= half.left && got.x1 <= half.right, t);
+                const bool whole = got.count == valueInk(t, 1);
+                // On 240 the x1 half region is 112 px: only the 15-glyph text (120 px) is cut.
+                const bool expectWhole = big && strcmp(t, "ABCDEFGHIJKLMNO") != 0;
+                TEST_ASSERT_EQUAL_MESSAGE(expectWhole, whole, t);
+            }
+        }
+        // Values printed by golden_layout.py: "Uncomfortable" keeps 7 glyphs at W on 128 and is
+        // whole on 240; "ABCDEFGHIJKLMNO" keeps 14 on 240.
+        s.clear();
+        s.value("Uncomfortable", kDegC, SteamiAt::W);
+        if (big) {
+            expectBox(inkBox(mem, STEAMI_WHITE), 8, 107, 109, 113);
+        } else {
+            expectBox(inkBox(mem, STEAMI_WHITE), 4, 55, 57, 61);
+        }
+        s.clear();
+        s.value("ABCDEFGHIJKLMNO", kDegC, SteamiAt::W);
+        if (big) {
+            expectBox(inkBox(mem, STEAMI_WHITE), 4, 107, 113, 113);
+            TEST_ASSERT_EQUAL_size_t(runInk("ABCDEFGHIJKLMN", 14, Ink::VALUE, 1),
+                                     inkBox(mem, STEAMI_WHITE).count);
+        }
+        // A 15-character CENTER value is whole at the default rows and cut from a yOffset on.
+        TEST_ASSERT_FALSE(centerCut(s, mem, kFifteen, kDegC, 0));
+        TEST_ASSERT_TRUE(centerCut(s, mem, kFifteen, kDegC, big ? -50 : -12));
+        s.clear();
+        s.value(kFifteen, kDegC, SteamiAt::CENTER, nullptr, STEAMI_WHITE, 2, big ? -50 : -12);
+        if (big) {
+            expectBox(inkBox(mem, STEAMI_WHITE), 69, 14, 170, 20);  // 13 glyphs kept
+        } else {
+            expectBox(inkBox(mem, STEAMI_WHITE), 9, 43, 118, 49);  // 14 glyphs kept
+        }
+        // The yOffset thresholds of 5.9: cut from the first, whole one step closer to 0.
+        struct Threshold {
+            const char* text;
+            const char* unit;
+            int16_t up;
+            int16_t down;
+        };
+        const Threshold small[] = {
+            {kFifteen, kDegC, -7, 19}, {kFifteen, nullptr, -12, 14}, {kNumeric, kDegC, -14, 26}};
+        const Threshold large[] = {
+            {kFifteen, kDegC, -48, 59}, {kFifteen, nullptr, -53, 54}, {kNumeric, kDegC, -49, 60}};
+        for (const Threshold& t : big ? large : small) {
+            TEST_ASSERT_TRUE(centerCut(s, mem, t.text, t.unit, t.up));
+            TEST_ASSERT_FALSE(centerCut(s, mem, t.text, t.unit, static_cast<int16_t>(t.up + 1)));
+            TEST_ASSERT_TRUE(centerCut(s, mem, t.text, t.unit, t.down));
+            TEST_ASSERT_FALSE(centerCut(s, mem, t.text, t.unit, static_cast<int16_t>(t.down - 1)));
+        }
+    });
+}
+
+static void test_value_labels_and_units(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        const bool big = s.width() == 240;
+        const uint8_t k = s.k();
+        // Values printed by golden_layout.py: "TEMPERATURE" keeps 9 cells on 128, 8 on 240.
+        const size_t kept = big ? 8 : 9;
+        for (SteamiAt at : {SteamiAt::W, SteamiAt::E}) {
+            s.clear();
+            s.value(23.5f, kDegC, at, "TEMPERATURE");
+            const InkBox label = inkBox(mem, STEAMI_GRAY);
+            TEST_ASSERT_EQUAL_size_t(runInk("TEMPERATURE", kept, Ink::LABEL, k), label.count);
+            if (at == SteamiAt::W) {
+                if (big) {
+                    expectBox(label, 15, 75, 108, 88);
+                } else {
+                    expectBox(label, 7, 39, 59, 45);
+                }
+            } else {
+                if (big) {
+                    expectBox(label, 130, 75, 223, 88);
+                } else {
+                    expectBox(label, 68, 39, 120, 45);
+                }
+            }
+            // Up to 9 (128) or 8 (240) characters stay whole.
+            const char* whole = big ? "TEMPERAT" : "TEMPERATU";
+            s.clear();
+            s.value(23.5f, kDegC, at, whole);
+            TEST_ASSERT_EQUAL_size_t(runInk(whole, 99, Ink::LABEL, k),
+                                     inkBox(mem, STEAMI_GRAY).count);
+            // A long unit is cut inside the half region at its own rows.
+            s.clear();
+            s.value(23.5f, "ABCDEFGHIJ", at);
+            const InkBox unit = inkBox(mem, STEAMI_LIGHT);
+            TEST_ASSERT_TRUE(unit.count > 0);
+            TEST_ASSERT_TRUE(unit.count < runInk("ABCDEFGHIJ", 99, Ink::TEXT, k));
+            if (at == SteamiAt::W) {
+                TEST_ASSERT_TRUE(unit.x0 >= s.chord(unit.y0, unit.y1).left + k);
+                TEST_ASSERT_TRUE(unit.x1 <= s.centerX() - s.u(3) - 1);
+            } else {
+                TEST_ASSERT_TRUE(unit.x0 >= s.centerX() + s.u(3) + 1);
+                TEST_ASSERT_TRUE(unit.x1 <= s.chord(unit.y0, unit.y1).right - k);
+            }
+        }
+        // At CENTER a long label and unit are cut to the chord at their rows, centred.
+        s.clear();
+        s.value(23.5f, "ABCDEFGHIJKLMNOPQRST", SteamiAt::CENTER, "ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        TEST_ASSERT_TRUE(inkBox(mem, STEAMI_GRAY).count > 0);
+        TEST_ASSERT_TRUE(inkBox(mem, STEAMI_LIGHT).count > 0);
+    });
+}
+
+/// value(v, unit) alone on a fresh panel after setDecimals(d).
+static std::vector<uint16_t> valueAlone(int16_t size, SteamiValue v, const char* unit, uint8_t d) {
+    return rendered(size, size == 240, [v, unit, d](TestScreen& s) {
+        s.setDecimals(d);
+        s.value(v, unit);
+    });
+}
+
+static void test_value_nan_and_decimals(void) {
+    for (int16_t size : {128, 240}) {
+        TEST_ASSERT_TRUE(valueAlone(size, NAN, kDegC, 1) == valueAlone(size, "--", kDegC, 1));
+        TEST_ASSERT_TRUE(valueAlone(size, 23.456f, kDegC, 2) ==
+                         valueAlone(size, "23.46", kDegC, 1));
+        TEST_ASSERT_TRUE(valueAlone(size, 23.456f, kDegC, 0) == valueAlone(size, "23", kDegC, 1));
+        TEST_ASSERT_TRUE(valueAlone(size, 23.456f, kDegC, 9) ==
+                         valueAlone(size, "23.4560", kDegC, 1));
+        TEST_ASSERT_TRUE(valueAlone(size, 23.456f, kDegC, 1) == valueAlone(size, "23.5", kDegC, 1));
+        TEST_ASSERT_FALSE(valueAlone(size, NAN, kDegC, 1) == valueAlone(size, "", kDegC, 1));
+    }
+}
+
+static void test_value_edge_cases(void) {
+    for (int16_t size : {128, 240}) {
+        const bool color = size == 240;
+        // A scale of 0 counts as 1.
+        TEST_ASSERT_TRUE(rendered(size, color, [](TestScreen& s) {
+                             s.value(23.5f, kDegC, SteamiAt::CENTER, nullptr, STEAMI_WHITE, 0);
+                         }) == rendered(size, color, [](TestScreen& s) {
+                             s.value(23.5f, kDegC, SteamiAt::CENTER, nullptr, STEAMI_WHITE, 1);
+                         }));
+        // An empty unit is no unit.
+        TEST_ASSERT_TRUE(rendered(size, color, [](TestScreen& s) { s.value(0, ""); }) ==
+                         rendered(size, color, [](TestScreen& s) { s.value(0, nullptr); }));
+    }
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        // Rows out of the disc: nothing drawn (onPanel checks the circle).
+        s.value(23.5f, kDegC, SteamiAt::W, "TEMP", STEAMI_WHITE, 2, 80);
+        TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+        // An empty value draws its label and unit only.
+        s.clear();
+        s.value("", kDegC, SteamiAt::CENTER, "TEMP");
+        TEST_ASSERT_EQUAL_size_t(0, inkBox(mem, STEAMI_WHITE).count);
+        TEST_ASSERT_TRUE(inkBox(mem, STEAMI_GRAY).count > 0);
+        TEST_ASSERT_TRUE(inkBox(mem, STEAMI_LIGHT).count > 0);
+        TEST_ASSERT_EQUAL_size_t(inkBox(mem, STEAMI_GRAY).count + inkBox(mem, STEAMI_LIGHT).count,
+                                 inkBoxAll(mem).count);
+        // Empty label and unit: the value only.
+        s.clear();
+        s.value(0, "", SteamiAt::CENTER, "");
+        TEST_ASSERT_EQUAL_size_t(valueInk("0", static_cast<uint8_t>(2 * s.k())),
+                                 inkBox(mem, STEAMI_WHITE).count);
+        TEST_ASSERT_EQUAL_size_t(inkBox(mem, STEAMI_WHITE).count, inkBoxAll(mem).count);
+        // A huge scale is clamped: f never wraps.
+        s.clear();
+        s.value(8, nullptr, SteamiAt::CENTER, nullptr, STEAMI_WHITE, 255);
+        TEST_ASSERT_TRUE(inkBox(mem, STEAMI_WHITE).count > 0);
+    });
+}
+
+// Review Focus 4: no int16_t wrap draws a value elsewhere.
+static void test_value_offsets_at_int16_limits(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        for (int16_t y : {static_cast<int16_t>(32767), static_cast<int16_t>(-32767),
+                          static_cast<int16_t>(-32768), static_cast<int16_t>(20000),
+                          static_cast<int16_t>(-20000)}) {
+            for (SteamiAt at : {SteamiAt::CENTER, SteamiAt::W, SteamiAt::E}) {
+                s.value(23.5f, kDegC, at, "TEMP", STEAMI_WHITE, 2, y);
+                s.value("888888888888888", kDegC, at, "TEMPERATURE", STEAMI_WHITE, 1, y);
+            }
+        }
+        TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+        TEST_ASSERT_EQUAL_UINT32(0, mem.fillRectCalls());
+        TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+    });
+}
+
+static void test_value_colour_shortcut(void) {
+    for (int16_t size : {128, 240}) {
+        const bool color = size == 240;
+        const std::vector<uint16_t> shortcut =
+            rendered(size, color, [](TestScreen& s) { s.value(23.5f, kDegC, STEAMI_GREEN); });
+        TEST_ASSERT_TRUE(shortcut == rendered(size, color, [](TestScreen& s) {
+                             s.value(23.5f, kDegC, SteamiAt::CENTER, nullptr, STEAMI_GREEN);
+                         }));
+        TEST_ASSERT_FALSE(shortcut ==
+                          rendered(size, color, [](TestScreen& s) { s.value(23.5f, kDegC); }));
+    }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_format_integers);
@@ -990,5 +1468,13 @@ int main(int, char**) {
     RUN_TEST(test_subtitle_rows);
     RUN_TEST(test_subtitle_block_limits);
     RUN_TEST(test_subtitle_colour_and_shortcuts);
+    RUN_TEST(test_value_center_golden);
+    RUN_TEST(test_value_glyph_scale_side_by_side);
+    RUN_TEST(test_value_truncation);
+    RUN_TEST(test_value_labels_and_units);
+    RUN_TEST(test_value_nan_and_decimals);
+    RUN_TEST(test_value_edge_cases);
+    RUN_TEST(test_value_offsets_at_int16_limits);
+    RUN_TEST(test_value_colour_shortcut);
     return UNITY_END();
 }

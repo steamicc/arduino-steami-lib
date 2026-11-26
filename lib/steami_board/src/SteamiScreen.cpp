@@ -330,3 +330,108 @@ void SteamiScreen::subtitle(const char* l1, SteamiRgb c) {
 void SteamiScreen::subtitle(const char* l1, const char* l2, SteamiRgb c) {
     subtitle(l1, l2, nullptr, c);
 }
+
+int32_t SteamiScreen::blockHeight(uint8_t f, bool hasUnit) {
+    const int32_t cell = SteamiDisplay::CHAR_H * f;
+    return hasUnit ? cell + cell / 3 + SteamiDisplay::CHAR_H * k() : cell;
+}
+
+void SteamiScreen::value(SteamiValue v, const char* unit, SteamiAt at, const char* label,
+                         SteamiRgb c, uint8_t scale, int16_t yOffset) {
+    // Formatting touches no hardware, so it comes before the auto-begin. The frame holds the 16 B
+    // buffer and the run only (64 B on the target): placeValue() counts the glyphs and puts the
+    // block, drawValueParts() cuts, places and draws.
+    char text[16];
+    Run t{text, 0, 0, Ink::VALUE, 1};
+    v.format(text, sizeof text, _decimals);
+    if (!widgetCanDraw()) {
+        return;
+    }
+    // From the largest f down to 1 (the decision "Scale"). u(yOffset) is int32_t, so no int16_t
+    // wraps (Review Focus 4).
+    t.y = u(yOffset);
+    t.f = glyphFactor(scale, k());
+    while (!placeValue(t, at, unit)) {
+        t.f--;
+    }
+    drawValueParts(t, c, unit, label, at);
+}
+
+void SteamiScreen::value(SteamiValue v, const char* unit, SteamiRgb c) {
+    value(v, unit, SteamiAt::CENTER, nullptr, c);
+}
+
+SteamiScreen::Region SteamiScreen::valueRegion(const Run& value, SteamiAt at) {
+    if (at != SteamiAt::W && at != SteamiAt::E) {
+        return {0, static_cast<int32_t>(width()) - 1};
+    }
+    // B2: the chord at the value's cell rows, so the region does not depend on the digits.
+    const Region c = chord(value.y, value.y + SteamiDisplay::CHAR_H * value.f - 1);
+    if (c.width() == 0) {
+        return c;
+    }
+    const int32_t gap = u(STEAMI_VALUE_SIDE_GAP);
+    return at == SteamiAt::W ? Region{c.left + k(), centerX() - gap - 1}
+                             : Region{centerX() + gap + 1, c.right - k()};
+}
+
+bool SteamiScreen::placeValue(Run& value, SteamiAt at, const char* unit) {
+    const int32_t offset = value.y;
+    value.glyphs = glyphCount(value.s);
+    const int32_t vw = cellWidth(value.s, value.glyphs, Ink::VALUE, value.f);
+    // N and S take resolve()'s row; CENTER, W and E (and the corners, for now) centre the block
+    // on centerY() + u(yOffset).
+    if (at == SteamiAt::N || at == SteamiAt::S) {
+        value.y = resolveY(at, vw, value.f);
+    } else {
+        const bool hasUnit = unit != nullptr && unit[0] != '\0';
+        value.y = centerY() + offset - blockHeight(value.f, hasUnit) / 2;
+    }
+    bool fits = false;
+    if (at == SteamiAt::W || at == SteamiAt::E) {
+        // B6: "88.8" sets the f of every narrower value, so two values side by side match.
+        const int32_t widest = larger(vw, valueWidth(STEAMI_VALUE_REFERENCE, value.f));
+        fits = widest <= valueRegion(value, at).width();
+    } else {
+        // The chord at the rows the value inks, less u(4); a value without ink always fits.
+        fits = inkRows(value.s, value.glyphs, Ink::VALUE) == 0 ||
+               vw + u(STEAMI_VALUE_FIT_MARGIN) <= inkChord(value).width();
+    }
+    if (fits || value.f == 1) {
+        return true;
+    }
+    value.y = offset;
+    return false;
+}
+
+void SteamiScreen::drawValueParts(Run& value, SteamiRgb c, const char* unit, const char* label,
+                                  SteamiAt at) {
+    // Label, value, unit: the drawing order of the decision "Label and unit of value()".
+    Run part{label, glyphCount(label), value.y - u(STEAMI_VALUE_LABEL_GAP) - 7 * k(), Ink::LABEL,
+             k()};
+    drawValuePart(part, at, STEAMI_GRAY);
+    // Whole when it fits; at f 1 cut to the longest prefix that fits the same region. A W/E value
+    // is centred in its half region, which fitGlyphs() hands back unchanged (the ink chord of
+    // the kept prefix is never narrower than the chord at its cell rows).
+    const bool side = at == SteamiAt::W || at == SteamiAt::E;
+    Region room = valueRegion(value, at);
+    value.glyphs = fitGlyphs(value, &room, side ? 0 : u(STEAMI_VALUE_FIT_MARGIN));
+    const int32_t w = cellWidth(value.s, value.glyphs, Ink::VALUE, value.f);
+    drawGlyphs(value, side ? room.left + (room.width() - w) / 2 : centerX() - w / 2, c);
+    part = {unit, glyphCount(unit), value.y + SteamiDisplay::CHAR_H * value.f, Ink::TEXT, k()};
+    drawValuePart(part, at, STEAMI_LIGHT);
+}
+
+void SteamiScreen::drawValuePart(Run& part, SteamiAt at, SteamiRgb c) {
+    const bool side = at == SteamiAt::W || at == SteamiAt::E;
+    const int32_t cx = centerX();
+    const int32_t gap = u(STEAMI_VALUE_SIDE_GAP);
+    // At W and E the half region at the part's own inked rows: its ink chord shrunk by k, on its
+    // side of centerX(); elsewhere the whole chord.
+    Region room{at == SteamiAt::E ? cx + gap + 1 : 0,
+                at == SteamiAt::W ? cx - gap - 1 : static_cast<int32_t>(width()) - 1};
+    part.shrink = side ? k() : 0;
+    part.glyphs = fitGlyphs(part, &room);
+    const int32_t w = cellWidth(part.s, part.glyphs, part.ink, part.f);
+    drawGlyphs(part, side ? room.left + (room.width() - w) / 2 : cx - w / 2, c);
+}
