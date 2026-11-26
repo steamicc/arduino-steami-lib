@@ -205,9 +205,11 @@ Temperature sensor short keys are `hts`, `mag`, `ism`, `hid`, `pad`, and `bme`.
 
 ## Examples
 
-| Example | What it does |
-|---------|--------------|
-| [`show_config`](examples/show_config/) | Load and print the stored board information, calibrations and boot count, without writing anything. |
+| Example | What it does | Try it |
+|---------|--------------|--------|
+| [`show_config`](examples/show_config/) | Load and print the stored board information, calibrations and boot count, without writing anything. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config#show_config) |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config).
 
 ## License
 

@@ -108,18 +108,20 @@ See [examples/](examples/) for full sketches.
 
 ## Examples
 
-| Example | What it does |
-|---------|--------------|
-| [`framebuf_pixels`](examples/framebuf_pixels/) | Draw single pixels in different colours. |
-| [`framebuf_lines`](examples/framebuf_lines/) | Draw a star pattern of coloured lines. |
-| [`framebuf_rects`](examples/framebuf_rects/) | Draw nested filled squares in different colours. |
-| [`framebuf_text`](examples/framebuf_text/) | Render centred text lines in different colours. |
-| [`framebuf_scroll`](examples/framebuf_scroll/) | Scroll text up with `scroll()`. |
-| [`invert`](examples/invert/) | Toggle the display between normal and inverted colours. |
-| [`rotation`](examples/rotation/) | Demonstrate 180° display rotation. |
-| [`color_palette`](examples/color_palette/) | Show the named colours and red, green, blue and grey gradients built with `color565()`. |
-| [`random_pixels`](examples/random_pixels/) | Add randomly placed pixels of random colours. |
-| [`rotating_3d_cube`](examples/rotating_3d_cube/) | Animate a rotating wireframe 3D cube with coloured edges. |
+| Example | What it does | Try it |
+|---------|--------------|--------|
+| [`framebuf_pixels`](examples/framebuf_pixels/) | Draw single pixels in different colours. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/gc9a01#framebuf_pixels) |
+| [`framebuf_lines`](examples/framebuf_lines/) | Draw a star pattern of coloured lines. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/gc9a01#framebuf_lines) |
+| [`framebuf_rects`](examples/framebuf_rects/) | Draw nested filled squares in different colours. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/gc9a01#framebuf_rects) |
+| [`framebuf_text`](examples/framebuf_text/) | Render centred text lines in different colours. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/gc9a01#framebuf_text) |
+| [`framebuf_scroll`](examples/framebuf_scroll/) | Scroll text up with `scroll()`. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/gc9a01#framebuf_scroll) |
+| [`invert`](examples/invert/) | Toggle the display between normal and inverted colours. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/gc9a01#invert) |
+| [`rotation`](examples/rotation/) | Demonstrate 180° display rotation. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/gc9a01#rotation) |
+| [`color_palette`](examples/color_palette/) | Show the named colours and red, green, blue and grey gradients built with `color565()`. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/gc9a01#color_palette) |
+| [`random_pixels`](examples/random_pixels/) | Add randomly placed pixels of random colours. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/gc9a01#random_pixels) |
+| [`rotating_3d_cube`](examples/rotating_3d_cube/) | Animate a rotating wireframe 3D cube with coloured edges. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/gc9a01#rotating_3d_cube) |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/gc9a01).
 
 ### Building an example
 

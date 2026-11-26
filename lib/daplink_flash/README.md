@@ -124,9 +124,11 @@ DAPLink chip powered.
 
 ## Examples
 
-| Example | Description |
-|---------|-------------|
-| [`data_logger`](examples/data_logger/data_logger.ino) | Print the file, then append a `seconds,light` line every 10 seconds. |
+| Example | Description | Try it |
+|---------|-------------|--------|
+| [`data_logger`](examples/data_logger/data_logger.ino) | Print the file, then append a `seconds,light` line every 10 seconds. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash#data_logger) |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash).
 
 ## Testing
 

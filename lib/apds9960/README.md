@@ -51,12 +51,14 @@ example.
 
 ## Examples
 
-| Example                                      | What it does                                               |
-| -------------------------------------------- | ---------------------------------------------------------- |
-| [`ambient_light`](examples/ambient_light/)   | Read the ambient light and RGB colour channels.            |
-| [`proximity`](examples/proximity/)           | Detect nearby objects using the infrared proximity sensor. |
-| [`gesture`](examples/gesture/)               | Detect left, right, up, down, near and far gestures.       |
-| [`light_theremin`](examples/light_theremin/) | Control the STeaMi buzzer pitch using ambient light.       |
+| Example                                      | What it does                                               | Try it                                                                                    |
+| -------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [`ambient_light`](examples/ambient_light/)   | Read the ambient light and RGB colour channels.            | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/apds9960#ambient_light)  |
+| [`proximity`](examples/proximity/)           | Detect nearby objects using the infrared proximity sensor. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/apds9960#proximity)      |
+| [`gesture`](examples/gesture/)               | Detect left, right, up, down, near and far gestures.       | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/apds9960#gesture)        |
+| [`light_theremin`](examples/light_theremin/) | Control the STeaMi buzzer pitch using ambient light.       | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/apds9960#light_theremin) |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/apds9960).
 
 ### Building an example
 

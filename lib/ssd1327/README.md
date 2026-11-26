@@ -90,19 +90,21 @@ See [examples/](examples/) for full sketches.
 
 ## Examples
 
-| Example | What it does |
-|---------|--------------|
-| [`framebuf_pixels`](examples/framebuf_pixels/) | Draw individual pixel at various positions and grayscale levels. |
-| [`framebuf_lines`](examples/framebuf_lines/) | Draw diagonal and intersecting lines across the display. |
-| [`framebuf_rects`](examples/framebuf_rects/) | Draw filled and outlined rectangles using different grayscale levels. |
-| [`framebuf_text`](examples/framebuf_text/) | Render text strings at different positions on the display. |
-| [`framebuf_scroll`](examples/framebuf_scroll/) | Demonstrate software scrolling of the framebuffer with text. |
-| [`invert`](examples/invert/) | Toggle the display between normal and inverted modes. |
-| [`rotation`](examples/rotation/) | Demonstrate 180° display rotation. |
-| [`shades`](examples/shades/) | Display vertical bands covering all 16 shades of gray. |
-| [`random_pixels`](examples/random_pixels/) | Display one randomly positioned grayscale pixels on each iteration. |
-| [`illusion`](examples/illusion/) | Render an optical illusion pattern using alternating squares and horizontal lines. |
-| [`rotating_3d_cube`](examples/rotating_3d_cube/) | Animate a rotating wireframe 3D cube. |
+| Example | What it does | Try it |
+|---------|--------------|--------|
+| [`framebuf_pixels`](examples/framebuf_pixels/) | Draw individual pixel at various positions and grayscale levels. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ssd1327#framebuf_pixels) |
+| [`framebuf_lines`](examples/framebuf_lines/) | Draw diagonal and intersecting lines across the display. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ssd1327#framebuf_lines) |
+| [`framebuf_rects`](examples/framebuf_rects/) | Draw filled and outlined rectangles using different grayscale levels. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ssd1327#framebuf_rects) |
+| [`framebuf_text`](examples/framebuf_text/) | Render text strings at different positions on the display. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ssd1327#framebuf_text) |
+| [`framebuf_scroll`](examples/framebuf_scroll/) | Demonstrate software scrolling of the framebuffer with text. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ssd1327#framebuf_scroll) |
+| [`invert`](examples/invert/) | Toggle the display between normal and inverted modes. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ssd1327#invert) |
+| [`rotation`](examples/rotation/) | Demonstrate 180° display rotation. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ssd1327#rotation) |
+| [`shades`](examples/shades/) | Display vertical bands covering all 16 shades of gray. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ssd1327#shades) |
+| [`random_pixels`](examples/random_pixels/) | Display one randomly positioned grayscale pixels on each iteration. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ssd1327#random_pixels) |
+| [`illusion`](examples/illusion/) | Render an optical illusion pattern using alternating squares and horizontal lines. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ssd1327#illusion) |
+| [`rotating_3d_cube`](examples/rotating_3d_cube/) | Animate a rotating wireframe 3D cube. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ssd1327#rotating_3d_cube) |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/ssd1327).
 
 ### Building an example
 

@@ -158,13 +158,15 @@ make test-native
 
 ## Examples
 
-| Example | What it does |
-|---------|--------------|
-| [`dpad_reader`](examples/dpad_reader/) | Print which D-PAD button is currently pressed on the serial monitor. A good first sketch to check the expander and its pull-ups. |
-| [`SimonGame`](examples/SimonGame/) | Memory game inspired by *Simon Says*. The board flashes an increasingly long sequence using the on-board LEDs and the player must reproduce it using the D-PAD. Score is printed to the serial monitor. |
-| [`ReactionTimer`](examples/ReactionTimer/) | Reaction-time trainer. After a random delay, the red LED lights up and the player must press the UP button as quickly as possible. The measured reaction time is printed in milliseconds. |
-| [`MusicPlayer`](examples/MusicPlayer/) | Turn the D-PAD into a mini jukebox. Each direction plays a different 8-bit melody on the on-board speaker (Tetris, Mario, Zelda, or Pokémon). |
-| [`MorseCode`](examples/MorseCode/) | Enter Morse code using the D-PAD. Short and long presses on the UP button generate dots and dashes, while the DOWN button decodes the current sequence and prints the matching letter. |
+| Example | What it does | Try it |
+|---------|--------------|--------|
+| [`dpad_reader`](examples/dpad_reader/) | Print which D-PAD button is currently pressed on the serial monitor. A good first sketch to check the expander and its pull-ups. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e#dpad_reader) |
+| [`SimonGame`](examples/SimonGame/) | Memory game inspired by *Simon Says*. The board flashes an increasingly long sequence using the on-board LEDs and the player must reproduce it using the D-PAD. Score is printed to the serial monitor. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e#simongame) |
+| [`ReactionTimer`](examples/ReactionTimer/) | Reaction-time trainer. After a random delay, the red LED lights up and the player must press the UP button as quickly as possible. The measured reaction time is printed in milliseconds. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e#reactiontimer) |
+| [`MusicPlayer`](examples/MusicPlayer/) | Turn the D-PAD into a mini jukebox. Each direction plays a different 8-bit melody on the on-board speaker (Tetris, Mario, Zelda, or Pokémon). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e#musicplayer) |
+| [`MorseCode`](examples/MorseCode/) | Enter Morse code using the D-PAD. Short and long presses on the UP button generate dots and dashes, while the DOWN button decodes the current sequence and prints the matching letter. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e#morsecode) |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e).
 
 ### Building an example
 

@@ -68,11 +68,13 @@ for the complete example.
 
 # Examples
 
-| Example | What it does |
-|---------|--------------|
-| [`BasicReader`](examples/BasicReader/) | Read acceleration, angular velocity and temperature values from the ISM330DL. |
-| [`Orientation`](examples/Orientation/) | Detect the board orientation using the accelerometer. |
-| [`Motion`](examples/Motion/) | Detect tilt and rotation direction using the gyroscope. |
+| Example | What it does | Try it |
+|---------|--------------|--------|
+| [`BasicReader`](examples/BasicReader/) | Read acceleration, angular velocity and temperature values from the ISM330DL. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ism330dl#basicreader) |
+| [`Orientation`](examples/Orientation/) | Detect the board orientation using the accelerometer. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ism330dl#orientation) |
+| [`Motion`](examples/Motion/) | Detect tilt and rotation direction using the gyroscope. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ism330dl#motion) |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/ism330dl).
 
 
 ## Building an example

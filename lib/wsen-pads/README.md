@@ -106,11 +106,13 @@ does not reset the other.
 
 ## Examples
 
-| Example | What it does |
-|---------|--------------|
-| [`read_pressure_temperature`](examples/read_pressure_temperature/) | Baseline sketch: print pressure (hPa) and temperature (°C) every second. |
-| [`altitude`](examples/altitude/) | Estimate altitude from pressure using the international standard atmosphere model. Tunable sea-level reference for local QNH calibration. |
-| [`floor_detector`](examples/floor_detector/) | Calibrate a reference altitude over 10 samples, then report floor changes as the carrier moves. Hysteresis margin avoids oscillating on a boundary. |
+| Example | What it does | Try it |
+|---------|--------------|--------|
+| [`read_pressure_temperature`](examples/read_pressure_temperature/) | Baseline sketch: print pressure (hPa) and temperature (°C) every second. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-pads#read_pressure_temperature) |
+| [`altitude`](examples/altitude/) | Estimate altitude from pressure using the international standard atmosphere model. Tunable sea-level reference for local QNH calibration. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-pads#altitude) |
+| [`floor_detector`](examples/floor_detector/) | Calibrate a reference altitude over 10 samples, then report floor changes as the carrier moves. Hysteresis margin avoids oscillating on a boundary. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-pads#floor_detector) |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-pads).
 
 Flash one with:
 

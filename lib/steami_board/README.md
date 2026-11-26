@@ -155,6 +155,8 @@ Thirteen classes read a function without you choosing a chip:
 (V1a/V1b or V1c) and share the driver the board already built. Each has a
 ready-to-run example in [`examples/`](examples/).
 
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board).
+
 ```cpp
 #include <SteamiTemperature.h>
 

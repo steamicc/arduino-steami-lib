@@ -13,14 +13,16 @@ is not a driver: it only holds example sketches built on the
 
 ## Examples
 
-| Example | What it does |
-|---------|--------------|
-| [`BleBeacon`](examples/BleBeacon/) | Advertise the board name and a live temperature reading. Uses the WSEN-HIDS sensor (STeaMi V1a/V1b only). |
-| [`BleHotCold`](examples/BleHotCold/) | BLE treasure hunt game based on the received signal strength. |
-| [`BleRssiProximity`](examples/BleRssiProximity/) | Scan for a named BLE beacon and show a proximity gauge on the serial monitor. |
-| [`BleRssiMapper`](examples/BleRssiMapper/) | Record RSSI measurements at different positions in a room. |
-| [`BleTrilateration`](examples/BleTrilateration/) | Estimate a 2D position from the RSSI of several beacons. |
-| [`BleIndoorMap`](examples/BleIndoorMap/) | Real-time indoor position on an ASCII map, with a classroom [activity sheet](examples/BleIndoorMap/BleIndoorMap.md). |
+| Example | What it does | Try it |
+|---------|--------------|--------|
+| [`BleBeacon`](examples/BleBeacon/) | Advertise the board name and a live temperature reading. Uses the WSEN-HIDS sensor (STeaMi V1a/V1b only). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ble#blebeacon) |
+| [`BleHotCold`](examples/BleHotCold/) | BLE treasure hunt game based on the received signal strength. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ble#blehotcold) |
+| [`BleRssiProximity`](examples/BleRssiProximity/) | Scan for a named BLE beacon and show a proximity gauge on the serial monitor. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ble#blerssiproximity) |
+| [`BleRssiMapper`](examples/BleRssiMapper/) | Record RSSI measurements at different positions in a room. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ble#blerssimapper) |
+| [`BleTrilateration`](examples/BleTrilateration/) | Estimate a 2D position from the RSSI of several beacons. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ble#bletrilateration) |
+| [`BleIndoorMap`](examples/BleIndoorMap/) | Real-time indoor position on an ASCII map, with a classroom [activity sheet](examples/BleIndoorMap/BleIndoorMap.md). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ble#bleindoormap) |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/ble).
 
 Flash an example with PlatformIO:
 
