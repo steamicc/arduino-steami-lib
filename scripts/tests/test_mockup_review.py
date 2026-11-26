@@ -125,9 +125,9 @@ class MockupReviewTest(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertTrue((out / "index.html").is_file())
             rows = (out / "ssim.csv").read_text().strip().splitlines()
-            self.assertEqual(len(rows), 7)
+            self.assertEqual(len(rows), 2 * len(mr.MOCKUPS) + 1)
             self.assertEqual(rows[0], "name,size,ssim")
-            self.assertEqual(len(list(out.glob("*.png"))), 6)
+            self.assertEqual(len(list(out.glob("*.png"))), 2 * len(mr.MOCKUPS))
             self.assertIn("<strong>look</strong>", (out / "index.html").read_text())
 
     @unittest.skipUnless(HAVE_NUMPY_PIL, "Pillow and NumPy")
