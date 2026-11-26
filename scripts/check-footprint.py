@@ -84,8 +84,16 @@ def measure(sections: dict[str, tuple[int, int]], flash_size: int) -> Footprint:
     return Footprint(flash=flash, ram=ram)
 
 
+def board_upload(board_json: Path) -> dict:
+    return json.loads(board_json.read_text(encoding="utf-8"))["upload"]
+
+
+def flash_size(board_json: Path) -> int:
+    return board_upload(board_json)["maximum_size"]
+
+
 def limits(board_json: Path) -> Limits:
-    upload = json.loads(board_json.read_text(encoding="utf-8"))["upload"]
+    upload = board_upload(board_json)
 
     return Limits(
         flash=upload["maximum_size"] - FLASH_MARGIN,
@@ -123,8 +131,15 @@ def find_size_tool() -> str:
 def main() -> int:
     argparse.ArgumentParser(description=__doc__.splitlines()[0]).parse_args()
 
+    if not PIO.exists():
+        print(
+            "Error: .venv/bin/pio not found. Run 'make setup' first.",
+            file=sys.stderr,
+        )
+        return 1
+
     lim = limits(BOARD_JSON)
-    flash_size = lim.flash + FLASH_MARGIN
+    flash = flash_size(BOARD_JSON)
     failed = False
 
     try:
@@ -161,7 +176,7 @@ def main() -> int:
             return 1
 
         try:
-            fp = measure(parse_sections(size.stdout), flash_size)
+            fp = measure(parse_sections(size.stdout), flash)
         except FootprintError as error:
             print(f"{sketch}: {error}", file=sys.stderr)
             return 1

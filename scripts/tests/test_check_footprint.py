@@ -4,9 +4,12 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import sys
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parent.parent.parent
@@ -67,8 +70,31 @@ class CheckFootprintTest(unittest.TestCase):
         text = "\n".join(
             line for line in SIZE_A.splitlines() if not line.startswith(".bss")
         )
+        sections = self.mod.parse_sections(text)
         with self.assertRaises(self.mod.FootprintError):
-            self.mod.measure(self.mod.parse_sections(text), FLASH_SIZE)
+            self.mod.measure(sections, FLASH_SIZE)
+
+    def test_measure_without_data_raises(self) -> None:
+        text = "\n".join(
+            line for line in SIZE_A.splitlines() if not line.startswith(".data")
+        )
+        sections = self.mod.parse_sections(text)
+        with self.assertRaises(self.mod.FootprintError):
+            self.mod.measure(sections, FLASH_SIZE)
+
+    def test_flash_size_from_the_board(self) -> None:
+        self.assertEqual(self.mod.flash_size(ROOT / "boards" / "steami.json"), FLASH_SIZE)
+
+    def test_missing_pio_asks_for_make_setup(self) -> None:
+        stderr = io.StringIO()
+        missing = ROOT / ".venv" / "bin" / "no-such-pio"
+        with mock.patch.object(self.mod, "PIO", missing):
+            with mock.patch.object(self.mod.subprocess, "run") as run:
+                with mock.patch.object(sys, "argv", ["check-footprint.py"]):
+                    with redirect_stderr(stderr):
+                        self.assertEqual(self.mod.main(), 1)
+        run.assert_not_called()
+        self.assertIn("Run 'make setup' first", stderr.getvalue())
 
     def test_limits_from_the_board(self) -> None:
         lim = self.mod.limits(ROOT / "boards" / "steami.json")
