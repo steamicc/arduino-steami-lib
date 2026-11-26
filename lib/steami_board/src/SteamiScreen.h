@@ -62,6 +62,19 @@ class SteamiScreen : public SteamiDisplay {
     /// drawn from the column window (2, 4) and advancing 4.
     enum class Ink : uint8_t { TEXT, LABEL, VALUE };
 
+    /// The first `glyphs` glyphs of s, drawn with `ink` at factor f, the top of their cells on row
+    /// y; fitGlyphs() keeps `shrink` columns free at each end of the ink chord. A widget keeps its
+    /// string in one Run and hands it to the kernel by reference: no kernel call of a widget
+    /// passes arguments on the stack, which keeps each widget frame within 64 B.
+    struct Run {
+        const char* s;
+        size_t glyphs;
+        int32_t y;
+        Ink ink;
+        uint8_t f;
+        uint8_t shrink = 0;
+    };
+
     /// A length in 128-px units on this panel: v * width() / 128, truncated toward zero.
     int32_t u(int32_t v128);
 
@@ -75,9 +88,9 @@ class SteamiScreen : public SteamiDisplay {
     /// The rows (bit 0 = top row) inked by the first `glyphs` glyphs of s; LABEL has 7 rows.
     static uint8_t inkRows(const char* s, size_t glyphs, Ink ink);
 
-    /// chord() over the inked rows of the first `glyphs` glyphs drawn at row y, factor f;
-    /// {0, width() - 1} when they ink no row (callers treat no ink as fitting).
-    Region inkChord(const char* s, size_t glyphs, Ink ink, int32_t y, uint8_t f);
+    /// chord() over the rows the run inks; {0, width() - 1} when it inks no row (callers treat
+    /// no ink as fitting).
+    Region inkChord(const Run& t);
 
     /// The advance of the first `glyphs` glyphs of s at factor f.
     static int32_t cellWidth(const char* s, size_t glyphs, Ink ink, uint8_t f);
@@ -85,10 +98,12 @@ class SteamiScreen : public SteamiDisplay {
     /// The advance of the whole value text s at factor f.
     static int32_t valueWidth(const char* s, uint8_t f);
 
-    /// The longest prefix of s, in glyphs, whose cell width plus pad fits inside the ink chord at
-    /// row y shrunk by `shrink` at each end and intersected with limit. 0 when none fits.
-    size_t fitGlyphs(const char* s, Ink ink, uint8_t f, int32_t y, Region limit, uint8_t shrink,
-                     int32_t pad);
+    /// The longest prefix of the run, in glyphs (at most t.glyphs), whose cell width plus pad fits
+    /// inside its ink chord shrunk by t.shrink at each end and intersected with *room (the whole
+    /// panel when room is nullptr); 0 when none fits. On return *room holds the columns of the
+    /// kept prefix: its ink chord shrunk by t.shrink, intersected with the room it was given
+    /// ({0, width() - 1} stands for the chord of a prefix without ink).
+    size_t fitGlyphs(const Run& t, Region* room = nullptr, int32_t pad = 0);
 
     /// The N/S row margin for a text tw px wide at factor f: the safe margin of the circle, at
     /// least the floor of two cells plus the pad, at most the 13-cell cap.
@@ -97,12 +112,18 @@ class SteamiScreen : public SteamiDisplay {
     /// The E/W column margin at factor f: one cell plus the pad.
     int32_t marginEw(uint8_t f);
 
-    /// The top-left corner of a cell tw px wide and 8f high at the anchor.
-    Point resolve(SteamiAt at, int32_t tw, uint8_t f);
+    /// The left column and the top row of a cell tw px wide and 8f high at the anchor. Two
+    /// scalars, so that a widget's anchor never goes through memory.
+    int32_t resolveX(SteamiAt at, int32_t tw, uint8_t f);
+    int32_t resolveY(SteamiAt at, int32_t tw, uint8_t f);
 
-    /// Draws the first `glyphs` glyphs of s (fewer if s ends first) with its top-left at (x, y).
-    void drawGlyphs(const char* s, size_t glyphs, Ink ink, int32_t x, int32_t y, SteamiRgb c,
-                    uint8_t f);
+    /// The top-left corner of that cell: {resolveX(), resolveY()}.
+    Point resolve(SteamiAt at, int32_t tw, uint8_t f) {
+        return {resolveX(at, tw, f), resolveY(at, tw, f)};
+    }
+
+    /// Draws the run (fewer glyphs if s ends first), its first cell's left column at x.
+    void drawGlyphs(const Run& t, int32_t x, SteamiRgb c);
 
     /// fg, or on the grey panel a grey STEAMI_MIN_CONTRAST levels above bg when fg is darker.
     SteamiRgb lifted(SteamiRgb fg, SteamiRgb bg);
@@ -114,8 +135,13 @@ class SteamiScreen : public SteamiDisplay {
     /// The entry of every widget: begins the display on first use; false when it draws nothing.
     bool widgetCanDraw();
 
-    /// True when every inked line of the block, its first line's top at row y, fits whole.
-    bool linesFit(const char* const* lines, int32_t count, int32_t y, int32_t pitch);
+    /// chord() over the rows set in `rows` (bit 0 = top row) of glyphs drawn at row y, factor f;
+    /// {0, width() - 1} when rows is 0.
+    Region rowsChord(uint8_t rows, int32_t y, uint8_t f);
+
+    /// True when every inked line of the block, its first line's top at row y and the next ones
+    /// u(STEAMI_SUBTITLE_PITCH) lower, fits whole.
+    bool linesFit(const char* const* lines, int32_t count, int32_t y);
 
     uint8_t _decimals = 1;
 };

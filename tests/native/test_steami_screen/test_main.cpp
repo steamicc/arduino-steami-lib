@@ -229,12 +229,16 @@ class TestScreen : public SteamiScreen {
     using SteamiScreen::Point;
     using SteamiScreen::Region;
     using SteamiScreen::resolve;
+    using SteamiScreen::resolveX;
+    using SteamiScreen::resolveY;
+    using SteamiScreen::Run;
     using SteamiScreen::u;
     using SteamiScreen::valueWidth;
 };
 
 using Region = TestScreen::Region;
 using Ink = TestScreen::Ink;
+using Run = TestScreen::Run;
 
 /// Runs `check` on a fresh board state with a size x size memory panel injected and cleared, then
 /// asserts that nothing reached the backend off the panel or outside the circle.
@@ -343,23 +347,71 @@ static void test_ink_rows_and_widths(void) {
     TEST_ASSERT_EQUAL_size_t(0, TestScreen::glyphCount(nullptr));
 }
 
+/// fitGlyphs() over the whole of s, in the plan's argument order: the run of s at row y, the room
+/// `limit`, `shrink` columns kept free at each end of the ink chord, and `pad`.
+static size_t fit(TestScreen& screen, const char* s, Ink ink, uint8_t f, int32_t y, Region limit,
+                  uint8_t shrink, int32_t pad) {
+    Run t{s, TestScreen::glyphCount(s), y, ink, f};
+    t.shrink = shrink;
+    return screen.fitGlyphs(t, &limit, pad);
+}
+
 static void test_fit_glyphs_longest_prefix(void) {
     onPanel(128, true, [](SteamiMemoryBackend&, TestScreen& s) {
         const Region all{0, 127};
-        TEST_ASSERT_EQUAL_size_t(13,
-                                 s.fitGlyphs("ABCDEFGHIJKLMNOPQRST", Ink::TEXT, 1, 29, all, 0, 0));
-        TEST_ASSERT_EQUAL_size_t(14, s.fitGlyphs("______________T", Ink::TEXT, 1, 29, all, 0, 0));
-        TEST_ASSERT_EQUAL_size_t(14, s.fitGlyphs("              ", Ink::TEXT, 1, 29, all, 0, 0));
+        TEST_ASSERT_EQUAL_size_t(13, fit(s, "ABCDEFGHIJKLMNOPQRST", Ink::TEXT, 1, 29, all, 0, 0));
+        TEST_ASSERT_EQUAL_size_t(14, fit(s, "______________T", Ink::TEXT, 1, 29, all, 0, 0));
+        TEST_ASSERT_EQUAL_size_t(14, fit(s, "              ", Ink::TEXT, 1, 29, all, 0, 0));
         // region 33..95; with the limit {0, 50}, 33..50: 18 px, "TEM"
-        TEST_ASSERT_EQUAL_size_t(4, s.fitGlyphs("TEMP", Ink::LABEL, 1, 9, all, 1, 0));
-        TEST_ASSERT_EQUAL_size_t(3, s.fitGlyphs("TEMP", Ink::LABEL, 1, 9, Region{0, 50}, 1, 0));
+        TEST_ASSERT_EQUAL_size_t(4, fit(s, "TEMP", Ink::LABEL, 1, 9, all, 1, 0));
+        TEST_ASSERT_EQUAL_size_t(3, fit(s, "TEMP", Ink::LABEL, 1, 9, Region{0, 50}, 1, 0));
     });
     onPanel(240, true, [](SteamiMemoryBackend&, TestScreen& s) {
         const Region all{0, 239};
-        TEST_ASSERT_EQUAL_size_t(13,
-                                 s.fitGlyphs("ABCDEFGHIJKLMNOPQRST", Ink::TEXT, 2, 63, all, 0, 0));
-        TEST_ASSERT_EQUAL_size_t(13, s.fitGlyphs("______________T", Ink::TEXT, 2, 63, all, 0, 0));
-        TEST_ASSERT_EQUAL_size_t(14, s.fitGlyphs("              ", Ink::TEXT, 2, 63, all, 0, 0));
+        TEST_ASSERT_EQUAL_size_t(13, fit(s, "ABCDEFGHIJKLMNOPQRST", Ink::TEXT, 2, 63, all, 0, 0));
+        TEST_ASSERT_EQUAL_size_t(13, fit(s, "______________T", Ink::TEXT, 2, 63, all, 0, 0));
+        TEST_ASSERT_EQUAL_size_t(14, fit(s, "              ", Ink::TEXT, 2, 63, all, 0, 0));
+    });
+}
+
+static void test_fit_glyphs_room_and_run(void) {
+    onPanel(128, true, [](SteamiMemoryBackend&, TestScreen& s) {
+        // At most t.glyphs are tried; nullptr is the whole panel.
+        Run t{"ABCDEFGHIJKLMNOPQRST", 5, 29, Ink::TEXT, 1};
+        TEST_ASSERT_EQUAL_size_t(5, s.fitGlyphs(t));
+        t.glyphs = 20;
+        TEST_ASSERT_EQUAL_size_t(13, s.fitGlyphs(t));
+        // The room comes back as the kept prefix's ink chord (row 29: 11..117) shrunk by t.shrink
+        // and intersected with the room given: "TEMP" label at row 9, chord 32..96.
+        Run label{"TEMP", 4, 9, Ink::LABEL, 1};
+        label.shrink = 1;
+        Region room{0, 50};
+        TEST_ASSERT_EQUAL_size_t(3, s.fitGlyphs(label, &room));
+        TEST_ASSERT_EQUAL_INT32(33, room.left);
+        TEST_ASSERT_EQUAL_INT32(50, room.right);
+        room = {0, 127};
+        TEST_ASSERT_EQUAL_size_t(13, s.fitGlyphs(t, &room));
+        TEST_ASSERT_EQUAL_INT32(11, room.left);
+        TEST_ASSERT_EQUAL_INT32(117, room.right);
+        // pad: 13 cells (104 px) plus 3 still fit the 107 px chord, plus 4 do not.
+        room = {0, 127};
+        TEST_ASSERT_EQUAL_size_t(13, s.fitGlyphs(t, &room, 3));
+        room = {0, 127};
+        TEST_ASSERT_EQUAL_size_t(12, s.fitGlyphs(t, &room, 4));
+        // A prefix without ink keeps the room it was given (the chord of no ink is the panel).
+        Run blank{"   ", 3, 29, Ink::TEXT, 1};
+        blank.shrink = 1;
+        room = {5, 60};
+        TEST_ASSERT_EQUAL_size_t(3, s.fitGlyphs(blank, &room));
+        TEST_ASSERT_EQUAL_INT32(5, room.left);
+        TEST_ASSERT_EQUAL_INT32(60, room.right);
+        // Nothing kept: the room is that of no ink too, shrunk by t.shrink.
+        Run outside{"A", 1, -40, Ink::TEXT, 1};
+        outside.shrink = 1;
+        room = {0, 127};
+        TEST_ASSERT_EQUAL_size_t(0, s.fitGlyphs(outside, &room));
+        TEST_ASSERT_EQUAL_INT32(1, room.left);
+        TEST_ASSERT_EQUAL_INT32(126, room.right);
     });
 }
 
@@ -406,7 +458,7 @@ static void drawOnFreshPanel(SteamiMemoryBackend& mem, const char* s, size_t gly
     board.setLogger(&capture);
     board.setDisplayBackend(mem);
     TestScreen screen(board);
-    screen.drawGlyphs(s, glyphs, ink, 10, 10, STEAMI_WHITE, 2);
+    screen.drawGlyphs(Run{s, glyphs, 10, ink, 2}, 10, STEAMI_WHITE);
     TEST_ASSERT_EQUAL_UINT32(0, mem.outOfBounds());
     board.end();
 }
@@ -654,8 +706,8 @@ static void test_title_band(void) {
         // A lowercase-only title takes its width from the rows it inks, not from its cell row.
         const int32_t capRow = topMax;
         const uint8_t f = s.k();
-        const int32_t lower = s.inkChord("acemnorsuvwxz", 13, Ink::TEXT, capRow, f).width();
-        const int32_t upper = s.inkChord("ABCDEFGHIJKLM", 13, Ink::TEXT, capRow, f).width();
+        const int32_t lower = s.inkChord(Run{"acemnorsuvwxz", 13, capRow, Ink::TEXT, f}).width();
+        const int32_t upper = s.inkChord(Run{"ABCDEFGHIJKLM", 13, capRow, Ink::TEXT, f}).width();
         TEST_ASSERT_EQUAL_INT32(big ? 215 : 109, lower);
         TEST_ASSERT_EQUAL_INT32(big ? 211 : 107, upper);
         // Both still keep 13 cells at the cap.
@@ -926,6 +978,7 @@ int main(int, char**) {
     RUN_TEST(test_chord_convention);
     RUN_TEST(test_ink_rows_and_widths);
     RUN_TEST(test_fit_glyphs_longest_prefix);
+    RUN_TEST(test_fit_glyphs_room_and_run);
     RUN_TEST(test_resolve_every_anchor);
     RUN_TEST(test_draw_glyphs_value_window);
     RUN_TEST(test_lifted_contrast);
