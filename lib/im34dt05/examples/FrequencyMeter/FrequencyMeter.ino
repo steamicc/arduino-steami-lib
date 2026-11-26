@@ -11,6 +11,12 @@
 // Quiet sounds are skipped: below SILENCE_DBFS the strongest frequency is
 // just noise.
 //
+// Testing it with the board's own buzzer (tone(SPEAKER, f)): stay between
+// 2000 and 4000 Hz. The piezo buzzer resonates near 3 kHz, so for a lower
+// tone one of its harmonics is louder than the tone itself and the meter
+// shows that harmonic (1000 Hz reads about 3000 Hz). A real instrument,
+// a voice or a phone app does not have this problem.
+//
 // Flash and open the serial monitor at 115200 baud.
 
 #include <Arduino.h>

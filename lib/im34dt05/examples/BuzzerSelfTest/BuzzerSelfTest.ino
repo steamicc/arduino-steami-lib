@@ -9,9 +9,14 @@
 // accurate to about 1 %). It is a quick check that both the buzzer and the
 // microphone work, and a demonstration of how a frequency is measured.
 //
-// The buzzer plays a square wave: if the measured frequency is a multiple
-// of the played one, the buzzer made a harmonic louder than the
-// fundamental (the sketch says so).
+// The tones stay between 2000 and 4000 Hz, the useful range of the
+// buzzer. It is a small piezo that resonates near 3 kHz, and tone() drives
+// it with a square wave, rich in odd and even harmonics: for a low tone,
+// the harmonic that falls near 3 kHz comes out louder than the tone
+// itself. On a STeaMi V1c, 1000 Hz is heard at 3000 Hz (third harmonic)
+// and 1500 Hz at 3000 Hz (second harmonic), while 2000 to 4000 Hz are
+// heard within 0.1 %. If the measured frequency is a multiple of the
+// played one, the sketch says which harmonic it heard.
 //
 // Press RESET to run the test again. Open the serial monitor at 115200 baud.
 
@@ -22,7 +27,8 @@
 SteamiIMP34DT05 mic;
 
 static const int BUZZER_PIN = SPEAKER;
-static const uint16_t TONES_HZ[] = {1000, 1500, 2000, 2500, 3000, 4000};
+// The buzzer's useful range (see above): no tone under 2 kHz.
+static const uint16_t TONES_HZ[] = {2000, 2500, 3000, 3500, 4000};
 static const size_t TONE_COUNT = sizeof(TONES_HZ) / sizeof(TONES_HZ[0]);
 static const float TOLERANCE = 0.02f;  // 2 %
 static const int MEASURES = 3;         // per tone, the median is kept
