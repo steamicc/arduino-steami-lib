@@ -68,8 +68,12 @@ constexpr uint32_t IMP34DT05_PLLSAI1_VCO_HZ = 128000000;
 constexpr uint8_t IMP34DT05_SAI_MCKDIV = 25;
 constexpr uint8_t IMP34DT05_SAI_FRAME_BITS = 16;
 
-// Priority of the DMA interrupt (0 = most urgent, 15 = least).
-constexpr uint8_t IMP34DT05_DMA_IRQ_PRIORITY = 6;
+// Priority of the DMA interrupt (0 = most urgent, 15 = least). The
+// whole PDM to PCM conversion runs in this interrupt, so it takes the
+// lowest priority: the short interrupts of the core (tone() and the
+// HardwareTimer at 14, Serial, Wire, EXTI) preempt it instead of being
+// delayed by it. The double buffer leaves it a full millisecond.
+constexpr uint8_t IMP34DT05_DMA_IRQ_PRIORITY = 15;
 
 // Slot selection: automatic detection, or a fixed slot.
 constexpr uint8_t IMP34DT05_SLOT_AUTO = 0xFF;
