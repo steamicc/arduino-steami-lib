@@ -284,7 +284,17 @@ void SteamiPdmSai::end() {
     (void)HAL_DMA_DeInit(&dmaHandle);
     HAL_GPIO_DeInit(GPIOA, CLOCK_PIN | DATA_PIN);
     __HAL_RCC_SAI1_CLK_DISABLE();
+
+    // Stop PLLSAI1 too (its VCO draws current) unless another of its
+    // outputs is still in use. configureClock() restarts it.
+    hsem_lock(CFG_HW_RCC_SEMID, HSEM_LOCK_DEFAULT_RETRY);
     __HAL_RCC_PLLSAI1CLKOUT_DISABLE(RCC_PLLSAI1_SAI1CLK);
+    if ((RCC->PLLSAI1CFGR &
+         (RCC_PLLSAI1CFGR_PLLPEN | RCC_PLLSAI1CFGR_PLLQEN | RCC_PLLSAI1CFGR_PLLREN)) == 0U) {
+        __HAL_RCC_PLLSAI1_DISABLE();
+    }
+    hsem_unlock(CFG_HW_RCC_SEMID);
+
     initialised = false;
     blockHandler = nullptr;
 }
