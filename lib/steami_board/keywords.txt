@@ -34,6 +34,9 @@ SteamiButtons	KEYWORD1
 SteamiVector	KEYWORD1
 SteamiButton	KEYWORD1
 SteamiDisplay	KEYWORD1
+SteamiScreen	KEYWORD1
+SteamiAt	KEYWORD1
+SteamiValue	KEYWORD1
 SteamiDisplayBackend	KEYWORD1
 SteamiSsd1327Backend	KEYWORD1
 SteamiGc9a01Backend	KEYWORD1
@@ -132,6 +135,13 @@ triangle	KEYWORD2
 arc	KEYWORD2
 text	KEYWORD2
 textWidth	KEYWORD2
+title	KEYWORD2
+subtitle	KEYWORD2
+value	KEYWORD2
+setDecimals	KEYWORD2
+bar	KEYWORD2
+maxChars	KEYWORD2
+format	KEYWORD2
 show	KEYWORD2
 rotate	KEYWORD2
 invert	KEYWORD2
