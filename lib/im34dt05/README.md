@@ -31,7 +31,9 @@ and the constants use the real name: `SteamiIMP34DT05.h`,
 * Signal chain, in the DMA interrupt every millisecond: PDM bits ->
   sinc3 filter (decimation 8, lookup tables) -> sinc4 FIR (decimation 10,
   sets the volume) -> high-pass filter (DC removal) -> **16 kHz, 16-bit PCM**.
-  The PDM to PCM filter is ST's, see [Credits](#credits).
+  The PDM to PCM filter is ST's, see [Credits](#credits), reorganised for
+  speed (one block at a time, two multiply-accumulates per instruction with
+  the Cortex-M4 `SMLALD`) with bit-identical output.
 * Datasheet sensitivity: -26 dBFS for 94 dB SPL at 1 kHz, acoustic overload
   point 122.5 dB SPL, signal-to-noise ratio 64 dB.
 
@@ -71,7 +73,7 @@ With the `STeaMi` Library Manager package, `#include <SteamiIMP34DT05.h>` (or
 | [`SoundLevel`](examples/SoundLevel/)         | Print the RMS level, the dBFS level and an estimated dB SPL value five times per second.     |
 | [`ClapDetector`](examples/ClapDetector/)     | Toggle the blue LED on each hand clap (sharp peak above the background noise).               |
 | [`FrequencyMeter`](examples/FrequencyMeter/) | Show the dominant frequency and the nearest note (A4 = 440 Hz), like a tuner.                |
-| [`BuzzerSelfTest`](examples/BuzzerSelfTest/) | Play tones on the buzzer and check that the microphone hears the right frequency.            |
+| [`BuzzerSelfTest`](examples/BuzzerSelfTest/) | Play tones from 2 to 4 kHz on the buzzer and check that the microphone hears the right frequency. |
 
 ### Building an example
 
@@ -164,6 +166,14 @@ first one.
 The frequency is measured against the PDM clock, derived from the internal
 16 MHz oscillator (HSI): expect about 1 % of absolute error.
 
+To test it with the STeaMi buzzer (`tone(SPEAKER, f)`), play **2000 to
+4000 Hz**. The buzzer is a small piezo that resonates near 3 kHz, driven
+with a square wave: for a lower tone, the harmonic that falls near 3 kHz is
+louder than the tone itself, and that harmonic is what the microphone
+reports. Measured on a V1c: 1000 Hz is heard at 2998 Hz (third harmonic),
+1500 Hz at 2998 Hz (second harmonic), while 2000, 2500, 3000 and 4000 Hz
+are heard within 0.1 %.
+
 ### Microphone slot
 
 | Method | Description |
@@ -180,6 +190,13 @@ quietest: a random stream reads far louder than a microphone in a room. A very
 loud sound right at the microphone during `begin()` could fool it; force the
 slot with `setSlot()` if `levelDbfs()` stays high and does not follow the
 sound.
+
+### Conversion cost
+
+| Method | Description |
+|--------|-------------|
+| `ConversionStats conversionStats()` | `{blocks, averageCycles, maxCycles}`: processor cycles the DMA interrupt spent on each 1 ms block (conversion, buffer, level, `onReceive()` callback), read from the DWT cycle counter. Only the steady state counts: warm-up, slot detection and settling blocks are left out. `averageCycles / (SystemCoreClock / 1000)` is the share of the CPU. Reset by `begin()` and `powerOn()`; always zero on the host. |
+| `void resetConversionStats()` | Start a new measurement. |
 
 ## Constants
 
@@ -204,12 +221,16 @@ window sizes and the datasheet sensitivity.
   `SteamiPdmSai::handleDmaInterrupt()` from your handler if the microphone
   is still needed.
 * The conversion runs in the DMA interrupt, at the lowest priority (15) so
-  that `tone()`, timers, `Serial` and `Wire` interrupts preempt it. It takes
-  about a quarter of the CPU at the STeaMi's 32 MHz clock (estimate; the
-  hardware test `test_im34dt05_cpu_load` prints the measured share), so
-  heavy work such as drawing on the GC9A01 display runs slower while the
-  microphone is on. A sketch that masks interrupts for more than about
-  1 ms loses audio.
+  that `tone()`, timers, `Serial` and `Wire` interrupts preempt it. Its
+  share of the CPU at the STeaMi's 32 MHz clock: measured on a V1c,
+  61.5 % before optimisation; with the optimised filter (block processing,
+  `SMLALD`, lookup tables in RAM, compiled with `-O2`):
+  (to be measured on a V1c). `conversionStats()` measures it in a sketch and
+  the hardware test `test_im34dt05_cpu_load` prints it. Heavy work such as
+  drawing on the GC9A01 display runs slower while the microphone is on. A
+  sketch that masks interrupts for more than about 1 ms loses audio.
+* The filter's lookup tables take 1.5 KB of RAM (they are faster there than
+  in flash at 32 MHz).
 * `levelDbSpl()` is an estimate, not a calibrated sound level meter.
 * STM32WB55 only: on another board `begin()` returns `false` (the sources
   still compile, for host tests and for the Library Manager package).
@@ -225,10 +246,14 @@ make lint
 
 The native suite feeds the filter and the driver with PDM streams made by a
 second-order sigma-delta modulator (what a MEMS microphone contains), checks
-ST's lookup tables against the sinc3 coefficients, the gain of each volume,
-DC removal, saturation, the slot detection, the level window and the
-frequency estimate end to end. The hardware suite in
-`tests/hardware/test_im34dt05/` needs a STeaMi.
+ST's lookup tables against the sinc3 coefficients, compares the optimised
+filter sample for sample with a straightforward implementation of ST's
+filter (random and sigma-delta streams, every volume, both slots, random
+block sizes), and checks the gain of each volume, DC removal, saturation,
+the slot detection, the level window and the frequency estimate end to end.
+The hardware suite in `tests/hardware/test_im34dt05/` needs a STeaMi: it
+also prints the CPU share of the conversion (and fails above 30 %) and
+checks that the microphone hears the buzzer from 2 to 4 kHz.
 
 ## Credits
 
