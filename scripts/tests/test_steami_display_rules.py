@@ -107,11 +107,12 @@ class SteamiDisplayRulesTest(unittest.TestCase):
         self.assertEqual(sketch_body, gallery_body)
         self.assertIn("drawGallery(screen);", sketch.read_text(encoding="utf-8"))
 
-    # One token of a statement: a string literal, a SteamiAt:: or STEAMI_ name, nullptr, an
-    # identifier (skipped, so that the digits of a name are no number) or a numeric literal.
+    # One token of a statement: a string literal, a SteamiAt::, SteamiFace:: or STEAMI_ name,
+    # nullptr, an identifier (skipped, so that the digits of a name are no number) or a numeric
+    # literal.
     _TOKEN = re.compile(
         r'"(?:[^"\\]|\\.)*"'
-        r"|SteamiAt::\w+|\bSTEAMI_\w+|\bnullptr\b"
+        r"|SteamiAt::\w+|SteamiFace::\w+|\bSTEAMI_\w+|\bnullptr\b"
         r"|(?P<ident>\b[A-Za-z_]\w*)"
         r"|(?<![\w.])-?\d+(?:\.\d+)?[fFuUlL]*"
     )
@@ -147,11 +148,12 @@ class SteamiDisplayRulesTest(unittest.TestCase):
             self._calls(
                 'screen.value(battery.percent(), "%", SteamiAt::CENTER, nullptr, STEAMI_WHITE, 2,'
                 ' -12);  // rows 72..79\nif (x) {\n}\nscreen.vline(cx, cy - r / 2, r, STEAMI_DARK);'
-                " delay(500); x2 = 3;"
+                " delay(500); x2 = 3; screen.face(SteamiFace::HAPPY);"
             ),
             [
                 ("value", ['"%"', "SteamiAt::CENTER", "nullptr", "STEAMI_WHITE", "2", "-12"]),
                 ("vline", ["2", "STEAMI_DARK"]),
+                ("face", ["SteamiFace::HAPPY"]),
             ],
         )
 
@@ -165,6 +167,10 @@ class SteamiDisplayRulesTest(unittest.TestCase):
             ("ScreenTemperature", "mockupTemperature"),
             ("ScreenBattery", "mockupBattery"),
             ("ScreenComfort", "mockupComfort"),
+            ("ScreenGauge", "mockupGauge"),
+            ("ScreenCompass", "mockupCompass"),
+            ("ScreenFaces", "mockupFaces"),
+            ("ScreenWatch", "mockupWatch"),
         ):
             with self.subTest(example=example):
                 sketch = examples / example / f"{example}.ino"
