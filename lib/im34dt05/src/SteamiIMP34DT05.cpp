@@ -51,10 +51,31 @@ bool isLiveByte(uint8_t value) {
     return value != 0x00 && value != 0xFF;
 }
 
+// Filter the `perSlot` bytes of one slot of a SAI block, one PCM block
+// (or less) at a time, and hand each batch of samples to `sink`.
+template <typename Sink>
+void filterSlot(SteamiPdmFilter& filter, const uint8_t* data, size_t perSlot, uint8_t slot,
+                Sink sink) {
+    int16_t pcm[IMP34DT05_SAMPLES_PER_BLOCK + 1];
+    const uint8_t* slotData = data + slot;
+    size_t remaining = perSlot;
+    while (remaining > 0) {
+        size_t chunk =
+            remaining < IMP34DT05_PDM_BYTES_PER_BLOCK ? remaining : IMP34DT05_PDM_BYTES_PER_BLOCK;
+        size_t count = filter.process(slotData, chunk, IMP34DT05_SAI_SLOTS, pcm);
+        slotData += chunk * IMP34DT05_SAI_SLOTS;
+        remaining -= chunk;
+        sink(pcm, count);
+    }
+}
+
 }  // namespace
 
 SteamiIMP34DT05::SteamiIMP34DT05() {
     _windowSamples = static_cast<uint32_t>(_windowMs) * (IMP34DT05_SAMPLE_RATE_16K / 1000);
+    for (SteamiPdmFilter& filter : _detectFilter) {
+        (void)filter.setVolume(IMP34DT05_DETECT_VOLUME);
+    }
 }
 
 // --- Lifecycle ---------------------------------------------------------------
@@ -123,14 +144,19 @@ bool SteamiIMP34DT05::startAndWait() {
     _filter.reset();
     _blocks = 0;
     _settleBlocks = IMP34DT05_SETTLE_BLOCKS;
-    for (uint32_t& score : _slotScore) {
-        score = 0;
+    for (uint8_t s = 0; s < IMP34DT05_SAI_SLOTS; s++) {
+        _slotScore[s] = 0;
+        _slotEnergy[s] = 0;
+        _detectFilter[s].reset();
     }
     if (_slotMode != IMP34DT05_SLOT_AUTO) {
         _slot = _slotMode;
         _slotLocked = true;
         _streamAlive = true;  // forced slot: nothing to check against
+    } else if (_redetect) {
+        _slotLocked = false;  // setSlot(AUTO) after a forced slot
     }
+    _redetect = false;
 
     if (!SteamiPdmSai::start()) {
         return false;
@@ -168,44 +194,70 @@ void SteamiIMP34DT05::processBlock(const uint8_t* data, size_t length) {
     }
 
     if (!_slotLocked) {
-        for (size_t i = 0; i < perSlot; i++) {
-            for (uint8_t s = 0; s < IMP34DT05_SAI_SLOTS; s++) {
-                if (isLiveByte(data[i * IMP34DT05_SAI_SLOTS + s])) {
-                    _slotScore[s]++;
-                }
-            }
-        }
-        if (block < IMP34DT05_WARMUP_BLOCKS + IMP34DT05_DETECT_BLOCKS) {
-            return;
-        }
-        uint8_t best = (_slotScore[1] > _slotScore[0]) ? 1 : 0;
-        // Alive when at least a quarter of the bytes toggle.
-        uint32_t needed = static_cast<uint32_t>(IMP34DT05_DETECT_BLOCKS) * perSlot / 4;
-        _streamAlive = _slotScore[best] >= needed;
-        _slot = best;
-        _filter.reset();
-        _settleBlocks = IMP34DT05_SETTLE_BLOCKS;
-        _slotLocked = true;
+        detectSlot(data, perSlot, block - IMP34DT05_WARMUP_BLOCKS);
         return;
     }
 
-    // Filter one block (or less) at a time into a small stack buffer.
-    int16_t pcm[IMP34DT05_SAMPLES_PER_BLOCK + 1];
-    const uint8_t* slotData = data + _slot;
-    size_t remaining = perSlot;
-    while (remaining > 0) {
-        size_t chunk =
-            remaining < IMP34DT05_PDM_BYTES_PER_BLOCK ? remaining : IMP34DT05_PDM_BYTES_PER_BLOCK;
-        size_t count = _filter.process(slotData, chunk, IMP34DT05_SAI_SLOTS, pcm);
-        slotData += chunk * IMP34DT05_SAI_SLOTS;
-        remaining -= chunk;
-        if (_settleBlocks == 0) {
+    bool deliver = _settleBlocks == 0;
+    filterSlot(_filter, data, perSlot, _slot, [this, deliver](const int16_t* pcm, size_t count) {
+        if (deliver) {
             publish(pcm, count);
         }
-    }
+    });
     if (_settleBlocks > 0) {
         _settleBlocks = _settleBlocks - 1;
     }
+}
+
+// The SAI samples D1 on both clock edges: one slot carries the
+// microphone, the other reads the line while the microphone leaves it
+// undriven (PA10 has no pull resistor). That line holds the last bit (a
+// copy of the stream, harmless), drifts (long runs of 0 or 1) or picks
+// up the clock (a random bit stream). A random stream toggles as much as
+// a real one, but once filtered it is far louder than a microphone in a
+// room, which gives about -70 dBFS at the detection volume. Hence: keep
+// the slots whose bytes toggle, then pick the quietest one.
+void SteamiIMP34DT05::detectSlot(const uint8_t* data, size_t perSlot, uint32_t detectBlock) {
+    bool measure = detectBlock > IMP34DT05_DETECT_SETTLE_BLOCKS;
+    for (uint8_t s = 0; s < IMP34DT05_SAI_SLOTS; s++) {
+        uint32_t live = 0;
+        for (size_t i = 0; i < perSlot; i++) {
+            if (isLiveByte(data[i * IMP34DT05_SAI_SLOTS + s])) {
+                live++;
+            }
+        }
+        _slotScore[s] += live;
+
+        uint64_t energy = 0;
+        filterSlot(_detectFilter[s], data, perSlot, s, [&energy](const int16_t* pcm, size_t count) {
+            for (size_t i = 0; i < count; i++) {
+                int32_t value = pcm[i];
+                energy += static_cast<uint64_t>(value * value);
+            }
+        });
+        if (measure) {
+            _slotEnergy[s] += energy;
+        }
+    }
+    if (detectBlock < IMP34DT05_DETECT_BLOCKS) {
+        return;
+    }
+
+    // Alive when at least a quarter of the bytes toggle.
+    uint32_t needed = static_cast<uint32_t>(IMP34DT05_DETECT_BLOCKS) * perSlot / 4;
+    bool live0 = _slotScore[0] >= needed;
+    bool live1 = _slotScore[1] >= needed;
+    uint8_t best = 0;
+    if (live0 && live1) {
+        best = (_slotEnergy[1] < _slotEnergy[0]) ? 1 : 0;
+    } else if (live1) {
+        best = 1;
+    }
+    _streamAlive = live0 || live1;
+    _slot = best;
+    _filter.reset();
+    _settleBlocks = IMP34DT05_SETTLE_BLOCKS;
+    _slotLocked = true;
 }
 
 void SteamiIMP34DT05::publish(const int16_t* samples, size_t count) {
@@ -410,8 +462,11 @@ float SteamiIMP34DT05::dominantFrequencyHz() {
 
 bool SteamiIMP34DT05::setSlot(uint8_t slot) {
     if (slot == IMP34DT05_SLOT_AUTO) {
+        IrqGuard guard;
         _slotMode = slot;
-        if (!_running) {
+        if (_running) {
+            _redetect = true;  // keep the current slot until the next start
+        } else {
             _slotLocked = false;
         }
         return true;
@@ -421,6 +476,7 @@ bool SteamiIMP34DT05::setSlot(uint8_t slot) {
     }
     IrqGuard guard;
     _slotMode = slot;
+    _redetect = false;
     if (_slot != slot || !_slotLocked) {
         _slot = slot;
         _filter.reset();

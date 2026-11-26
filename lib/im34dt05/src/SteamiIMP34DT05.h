@@ -133,9 +133,12 @@ class SteamiIMP34DT05 {
     // --- Microphone slot -------------------------------------------------
 
     // The SAI reads two microphones per data line (one on each clock
-    // edge); begin() picks the slot that carries the STeaMi microphone.
-    // setSlot(0 or 1) forces a slot, setSlot(IMP34DT05_SLOT_AUTO)
-    // restores detection at the next begin() / powerOn().
+    // edge); begin() picks the slot that carries the STeaMi microphone:
+    // of the slots whose data line toggles, the one with the lowest
+    // filtered energy (the other edge reads an undriven line, which gives
+    // either a copy of the stream or noise far louder than a microphone).
+    // setSlot(0 or 1) forces a slot at once; setSlot(IMP34DT05_SLOT_AUTO)
+    // makes the next begin() or powerOn() detect the slot again.
     bool setSlot(uint8_t slot);
     uint8_t slot() const;
 
@@ -171,7 +174,10 @@ class SteamiIMP34DT05 {
     volatile bool _slotLocked = false;
     volatile bool _streamAlive = false;
     volatile uint32_t _blocks = 0;
+    bool _redetect = false;  // setSlot(AUTO) while running: detect at next start
     uint32_t _slotScore[IMP34DT05_SAI_SLOTS] = {};
+    uint64_t _slotEnergy[IMP34DT05_SAI_SLOTS] = {};
+    SteamiPdmFilter _detectFilter[IMP34DT05_SAI_SLOTS];
     volatile uint16_t _settleBlocks = 0;
 
     // Sample buffer: written by the interrupt, read by read().
@@ -195,6 +201,7 @@ class SteamiIMP34DT05 {
     float _levelOffset = 0.0f;
 
     bool startAndWait();
+    void detectSlot(const uint8_t* data, size_t perSlot, uint32_t detectBlock);
     void resetStream();
     void resetLevel();
     void publish(const int16_t* samples, size_t count);

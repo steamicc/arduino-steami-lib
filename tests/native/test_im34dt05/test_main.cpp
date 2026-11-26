@@ -346,12 +346,42 @@ void test_detection_finds_microphone_slot(void) {
     }
 }
 
+void test_detection_rejects_random_slot(void) {
+    // The undriven edge may read a random bit stream (the line picks up
+    // the clock): it toggles as much as the microphone, but is far louder
+    // once filtered than a quiet room (a -60 dBFS tone here).
+    std::vector<uint8_t> quiet = pdmSine(500.0f, 0.001f, 16000);
+    for (uint8_t micSlot = 0; micSlot < 2; micSlot++) {
+        std::vector<uint8_t> frames = saiFrames(quiet, micSlot);
+        // Random bytes, none flat: the two slots toggle equally often.
+        srand(1234);
+        for (size_t i = 0; i < quiet.size(); i++) {
+            frames[i * 2 + (1 - micSlot)] = static_cast<uint8_t>(1 + rand() % 254);
+        }
+        SteamiIMP34DT05 mic;
+        size_t position = 0;
+        feedBlocks(mic, frames, STARTUP_BLOCKS + 2, position);
+        TEST_ASSERT_EQUAL_UINT8(micSlot, mic.slot());
+        TEST_ASSERT_EQUAL_UINT(2 * IMP34DT05_SAMPLES_PER_BLOCK, mic.available());
+    }
+}
+
 void test_forced_slot(void) {
     SteamiIMP34DT05 mic;
     TEST_ASSERT_FALSE(mic.setSlot(2));
     TEST_ASSERT_TRUE(mic.setSlot(1));
     TEST_ASSERT_EQUAL_UINT8(1, mic.slot());
     TEST_ASSERT_TRUE(mic.setSlot(IMP34DT05_SLOT_AUTO));
+}
+
+void test_auto_slot_after_forced_slot_detects_again(void) {
+    SteamiIMP34DT05 mic;
+    TEST_ASSERT_TRUE(mic.setSlot(1));
+    TEST_ASSERT_TRUE(mic.setSlot(IMP34DT05_SLOT_AUTO));
+    std::vector<uint8_t> frames = saiFrames(pdmSine(1000.0f, 0.25f, 16000), 0);
+    size_t position = 0;
+    feedBlocks(mic, frames, STARTUP_BLOCKS + 2, position);
+    TEST_ASSERT_EQUAL_UINT8(0, mic.slot());
 }
 
 void test_read_returns_oldest_samples_first(void) {
@@ -494,7 +524,9 @@ int main(int /* argc */, char** /* argv */) {
 
     RUN_TEST(test_warmup_and_detection_deliver_nothing);
     RUN_TEST(test_detection_finds_microphone_slot);
+    RUN_TEST(test_detection_rejects_random_slot);
     RUN_TEST(test_forced_slot);
+    RUN_TEST(test_auto_slot_after_forced_slot_detects_again);
     RUN_TEST(test_read_returns_oldest_samples_first);
     RUN_TEST(test_buffer_overrun_is_counted);
     RUN_TEST(test_callback_receives_each_block);

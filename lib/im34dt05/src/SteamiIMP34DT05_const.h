@@ -84,8 +84,15 @@ constexpr uint8_t IMP34DT05_SLOT_AUTO = 0xFF;
 // 10 ms to wake up, then the filters settle.
 constexpr uint16_t IMP34DT05_WARMUP_BLOCKS = 20;
 
-// Blocks used to find the slot that carries the microphone.
+// Blocks used to find the slot that carries the microphone: both slots
+// are filtered, the first IMP34DT05_DETECT_SETTLE_BLOCKS let the filters
+// settle, the others measure the energy of each slot.
 constexpr uint16_t IMP34DT05_DETECT_BLOCKS = 16;
+constexpr uint16_t IMP34DT05_DETECT_SETTLE_BLOCKS = 8;
+
+// Volume of the detection filters (gain 2): low enough that a real
+// microphone does not clip, so that it reads quieter than noise.
+constexpr uint8_t IMP34DT05_DETECT_VOLUME = 1;
 
 // Blocks filtered but not delivered after a (re)start or a slot change,
 // while the high-pass filter forgets the DC offset.
