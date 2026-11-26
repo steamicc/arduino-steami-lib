@@ -79,7 +79,10 @@ class SteamiDisplayRulesTest(unittest.TestCase):
         # The example copies the native gallery body line for line (comments and blanks aside).
         def body(path: Path) -> list[str]:
             lines = path.read_text(encoding="utf-8").splitlines()
-            start = next(i for i, line in enumerate(lines) if "drawGallery(SteamiDisplay& d) {" in line)
+            marker = "drawGallery(SteamiDisplay& d) {"
+            start = next((i for i, line in enumerate(lines) if marker in line), None)
+            if start is None:
+                self.fail(f"{path.name} has no '{marker}': was drawGallery renamed?")
             out: list[str] = []
             for line in lines[start + 1 :]:
                 if line == "}":

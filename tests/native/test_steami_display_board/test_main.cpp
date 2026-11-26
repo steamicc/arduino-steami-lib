@@ -12,7 +12,6 @@
 #include <string.h>
 #include <unity.h>
 
-#include <cstddef>
 #include <initializer_list>
 #include <map>
 #include <new>
@@ -109,7 +108,7 @@ static std::vector<uint8_t> lastData(size_t n) {
         }
     }
     TEST_ASSERT_TRUE_MESSAGE(all.size() >= n, "fewer data bytes than asked");
-    return std::vector<uint8_t>(all.end() - static_cast<std::ptrdiff_t>(n), all.end());
+    return std::vector<uint8_t>(all.end() - static_cast<ptrdiff_t>(n), all.end());
 }
 
 /// The first data byte after the first cmd, -1 if none.
@@ -210,6 +209,10 @@ static void test_gc9a01_backend_passes_rgb565_through(void) {
     for (size_t i = 0; i < 480; i += 2) {
         TEST_ASSERT_EQUAL_HEX8(0x07, row[i]);
         TEST_ASSERT_EQUAL_HEX8(0xE0, row[i + 1]);
+    }
+    for (size_t i = 480; i < 960; i += 2) {  // h = 1: row 1 keeps the fill
+        TEST_ASSERT_EQUAL_HEX8(0x12, row[i]);
+        TEST_ASSERT_EQUAL_HEX8(0x34, row[i + 1]);
     }
 }
 
@@ -543,7 +546,9 @@ static void test_unknown_gives_e30_and_no_slot(void) {  // Review Focus 1
     TEST_ASSERT_FALSE(board.built(SteamiChip::SSD1327));
     TEST_ASSERT_FALSE(board.built(SteamiChip::GC9A01));
     TEST_ASSERT_EQUAL_size_t(0, g_spi.size());
-    TEST_ASSERT_EQUAL_size_t(0, gpioPinMode().count(CS_DISPLAY) + gpioPinMode().count(RST_DISPLAY));
+    for (int pin : {CS_DISPLAY, RST_DISPLAY, SPI_INT_MISO}) {  // SPI_INT_MISO: the SSD1327 D/C
+        TEST_ASSERT_EQUAL_size_t(0, gpioPinMode().count(pin));
+    }
 }
 
 static void test_v1c_geometry_before_begin(void) {  // Review Focus 2
