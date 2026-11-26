@@ -156,6 +156,9 @@ class BuildPackageTest(unittest.TestCase):
             "SteamiGc9a01Backend.h",
             "SteamiSSD1327.h",
             "SteamiGC9A01.h",
+            "SteamiScreen.h",
+            "SteamiValue.h",
+            "SteamiScreenConst.h",
         ):
             self.assertIn(f'#include "{header}"', umbrella)
 

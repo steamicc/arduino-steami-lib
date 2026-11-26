@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.38.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.37.0...v0.38.0) (2026-11-26)
+
+
+### Features
+
+* **board:** Lay out titles, values and bars on the screen. ([#274](https://github.com/steamicc/arduino-steami-lib/issues/274)) ([b960407](https://github.com/steamicc/arduino-steami-lib/commit/b960407cae8fc218d0d5b3b26cacbe74ce0a6031))
+
 # [0.37.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.36.3...v0.37.0) (2026-11-26)
 
 
