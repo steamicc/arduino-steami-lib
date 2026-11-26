@@ -8,11 +8,14 @@
 #include <Wire.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unity.h>
 
 #include <cstddef>
 #include <initializer_list>
+#include <map>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -22,6 +25,32 @@
 #include "SteamiGc9a01Backend.h"
 #include "SteamiMemoryBackend.h"
 #include "SteamiSsd1327Backend.h"
+
+// Every operator new of this program, counted: a slot built by display() allocates.
+static size_t g_allocations = 0;
+void* operator new(size_t n) {
+    g_allocations++;
+    void* p = malloc(n == 0 ? 1 : n);
+    if (p == nullptr) {
+        throw std::bad_alloc();
+    }
+    return p;
+}
+void* operator new[](size_t n) {
+    return operator new(n);
+}
+void operator delete(void* p) noexcept {
+    free(p);
+}
+void operator delete[](void* p) noexcept {
+    free(p);
+}
+void operator delete(void* p, size_t) noexcept {
+    free(p);
+}
+void operator delete[](void* p, size_t) noexcept {
+    free(p);
+}
 
 static std::vector<std::string> g_lines;
 static void capture(const char* line) {
@@ -550,6 +579,31 @@ static void test_release_forced_after_geometry_keeps_one_slot(void) {
     TEST_ASSERT_FALSE(board.built(SteamiChip::SSD1327));
 }
 
+static void test_release_forced_after_begin_keeps_the_begun_slot(void) {
+    board.begin(SteamiRelease::V1C);
+    SteamiDisplay d(board);
+    TEST_ASSERT_TRUE(d.begin());
+    SteamiDisplayBackend* begun = board.display();
+    TEST_ASSERT_NOT_NULL(begun);
+    const size_t sent = g_spi.size();
+    const std::map<int, int> modes = gpioPinMode();
+    const std::map<int, int> levels = gpioPinState();
+
+    board.begin(SteamiRelease::V1B);
+    const size_t allocations = g_allocations;
+    TEST_ASSERT_EQUAL_PTR(begun, board.display());
+    TEST_ASSERT_EQUAL_size_t(allocations, g_allocations);
+    TEST_ASSERT_TRUE(board.built(SteamiChip::GC9A01));
+    TEST_ASSERT_FALSE(board.built(SteamiChip::SSD1327));
+    TEST_ASSERT_EQUAL_PTR(begun, d.backend());
+    TEST_ASSERT_TRUE(modes == gpioPinMode());  // no reset pulse, D/C pin untouched
+    TEST_ASSERT_TRUE(levels == gpioPinState());
+    TEST_ASSERT_EQUAL_size_t(sent, g_spi.size());
+    const std::string info = printedInfo();
+    TEST_ASSERT_TRUE(printed(info, "GC9A01 screen OK\n"));
+    TEST_ASSERT_FALSE(printed(info, "SSD1327 screen"));
+}
+
 static void test_v1ab_geometry_before_begin(void) {  // Review Focus 2
     board.begin(SteamiRelease::V1B);
     SteamiDisplay d(board);
@@ -724,6 +778,7 @@ int main(int, char**) {
     RUN_TEST(test_unknown_gives_e30_and_no_slot);
     RUN_TEST(test_v1c_geometry_before_begin);
     RUN_TEST(test_release_forced_after_geometry_keeps_one_slot);
+    RUN_TEST(test_release_forced_after_begin_keeps_the_begun_slot);
     RUN_TEST(test_v1ab_geometry_before_begin);
     RUN_TEST(test_injected_backend_skips_detection);
     RUN_TEST(test_injection_frees_an_unbegun_slot);

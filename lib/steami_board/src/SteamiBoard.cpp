@@ -592,9 +592,11 @@ void SteamiBoard::printInfoTo(bool (*emit)(void* ctx, const char* line), void* c
                  calibrated(c) ? ", calibrated" : "");
         emit(ctx, line);
     }
-    const char* screen = _displayInjected != nullptr
-                             ? _displayInjected->chip()
-                             : steamiChipName(steamiRoute(_release, SteamiFunction::SCREEN, 0));
+    const char* screen = steamiChipName(steamiRoute(_release, SteamiFunction::SCREEN, 0));
+    if (_displayInjected != nullptr || _displayStatus != SteamiStatus::NOT_STARTED) {
+        SteamiDisplayBackend* b = display();  // builds nothing: the injected or the begun backend
+        screen = b != nullptr ? b->chip() : "";
+    }
     if (screen[0] != '\0') {
         snprintf(line, sizeof(line), "%s screen %s", screen,
                  steamiDisplayStateText(_displayStatus));
@@ -627,18 +629,21 @@ SteamiDisplayBackend* SteamiBoard::display() {
     if (_displayInjected != nullptr) {
         return _displayInjected;  // no release detection
     }
+    if (_displayStatus != SteamiStatus::NOT_STARTED) {
+        // Once beginDisplay() ran, the slot it began, whatever release was forced since: routing
+        // again would build the other panel's slot next to it. nullptr if none was built.
+        if (_gc9a01.built()) {
+            return _gc9a01.get();
+        }
+        return _ssd1327.get();
+    }
     // Before the panel is begun, a release forced since the last call never leaves both slots.
-    const bool unbegun = _displayStatus == SteamiStatus::NOT_STARTED;
     switch (steamiRoute(release(), SteamiFunction::SCREEN, 0)) {
         case SteamiChip::GC9A01:
-            if (unbegun) {
-                _ssd1327.reset();
-            }
+            _ssd1327.reset();
             return &_gc9a01.emplace();
         case SteamiChip::SSD1327:
-            if (unbegun) {
-                _gc9a01.reset();
-            }
+            _gc9a01.reset();
             return &_ssd1327.emplace();
         default:
             return nullptr;

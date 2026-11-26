@@ -159,7 +159,8 @@ class SteamiBoard {
 
     /// The injected display backend, without detecting the release; otherwise the panel slot of
     /// the release (GC9A01 on V1c, SSD1327 on V1a/V1b), built but not begun; nullptr on an
-    /// UNKNOWN release. Before beginDisplay(), the slot of the other panel is destroyed first.
+    /// UNKNOWN release. Before beginDisplay(), the slot of the other panel is destroyed first;
+    /// once it ran, the slot it began, even after a release forced since, until end().
     SteamiDisplayBackend* display();
 
     /// Injects a display backend (tests, an external panel) and destroys the panel slots, which
