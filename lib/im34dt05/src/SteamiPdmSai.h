@@ -37,4 +37,11 @@ class SteamiPdmSai {
 
     // Stop and release SAI1, the DMA channel and the pins.
     static void end();
+
+    // Body of the DMA1 channel 1 interrupt. The library defines
+    // DMA1_Channel1_IRQHandler() to call it, unless the build defines
+    // STEAMI_IMP34DT05_NO_DMA_IRQ_HANDLER (for a sketch or library that
+    // has its own handler: call this function from it to keep the
+    // microphone working).
+    static void handleDmaInterrupt();
 };

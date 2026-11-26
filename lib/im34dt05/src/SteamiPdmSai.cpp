@@ -223,9 +223,19 @@ bool configureSai() {
 
 }  // namespace
 
-extern "C" void DMA1_Channel1_IRQHandler(void) {
+void SteamiPdmSai::handleDmaInterrupt() {
     HAL_DMA_IRQHandler(&dmaHandle);
 }
+
+// Every object of the library is linked into every sketch (arduino-cli
+// links library archives with --whole-archive), so this handler is
+// always there. Define STEAMI_IMP34DT05_NO_DMA_IRQ_HANDLER (build_opt.h
+// file of the sketch, or build_flags) when another one is needed.
+#ifndef STEAMI_IMP34DT05_NO_DMA_IRQ_HANDLER
+extern "C" void DMA1_Channel1_IRQHandler(void) {
+    SteamiPdmSai::handleDmaInterrupt();
+}
+#endif
 
 bool SteamiPdmSai::supported() {
     return true;
@@ -316,5 +326,7 @@ bool SteamiPdmSai::start() {
 void SteamiPdmSai::stop() {}
 
 void SteamiPdmSai::end() {}
+
+void SteamiPdmSai::handleDmaInterrupt() {}
 
 #endif  // STEAMI_PDM_SAI_HARDWARE
