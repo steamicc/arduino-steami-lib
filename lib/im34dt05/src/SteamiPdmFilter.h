@@ -21,6 +21,12 @@
 // The filter keeps its state between calls, so a stream can be fed in
 // blocks of any size. Pure computation: no hardware access, usable on
 // the host for tests.
+//
+// It runs in the DMA interrupt, so it is written for speed: the sinc3
+// outputs of a block go to a linear buffer, then each FIR output is a
+// dot product over 19 pairs of 16-bit values (one SMLALD instruction per
+// pair on a Cortex-M4, exact 64-bit sums). Results are bit-identical to
+// a sample-by-sample implementation of the same three stages.
 class SteamiPdmFilter {
    public:
     SteamiPdmFilter();
@@ -46,21 +52,31 @@ class SteamiPdmFilter {
     // (newest in bits 16..23 of `window`). Exposed for the tests.
     static int16_t cicOutput(uint32_t window);
 
+    // FIR taps padded to an even count (a zero tap in front, applied to
+    // the sample just older than the 37 the FIR uses), so that the dot
+    // product runs over whole pairs.
+    static constexpr uint8_t FIR_WINDOW = IMP34DT05_FIR_TAPS + 1;
+
+    // sinc3 outputs kept between calls: the next FIR window minus the
+    // samples still to come, i.e. FIR_KEEP plus the phase.
+    static constexpr uint8_t FIR_KEEP = FIR_WINDOW - IMP34DT05_FIR_DECIMATION;
+    static constexpr uint8_t FIR_HISTORY_MAX = FIR_KEEP + IMP34DT05_FIR_DECIMATION - 1;
+
    private:
     uint8_t _volume = IMP34DT05_VOLUME_DEFAULT;
 
-    // Last three PDM bytes, newest in bits 16..23.
+    // Last two PDM bytes: newest in bits 16..23, previous in bits 8..15.
     uint32_t _cicWindow = 0;
 
-    // Circular history of the sinc3 outputs feeding the FIR.
-    int16_t _firHistory[IMP34DT05_FIR_TAPS] = {};
-    uint8_t _firNewest = 0;
+    // sinc3 outputs since the last FIR output (0 to 9).
     uint8_t _firPhase = 0;
+
+    // The FIR_KEEP + _firPhase newest sinc3 outputs, oldest first.
+    alignas(4) int16_t _firHistory[FIR_HISTORY_MAX] = {};
 
     // High-pass filter state: previous input and previous output.
     int32_t _hpPrevIn = 0;
     int16_t _hpPrevOut = 0;
 
-    int16_t firOutput() const;
     int16_t highPass(int16_t sample);
 };
