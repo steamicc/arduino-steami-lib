@@ -457,8 +457,41 @@ def kept_room(P, s, n, ink, y, f, limit, shrink):
     return (max(c[0] + shrink, limit[0]), min(c[1] - shrink, limit[1]))
 
 
+CORNERS = ("NE", "NW", "SE", "SW")
+
+
+def corner_region(P, top, f):
+    """The corner region of a value cell row band: the chord at rows top..top + 8f - 1 shrunk by k
+    at each end; (0, -1) if empty."""
+    c = P.chord(top, top + 8 * f - 1)
+    return (0, -1) if c is None else (c[0] + P.k, c[1] - P.k)
+
+
+def corner_place(P, t, at, scale):
+    """5.9 "Corner anchors" (B9): f, top, region, kept glyphs and x of a value at NE, NW, SE, SW."""
+    f = glyph_factor(P, scale)
+    while True:
+        vw = value_width(t, f)
+        x, top = P.resolve(at, vw, f)
+        region = corner_region(P, top, f)
+        if region_width(region) > 0 and region[0] <= x and x + vw - 1 <= region[1]:
+            return {"f": f, "top": top, "region": region, "n": count(t), "x": x}
+        if f == 1:
+            break
+        f -= 1
+    # f = 1: p, top and region stay those of the whole text; only x follows the kept prefix. The
+    # longest prefix with value_width <= region width, as fitGlyphs() keeps it (the region lies
+    # inside the ink chord of any prefix; a prefix without ink always fits, B9).
+    n = P.fit_glyphs(t, VALUE, 1, top, region, 0, 0)
+    w = cell_width(t, n, VALUE, 1)
+    x = max(region[0], min(P.resolve(at, w, 1)[0], region[1] - w + 1))
+    return {"f": 1, "top": top, "region": region, "n": n, "x": x}
+
+
 def value_place(P, t, at, unit, scale, y_offset):
     """f, top, region, kept glyphs and x of the value text t (the decision "Scale", 5.9)."""
+    if at in CORNERS:
+        return corner_place(P, t, at, scale)
     side = at in ("W", "E")
     pad = 0 if side else P.u(4)
     f = glyph_factor(P, scale)
@@ -466,7 +499,7 @@ def value_place(P, t, at, unit, scale, y_offset):
         vw = value_width(t, f)
         if at in ("N", "S"):
             top = P.resolve(at, vw, f)[1]
-        else:  # CENTER, W, E; the corners take the CENTER branch until Task 5
+        else:  # CENTER, W, E
             top = P.cy + P.u(y_offset) - block_height(P, f, has_text(unit)) // 2
         if side:
             region = half_region(P, at, P.chord(top, top + 8 * f - 1))
@@ -484,16 +517,24 @@ def value_place(P, t, at, unit, scale, y_offset):
     return {"f": f, "top": top, "region": region, "n": n, "x": x}
 
 
-def part_place(P, s, ink, y, at):
-    """(x, kept, room) of a label (LABEL) or unit (TEXT) at row y, factor k."""
+def part_place(P, s, ink, y, at, centre):
+    """(x, kept, room) of a label (LABEL) or unit (TEXT) at row y, factor k; `centre` is the
+    value's centre column, which a corner label or unit is centred on before the clamp."""
     if at in ("W", "E"):
         limit, shrink = half_limit(P, at), P.k
+    elif at in CORNERS:  # the chord at its own inked rows shrunk by k
+        limit, shrink = (0, P.W - 1), P.k
     else:
         limit, shrink = (0, P.W - 1), 0
     n = P.fit_glyphs(s, ink, P.k, y, limit, shrink, 0)
     room = kept_room(P, s, n, ink, y, P.k, limit, shrink)
     w = cell_width(s, n, ink, P.k)
-    x = room[0] + (region_width(room) - w) // 2 if at in ("W", "E") else P.cx - w // 2
+    if at in ("W", "E"):
+        x = room[0] + (region_width(room) - w) // 2
+    elif at in CORNERS:
+        x = max(room[0], min(centre - w // 2, room[1] - w + 1))
+    else:
+        x = P.cx - w // 2
     return x, n, room
 
 
@@ -510,10 +551,11 @@ def value_layout(W, t, at="CENTER", unit=None, label=None, scale=2, y_offset=0):
         out[name] = None
         out[name + "_n"] = 0
         if has_text(s):
-            x, n, room = part_place(P, s, ink, y, at)
+            centre = v["x"] + cell_width(t, v["n"], VALUE, v["f"]) // 2
+            x, n, room = part_place(P, s, ink, y, at, centre)
             lit = draw_glyphs(s, n, ink, x, y, P.k)
             out[name] = box(lit) if lit else None
-            out[name + "_n"], out[name + "_room"] = n, room
+            out[name + "_n"], out[name + "_room"], out[name + "_x"] = n, room, x
     return out
 
 
@@ -600,3 +642,58 @@ for W in (128, 240):
     for y_offset in (0, -12, -50):
         got = value_layout(W, FIFTEEN, "CENTER", DEG_C, None, 2, y_offset)
         print("  %d %s CENTER yOffset %d: kept %d box %s" % (W, FIFTEEN, y_offset, got["n"], got["value"]))
+
+# ---- Self-check of Task 5: value() at the corners (5.9 "Corner anchors", B9) ----
+CORNER_LABELS = ("TEMP", "TEMPERATURE", "TEMPERATURES12")
+CORNER_TEXTS = ("-12345.7", "Uncomfortable", "ABCDEFGHIJKLMNO")  # -12345.678f formats as "-12345.7"
+
+
+def inside(b, room):
+    return b is None or (room[0] <= b[0] and b[2] <= room[1])
+
+
+c128 = value_layout(128, "8", "NE", "C", "TEMP", 1)
+assert (c128["f"], c128["x"], c128["top"], c128["n"]) == (1, 102, 20, 1), c128
+assert c128["label"][1::2] == (9, 15) and c128["label_room"] == (33, 95) and c128["label_x"] == 72, c128
+assert c128["label"][2] <= 95 and c128["label_n"] == 4
+assert c128["x"] + 8 // 2 - 24 // 2 == 94  # "moves from x 94 to x 72"
+s128 = value_layout(128, "8", "SE", "C", "TEMP", 1)
+assert s128["unit"][1::2] == (108, 114) and s128["unit_room"] == (26, 102) and s128["unit_x"] == 95, s128
+assert s128["x"] + 8 // 2 - 8 // 2 == 103  # "moves from x 103 to x 95"
+c240 = value_layout(240, "8", "NE", "C", "TEMP", 1)
+assert (c240["f"], c240["x"], c240["top"]) == (1, 180, 22), c240  # f 2 leaves the region
+assert c240["label"][1::2] == (1, 14) and c240["label_room"] == (107, 133), c240
+assert (c240["label_n"], c240["label_x"]) == (2, 110), c240  # "TE", 24 px
+assert width(P240.chord(1, 14)) == 31 and region_width(c240["label_room"]) == 27
+# every corner case: each part inside its region (the value) or its room (label, unit), so inside
+# the circle; the 15-glyph text is cut on 128 (cap row 29, region 105 px) and whole on 240
+for W in (128, 240):
+    for at in CORNERS:
+        for t, unit, label, scale in ([("8", "C", l, sc) for l in CORNER_LABELS for sc in (1, 2)] +
+                                      [(t, DEG_C, "TEMPERATURES12", 2) for t in CORNER_TEXTS]):
+            got = value_layout(W, t, at, unit, label, scale)
+            assert inside(got["value"], got["region"]), (W, at, t, got)
+            assert inside(got["label"], got["label_room"]) and inside(got["unit"], got["unit_room"]), (W, at, t)
+        assert value_layout(W, "ABCDEFGHIJKLMNO", at, DEG_C)["n"] == (13 if W == 128 else 15), (W, at)
+
+# ---- Values pinned by test_steami_screen (Task 5) ----
+print("value corners: value(8, \"C\", at, label, WHITE, scale) (f top x kept; value, label, unit)")
+for W in (128, 240):
+    for at in CORNERS:
+        for scale in (1, 2):
+            for label in CORNER_LABELS:
+                got = value_layout(W, "8", at, "C", label, scale)
+                print("  %d %s s%d %-15s f %d top %d x %d n %d; %s %s %s; label n %d x %d room %s; unit x %d room %s" % (
+                    W, at, scale, label, got["f"], got["top"], got["x"], got["n"], got["value"], got["label"],
+                    got["unit"], got["label_n"], got["label_x"], got["label_room"], got["unit_x"], got["unit_room"]))
+print("value corners: value(text, \"°C\", at, \"TEMPERATURES12\", WHITE, 2)")
+for W in (128, 240):
+    for at in CORNERS:
+        for t in CORNER_TEXTS:
+            got = value_layout(W, t, at, DEG_C, "TEMPERATURES12", 2)
+            print("  %d %s %-16r f %d top %d x %d n %d region %s; %s %s %s; label n %d" % (
+                W, at, t, got["f"], got["top"], got["x"], got["n"], got["region"], got["value"], got["label"],
+                got["unit"], got["label_n"]))
+got = value_layout(128, "8", "NE", None, None, 1)
+print("  128 value(8, nullptr, NE, nullptr, WHITE, 1): f %d top %d x %d region %s; %s" % (
+    got["f"], got["top"], got["x"], got["region"], got["value"]))

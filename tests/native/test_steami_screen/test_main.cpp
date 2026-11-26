@@ -1441,6 +1441,308 @@ static void test_value_colour_shortcut(void) {
     }
 }
 
+// ---- value() at the corners ----
+
+/// Only the pixels of colour c in a copy of mem's panel, every other pixel 0.
+static std::vector<uint16_t> pixelsOf(const SteamiMemoryBackend& mem, SteamiRgb c) {
+    std::vector<uint16_t> out = mem.pixels();
+    const uint16_t stored = mem.stored(c);
+    for (uint16_t& p : out) {
+        p = p == stored ? stored : 0;
+    }
+    return out;
+}
+
+static void test_value_corner_worked_examples(void) {
+    // 128 grey, value(8, "C", NE, "TEMP", WHITE, 1): the value cell at x 102, row 20 (the 8x8 '8'
+    // leaves column 0 empty, so its ink starts at 103); the label's rows 9..15 leave the region
+    // [33, 95], so "TEMP" (24 px) moves from x 94 to x 72 (the 5x7 'T' inks column 0).
+    onPanel(128, false, [](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.value(8, "C", SteamiAt::NE, "TEMP", STEAMI_WHITE, 1);
+        const InkBox value = inkBox(mem, STEAMI_WHITE);
+        TEST_ASSERT_EQUAL_INT(103, value.x0);
+        TEST_ASSERT_EQUAL_INT(20, value.y0);
+        const InkBox label = inkBox(mem, STEAMI_GRAY);
+        TEST_ASSERT_EQUAL_INT(72, label.x0);
+        TEST_ASSERT_TRUE(label.x1 <= 95);
+        TEST_ASSERT_EQUAL_INT(9, label.y0);
+        TEST_ASSERT_EQUAL_INT(15, label.y1);
+        TEST_ASSERT_EQUAL_size_t(runInk("TEMP", 4, Ink::LABEL, 1), label.count);
+        // At SE the unit "C" (rows 108..114, region [26, 102]) moves from x 103 to x 95 ('C'
+        // leaves column 0 empty).
+        s.clear();
+        s.value(8, "C", SteamiAt::SE, "TEMP", STEAMI_WHITE, 1);
+        const InkBox unit = inkBox(mem, STEAMI_LIGHT);
+        TEST_ASSERT_EQUAL_INT(96, unit.x0);
+        TEST_ASSERT_EQUAL_INT(108, unit.y0);
+        TEST_ASSERT_EQUAL_INT(114, unit.y1);
+    });
+    // 240 colour, the NE call: the value falls to f 1 at x 180, row 22; the label's rows 1..14
+    // leave the region [107, 133] (27 px), so "TEMP" (48 px) is cut to "TE" (24 px) at x 110.
+    std::vector<uint16_t> label;
+    onPanel(240, true, [&label](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.value(8, "C", SteamiAt::NE, "TEMP", STEAMI_WHITE, 1);
+        const InkBox value = inkBox(mem, STEAMI_WHITE);
+        TEST_ASSERT_EQUAL_INT(181, value.x0);
+        TEST_ASSERT_EQUAL_INT(22, value.y0);
+        TEST_ASSERT_EQUAL_size_t(valueInk("8", 1), value.count);
+        const InkBox box = inkBox(mem, STEAMI_GRAY);
+        TEST_ASSERT_EQUAL_INT(110, box.x0);
+        TEST_ASSERT_TRUE(box.x1 <= 133);
+        TEST_ASSERT_EQUAL_INT(1, box.y0);
+        TEST_ASSERT_EQUAL_INT(14, box.y1);
+        label = pixelsOf(mem, STEAMI_GRAY);
+    });
+    TEST_ASSERT_TRUE(label == rendered(240, true, [](TestScreen& s) {
+                         s.textSmall("TE", 110, 1, STEAMI_GRAY, 2);
+                     }));
+}
+
+/// value(text, unit, at, label, c, scale) on a size x size panel.
+struct CornerCall {
+    int16_t size;
+    const char* text;
+    const char* unit;
+    SteamiAt at;
+    const char* label;
+    uint8_t scale;
+};
+
+/// What golden_layout.py prints for a CornerCall.
+struct CornerGolden {
+    uint8_t f;          // the value's glyph factor
+    uint8_t kept;       // value glyphs drawn
+    uint8_t labelKept;  // label glyphs drawn; the unit is whole in every case
+    int16_t value[4];
+    int16_t label[4];  // all -1: no label
+    int16_t unit[4];   // all -1: no unit
+};
+
+struct CornerCase {
+    CornerCall call;
+    CornerGolden golden;
+};
+
+#define NO_BOX {-1, -1, -1, -1}
+
+// Values printed by golden_layout.py: the WHITE (value), GRAY (label) and LIGHT (unit) ink boxes of
+// value(text, unit, at, label, STEAMI_WHITE, scale) drawn alone. "-12345.7" is -12345.678f with
+// one decimal; "ABCDEFGHIJKLMNO" is cut to 13 glyphs on 128.
+static const CornerCase kCorners[] = {
+    {{128, "8", nullptr, SteamiAt::NE, nullptr, 1}, {1, 1, 0, {103, 20, 108, 26}, NO_BOX, NO_BOX}},
+    {{128, "8", "C", SteamiAt::NE, "TEMP", 1},
+     {1, 1, 4, {103, 20, 108, 26}, {72, 9, 94, 15}, {103, 28, 108, 34}}},
+    {{128, "8", "C", SteamiAt::NE, "TEMPERATURE", 1},
+     {1, 1, 10, {103, 20, 108, 26}, {36, 9, 94, 15}, {103, 28, 108, 34}}},
+    {{128, "8", "C", SteamiAt::NE, "TEMPERATURES12", 1},
+     {1, 1, 10, {103, 20, 108, 26}, {36, 9, 94, 15}, {103, 28, 108, 34}}},
+    {{128, "8", "C", SteamiAt::NE, "TEMP", 2},
+     {2, 1, 4, {94, 36, 105, 49}, {88, 25, 110, 31}, {97, 52, 102, 58}}},
+    {{128, "8", "C", SteamiAt::NE, "TEMPERATURE", 2},
+     {2, 1, 11, {94, 36, 105, 49}, {48, 25, 112, 31}, {97, 52, 102, 58}}},
+    {{128, "8", "C", SteamiAt::NE, "TEMPERATURES12", 2},
+     {2, 1, 14, {94, 36, 105, 49}, {30, 25, 112, 31}, {97, 52, 102, 58}}},
+    {{128, "-12345.7", kDegC, SteamiAt::NE, "TEMPERATURES12", 2},
+     {1, 8, 10, {51, 20, 108, 26}, {36, 9, 94, 15}, {73, 28, 86, 34}}},
+    {{128, "Uncomfortable", kDegC, SteamiAt::NE, "TEMPERATURES12", 2},
+     {1, 13, 14, {13, 29, 114, 35}, {22, 18, 104, 24}, {57, 37, 70, 43}}},
+    {{128, "ABCDEFGHIJKLMNO", kDegC, SteamiAt::NE, "TEMPERATURES12", 2},
+     {1, 13, 14, {13, 29, 115, 35}, {22, 18, 104, 24}, {57, 37, 70, 43}}},
+    {{128, "8", "C", SteamiAt::NW, "TEMP", 1},
+     {1, 1, 4, {20, 20, 25, 26}, {33, 9, 55, 15}, {20, 28, 25, 34}}},
+    {{128, "8", "C", SteamiAt::NW, "TEMPERATURE", 1},
+     {1, 1, 10, {20, 20, 25, 26}, {33, 9, 91, 15}, {20, 28, 25, 34}}},
+    {{128, "8", "C", SteamiAt::NW, "TEMPERATURES12", 1},
+     {1, 1, 10, {20, 20, 25, 26}, {33, 9, 91, 15}, {20, 28, 25, 34}}},
+    {{128, "8", "C", SteamiAt::NW, "TEMP", 2},
+     {2, 1, 4, {22, 36, 33, 49}, {16, 25, 38, 31}, {25, 52, 30, 58}}},
+    {{128, "8", "C", SteamiAt::NW, "TEMPERATURE", 2},
+     {2, 1, 11, {22, 36, 33, 49}, {15, 25, 79, 31}, {25, 52, 30, 58}}},
+    {{128, "8", "C", SteamiAt::NW, "TEMPERATURES12", 2},
+     {2, 1, 14, {22, 36, 33, 49}, {15, 25, 97, 31}, {25, 52, 30, 58}}},
+    {{128, "-12345.7", kDegC, SteamiAt::NW, "TEMPERATURES12", 2},
+     {1, 8, 10, {20, 20, 77, 26}, {33, 9, 91, 15}, {42, 28, 55, 34}}},
+    {{128, "Uncomfortable", kDegC, SteamiAt::NW, "TEMPERATURES12", 2},
+     {1, 13, 14, {13, 29, 114, 35}, {22, 18, 104, 24}, {57, 37, 70, 43}}},
+    {{128, "ABCDEFGHIJKLMNO", kDegC, SteamiAt::NW, "TEMPERATURES12", 2},
+     {1, 13, 14, {13, 29, 115, 35}, {22, 18, 104, 24}, {57, 37, 70, 43}}},
+    {{128, "8", "C", SteamiAt::SE, "TEMP", 1},
+     {1, 1, 4, {104, 100, 109, 106}, {95, 89, 117, 95}, {96, 108, 101, 114}}},
+    {{128, "8", "C", SteamiAt::SE, "TEMPERATURE", 1},
+     {1, 1, 11, {104, 100, 109, 106}, {53, 89, 117, 95}, {96, 108, 101, 114}}},
+    {{128, "8", "C", SteamiAt::SE, "TEMPERATURES12", 1},
+     {1, 1, 14, {104, 100, 109, 106}, {35, 89, 117, 95}, {96, 108, 101, 114}}},
+    {{128, "8", "C", SteamiAt::SE, "TEMP", 2},
+     {2, 1, 4, {94, 76, 105, 89}, {88, 65, 110, 71}, {97, 92, 102, 98}}},
+    {{128, "8", "C", SteamiAt::SE, "TEMPERATURE", 2},
+     {2, 1, 11, {94, 76, 105, 89}, {61, 65, 125, 71}, {97, 92, 102, 98}}},
+    {{128, "8", "C", SteamiAt::SE, "TEMPERATURES12", 2},
+     {2, 1, 14, {94, 76, 105, 89}, {43, 65, 125, 71}, {97, 92, 102, 98}}},
+    {{128, "-12345.7", kDegC, SteamiAt::SE, "TEMPERATURES12", 2},
+     {1, 8, 14, {52, 100, 109, 106}, {35, 89, 117, 95}, {74, 108, 87, 114}}},
+    {{128, "Uncomfortable", kDegC, SteamiAt::SE, "TEMPERATURES12", 2},
+     {1, 13, 14, {13, 91, 114, 97}, {22, 80, 104, 86}, {57, 99, 70, 105}}},
+    {{128, "ABCDEFGHIJKLMNO", kDegC, SteamiAt::SE, "TEMPERATURES12", 2},
+     {1, 13, 14, {13, 91, 115, 97}, {22, 80, 104, 86}, {57, 99, 70, 105}}},
+    {{128, "8", "C", SteamiAt::SW, "TEMP", 1},
+     {1, 1, 4, {19, 100, 24, 106}, {10, 89, 32, 95}, {27, 108, 32, 114}}},
+    {{128, "8", "C", SteamiAt::SW, "TEMPERATURE", 1},
+     {1, 1, 11, {19, 100, 24, 106}, {10, 89, 74, 95}, {27, 108, 32, 114}}},
+    {{128, "8", "C", SteamiAt::SW, "TEMPERATURES12", 1},
+     {1, 1, 14, {19, 100, 24, 106}, {10, 89, 92, 95}, {27, 108, 32, 114}}},
+    {{128, "8", "C", SteamiAt::SW, "TEMP", 2},
+     {2, 1, 4, {22, 76, 33, 89}, {16, 65, 38, 71}, {25, 92, 30, 98}}},
+    {{128, "8", "C", SteamiAt::SW, "TEMPERATURE", 2},
+     {2, 1, 11, {22, 76, 33, 89}, {2, 65, 66, 71}, {25, 92, 30, 98}}},
+    {{128, "8", "C", SteamiAt::SW, "TEMPERATURES12", 2},
+     {2, 1, 14, {22, 76, 33, 89}, {2, 65, 84, 71}, {25, 92, 30, 98}}},
+    {{128, "-12345.7", kDegC, SteamiAt::SW, "TEMPERATURES12", 2},
+     {1, 8, 14, {19, 100, 76, 106}, {10, 89, 92, 95}, {41, 108, 54, 114}}},
+    {{128, "Uncomfortable", kDegC, SteamiAt::SW, "TEMPERATURES12", 2},
+     {1, 13, 14, {13, 91, 114, 97}, {22, 80, 104, 86}, {57, 99, 70, 105}}},
+    {{128, "ABCDEFGHIJKLMNO", kDegC, SteamiAt::SW, "TEMPERATURES12", 2},
+     {1, 13, 14, {13, 91, 115, 97}, {22, 80, 104, 86}, {57, 99, 70, 105}}},
+    {{240, "8", "C", SteamiAt::NE, "TEMP", 1},
+     {1, 1, 2, {181, 22, 186, 28}, {110, 1, 131, 14}, {178, 30, 189, 43}}},
+    {{240, "8", "C", SteamiAt::NE, "TEMPERATURE", 1},
+     {1, 1, 2, {181, 22, 186, 28}, {110, 1, 131, 14}, {178, 30, 189, 43}}},
+    {{240, "8", "C", SteamiAt::NE, "TEMPERATURES12", 1},
+     {1, 1, 2, {181, 22, 186, 28}, {110, 1, 131, 14}, {178, 30, 189, 43}}},
+    {{240, "8", "C", SteamiAt::NE, "TEMP", 2},
+     {4, 1, 4, {175, 67, 198, 94}, {163, 46, 208, 59}, {181, 99, 192, 112}}},
+    {{240, "8", "C", SteamiAt::NE, "TEMPERATURE", 2},
+     {4, 1, 11, {175, 67, 198, 94}, {81, 46, 210, 59}, {181, 99, 192, 112}}},
+    {{240, "8", "C", SteamiAt::NE, "TEMPERATURES12", 2},
+     {4, 1, 14, {175, 67, 198, 94}, {45, 46, 210, 59}, {181, 99, 192, 112}}},
+    {{240, "-12345.7", kDegC, SteamiAt::NE, "TEMPERATURES12", 2},
+     {3, 8, 13, {33, 52, 206, 72}, {42, 31, 193, 44}, {106, 76, 133, 89}}},
+    {{240, "Uncomfortable", kDegC, SteamiAt::NE, "TEMPERATURES12", 2},
+     {1, 13, 2, {85, 22, 186, 28}, {110, 1, 131, 14}, {122, 30, 149, 43}}},
+    {{240, "ABCDEFGHIJKLMNO", kDegC, SteamiAt::NE, "TEMPERATURES12", 2},
+     {1, 15, 2, {69, 22, 186, 28}, {110, 1, 131, 14}, {114, 30, 141, 43}}},
+    {{240, "8", "C", SteamiAt::NW, "TEMP", 1},
+     {1, 1, 2, {54, 22, 59, 28}, {107, 1, 128, 14}, {51, 30, 62, 43}}},
+    {{240, "8", "C", SteamiAt::NW, "TEMPERATURE", 1},
+     {1, 1, 2, {54, 22, 59, 28}, {107, 1, 128, 14}, {51, 30, 62, 43}}},
+    {{240, "8", "C", SteamiAt::NW, "TEMPERATURES12", 1},
+     {1, 1, 2, {54, 22, 59, 28}, {107, 1, 128, 14}, {51, 30, 62, 43}}},
+    {{240, "8", "C", SteamiAt::NW, "TEMP", 2},
+     {4, 1, 4, {41, 67, 64, 94}, {29, 46, 74, 59}, {47, 99, 58, 112}}},
+    {{240, "8", "C", SteamiAt::NW, "TEMPERATURE", 2},
+     {4, 1, 11, {41, 67, 64, 94}, {28, 46, 157, 59}, {47, 99, 58, 112}}},
+    {{240, "8", "C", SteamiAt::NW, "TEMPERATURES12", 2},
+     {4, 1, 14, {41, 67, 64, 94}, {28, 46, 193, 59}, {47, 99, 58, 112}}},
+    {{240, "-12345.7", kDegC, SteamiAt::NW, "TEMPERATURES12", 2},
+     {3, 8, 13, {33, 52, 206, 72}, {42, 31, 193, 44}, {106, 76, 133, 89}}},
+    {{240, "Uncomfortable", kDegC, SteamiAt::NW, "TEMPERATURES12", 2},
+     {1, 13, 2, {54, 22, 155, 28}, {107, 1, 128, 14}, {91, 30, 118, 43}}},
+    {{240, "ABCDEFGHIJKLMNO", kDegC, SteamiAt::NW, "TEMPERATURES12", 2},
+     {1, 15, 2, {54, 22, 171, 28}, {107, 1, 128, 14}, {99, 30, 126, 43}}},
+    {{240, "8", "C", SteamiAt::SE, "TEMP", 1},
+     {1, 1, 4, {182, 210, 187, 216}, {158, 189, 203, 202}, {150, 218, 161, 231}}},
+    {{240, "8", "C", SteamiAt::SE, "TEMPERATURE", 1},
+     {1, 1, 11, {182, 210, 187, 216}, {74, 189, 203, 202}, {150, 218, 161, 231}}},
+    {{240, "8", "C", SteamiAt::SE, "TEMPERATURES12", 1},
+     {1, 1, 14, {182, 210, 187, 216}, {38, 189, 203, 202}, {150, 218, 161, 231}}},
+    {{240, "8", "C", SteamiAt::SE, "TEMP", 2},
+     {4, 1, 4, {175, 141, 198, 168}, {163, 120, 208, 133}, {181, 173, 192, 186}}},
+    {{240, "8", "C", SteamiAt::SE, "TEMPERATURE", 2},
+     {4, 1, 11, {175, 141, 198, 168}, {106, 120, 235, 133}, {181, 173, 192, 186}}},
+    {{240, "8", "C", SteamiAt::SE, "TEMPERATURES12", 2},
+     {4, 1, 14, {175, 141, 198, 168}, {70, 120, 235, 133}, {181, 173, 192, 186}}},
+    {{240, "-12345.7", kDegC, SteamiAt::SE, "TEMPERATURES12", 2},
+     {3, 8, 14, {33, 164, 206, 184}, {36, 143, 201, 156}, {106, 188, 133, 201}}},
+    {{240, "Uncomfortable", kDegC, SteamiAt::SE, "TEMPERATURES12", 2},
+     {1, 13, 14, {86, 210, 187, 216}, {38, 189, 203, 202}, {123, 218, 150, 231}}},
+    {{240, "ABCDEFGHIJKLMNO", kDegC, SteamiAt::SE, "TEMPERATURES12", 2},
+     {1, 15, 14, {70, 210, 187, 216}, {38, 189, 203, 202}, {115, 218, 142, 231}}},
+    {{240, "8", "C", SteamiAt::SW, "TEMP", 1},
+     {1, 1, 4, {53, 210, 58, 216}, {35, 189, 80, 202}, {79, 218, 90, 231}}},
+    {{240, "8", "C", SteamiAt::SW, "TEMPERATURE", 1},
+     {1, 1, 11, {53, 210, 58, 216}, {35, 189, 164, 202}, {79, 218, 90, 231}}},
+    {{240, "8", "C", SteamiAt::SW, "TEMPERATURES12", 1},
+     {1, 1, 14, {53, 210, 58, 216}, {35, 189, 200, 202}, {79, 218, 90, 231}}},
+    {{240, "8", "C", SteamiAt::SW, "TEMP", 2},
+     {4, 1, 4, {41, 141, 64, 168}, {29, 120, 74, 133}, {47, 173, 58, 186}}},
+    {{240, "8", "C", SteamiAt::SW, "TEMPERATURE", 2},
+     {4, 1, 11, {41, 141, 64, 168}, {3, 120, 132, 133}, {47, 173, 58, 186}}},
+    {{240, "8", "C", SteamiAt::SW, "TEMPERATURES12", 2},
+     {4, 1, 14, {41, 141, 64, 168}, {3, 120, 168, 133}, {47, 173, 58, 186}}},
+    {{240, "-12345.7", kDegC, SteamiAt::SW, "TEMPERATURES12", 2},
+     {3, 8, 14, {33, 164, 206, 184}, {36, 143, 201, 156}, {106, 188, 133, 201}}},
+    {{240, "Uncomfortable", kDegC, SteamiAt::SW, "TEMPERATURES12", 2},
+     {1, 13, 14, {53, 210, 154, 216}, {35, 189, 200, 202}, {90, 218, 117, 231}}},
+    {{240, "ABCDEFGHIJKLMNO", kDegC, SteamiAt::SW, "TEMPERATURES12", 2},
+     {1, 15, 14, {53, 210, 170, 216}, {35, 189, 200, 202}, {98, 218, 125, 231}}},
+};
+
+#undef NO_BOX
+
+static void test_value_corner_golden(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        const uint8_t k = s.k();
+        for (const CornerCase& v : kCorners) {
+            const CornerCall& a = v.call;
+            const CornerGolden& g = v.golden;
+            if (a.size != s.width()) {
+                continue;
+            }
+            s.clear();
+            s.value(a.text, a.unit, a.at, a.label, STEAMI_WHITE, a.scale);
+            expectPart(mem, STEAMI_WHITE, g.value);
+            expectPart(mem, STEAMI_GRAY, g.label);
+            expectPart(mem, STEAMI_LIGHT, g.unit);
+            const size_t value = runInk(a.text, g.kept, Ink::VALUE, g.f);
+            const size_t label = a.label ? runInk(a.label, g.labelKept, Ink::LABEL, k) : 0;
+            const size_t unit = a.unit ? runInk(a.unit, 99, Ink::TEXT, k) : 0;
+            TEST_ASSERT_EQUAL_size_t_MESSAGE(value, inkBox(mem, STEAMI_WHITE).count, a.text);
+            TEST_ASSERT_EQUAL_size_t_MESSAGE(label, inkBox(mem, STEAMI_GRAY).count, a.label);
+            TEST_ASSERT_EQUAL_size_t(value + label + unit, inkBoxAll(mem).count);
+        }
+    });
+    // A corner value takes resolve()'s row: yOffset does not move it.
+    for (int16_t size : {128, 240}) {
+        for (SteamiAt at : {SteamiAt::NE, SteamiAt::NW, SteamiAt::SE, SteamiAt::SW}) {
+            TEST_ASSERT_TRUE(rendered(size, size == 240, [at](TestScreen& s) {
+                                 s.value(23.5f, kDegC, at, "TEMP", STEAMI_WHITE, 2, 0);
+                             }) == rendered(size, size == 240, [at](TestScreen& s) {
+                                 s.value(23.5f, kDegC, at, "TEMP", STEAMI_WHITE, 2, 40);
+                             }));
+        }
+    }
+}
+
+static void test_value_corners_stay_inside(void) {
+    TEST_ASSERT_EQUAL_STRING("-12345.7", fmt(-12345.678f).c_str());
+    // onPanel checks outsideCircle() == 0 and outOfBounds() == 0 after every panel.
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        const uint8_t k = s.k();
+        for (const CornerCase& v : kCorners) {
+            s.clear();
+            const CornerCall& a = v.call;
+            s.value(a.text, a.unit, a.at, a.label, STEAMI_WHITE, a.scale);
+            TEST_ASSERT_TRUE(inkBox(mem, STEAMI_WHITE).count > 0);
+        }
+        for (SteamiAt at : {SteamiAt::NE, SteamiAt::NW, SteamiAt::SE, SteamiAt::SW}) {
+            for (uint8_t scale : {0, 1, 2, 3, 255}) {
+                for (int text = 0; text < 2; text++) {
+                    s.clear();
+                    if (text == 0) {
+                        s.value(-12345.678f, kDegC, at, "TEMPERATURES12", STEAMI_WHITE, scale);
+                    } else {
+                        s.value("Uncomfortable", kDegC, at, "TEMPERATURES12", STEAMI_WHITE, scale);
+                    }
+                    // The value lies inside the chord at its inked rows, shrunk by k.
+                    const InkBox got = inkBox(mem, STEAMI_WHITE);
+                    TEST_ASSERT_TRUE(got.count > 0);
+                    const Region c = s.chord(got.y0, got.y1);
+                    TEST_ASSERT_TRUE(got.x0 >= c.left + k && got.x1 <= c.right - k);
+                }
+            }
+        }
+    });
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_format_integers);
@@ -1476,5 +1778,8 @@ int main(int, char**) {
     RUN_TEST(test_value_edge_cases);
     RUN_TEST(test_value_offsets_at_int16_limits);
     RUN_TEST(test_value_colour_shortcut);
+    RUN_TEST(test_value_corner_worked_examples);
+    RUN_TEST(test_value_corner_golden);
+    RUN_TEST(test_value_corners_stay_inside);
     return UNITY_END();
 }

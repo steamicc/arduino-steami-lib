@@ -139,17 +139,18 @@ class SteamiScreen : public SteamiDisplay {
     /// the value), 8f without. A unit is a non-empty string, as device.py's `if unit:`.
     int32_t blockHeight(uint8_t f, bool hasUnit);
 
-    /// The columns a value run may take at its factor and row: at W and E the half region of
-    /// the chord at its cell rows, [left edge + k, centerX() - u(3)) and its mirror image (empty
-    /// when those rows leave the circle); elsewhere the whole panel.
+    /// The columns a value run may take at its factor and row, from the chord at its cell rows (so
+    /// they do not depend on the digits; empty when those rows leave the circle): at W and E its
+    /// half region, [left edge + k, centerX() - u(3)) and its mirror image; at NE, NW, SE and SW
+    /// the corner region, that chord shrunk by k at each end; elsewhere the whole panel.
     Region valueRegion(const Run& value, SteamiAt at);
 
-    /// Places a value run whose f and top row value() chose, then draws its label (5x7 x k, GRAY,
-    /// its top u(4) + 7k above the value), the value in c and its unit (8x8 x k, LIGHT, its top 8f
-    /// below the value's). The value keeps the longest prefix that fits valueRegion() (less u(4)
-    /// at CENTER, N and S), centred in it at W and E and on centerX() elsewhere. Label and unit
-    /// are cut to the chord at their own inked rows; at W and E also to the half region taken at
-    /// those rows, and centred in what remains; elsewhere centred on centerX().
+    /// Draws a value run whose f and top row value() chose: its label (5x7 x k, GRAY, its top
+    /// u(4) + 7k above the value), the value in c as fitValue() cuts and places it, and its unit
+    /// (8x8 x k, LIGHT, its top 8f below the value's). Label and unit are cut to the chord at their
+    /// own inked rows: at W and E also to the half region taken at those rows, and centred in what
+    /// remains; at a corner shrunk by k, centred on the value's centre, then clamped into it;
+    /// elsewhere centred on centerX().
     void drawValueParts(Run& value, SteamiRgb c, const char* unit, const char* label, SteamiAt at);
 
     /// fg, or on the grey panel a grey STEAMI_MIN_CONTRAST levels above bg when fg is darker.
@@ -171,15 +172,24 @@ class SteamiScreen : public SteamiDisplay {
     bool linesFit(const char* const* lines, int32_t count, int32_t y);
 
     /// Puts the value run's block at its f: counts the glyphs of value.s, then sets value.y to the
-    /// block's top, on resolve()'s row at N and S, elsewhere centred on centerY() + value.y
-    /// (value.y holds u(yOffset) on entry; blockHeight() with a non-empty unit). Returns true when
-    /// the value fits there or f is 1; otherwise false, value.y back to u(yOffset). It fits when,
-    /// at W and E, max(its width, the width of "88.8") fits valueRegion(); elsewhere when its
-    /// width plus u(4) fits the chord at the rows it inks (a value without ink always fits).
+    /// block's top, on resolve()'s row at N, S and the corners, elsewhere centred on centerY() +
+    /// value.y (value.y holds u(yOffset) on entry; blockHeight() with a non-empty unit). Returns
+    /// true when the value fits there or f is 1; otherwise false, value.y back to u(yOffset). It
+    /// fits when, at W and E, max(its width, the width of "88.8") fits valueRegion(); at a corner
+    /// when resolve()'s cell lies inside valueRegion(); elsewhere when its width plus u(4) fits the
+    /// chord at the rows it inks (a value without ink always fits).
     bool placeValue(Run& value, SteamiAt at, const char* unit);
 
-    /// Cuts a label or unit run and draws it as drawValueParts() says.
-    void drawValuePart(Run& part, SteamiAt at, SteamiRgb c);
+    /// Cuts the value run placed by placeValue() to the longest prefix that fits valueRegion()
+    /// (less u(4) at CENTER, N and S), whole whenever it fit there, and returns the left column of
+    /// what it keeps: centred in the region at W and E; at a corner resolve()'s x for the kept
+    /// width, clamped into the region; elsewhere centred on centerX(). Cutting a cut run again
+    /// keeps it unchanged.
+    int32_t fitValue(Run& value, SteamiAt at);
+
+    /// Cuts a label (LABEL ink, drawn GRAY) or unit (TEXT ink, drawn LIGHT) run of the value run
+    /// and draws it as drawValueParts() says.
+    void drawValuePart(Run& part, Run& value, SteamiAt at);
 
     uint8_t _decimals = 1;
 };
