@@ -8,9 +8,10 @@
 
 #include "SteamiScreen.h"
 
-// The drawing code of mockups 01 to 09 (spec section 6), shared by the native mockups suite. Each
-// function is the loop() body of its example up to show(), the sensor readings taken as
-// parameters; a script checks that the examples make the same screen calls with the same literals.
+// The drawing code of mockups 01 to 09 and of WeatherStation (spec section 6), shared by the native
+// mockups suite. Each function is the loop() body of its example up to show(), the
+// sensor readings taken as parameters; a script checks that the examples make the same screen
+// calls with the same literals.
 // The 240 px colour renders are the references for the V1c photos.
 
 /// 01 Temperature (ScreenTemperature): t in degrees Celsius, NAN when the sensor is missing.
@@ -129,5 +130,30 @@ inline void mockupFaces(SteamiScreen& screen, int shown, int d) {
 inline void mockupWatch(SteamiScreen& screen, uint32_t s) {
     screen.clear();
     screen.watch((s / 3600) % 24, (s / 60) % 60, s % 60);
+    screen.show();
+}
+
+/// The four pages of WeatherStation, which RIGHT or A and LEFT or B step through.
+constexpr const char* const WEATHER_PAGES[4] = {"Temperature", "Humidity", "Pressure", "Compass"};
+
+/// WeatherStation, page 0..3: t in degrees Celsius, h in percent, history the last 40 pressures in
+/// hPa, heading in degrees; NAN when a sensor is missing.
+inline void weatherPage(SteamiScreen& screen, int page, float t, float h,
+                        const SteamiHistory<40>& history, float heading) {
+    screen.clear();
+    if (page == 0) {
+        screen.title(WEATHER_PAGES[page]);
+        screen.value(t, "°C");
+    } else if (page == 1) {
+        screen.gauge(h, 0, 100, STEAMI_BLUE);  // lifted to grey 10 on the OLED (5.10)
+        screen.title(WEATHER_PAGES[page]);
+        screen.value(h, "%");
+    } else if (page == 2) {
+        screen.title(WEATHER_PAGES[page]);
+        screen.graph(history, 950, 1050, STEAMI_RED);  // labels "1050" and "950", inside the circle
+        screen.subtitle("hPa");
+    } else {
+        screen.compass(heading);  // the rose fills the screen: no extra text
+    }
     screen.show();
 }

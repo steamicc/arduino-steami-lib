@@ -580,6 +580,87 @@ static void test_mockups_without_sensors(void) {
     }
 }
 
+/// mask with every pixel outside the columns x0..x1 and the rows y0..y1 cleared, on a panel
+/// `width` pixels wide.
+static std::vector<bool> within(std::vector<bool> mask, int16_t width, int16_t x0, int16_t y0,
+                                int16_t x1, int16_t y1) {
+    for (size_t i = 0; i < mask.size(); i++) {
+        const int32_t x = static_cast<int32_t>(i % static_cast<size_t>(width));
+        const int32_t y = static_cast<int32_t>(i / static_cast<size_t>(width));
+        if (x < x0 || x > x1 || y < y0 || y > y1) {
+            mask[i] = false;
+        }
+    }
+    return mask;
+}
+
+// D14: the four pages of WeatherStation, the references of its V1c photos, each compared with its
+// widgets drawn alone. Page 1's BLUE fill is lifted to grey 10 on the OLED (spec 5.10); page 2's
+// "1050" and "950" are DARK inside the box (spec 11 item 9), and the ramp 990..1029 keeps the
+// curve off their rows; page 3 is mockup 07, north up.
+static void test_weather_station_pages(void) {
+    SteamiHistory<40> history;
+    for (int i = 0; i < 40; i++) {
+        history.add(990.0f + static_cast<float>(i));
+    }
+    // The graph box interior (golden_layout.py "graph (4c Task 2)"): right of the left axis, above
+    // the bottom one.
+    struct Panel {
+        int16_t size;
+        bool color;
+        int16_t x0, y0, x1, y1;
+    };
+    const SteamiRgb lifted = SteamiRgb::gray(10);
+    for (const Panel p : {Panel{128, false, 22, 38, 112, 89}, Panel{240, true, 41, 71, 211, 167}}) {
+        const std::vector<bool> value =
+            maskAlone(p.size, p.color, STEAMI_WHITE, [](SteamiScreen& s) { s.value(23.5f, "°C"); });
+        const std::vector<bool> fill = maskAlone(
+            p.size, p.color, lifted, [](SteamiScreen& s) { s.gauge(60.0f, 0, 100, STEAMI_BLUE); });
+        const std::vector<bool> curve =
+            maskAlone(p.size, p.color, STEAMI_RED,
+                      [&](SteamiScreen& s) { s.graph(history, 950, 1050, STEAMI_RED); });
+        const std::vector<bool> labels =
+            within(maskAlone(p.size, p.color, STEAMI_DARK,
+                             [&](SteamiScreen& s) { s.graph(history, 950, 1050, STEAMI_RED); }),
+                   p.size, p.x0, p.y0, p.x1, p.y1);
+        std::vector<uint16_t> compass;
+        onPanel(p.size, p.color, [&](SteamiMemoryBackend& mem, SteamiScreen& s) {
+            mockupCompass(s, 0.0f);
+            compass = mem.pixels();
+        });
+        TEST_ASSERT_TRUE(any(value) && any(curve) && any(labels));
+
+        render("weather_temperature", p.size, p.color,
+               [&](SteamiMemoryBackend& mem, SteamiScreen& s) {
+                   weatherPage(s, 0, 23.5f, 60.0f, history, 0.0f);
+                   TEST_ASSERT_TRUE(maskOf(mem, STEAMI_WHITE) == value);
+               });
+        render("weather_humidity", p.size, p.color, [&](SteamiMemoryBackend& mem, SteamiScreen& s) {
+            weatherPage(s, 1, 23.5f, 60.0f, history, 0.0f);
+            if (p.color) {
+                TEST_ASSERT_TRUE(inkBox(mem, STEAMI_BLUE).count > 0);
+                return;
+            }
+            // The title may paint over part of the fill: a subset of the gauge's, not equal.
+            const std::vector<bool> page = maskOf(mem, lifted);
+            TEST_ASSERT_TRUE(any(page));
+            for (size_t i = 0; i < page.size(); i++) {
+                TEST_ASSERT_TRUE_MESSAGE(!page[i] || fill[i], "grey 10 pixel off the gauge fill");
+            }
+        });
+        render("weather_pressure", p.size, p.color, [&](SteamiMemoryBackend& mem, SteamiScreen& s) {
+            weatherPage(s, 2, 23.5f, 60.0f, history, 0.0f);
+            TEST_ASSERT_TRUE(maskOf(mem, STEAMI_RED) == curve);
+            TEST_ASSERT_TRUE(within(maskOf(mem, STEAMI_DARK), p.size, p.x0, p.y0, p.x1, p.y1) ==
+                             labels);
+        });
+        render("weather_compass", p.size, p.color, [&](SteamiMemoryBackend& mem, SteamiScreen& s) {
+            weatherPage(s, 3, 23.5f, 60.0f, history, 0.0f);
+            TEST_ASSERT_TRUE(mem.pixels() == compass);
+        });
+    }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_mockup_01_temperature);
@@ -595,5 +676,6 @@ int main(int, char**) {
     RUN_TEST(test_mockup_08_reactive);
     RUN_TEST(test_mockup_09_watch);
     RUN_TEST(test_mockups_without_sensors);
+    RUN_TEST(test_weather_station_pages);
     return UNITY_END();
 }

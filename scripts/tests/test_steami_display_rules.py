@@ -195,6 +195,7 @@ class SteamiDisplayRulesTest(unittest.TestCase):
             ("ScreenWatch", "mockupWatch"),
             ("ScreenGraph", "mockupGraph"),
             ("ScreenMenu", "mockupMenu"),
+            ("WeatherStation", "weatherPage"),
         ):
             with self.subTest(example=example):
                 sketch = examples / example / f"{example}.ino"
