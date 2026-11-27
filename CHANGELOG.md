@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.40.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.39.1...v0.40.0) (2026-11-27)
+
+
+### Features
+
+* **board:** Draw round widgets, and V1c text in Spleen fonts. ([#277](https://github.com/steamicc/arduino-steami-lib/issues/277)) ([64b8db6](https://github.com/steamicc/arduino-steami-lib/commit/64b8db6b513de902ac30c72f7d134915bc8688bd)), closes [#287](https://github.com/steamicc/arduino-steami-lib/issues/287)
+
 ## [0.39.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.39.0...v0.39.1) (2026-11-27)
 
 
