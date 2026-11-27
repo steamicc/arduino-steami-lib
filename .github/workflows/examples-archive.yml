@@ -57,6 +57,10 @@ concurrency:
 
 env:
   STM32_CORE_VERSION: '3.1.0'
+  # Pinned so the compiled examples do not change with each STM32duinoBLE
+  # release. Keep equal to the lower bound of stm32duino/STM32duinoBLE in
+  # platformio.ini (checked by scripts/tests/test_workflow_versions.py).
+  STM32DUINOBLE_VERSION: '1.5.0'
   ARDUINO_BOARD_MANAGER_ADDITIONAL_URLS: https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json
   DIST_REPO: steamicc/arduino-steami
 
@@ -133,7 +137,7 @@ jobs:
           arduino-cli core install "STMicroelectronics:stm32@${STM32_CORE_VERSION}"
 
       - name: Install library dependencies
-        run: arduino-cli lib install STM32duinoBLE
+        run: arduino-cli lib install "STM32duinoBLE@${STM32DUINOBLE_VERSION}"
 
       - name: Compile every example
         run: scripts/compile-package-examples.sh build/arduino-package --output-dir build/exemples-bin
