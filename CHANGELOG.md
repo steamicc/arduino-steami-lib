@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.39.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.39.0...v0.39.1) (2026-11-27)
+
+
+### Bug Fixes
+
+* **board:** Wait for a sample at the new accelerometer range. ([#279](https://github.com/steamicc/arduino-steami-lib/issues/279)) ([946a24c](https://github.com/steamicc/arduino-steami-lib/commit/946a24c937d5754f95cfdc0aa19b3be770bf317b)), closes [#278](https://github.com/steamicc/arduino-steami-lib/issues/278)
+
 # [0.39.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.38.0...v0.39.0) (2026-11-26)
 
 
