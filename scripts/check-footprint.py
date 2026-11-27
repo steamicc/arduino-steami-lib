@@ -23,7 +23,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent.parent
 PIO = ROOT / ".venv" / "bin" / "pio"
 BOARD_JSON = ROOT / "boards" / "steami.json"

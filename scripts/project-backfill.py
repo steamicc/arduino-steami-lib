@@ -311,6 +311,7 @@ def _issue_milestone(n: int, by_number: dict[int, Item]) -> tuple[int, str] | No
         ["gh", "api", f"repos/{REPO}/issues/{n}"],
         capture_output=True,
         text=True,
+        check=False,
     )
     if probe.returncode != 0:
         _issue_milestone_cache[n] = None

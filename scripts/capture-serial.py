@@ -16,7 +16,6 @@ import time
 import serial
 from serial.tools import list_ports
 
-
 DEFAULT_PORT = "/dev/ttyACM0"
 DEFAULT_BAUDRATE = 115200
 DEFAULT_DURATION = 10
@@ -50,7 +49,7 @@ def reset_board() -> None:
         "init; reset; shutdown",
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
     if result.returncode != 0:
         if result.stdout:

@@ -15,7 +15,10 @@ FIRST_CODE, DEGREE, GLYPHS = 32, 127, 96
 
 
 def _table(source, header, width):
-    """The rows of the table that starts at `header`, up to the next `};`: `width` hex bytes each."""
+    """The rows of the table that starts at `header`, up to the next `};`.
+
+    Each row holds `width` hex bytes.
+    """
     body = source.split(header, 1)[1].split("};", 1)[0]
     rows = []
     for line in body.splitlines():
@@ -30,8 +33,8 @@ def _table(source, header, width):
 _SOURCE = FONT_CPP.read_text(encoding="utf-8")
 FONT8 = _table(_SOURCE, "const uint8_t kFont8x8[kGlyphCount][8] = {", 8)
 FONT5 = _table(_SOURCE, "const uint8_t kFont5x7[kGlyphCount][5] = {", 5)
-FOLDS = {int(h, 16): c for h, c in re.findall(r"\{(0x[0-9A-Fa-f]{2}), '(.)'\}",
-                                              _SOURCE.split("const Fold kFolds[] = {", 1)[1].split("};", 1)[0])}
+_FOLD_TABLE = _SOURCE.split("const Fold kFolds[] = {", 1)[1].split("};", 1)[0]
+FOLDS = {int(h, 16): c for h, c in re.findall(r"\{(0x[0-9A-Fa-f]{2}), '(.)'\}", _FOLD_TABLE)}
 
 
 def glyphs(s):
@@ -131,7 +134,8 @@ class Panel:
 
     def margin_ns(self, tw, f):
         r, tw = self.r, max(tw, 0)
-        m = self.cap() if tw >= 2 * r else r - isqrt(r * r - (tw // 2) ** 2) + 2  # tw < 2r: argument > 0
+        # tw < 2r: the argument of isqrt is > 0
+        m = self.cap() if tw >= 2 * r else r - isqrt(r * r - (tw // 2) ** 2) + 2
         return max((16 * f + 4 * self.k) * self.W // (128 * self.k), min(m, self.cap()))
 
     def margin_ew(self, f):
@@ -226,7 +230,10 @@ def clamp_into(P, s, n, ink, y, f, limit, x):
 
 
 def text_layout(P, s, at, scale):
-    """(x, y, n): the cell top-left and the glyphs kept by text(s, at, c, scale); None draws nothing."""
+    """(x, y, n): the cell top-left and the glyphs kept by text(s, at, c, scale).
+
+    None draws nothing.
+    """
     if not s:
         return None
     f = glyph_factor(P, scale)
@@ -270,7 +277,7 @@ def subtitle_layout(P, lines):
     if not block:
         return []
     f, panel = P.k, (0, P.W - 1)
-    S = P.resolve("S", max(cell_width(l, count(l), TEXT, f) for l in block), f)[1]
+    S = P.resolve("S", max(cell_width(text, count(text), TEXT, f) for text in block), f)[1]
     pitch, n = P.u(11), len(block)
 
     def fits(line, y):
@@ -279,8 +286,8 @@ def subtitle_layout(P, lines):
     start = S + P.u(8) if n == 1 else S - (pitch * (n - 1)) // 2
     lowest = S - (n - 1) * pitch
     y = start
-    while y > lowest and any(ink_rows(l, count(l), TEXT) and not fits(l, y + i * pitch)
-                             for i, l in enumerate(block)):
+    while y > lowest and any(ink_rows(text, count(text), TEXT) and not fits(text, y + i * pitch)
+                             for i, text in enumerate(block)):
         y -= 1
     out = []
     for i, line in enumerate(block):
@@ -293,7 +300,7 @@ def subtitle_rows(W, lines):
     """[(row, kept, ink box or None)] per line of subtitle(*lines) on a W panel."""
     P = Panel(W)
     out = []
-    for line, (x, y, n) in zip(lines, subtitle_layout(P, lines)):
+    for line, (x, y, n) in zip(lines, subtitle_layout(P, lines), strict=False):
         lit = draw_glyphs(line, n, TEXT, x, y, P.k)
         out.append((y, n, box(lit) if lit else None))
     return out
@@ -312,8 +319,10 @@ assert (P128.k, P240.k) == (1, 2) and (P128.cap(), P240.cap()) == (29, 63)
 assert [P128.u(v) for v in (8, 11, 4, 3, 20, 40, -12)] == [8, 11, 4, 3, 20, 40, -12]
 assert [P240.u(v) for v in (8, 11, 4, 3, 20, 40, -12)] == [15, 20, 7, 5, 37, 75, -22]
 # floor_f: 20/37 at scale 1, 36/67 at scale 2, 52 for f = 3 on 240; margin_ew 12/22, 30 for f = 3
-assert (P128.margin_ns(8, 1), P240.margin_ns(16, 2), P128.margin_ns(8, 2), P240.margin_ns(16, 4)) == (20, 37, 36, 67)
-assert P240.margin_ns(16, 3) == 52 and (P128.margin_ew(1), P240.margin_ew(2), P240.margin_ew(3)) == (12, 22, 30)
+assert (P128.margin_ns(8, 1), P240.margin_ns(16, 2),
+        P128.margin_ns(8, 2), P240.margin_ns(16, 4)) == (20, 37, 36, 67)
+assert P240.margin_ns(16, 3) == 52
+assert (P128.margin_ew(1), P240.margin_ew(2), P240.margin_ew(3)) == (12, 22, 30)
 assert P128.chord(20, 20) == (18, 110)  # 93 px
 assert width(P128.chord(29, 29)) == 107
 assert width(P128.chord(36, 36)) == 115
@@ -324,16 +333,19 @@ assert P128.chord(9, 15) == (32, 96) and P240.chord(1, 14) == (105, 135)
 assert P128.chord(-1, 0) is None and P240.chord(239, 241) is None
 # no screen (W 0) and a narrow injected panel: isqrt never sees a negative number (B9)
 assert (P0.k, P0.cap(), P0.margin_ns(8, 1), P0.margin_ns(160, 1)) == (1, 2, 2, 2)
-assert (P96.cap(), P96.margin_ns(200, 1), P96.margin_ns(160, 1)) == (50, 50, 50)  # r 48 < 52: cap r + 2
+# r 48 < 52: cap r + 2
+assert (P96.cap(), P96.margin_ns(200, 1), P96.margin_ns(160, 1)) == (50, 50, 50)
 # the 128 anchors are device.py's wherever 5.9 changes nothing (f 1, tw <= 104: below the cap)
-assert all(P128.resolve(at, tw, 1) == device_resolve(128, at, tw) for at in ANCHORS for tw in range(0, 105, 8))
+assert all(P128.resolve(at, tw, 1) == device_resolve(128, at, tw)
+           for at in ANCHORS for tw in range(0, 105, 8))
 
 # ---- Values pinned by test_steami_screen (Task 2) ----
 print("scale quantities")
 print("  128 u(8) u(-12) k maxChars", P128.u(8), P128.u(-12), P128.k, 128 // (8 * P128.k))
 print("  128 marginEw(1)", P128.margin_ew(1), "marginNs(8,1) (104,1) (112,1) (160,1) (8,2)",
       *(P128.margin_ns(tw, f) for tw, f in ((8, 1), (104, 1), (112, 1), (160, 1), (8, 2))))
-print("  240 u(8) u(-12) u(40) k maxChars", P240.u(8), P240.u(-12), P240.u(40), P240.k, 240 // (8 * P240.k))
+print("  240 u(8) u(-12) u(40) k maxChars", P240.u(8), P240.u(-12), P240.u(40), P240.k,
+      240 // (8 * P240.k))
 print("  240 marginEw(2) (3)", P240.margin_ew(2), P240.margin_ew(3),
       "marginNs(16,2) (176,2) (208,2) (16,4) (16,3)",
       *(P240.margin_ns(tw, f) for tw, f in ((16, 2), (176, 2), (208, 2), (16, 4), (16, 3))))
@@ -344,55 +356,64 @@ print("  128 (20,20) (9,15) (64,64)", P128.chord(20, 20), P128.chord(9, 15), P12
 print("  240 (41,41) (1,14)", P240.chord(41, 41), P240.chord(1, 14), "w(37,37) w(63,63)",
       width(P240.chord(37, 37)), width(P240.chord(63, 63)), "(239,241)", P240.chord(239, 241))
 print("ink rows and widths")
-print("  inkRows _ TEXT 0x%02X, 8. VALUE 0x%02X, spaces 0x%02X, TEMP LABEL 0x%02X" % (
-    ink_rows("_", 1, TEXT), ink_rows("8.", 2, VALUE), ink_rows("   ", 3, TEXT), ink_rows("TEMP", 4, LABEL)))
+print(f"  inkRows _ TEXT 0x{ink_rows('_', 1, TEXT):02X}, "
+      f"8. VALUE 0x{ink_rows('8.', 2, VALUE):02X}, "
+      f"spaces 0x{ink_rows('   ', 3, TEXT):02X}, TEMP LABEL 0x{ink_rows('TEMP', 4, LABEL):02X}")
 print("  cellWidth 23.5 TEXT", cell_width("23.5", 4, TEXT, 1), "valueWidth 23.5 f1 f2 12:34:56",
       value_width("23.5", 1), value_width("23.5", 2), value_width("12:34:56", 1),
-      "TEMP LABEL f2", cell_width("TEMP", 4, LABEL, 2), "Température", cell_width("Température", 11, TEXT, 1))
+      "TEMP LABEL f2", cell_width("TEMP", 4, LABEL, 2),
+      "Température", cell_width("Température", 11, TEXT, 1))
 print("fitGlyphs")
 for P, y, f in ((P128, 29, 1), (P240, 63, 2)):
-    print("  %d y %d f %d:" % (P.W, y, f), *(P.fit_glyphs(s, TEXT, f, y, (0, P.W - 1), 0, 0) for s in
-                                              ("ABCDEFGHIJKLMNOPQRST", "_" * 14 + "T", " " * 14)))
+    print(f"  {P.W} y {y} f {f}:",
+          *(P.fit_glyphs(s, TEXT, f, y, (0, P.W - 1), 0, 0)
+            for s in ("ABCDEFGHIJKLMNOPQRST", "_" * 14 + "T", " " * 14)))
 print("  128 TEMP LABEL y 9 shrink 1:", P128.fit_glyphs("TEMP", LABEL, 1, 9, (0, 127), 1, 0),
       "limit (0, 50):", P128.fit_glyphs("TEMP", LABEL, 1, 9, (0, 50), 1, 0))
 print("resolve")
 for P, tw, f in ((P128, 16, 1), (P240, 32, 2)):
-    print("  %d tw %d f %d:" % (P.W, tw, f), *("%s %s" % (at, P.resolve(at, tw, f)) for at in ANCHORS))
+    print(f"  {P.W} tw {tw} f {f}:", *(f"{at} {P.resolve(at, tw, f)}" for at in ANCHORS))
 print("  240 f 4 CENTER", P240.resolve("CENTER", 32, 4))
 print("drawGlyphs VALUE at (10, 10), f 2")
 for s in ("8.8", "8:8"):
     lit = draw_glyphs(s, 3, VALUE, 10, 10, 2)
     narrow = {p for p in lit if 26 <= p[0] < 34}
     second = {p for p in lit if p[0] >= 34}
-    print("  %s box %s, middle glyph box %s, third glyph first column %d" % (
-        s, box(lit), box(narrow), min(p[0] for p in second)))
+    print(f"  {s} box {box(lit)}, middle glyph box {box(narrow)}, "
+          f"third glyph first column {min(p[0] for p in second)}")
 
 # ---- Self-check of Task 3: titles, text at a scale, subtitles (spec 5.8 rule 7, 5.9, B7, B8) ----
 assert title_row(128, "Temperature") == (20, 11) and title_row(240, "Temperature") == (41, 11)
-assert all(title_row(W, s) == (row, 7) for s in ("Comfort", "Battery") for W, row in ((128, 20), (240, 37)))
+assert all(title_row(W, s) == (row, 7)
+           for s in ("Comfort", "Battery") for W, row in ((128, 20), (240, 37)))
 for s in ("ABCDEFGHIJKLM", "ABCDEFGHIJKLMNOPQRST"):
     assert title_row(128, s) == (29, 13) and title_row(240, s) == (63, 13), s
 assert title_row(128, "_" * 14) == (29, 14) and title_row(240, "_" * 14) == (63, 13)
 assert title_row(128, "_" * 14 + "T") == (29, 14) and title_row(240, "_" * 14 + "T") == (63, 13)
-assert text_layout(P128, "ABCDEFGH", "N", 2)[1:] == (36, 7) and text_layout(P240, "ABCDEFGH", "N", 2)[1:] == (67, 6)
+assert text_layout(P128, "ABCDEFGH", "N", 2)[1:] == (36, 7)
+assert text_layout(P240, "ABCDEFGH", "N", 2)[1:] == (67, 6)
 CHIPS = ("WSEN-HIDS", "BME280", "APDS-9960")
 ONE_LINE = {("WSEN-HIDS",): (108, 202), ("BME280",): (108, 202), ("BQ27441",): (108, 202),
             ("VL53L1X",): (108, 202), ("SURPRISED",): (108, 202), ("Comfortable",): (104, 188),
-            ("VL53L1X ToF",): (104, 188), ("Uncomfortable",): (95, 166), ("20s window",): (107, 196)}
+            ("VL53L1X ToF",): (104, 188), ("Uncomfortable",): (95, 166),
+            ("20s window",): (107, 196)}
 TWO_LINES = {("3842 mV", "BQ27441"): ((95, 106), (177, 197))}
 for chip in CHIPS:
     TWO_LINES[("Comfortable", chip)] = ((95, 106), (173, 193))
     TWO_LINES[("Uncomfortable", chip)] = ((86, 97), (151, 171))
     TWO_LINES[(chip, "20s window")] = ((95, 106), (176, 196))
 for lines, rows in ONE_LINE.items():
-    for W, row in zip((128, 240), rows):
-        assert [(y, n) for y, n, _ in subtitle_rows(W, lines)] == [(row, count(lines[0]))], (W, lines)
+    for W, row in zip((128, 240), rows, strict=True):
+        got = [(y, n) for y, n, _ in subtitle_rows(W, lines)]
+        assert got == [(row, count(lines[0]))], (W, lines)
 for lines, rows in TWO_LINES.items():
-    for W, pair in zip((128, 240), rows):
+    for W, pair in zip((128, 240), rows, strict=True):
         got = subtitle_rows(W, lines)
         assert tuple(y for y, _, _ in got) == pair, (W, lines, got)
-        assert all(n == count(l) for (_, n, _), l in zip(got, lines)), (W, lines)  # every line whole
-# Review Focus 3: 15 glyphs (20 bytes), 13 kept, cells 12..115, ink 13..114 ('T' column 0, 'e' column 7)
+        # every line whole
+        assert all(n == count(line) for (_, n, _), line in zip(got, lines, strict=True)), (W, lines)
+# Review Focus 3: 15 glyphs (20 bytes), 13 kept, cells 12..115, ink 13..114
+# ('T' column 0, 'e' column 7)
 assert text_layout(P128, "Températureéééé", "N", 1) == (12, 29, 13)
 assert text_box(128, "Températureéééé", "N")[0::2] == (13, 114)
 # the available width of a lowercase-only title comes from the rows it inks
@@ -400,24 +421,27 @@ assert width(P128.ink_chord("acemnorsuvwxz", 13, TEXT, 29, 1)) == 109
 assert width(P128.ink_chord("ABCDEFGHIJKLM", 13, TEXT, 29, 1)) == 107
 assert width(P240.ink_chord("acemnorsuvwxz", 13, TEXT, 63, 2)) == 215
 assert width(P240.ink_chord("ABCDEFGHIJKLM", 13, TEXT, 63, 2)) == 211
-assert title_row(128, "acemnorsuvwxzacemnorsuvwxz")[1] == 13 and title_row(240, "acemnorsuvwxzacem")[1] == 13
+assert title_row(128, "acemnorsuvwxzacemnorsuvwxz")[1] == 13
+assert title_row(240, "acemnorsuvwxzacem")[1] == 13
 
 # ---- Values pinned by test_steami_screen (Task 3) ----
 print("text_box of Hi at the nine anchors (x0 y0 x1 y1)")
 for W in (128, 240):
     for scale in (1, 2):
-        print("  %d scale %d:" % (W, scale), *("%s %s" % (at, text_box(W, "Hi", at, scale)) for at in ANCHORS))
+        print(f"  {W} scale {scale}:",
+              *(f"{at} {text_box(W, 'Hi', at, scale)}" for at in ANCHORS))
 TITLES = ("Temperature", "Comfort", "Battery", "ABCDEFGHIJKLM", "ABCDEFGHIJKLMNOPQRST", "_" * 14,
           "_" * 14 + "T", "Températureéééé")
 print("titles (row, kept, ink box)")
 for s in TITLES:
-    print("  %-22r" % s, *("%d: %s %s" % (W, title_row(W, s), text_box(W, s, "N")) for W in (128, 240)))
-print("  text('ABCDEFGH', N, 2)", *("%d: %s %s" % (W, text_layout(Panel(W), "ABCDEFGH", "N", 2),
-                                                      text_box(W, "ABCDEFGH", "N", 2)) for W in (128, 240)))
+    print(f"  {s!r:<22}", *(f"{W}: {title_row(W, s)} {text_box(W, s, 'N')}" for W in (128, 240)))
+print("  text('ABCDEFGH', N, 2)",
+      *(f"{W}: {text_layout(Panel(W), 'ABCDEFGH', 'N', 2)} {text_box(W, 'ABCDEFGH', 'N', 2)}"
+        for W in (128, 240)))
 print("subtitles (row, kept, ink box) per line")
 for lines in list(ONE_LINE) + list(TWO_LINES):
     for W in (128, 240):
-        print("  %d %r:" % (W, lines), *subtitle_rows(W, lines))
+        print(f"  {W} {lines!r}:", *subtitle_rows(W, lines))
 
 # ---- Widget of Task 4: value() at CENTER, N, S, W and E (spec 5.9, B2, B6, B9) ----
 REFERENCE = "88.8"  # the widest value that keeps the same f at W and E (B6)
@@ -443,7 +467,10 @@ def half_limit(P, at):
 
 
 def half_region(P, at, c):
-    """The W/E half region of a chord: [left edge + k, cx - u(3) - 1], E mirrored; (0, -1) if empty."""
+    """The W/E half region of a chord: [left edge + k, cx - u(3) - 1], E mirrored.
+
+    (0, -1) if empty.
+    """
     if c is None:
         return (0, -1)
     lo, hi = half_limit(P, at)
@@ -539,8 +566,8 @@ def part_place(P, s, ink, y, at, centre):
 
 
 def value_layout(W, t, at="CENTER", unit=None, label=None, scale=2, y_offset=0):
-    """Boxes (value, label, unit) of value(t, unit, at, label, c, scale, yOffset) alone on a W panel,
-    each None without ink, and the placement: f, top, region, kept glyphs of each part."""
+    """Boxes (value, label, unit) of value(t, unit, at, label, c, scale, yOffset) alone on a W
+    panel, each None without ink, and the placement: f, top, region, kept glyphs of each part."""
     P = Panel(W)
     v = value_place(P, t, at, unit, scale, y_offset)
     out = dict(v)
@@ -595,10 +622,12 @@ assert value_layout(240, "8888", "W", DEG_C, scale=1)["f"] == 2
 assert value_layout(128, "12:34:56", "W", DEG_C)["n"] == 8
 for t in ("12345678", "-1234.56", "Uncomfortable"):
     assert value_cut(128, t, "W", DEG_C) and value_cut(128, t, "E", DEG_C), t
-assert not value_cut(240, "Uncomfortable", "W", DEG_C) and value_cut(240, "ABCDEFGHIJKLMNO", "W", DEG_C)
+assert not value_cut(240, "Uncomfortable", "W", DEG_C)
+assert value_cut(240, "ABCDEFGHIJKLMNO", "W", DEG_C)
 FIFTEEN, NUMERIC = "888888888888888", "-999999936.0000"
 assert value_width(FIFTEEN, 1) == 120 and value_width(NUMERIC, 1) == 116
-assert value_cut(128, FIFTEEN, "CENTER", DEG_C, -12) and value_cut(240, FIFTEEN, "CENTER", DEG_C, -50)
+assert value_cut(128, FIFTEEN, "CENTER", DEG_C, -12)
+assert value_cut(240, FIFTEEN, "CENTER", DEG_C, -50)
 assert not value_cut(128, FIFTEEN, "CENTER", DEG_C) and not value_cut(240, FIFTEEN, "CENTER", DEG_C)
 THRESHOLDS = {128: ((-7, 19), (-12, 14), (-14, 26)), 240: ((-48, 59), (-53, 54), (-49, 60))}
 for W, expected in THRESHOLDS.items():
@@ -626,22 +655,22 @@ print("value boxes (f top x; value, label, unit)")
 for name, t, at, unit, label, y_offset in VALUE_CASES:
     for W in (128, 240):
         got = value_layout(W, t, at, unit, label, 2, y_offset)
-        print("  %-6s %d: f %d top %d x %d region %s; %s %s %s" % (
-            name, W, got["f"], got["top"], got["x"], got["region"], got["value"], got["label"], got["unit"]))
+        print(f"  {name:<6} {W}: f {got['f']} top {got['top']} x {got['x']} "
+              f"region {got['region']}; {got['value']} {got['label']} {got['unit']}")
 print("value regions and cuts")
 for W in (128, 240):
     for t in ("1", "8888", "123456", "12:34:56", "Uncomfortable", "ABCDEFGHIJKLMNO"):
         for at in ("W", "E"):
             got = value_layout(W, t, at, DEG_C)
-            print("  %d %-16r %s: f %d region %s kept %d box %s" % (
-                W, t, at, got["f"], got["region"], got["n"], got["value"]))
+            print(f"  {W} {t!r:<16} {at}: f {got['f']} region {got['region']} "
+                  f"kept {got['n']} box {got['value']}")
     for at in ("W", "E"):
         got = value_layout(W, "23.5", at, DEG_C, "TEMPERATURE")
-        print("  %d TEMPERATURE label %s: kept %d room %s box %s" % (
-            W, at, got["label_n"], got["label_room"], got["label"]))
+        print(f"  {W} TEMPERATURE label {at}: kept {got['label_n']} "
+              f"room {got['label_room']} box {got['label']}")
     for y_offset in (0, -12, -50):
         got = value_layout(W, FIFTEEN, "CENTER", DEG_C, None, 2, y_offset)
-        print("  %d %s CENTER yOffset %d: kept %d box %s" % (W, FIFTEEN, y_offset, got["n"], got["value"]))
+        print(f"  {W} {FIFTEEN} CENTER yOffset {y_offset}: kept {got['n']} box {got['value']}")
 
 # ---- Self-check of Task 5: value() at the corners (5.9 "Corner anchors", B9) ----
 CORNER_LABELS = ("TEMP", "TEMPERATURE", "TEMPERATURES12")
@@ -654,11 +683,13 @@ def inside(b, room):
 
 c128 = value_layout(128, "8", "NE", "C", "TEMP", 1)
 assert (c128["f"], c128["x"], c128["top"], c128["n"]) == (1, 102, 20, 1), c128
-assert c128["label"][1::2] == (9, 15) and c128["label_room"] == (33, 95) and c128["label_x"] == 72, c128
+assert c128["label"][1::2] == (9, 15) and c128["label_room"] == (33, 95), c128
+assert c128["label_x"] == 72, c128
 assert c128["label"][2] <= 95 and c128["label_n"] == 4
 assert c128["x"] + 8 // 2 - 24 // 2 == 94  # "moves from x 94 to x 72"
 s128 = value_layout(128, "8", "SE", "C", "TEMP", 1)
-assert s128["unit"][1::2] == (108, 114) and s128["unit_room"] == (26, 102) and s128["unit_x"] == 95, s128
+assert s128["unit"][1::2] == (108, 114) and s128["unit_room"] == (26, 102), s128
+assert s128["unit_x"] == 95, s128
 assert s128["x"] + 8 // 2 - 8 // 2 == 103  # "moves from x 103 to x 95"
 c240 = value_layout(240, "8", "NE", "C", "TEMP", 1)
 assert (c240["f"], c240["x"], c240["top"]) == (1, 180, 22), c240  # f 2 leaves the region
@@ -669,12 +700,15 @@ assert width(P240.chord(1, 14)) == 31 and region_width(c240["label_room"]) == 27
 # the circle; the 15-glyph text is cut on 128 (cap row 29, region 105 px) and whole on 240
 for W in (128, 240):
     for at in CORNERS:
-        for t, unit, label, scale in ([("8", "C", l, sc) for l in CORNER_LABELS for sc in (1, 2)] +
-                                      [(t, DEG_C, "TEMPERATURES12", 2) for t in CORNER_TEXTS]):
+        cases = ([("8", "C", corner_label, sc) for corner_label in CORNER_LABELS for sc in (1, 2)] +
+                 [(t, DEG_C, "TEMPERATURES12", 2) for t in CORNER_TEXTS])
+        for t, unit, label, scale in cases:
             got = value_layout(W, t, at, unit, label, scale)
             assert inside(got["value"], got["region"]), (W, at, t, got)
-            assert inside(got["label"], got["label_room"]) and inside(got["unit"], got["unit_room"]), (W, at, t)
-        assert value_layout(W, "ABCDEFGHIJKLMNO", at, DEG_C)["n"] == (13 if W == 128 else 15), (W, at)
+            assert inside(got["label"], got["label_room"]), (W, at, t)
+            assert inside(got["unit"], got["unit_room"]), (W, at, t)
+        kept = value_layout(W, "ABCDEFGHIJKLMNO", at, DEG_C)["n"]
+        assert kept == (13 if W == 128 else 15), (W, at)
 
 # ---- Values pinned by test_steami_screen (Task 5) ----
 print("value corners: value(8, \"C\", at, label, WHITE, scale) (f top x kept; value, label, unit)")
@@ -683,20 +717,21 @@ for W in (128, 240):
         for scale in (1, 2):
             for label in CORNER_LABELS:
                 got = value_layout(W, "8", at, "C", label, scale)
-                print("  %d %s s%d %-15s f %d top %d x %d n %d; %s %s %s; label n %d x %d room %s; unit x %d room %s" % (
-                    W, at, scale, label, got["f"], got["top"], got["x"], got["n"], got["value"], got["label"],
-                    got["unit"], got["label_n"], got["label_x"], got["label_room"], got["unit_x"], got["unit_room"]))
+                print(f"  {W} {at} s{scale} {label:<15} f {got['f']} top {got['top']} "
+                      f"x {got['x']} n {got['n']}; {got['value']} {got['label']} {got['unit']}; "
+                      f"label n {got['label_n']} x {got['label_x']} room {got['label_room']}; "
+                      f"unit x {got['unit_x']} room {got['unit_room']}")
 print("value corners: value(text, \"°C\", at, \"TEMPERATURES12\", WHITE, 2)")
 for W in (128, 240):
     for at in CORNERS:
         for t in CORNER_TEXTS:
             got = value_layout(W, t, at, DEG_C, "TEMPERATURES12", 2)
-            print("  %d %s %-16r f %d top %d x %d n %d region %s; %s %s %s; label n %d" % (
-                W, at, t, got["f"], got["top"], got["x"], got["n"], got["region"], got["value"], got["label"],
-                got["unit"], got["label_n"]))
+            print(f"  {W} {at} {t!r:<16} f {got['f']} top {got['top']} x {got['x']} "
+                  f"n {got['n']} region {got['region']}; "
+                  f"{got['value']} {got['label']} {got['unit']}; label n {got['label_n']}")
 got = value_layout(128, "8", "NE", None, None, 1)
-print("  128 value(8, nullptr, NE, nullptr, WHITE, 1): f %d top %d x %d region %s; %s" % (
-    got["f"], got["top"], got["x"], got["region"], got["value"]))
+print(f"  128 value(8, nullptr, NE, nullptr, WHITE, 1): f {got['f']} top {got['top']} "
+      f"x {got['x']} region {got['region']}; {got['value']}")
 
 # ---- Widget of Task 6: bar() (spec 5.9 "bar", the decision "bar() geometry") ----
 
@@ -763,7 +798,8 @@ NAN = float("nan")
 for v, max_v, fill in ((-5, 100, 0), (-INF, 100, 0), (150, 100, 88), (INF, 100, 88), (NAN, 100, 0),
                        (50, 0, 0), (50, -10, 0), (50, NAN, 0), (50, INF, 0), (INF, INF, 88)):
     assert bar_rect(128, v, max_v)[4] == fill, (v, max_v)
-assert bar_rect(128, 3e38, 3.4e38)[4] == 77  # 88 * 3e38 overflows a float: the C++ takes the ratio first
+# 88 * 3e38 overflows a float: the C++ takes the ratio first
+assert bar_rect(128, 3e38, 3.4e38)[4] == 77
 # yOffset 0: the whole track is inside the disc (88 / 165 px on every row)
 for W, whole in ((128, 88), (240, 165)):
     spans = bar_spans(W, 50, 100, 0)
@@ -777,6 +813,7 @@ for W in (128, 240):
 print("bar(72, 100, yOffset) (x top w h fill; unfilled track box, fill box)")
 for W in (128, 240):
     for y_offset in (0, -12):
-        print("  %d yOffset %d: %s; %s %s" % (W, y_offset, bar_rect(W, 72, 100, y_offset),
-                                             *bar_boxes(W, 72, 100, y_offset)))
-print("bar(50, 100, 0) (fill box)", *("%d: %s" % (W, bar_boxes(W, 50, 100, 0)[1]) for W in (128, 240)))
+        track, filled = bar_boxes(W, 72, 100, y_offset)
+        print(f"  {W} yOffset {y_offset}: {bar_rect(W, 72, 100, y_offset)}; {track} {filled}")
+print("bar(50, 100, 0) (fill box)",
+      *(f"{W}: {bar_boxes(W, 50, 100, 0)[1]}" for W in (128, 240)))

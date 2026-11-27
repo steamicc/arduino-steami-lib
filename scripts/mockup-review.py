@@ -34,7 +34,6 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-
 TUTORIALS_COMMIT = "83d8e2ca23abb0eeca7afca2d001cdd95b1df76b"
 MOCKUPS: tuple[str, ...] = ("01_temperature", "02_battery", "03_comfort_dual")
 PANELS: tuple[tuple[int, str], ...] = ((128, "gray"), (240, "color"))
@@ -83,7 +82,10 @@ def oled_grey(rgb):
 
 
 def disc_mask(size: int, ratio: float):
-    """True inside the disc of radius ratio * size / 2 around (size / 2, size / 2), indexed [y, x]."""
+    """True inside the disc of radius ratio * size / 2 around (size / 2, size / 2).
+
+    Indexed [y, x].
+    """
     import numpy as np
 
     c = size // 2
@@ -168,7 +170,9 @@ def review(ppm_dir: Path, out_dir: Path, refs_dir: Path | None) -> list[Row]:
             ppm = ppm_dir / ppm_name(name, size, mode)
             render = _open_rgb(ppm, str(ppm))
             if render.shape != (size, size, 3):
-                raise ReviewError(f"{ppm} is {render.shape[1]}x{render.shape[0]}, not {size}x{size}")
+                raise ReviewError(
+                    f"{ppm} is {render.shape[1]}x{render.shape[0]}, not {size}x{size}"
+                )
             expected = np.asarray(ref.resize((size, size), Image.LANCZOS), dtype=np.uint8)
             if mode == "gray":
                 expected = oled_grey(expected)
@@ -193,7 +197,8 @@ def _page(rows: list[Row]) -> str:
         title = html.escape(f"{r.name} at {r.size} px")
         body.append(
             f"<tr><td>{title}</td>"
-            f'<td><img src="{html.escape(r.name)}-{r.size}.png" alt="{title}: reference, render, difference"></td>'
+            f'<td><img src="{html.escape(r.name)}-{r.size}.png"'
+            f' alt="{title}: reference, render, difference"></td>'
             f"<td>{r.score:.4f}{look}</td></tr>"
         )
     return (
@@ -202,8 +207,9 @@ def _page(rows: list[Row]) -> str:
         "<style>body{font-family:sans-serif;margin:1em}td{padding:.4em;vertical-align:middle}"
         "img{image-rendering:pixelated;background:#000}</style></head><body>\n"
         "<h1>SteamiScreen mockups against the tutorials</h1>\n"
-        "<p>Each image shows the reference, the render and their absolute difference, masked outside "
-        f"{MASK_RATIO} of the radius. SSIM is indicative; \"look\" marks scores under {SSIM_HINT}.</p>\n"
+        "<p>Each image shows the reference, the render and their absolute difference, "
+        f"masked outside {MASK_RATIO} of the radius. "
+        f"SSIM is indicative; \"look\" marks scores under {SSIM_HINT}.</p>\n"
         "<table><tr><th>Mockup</th><th>Reference, render, difference</th><th>SSIM</th></tr>\n"
         + "\n".join(body)
         + "\n</table></body></html>\n"
