@@ -1061,7 +1061,7 @@ maintainer to review; the document marks each place they apply with B1 to B10:
   128, 67 on 240) and is truncated there. N/S rows, margin and glyph height are physical for N, S, NE, NW, SE
   and SW, so a short subtitle line sits at 202 on 240 (5.8 rule 3).
 - **B9, edge cases**: a value at NE, NW, SE or SW fits a corner region (the chord at its rows, shrunk by k)
-  and is clamped and truncated there at ×1; the label and unit of `value()` are truncated to their available
+  and is clamped and truncated there at f = k (×1 on 128); the label and unit of `value()` are truncated to their available
   width (and to the half region at W/E); truncation keeps the longest fitting prefix; a text with no inked
   rows always fits; an empty chord draws nothing; a scale of 0 counts as 1 (5.8 rules 6 and 7, 5.9). At a
   corner, the label and unit get their own region (the chord at their inked rows, shrunk by k): they are cut
