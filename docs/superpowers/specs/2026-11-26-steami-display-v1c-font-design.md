@@ -545,8 +545,7 @@ measured in the face of the whole text; on 240 the value fit stops at f 2 (CENTE
 ### 8.1 MicroPython (issue in `steamicc/micropython-steami-lib`)
 
 Filed by the controller when this delivery's PR opens: commit the `spleen.py` produced by this
-repository's generator, at a place that depends on the flash option chosen below (inside `steami_screen/`,
-frozen, with option (a); outside the frozen package, shipped as `spleen.mpy`, with option (b)) (`--micropython`, contract of 5.6), and on the 240 px backend draw the faces of 5.1
+repository's generator in `steami_screen/`, frozen with the package (flash option (a), below) (`--micropython`, contract of 5.6), and on the 240 px backend draw the faces of 5.1
 with the rules of 5.2 to 5.4, for the widgets and for the pixel text `text(s, (x, y), c, scale)`: Spleen 8x16
 × scale with its cell's top-left at (x, y), accents drawn (mapped through `EXTRA`), instead of framebuf's 8x8
 or `_draw_scaled_text` on 240. The issue says that native faces, bold included, are blitted from the frozen
@@ -601,21 +600,16 @@ review of this document against its branch, 2026-11-27):
 - **Firmware flash:** after #454 the margin is 5 572 B (text+data 518 716 B, frozen with `mpy-cross -O3`). A
   stand-in `spleen.py` with the contract of 5.6 and the sizes of 5.5 compiles to about 5 535 B of `.mpy`, and
   the drawing code (decoder, face ladder, narrow window, bold, row drawer, ink bounds, adapter method) adds
-  about 1.5 to 3 KB. The fonts therefore cannot be frozen in the current flash layout. The maintainer chooses
-  at integration time:
-  - (a) move `FLASH_FS` up by 16 KB in a STeaMi-specific copy of `stm32wb55xg.ld` (the shared file also
-    serves NUCLEO_WB55 and USBDONGLE_WB55), named in `LD_FILES` of `STEAM32_WB55RG/mpconfigboard.mk` for both
-    the mboot and plain builds: FLASH 528K, FLASH_APP 496K, FLASH_FS at 0x08084000, length 256K (end
-    0x080C4000, below the radio stack at 0x080E0000). The file system is reformatted on update, so the
-    user's files are lost. The MicroPython session prefers this option.
-  - (b) freeze only the drawing code (it must fit in the 5 572 B) and keep `spleen.py` out of the frozen
-    package: outside `steami_screen/`, or an explicit `module()` list in place of `package("steami_screen")`,
-    which freezes every `.py` of the package. Ship it as a `spleen.mpy` built by `mpy-cross`, never as `.py`
-    source (compiling about 15 KB of `bytes` literals on the board peaks far above the 5.3 KB it keeps).
-    Install it on the file system as a documented step (lost when the file system is reformatted). Import it
-    in `Screen.begin()`, so that a missing file or a lack of heap gives E31 or a clear error and the 240 screen
-    falls back to the 8x8 text, instead of failing at the first `text()`. Count its ~5.3 KB, plus the module
-    object, in the RAM figure (about 92 KB of heap are left with BLE).
+  about 1.5 to 3 KB. The fonts therefore cannot be frozen in the current flash layout.
+  - **Chosen (maintainer): (a).** Move `FLASH_FS` up by 16 KB, from 0x08080000 to 0x08084000, in a
+    STeaMi-specific copy of `stm32wb55xg.ld` (the shared file also serves NUCLEO_WB55 and USBDONGLE_WB55),
+    named in `LD_FILES` of `STEAM32_WB55RG/mpconfigboard.mk` for both the mboot and plain builds: FLASH 528K,
+    FLASH_APP 496K, FLASH_FS at 0x08084000, length 256K (end 0x080C4000, below the radio stack at
+    0x080E0000). `spleen.py` is frozen in `steami_screen/` with the drawing code. The file system is
+    reformatted on update, so the user's files are lost; the MicroPython release notes say so.
+  - Set aside: (b), freezing only the drawing code and installing a precompiled `spleen.mpy` on the file
+    system. It would cost about 5.3 KB of the roughly 92 KB of heap left with BLE, an installation step lost
+    at each reformat, and a fallback to the 8x8 text when the file is missing.
   - The integration PR reports the firmware text+data and the margin before and after.
 - **Layout:** MicroPython follows spec 5.8 on 240 (k = 2), with three kept MicroPython differences: the `_at`
   margins use the real glyph height plus the title row floor and cap, the gauge outer radius is
