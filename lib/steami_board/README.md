@@ -566,7 +566,9 @@ Layout rules:
 * `menu()` shows 5 rows on 128 px and 6 on 240 px; the bar follows the circle;
   `-1` wraps to the last item, and the index is returned. Keep it in an `int`:
   with a `const char* const` array, a `long`, `unsigned` or `size_t` index calls
-  the `(items, n)` form, with `n` set to the index.
+  the `(items, n)` form, with `n` set to the index; with a `const char*` array a
+  `size_t` index does too (and `unsigned` on the STeaMi, where `size_t` is
+  `unsigned int`), with GCC's "ISO C++ says that these are ambiguous" warning.
 * The selected text of `menu()` is lifted on the grey screen, as the fills are.
 * `watch()` takes hours 0 to 23 and minutes and seconds 0 to 59; the hands move
   in whole degrees (the hour hand with the minutes, the minute hand with the
