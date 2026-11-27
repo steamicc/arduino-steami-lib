@@ -355,6 +355,211 @@ static void test_glyph_count_nullptr_and_empty(void) {
     TEST_ASSERT_EQUAL_PTR(empty, p);
 }
 
+// Decodes s with steamiNextCode() and checks every code, the final 0 and the
+// pointer left on the NUL (a further call returns 0 without moving); at each
+// step s moves exactly as steamiNextGlyph() moves it.
+static void assertCodes(const char* s, std::initializer_list<uint8_t> expected) {
+    const char* p = s;
+    const char* q = s;
+    for (uint8_t code : expected) {
+        TEST_ASSERT_EQUAL_UINT8(code, steamiNextCode(p));
+        steamiNextGlyph(q);
+        TEST_ASSERT_EQUAL_PTR(q, p);
+    }
+    for (int i = 0; i < 2; i++) {
+        TEST_ASSERT_EQUAL_UINT8(0, steamiNextCode(p));
+        TEST_ASSERT_EQUAL_PTR(s + strlen(s), p);
+    }
+}
+
+// The 31 Latin-1 letters of codes 128..158, in code order (the order of kFolds).
+static const uint8_t kAccentedLetters[] = {
+    0xC0, 0xC2, 0xC4, 0xC7, 0xC8, 0xC9, 0xCA, 0xCB, 0xCE, 0xCF, 0xD4, 0xD6, 0xD9, 0xDB, 0xDC, 0xE0,
+    0xE2, 0xE4, 0xE7, 0xE8, 0xE9, 0xEA, 0xEB, 0xEE, 0xEF, 0xF4, 0xF6, 0xF9, 0xFB, 0xFC, 0xFF,
+};
+
+static void test_extended_codes(void) {
+    assertCodes("A", {'A'});
+    assertCodes("\xC2\xB0", {127});      // degree sign
+    assertCodes("\xC3\x80", {128});      // A grave
+    assertCodes("\xC3\xA9", {148});      // e acute
+    assertCodes("\xC3\xBF", {158});      // y diaeresis
+    assertCodes("\xC5\xB8", {159});      // Y diaeresis
+    assertCodes("\x7F", {'?'});          // DEL
+    assertCodes("\x01", {'?'});          // control byte
+    assertCodes("\xE2\x82\xAC", {'?'});  // euro sign, valid but unsupported
+    assertCodes("\xFF", {'?'});          // invalid byte
+    assertCodes("A\xC3", {'A', '?'});    // truncated sequence
+    TEST_ASSERT_EQUAL_size_t(31, sizeof(kAccentedLetters));
+    for (size_t i = 0; i < sizeof(kAccentedLetters); i++) {
+        const std::string s = utf8(kAccentedLetters[i]);
+        assertCodes(s.c_str(), {static_cast<uint8_t>(128 + i)});
+    }
+    const char* p = nullptr;
+    TEST_ASSERT_EQUAL_UINT8(0, steamiNextCode(p));
+    TEST_ASSERT_NULL(p);
+    const char* empty = "";
+    p = empty;
+    TEST_ASSERT_EQUAL_UINT8(0, steamiNextCode(p));
+    TEST_ASSERT_EQUAL_PTR(empty, p);
+}
+
+// At each step of s, steamiNextGlyph() is steamiFoldCode(steamiNextCode()),
+// both move s alike, and every code before the final 0 is 32..159.
+static void assertGlyphIsFoldedCode(const char* s) {
+    const char* p = s;
+    const char* q = s;
+    uint8_t glyph = 0;
+    do {
+        glyph = steamiNextGlyph(p);
+        const uint8_t code = steamiNextCode(q);
+        TEST_ASSERT_EQUAL_UINT8(glyph, steamiFoldCode(code));
+        TEST_ASSERT_EQUAL_PTR(p, q);
+        if (code != 0) {
+            TEST_ASSERT_TRUE(code >= 32 && code <= 159);
+        }
+    } while (glyph != 0);
+}
+
+static void test_fold_codes(void) {
+    TEST_ASSERT_EQUAL_UINT8('A', steamiFoldCode(128));
+    TEST_ASSERT_EQUAL_UINT8('e', steamiFoldCode(148));
+    TEST_ASSERT_EQUAL_UINT8('y', steamiFoldCode(158));
+    TEST_ASSERT_EQUAL_UINT8('Y', steamiFoldCode(159));
+    TEST_ASSERT_EQUAL_UINT8(127, steamiFoldCode(127));
+    TEST_ASSERT_EQUAL_UINT8('A', steamiFoldCode('A'));
+    TEST_ASSERT_EQUAL_UINT8(0, steamiFoldCode(0));
+    TEST_ASSERT_EQUAL_UINT8(160, steamiFoldCode(160));
+    TEST_ASSERT_EQUAL_UINT8(255, steamiFoldCode(255));
+    // The strings of the three UTF-8 tests above.
+    const char* const strings[] = {
+        "\xC2\xB0"
+        "C",
+        "\xC3\xA9",
+        "\xC3\x89",
+        "\xC5\xB8",
+        "\xC3\xBF",
+        "Temp\xC3\xA9rature",
+        "\xFF",
+        "\x80"
+        "A",
+        "\xC0\xAF",
+        "\xC1\x81",
+        "\xE0\x81\x81",
+        "\xF0\x80\x81\x81",
+        "\xED\xA0\x80",
+        "\xF4\x90\x80\x80",
+        "\xF5\x80\x80\x80",
+        "\xE2\x82\xAC",
+        "\xF0\x9F\x98\x80",
+        "\xED\x9F\xBF",
+        "\xF4\x8F\xBF\xBF",
+        "\n",
+        "\x1F",
+        "\x7F",
+        " ~",
+        "A\xC3",
+        "\xE2\x82",
+        "\xF0\x9F",
+        "\xF0\x9F\x98",
+        "\xE2\x82"
+        "A",
+        "\xC3"
+        "A",
+    };
+    for (const char* s : strings) {
+        assertGlyphIsFoldedCode(s);
+    }
+    // Every code point up to U+FFFF (a surrogate encodes as three invalid bytes).
+    for (uint32_t cp = 1; cp <= 0xFFFF; cp++) {
+        const std::string s = utf8(cp);
+        assertGlyphIsFoldedCode(s.c_str());
+    }
+}
+
+static size_t faceGlyphBytes(const SteamiFontFace& face) {
+    return static_cast<size_t>(face.h) * ((face.w + 7) / 8);
+}
+
+static void test_spleen_face_metrics(void) {
+    struct Metrics {
+        const SteamiFontFace* face;
+        uint8_t w, h, ascent, glyphs;
+    };
+    const Metrics faces[] = {
+        {&STEAMI_SPLEEN_6X12, 6, 12, 9, 128},
+        {&STEAMI_SPLEEN_8X16, 8, 16, 12, 128},
+        {&STEAMI_SPLEEN_12X24, 12, 24, 19, 15},
+        {&STEAMI_SPLEEN_16X32, 16, 32, 26, 15},
+    };
+    size_t total = 0;
+    for (const Metrics& m : faces) {
+        TEST_ASSERT_EQUAL_UINT8(m.w, m.face->w);
+        TEST_ASSERT_EQUAL_UINT8(m.h, m.face->h);
+        TEST_ASSERT_EQUAL_UINT8(m.ascent, m.face->ascent);
+        TEST_ASSERT_EQUAL_UINT8(m.glyphs, m.face->glyphs);
+        TEST_ASSERT_NOT_NULL(m.face->data);
+        total += m.face->glyphs * faceGlyphBytes(*m.face);
+    }
+    TEST_ASSERT_EQUAL_size_t(5264, total);
+}
+
+static void test_face_glyph_lookup(void) {
+    const SteamiFontFace& f6 = STEAMI_SPLEEN_6X12;
+    const SteamiFontFace& f8 = STEAMI_SPLEEN_8X16;
+    const uint8_t blank[16] = {};
+    TEST_ASSERT_EQUAL_PTR(f8.data, steamiFaceGlyph(f8, ' '));
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(blank, steamiFaceGlyph(f8, ' '), 16);
+    const uint8_t* a = steamiFaceGlyph(f8, 'A');
+    TEST_ASSERT_EQUAL_PTR(f8.data + 33 * 16, a);
+    for (int row = 0; row < 16; row++) {
+        if (row >= 2 && row <= 11) {
+            TEST_ASSERT_NOT_EQUAL(0, a[row]);
+        } else {
+            TEST_ASSERT_EQUAL_HEX8(0, a[row]);
+        }
+    }
+    // Full sets: index code - 32 for 32..159, '?' for any other code.
+    for (const SteamiFontFace* face : {&f6, &f8}) {
+        const size_t bytes = faceGlyphBytes(*face);
+        const uint8_t* question = steamiFaceGlyph(*face, '?');
+        TEST_ASSERT_EQUAL_PTR(face->data + ('?' - 32) * bytes, question);
+        TEST_ASSERT_EQUAL_PTR(face->data + 127 * bytes, steamiFaceGlyph(*face, 159));
+        const uint8_t outside[] = {0, 20, 31, 160, 200, 255};
+        for (uint8_t code : outside) {
+            TEST_ASSERT_EQUAL_PTR(question, steamiFaceGlyph(*face, code));
+        }
+    }
+    TEST_ASSERT_TRUE(memcmp(steamiFaceGlyph(f8, 'Y'), steamiFaceGlyph(f8, 159), 16) != 0);
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(steamiFaceGlyph(f6, 'Y'), steamiFaceGlyph(f6, 159), 12);
+    // Value sets: the glyph at the key index, nullptr for any other code.
+    const SteamiFontFace& f16 = STEAMI_SPLEEN_16X32;
+    TEST_ASSERT_EQUAL_PTR(f16.data + 10 * 32 * 2, steamiFaceGlyph(f16, '5'));
+    TEST_ASSERT_NULL(steamiFaceGlyph(f16, 'A'));
+    const char key[] = " +-.:0123456789";
+    for (const SteamiFontFace* face : {&STEAMI_SPLEEN_12X24, &f16}) {
+        const size_t bytes = faceGlyphBytes(*face);
+        for (size_t i = 0; i < strlen(key); i++) {
+            const auto code = static_cast<uint8_t>(key[i]);
+            TEST_ASSERT_EQUAL_PTR(face->data + i * bytes, steamiFaceGlyph(*face, code));
+        }
+        const uint8_t others[] = {0, 'A', '?', '/', ';', 127, 128, 159, 200};
+        for (uint8_t code : others) {
+            TEST_ASSERT_NULL(steamiFaceGlyph(*face, code));
+        }
+    }
+    TEST_ASSERT_EQUAL_INT8(0, steamiValueIndex(' '));
+    TEST_ASSERT_EQUAL_INT8(1, steamiValueIndex('+'));
+    TEST_ASSERT_EQUAL_INT8(2, steamiValueIndex('-'));
+    TEST_ASSERT_EQUAL_INT8(3, steamiValueIndex('.'));
+    TEST_ASSERT_EQUAL_INT8(4, steamiValueIndex(':'));
+    TEST_ASSERT_EQUAL_INT8(5, steamiValueIndex('0'));
+    TEST_ASSERT_EQUAL_INT8(14, steamiValueIndex('9'));
+    TEST_ASSERT_EQUAL_INT8(-1, steamiValueIndex('A'));
+    TEST_ASSERT_EQUAL_INT8(-1, steamiValueIndex(127));
+    TEST_ASSERT_EQUAL_INT8(-1, steamiValueIndex(0));
+}
+
 static void test_memory_backend_counts_out_of_bounds(void) {
     SteamiMemoryBackend mem(128, 128);
     mem.pixel(-1, 0, 0xFFFF);
@@ -1663,6 +1868,10 @@ int main(int, char**) {
     RUN_TEST(test_utf8_invalid_bytes);
     RUN_TEST(test_utf8_truncated_sequences);
     RUN_TEST(test_glyph_count_nullptr_and_empty);
+    RUN_TEST(test_extended_codes);
+    RUN_TEST(test_fold_codes);
+    RUN_TEST(test_spleen_face_metrics);
+    RUN_TEST(test_face_glyph_lookup);
     RUN_TEST(test_memory_backend_counts_out_of_bounds);
     RUN_TEST(test_memory_backend_grey_mode_stores_oled_levels);
     RUN_TEST(test_memory_backend_writes_ppm);
