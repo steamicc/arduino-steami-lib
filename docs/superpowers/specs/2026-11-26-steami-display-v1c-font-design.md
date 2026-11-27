@@ -346,11 +346,11 @@ name); the face type, the extended decoder and the lookups are declared by hand 
   - `VERSION = "2.1.0"`; `VALUE_KEY = " +-.:0123456789"`; `EXTRA`, the 33 characters of codes 127..159
     (`°`, the 31 letters of 5.4 in order, `Ÿ`), so MicroPython maps a character to a code without the C++
     decoder; `FOLD`, a 33-character `str` parallel to `EXTRA` giving the 8x8 replacement of codes 127..159
-    (the base letter of each accent, `Y` for `Ÿ`; `°` maps to itself, since Arduino's 8x8 has a degree glyph
-    and MicroPython's petme128 has none, so the MicroPython PR picks its replacement), so that MicroPython can
-    fold on 128 without copying `kFolds` *(designer's call, from the MicroPython review)*. The generator
-    tests check the 31 letters of `FOLD` (positions 1..31) against the base letters of `kFolds` in
-    `SteamiFont.cpp`, and the two entries outside `kFolds` by fixed assertions: `FOLD[0] == "°"` and
+    (the base letter of each accent, `Y` for `Ÿ`; `°` maps to itself: MicroPython's petme128 has no degree
+    glyph, so MicroPython draws `°` at 128 with the same 8x8 degree glyph as Arduino, see 8.1), so that
+    MicroPython can fold on 128 without copying `kFolds` *(designer's call, from the MicroPython review)*.
+    The generator tests check the 31 letters of `FOLD` (positions 1..31) against the base letters of
+    `kFolds` in `SteamiFont.cpp`, and the two entries outside `kFolds` by fixed assertions: `FOLD[0] == "°"` and
     `FOLD[32] == "Y"` (the replacement the C++ fold function gives code 159).
   - Code of a character `ch` (MicroPython iterates code points): `o = ord(ch)`; `32 ≤ o ≤ 126` → `o`;
     otherwise `i = EXTRA.find(ch)`, `i ≥ 0` → `127 + i`; otherwise `ord('?')`. This covers control
@@ -650,10 +650,10 @@ review of this document against its branch, 2026-11-27):
   127 as glyph 127, a checkerboard (modframebuf.c:844-848), so today `é` or `°` (two bytes) is two
   checkerboards, 16 px, while the layout counts one cell. MicroPython folds codes 128..159 through `FOLD`
   before `framebuf.text`, and each folded character reaches it as a single ASCII byte, so an accented letter
-  is one 8 px cell; this is an improvement allowed on the SSD1327. `°` stays two checkerboards until the
-  MicroPython PR picks a single-byte ASCII replacement for it (`FOLD[0]`); even then Arduino draws a real
-  8x8 degree, so `°` at 128 is a listed MicroPython difference. Its rendering
-  at 128 may change elsewhere where it improves, with the maintainer's agreement: the MicroPython gauge at 128
+  is one 8 px cell; this is an improvement allowed on the SSD1327. `°` (`FOLD[0]`, which maps to itself) is
+  drawn by MicroPython with the same 8x8 degree glyph as Arduino, one 8 px cell
+  (steamicc/micropython-steami-lib#461), so `°` at 128 matches Arduino *(maintainer's decision)*.
+  Its rendering at 128 may change elsewhere where it improves, with the maintainer's agreement: the MicroPython gauge at 128
   is already a ring filled by horizontal rows, closer to Arduino. This document does not require MicroPython's
   128 rendering to stay pixel-identical; the bit-identical 128 requirement applies to the Arduino library.
 
