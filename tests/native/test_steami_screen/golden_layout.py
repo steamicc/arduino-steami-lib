@@ -2692,3 +2692,97 @@ for W in (128, 240):
         labels = graph_layout(W, lo, hi)["labels"]
         boxes = [graph_label_box(W, lo, hi, i) for i in (0, 1)]
         print(f"  {W} ({lo!r}, {hi!r}): {labels[0]} {boxes[0]}, {labels[1]} {boxes[1]}")
+
+# ---- Widget of 4c Task 3: graph() curve (spec 5.9, 7; D4) ----
+# n = the series' count; with n < 2 no curve. Point i sits at x = gx + i * gw // (n - 1) (integer
+# product, so the last point is at gx + gw) and y = gy + gh - ceilf(ratio * gh), ratio = (v - minV)
+# / span in float32, span = maxV - minV with span 0 replaced by 1. A NAN ratio skips the point;
+# otherwise the ratio is clamped to [0, 1] (INF included). A segment strokeLine(..., k, c) joins
+# two consecutive valid points only: a NAN leaves a gap and an isolated point draws nothing.
+GRAPH_05_VALUES = [354, 378, 415, 390, 451, 524, 561, 537, 573, 610,
+                   585, 622, 598, 634, 610, 622, 585, 610, 646, 847]  # D13
+
+
+def curve_row(v, min_v, max_v, top, h):
+    """curveRow(): the row of v, or None for a skipped point (NAN ratio)."""
+    v, min_v, max_v = f32(v), f32(min_v), f32(max_v)
+    span = f32(max_v - min_v)
+    if span == 0:
+        span = 1.0
+    ratio = f32(f32(v - min_v) / span)
+    if math.isnan(ratio):
+        return None
+    ratio = min(max(ratio, 0.0), 1.0)
+    return top + h - math.ceil(f32(ratio * h))
+
+
+def graph_points(W, values, min_v, max_v):
+    """D4's points [(x, y) or None], one per value; [] below 2 values (no curve)."""
+    gx, gy, gw, gh = graph_box(Panel(W))
+    n = len(values)
+    if n < 2:
+        return []
+    out = []
+    for i, v in enumerate(values):
+        y = curve_row(v, min_v, max_v, gy, gh)
+        out.append(None if y is None else (gx + i * gw // (n - 1), y))
+    return out
+
+
+def graph_render(W, values, min_v, max_v, c="LIGHT"):
+    """graph(): graph_frame() (value of the last point, "--" when empty), then the segments
+    between consecutive valid points, strokeLine() of width k in c."""
+    P = Panel(W)
+    cv = graph_frame({}, W, min_v, max_v, gauge_label_text(values[-1]) if values else "--")
+    pts = graph_points(W, values, min_v, max_v)
+    for a, b in zip(pts[:-1], pts[1:], strict=True):
+        if a is not None and b is not None:
+            r_stroke_line(cv, W, a[0], a[1], b[0], b[1], P.k, c)
+    return cv
+
+
+# ---- Self-check of 4c Task 3 ----
+for W, last in ((128, 113), (240, 212)):
+    gx, gy, gw, gh = graph_box(Panel(W))
+    pts = graph_points(W, [950] * 20, 950, 1050)
+    assert [p[0] for p in pts] == [gx + i * gw // 19 for i in range(20)] and pts[-1][0] == last
+    assert {p[1] for p in pts} == {gy + gh}  # 20 x 950 on the bottom axis row
+    assert {p[1] for p in graph_points(W, [1050] * 20, 950, 1050)} == {gy}  # 20 x 1050 on the top
+    # Clamped (spec 7): below minV on the bottom row, above maxV on the top row, INF included
+    assert {p[1] for p in graph_points(W, [-5, -INF, 2000, INF], 950, 1050)} == {gy + gh, gy}
+    # Fewer than 2 values: no curve; 2 values stretch across the box (D4)
+    assert graph_points(W, [], 950, 1050) == [] and graph_points(W, [1000], 950, 1050) == []
+    assert [p[0] for p in graph_points(W, [0, 1000], 0, 1000)] == [gx, gx + gw]
+    # A NAN ratio skips the point: NAN values, NAN bounds, INF - INF and INF / INF
+    assert graph_points(W, [NAN, 950, NAN], 950, 1050)[0::2] == [None, None]
+    assert all(p is None for p in graph_points(W, [1000] * 3, NAN, 1050))
+    assert all(p is None for p in graph_points(W, [1000] * 3, 950, NAN))
+    assert [p is None for p in graph_points(W, [FLT_MAX, -FLT_MAX, INF, -INF, NAN, -FLT_MAX, 0],
+                                            -FLT_MAX, FLT_MAX)] == [True, False, True, True,
+                                                                    True, False, False]
+    # span 0 is replaced by 1: 499, 500, 501 on (500, 500) give bottom, bottom, top
+    assert [p[1] for p in graph_points(W, [499, 500, 501], 500, 500)] == [gy + gh, gy + gh, gy]
+    # minV > maxV inverts the curve, as gauge() does
+    assert {p[1] for p in graph_points(W, [950] * 20, 1050, 950)} == {gy}
+# Nothing outside radius() + 1 for each history of spec 7, on both panels, and the LIGHT ink
+# stays in [gx, gx + gw + k - 1] x [gy, gy + gh + k - 1]
+for W in (128, 240):
+    P = Panel(W)
+    gx, gy, gw, gh = graph_box(P)
+    for values in ([], [950] * 20, [1050] * 20, [2000] * 20, [-5] * 20, [2000, -5] * 10,
+                   [INF] * 20, [-INF] * 20, [INF, -INF] * 10):
+        cv = graph_render(W, values, 950, 1050)
+        assert not outside_circle(cv, P), (W, values)
+        lit = colour_box(cv, "LIGHT")
+        assert lit is None if not values else lit is not None, (W, values)
+        if lit:
+            x0, y0, x1, y1 = lit
+            assert gx <= x0 and x1 <= gx + gw + P.k - 1 and gy <= y0 and y1 <= gy + gh + P.k - 1
+
+# ---- Values pinned by test_steami_screen (4c Task 3) ----
+print("graph curve (4c Task 3): LIGHT box on (0, 1000) of the ramp 50 * i (20 values), of the")
+print("mockup 05 values (D13) and of 2 points (0, 1000)")
+for W in (128, 240):
+    boxes = [colour_box(graph_render(W, values, 0, 1000), "LIGHT")
+             for values in ([50 * i for i in range(20)], GRAPH_05_VALUES, [0, 1000])]
+    print(f"  {W}: ramp {boxes[0]} mockup 05 {boxes[1]} two points {boxes[2]}")

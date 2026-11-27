@@ -355,7 +355,9 @@ class SteamiScreen : public SteamiDisplay {
     /// strokes of width k.
     void graphFrame();
 
-    /// The curve of the series in c across the box.
+    /// The curve of the series in c, stroke k, from the oldest point (box left) to the newest
+    /// (box left + width), the values clamped to [minV, maxV]; a NAN point is skipped, leaving a
+    /// gap, and fewer than 2 points draw nothing.
     void graphCurve(const Series& s, float minV, float maxV, SteamiRgb c);
 
     uint8_t _decimals = 1;

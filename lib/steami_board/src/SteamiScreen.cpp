@@ -123,6 +123,30 @@ int32_t lastRow(uint32_t rows) {
     return r;
 }
 
+/// The row of v in graph()'s curve (D4), for a box h rows tall from row top: top + h -
+/// ceilf(ratio * h), ratio = (v - minV) / span in float, span = maxV - minV with 0 replaced by 1
+/// (device.py), so that the row is device.py's int(top + h - ratio * h) without its float
+/// subtraction. False for a NAN ratio (a NAN value or bound, INF - INF, INF / INF): the point is
+/// skipped. Otherwise the ratio is clamped to [0, 1], INF included, which keeps the row in the
+/// box; minV > maxV inverts the curve.
+bool curveRow(float v, float minV, float maxV, int32_t top, int32_t h, int32_t* row) {
+    float span = maxV - minV;
+    if (span == 0.0f) {
+        span = 1.0f;
+    }
+    float ratio = (v - minV) / span;
+    if (isnan(ratio)) {
+        return false;
+    }
+    if (ratio < 0.0f) {
+        ratio = 0.0f;
+    } else if (ratio > 1.0f) {
+        ratio = 1.0f;
+    }
+    *row = top + h - static_cast<int32_t>(ceilf(ratio * static_cast<float>(h)));
+    return true;
+}
+
 }  // namespace
 
 int32_t SteamiScreen::Region::width() const {
@@ -964,6 +988,30 @@ void SteamiScreen::graphFrame() {
                static_cast<int16_t>(bottom), k(), STEAMI_DARK);
 }
 
-void SteamiScreen::graphCurve(const Series&, float, float, SteamiRgb) {
-    // The curve of D4 is not drawn yet: the frame, the value and the labels only.
+void SteamiScreen::graphCurve(const Series& s, float minV, float maxV, SteamiRgb c) {
+    if (s.count < 2) {
+        return;  // 0 or 1 point: the frame and the value only
+    }
+    // D4: n = count, so a partial series stretches across the box. Point i at x = gx + i * gw /
+    // (n - 1) in uint64_t (the last one at gx + gw, as device.py and the mockup) and the row of
+    // curveRow(); a segment joins two consecutive valid points only, so a NAN leaves a gap.
+    const int32_t gx = u(STEAMI_GRAPH_MARGIN + STEAMI_GRAPH_X_OFFSET);
+    const uint64_t gw = static_cast<uint64_t>(larger(0, width() - u(STEAMI_GRAPH_MARGIN) - gx));
+    const uint64_t last = s.count - 1;
+    int32_t px = 0;
+    int32_t py = 0;
+    bool previous = false;
+    for (size_t i = 0; i < s.count; i++) {
+        int32_t y = 0;
+        const bool valid =
+            curveRow(s.at(i), minV, maxV, u(STEAMI_GRAPH_Y), u(STEAMI_GRAPH_HEIGHT), &y);
+        const int32_t x = gx + static_cast<int32_t>(static_cast<uint64_t>(i) * gw / last);
+        if (valid && previous) {
+            strokeLine(static_cast<int16_t>(px), static_cast<int16_t>(py), static_cast<int16_t>(x),
+                       static_cast<int16_t>(y), k(), c);
+        }
+        px = x;
+        py = y;
+        previous = valid;
+    }
 }

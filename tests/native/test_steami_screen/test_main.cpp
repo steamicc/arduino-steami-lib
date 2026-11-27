@@ -2,12 +2,14 @@
 
 #include <Arduino.h>
 #include <Wire.h>
+#include <float.h>
 #include <limits.h>
 #include <math.h>
 #include <stdint.h>
 #include <string.h>
 #include <unity.h>
 
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -213,6 +215,7 @@ static_assert(sizeof(SteamiScreen) <= 3 * sizeof(void*), "12 B on the 32-bit tar
 class TestScreen : public SteamiScreen {
    public:
     explicit TestScreen(SteamiBoard& b) : SteamiScreen(b) {}
+    using SteamiDisplay::strokeLine;
     using SteamiDisplay::textSmall;
     using SteamiScreen::advanceWidth;
     using SteamiScreen::blockHeight;
@@ -3877,6 +3880,227 @@ static void test_graph_null_data(void) {
     }
 }
 
+/// The x of point i of n across the box (D4): gx + i * gw / (n - 1), the last point at gx + gw.
+static int16_t curveX(const GraphPins& g, size_t i, size_t n) {
+    return static_cast<int16_t>(g.gx +
+                                static_cast<int32_t>(i * static_cast<size_t>(g.gw) / (n - 1)));
+}
+
+/// The LIGHT pixels of graph(h, minV, maxV) for h holding values[0..n), on one panel.
+static std::vector<uint16_t> curveOf(const PanelMode& p, const float* values, size_t n, float minV,
+                                     float maxV) {
+    return colourAlone(p.size, p.color, STEAMI_LIGHT, [=](TestScreen& s) {
+        SteamiHistory<20> h;
+        for (size_t i = 0; i < n; i++) {
+            h.add(values[i]);
+        }
+        s.graph(h, minV, maxV);
+    });
+}
+
+/// A segment of the curve, from point a to point b on rows ya and yb.
+struct Segment {
+    size_t a, b;
+    int16_t ya, yb;
+};
+
+/// The LIGHT pixels of the segments strokeLine(x_a, ya, x_b, yb, k, LIGHT) alone, n points.
+static std::vector<uint16_t> segmentsOf(const PanelMode& p, size_t n,
+                                        std::initializer_list<Segment> segments) {
+    const GraphPins& g = graphPins(p.size);
+    return colourAlone(p.size, p.color, STEAMI_LIGHT, [&](TestScreen& s) {
+        for (const Segment& seg : segments) {
+            s.strokeLine(curveX(g, seg.a, n), seg.ya, curveX(g, seg.b, n), seg.yb, s.k(),
+                         STEAMI_LIGHT);
+        }
+    });
+}
+
+// Spec 7, D4: a full history of one value is one horizontal stroke across the box, from gx to
+// gx + gw; values below minV (-INF included) lie on the bottom axis row gy + gh, values above maxV
+// (+INF included) on the top row gy.
+static void test_graph_flat_and_clamped(void) {
+    for (const PanelMode p : kPanelModes) {
+        const GraphPins& g = graphPins(p.size);
+        const int16_t bottom = static_cast<int16_t>(g.gy + g.gh);
+        for (float v : {950.0f, -5.0f, -INFINITY, 1050.0f, 2000.0f, INFINITY}) {
+            float values[20];
+            for (float& x : values) {
+                x = v;
+            }
+            const int16_t row = v <= 950.0f ? bottom : g.gy;
+            TEST_ASSERT_TRUE_MESSAGE(
+                curveOf(p, values, 20, 950, 1050) == segmentsOf(p, 20, {{0, 19, row, row}}),
+                "flat");
+        }
+    }
+}
+
+// Values printed by golden_layout.py (4c Task 3): the LIGHT boxes on (0, 1000) of the ramp 50 * i
+// and of the mockup 05 values (D13); 2 points stretch across the box, from gx to gx + gw (D4).
+static void test_graph_curve_golden(void) {
+    static const float kMockup05[20] = {354, 378, 415, 390, 451, 524, 561, 537, 573, 610,
+                                        585, 622, 598, 634, 610, 622, 585, 610, 646, 847};
+    float ramp[20];
+    for (size_t i = 0; i < 20; i++) {
+        ramp[i] = 50.0f * static_cast<float>(i);
+    }
+    static const float kTwo[2] = {0, 1000};
+    struct Case {
+        int16_t size;
+        bool color;
+        const float* values;
+        size_t n;
+        int16_t box[4];
+    };
+    const Case kCases[] = {{128, false, ramp, 20, {21, 40, 113, 90}},
+                           {128, false, kMockup05, 20, {21, 45, 113, 71}},
+                           {128, false, kTwo, 2, {21, 38, 113, 90}},
+                           {240, true, ramp, 20, {39, 75, 213, 169}},
+                           {240, true, kMockup05, 20, {39, 85, 213, 134}},
+                           {240, true, kTwo, 2, {39, 71, 213, 169}}};
+    for (const Case& c : kCases) {
+        onPanel(c.size, c.color, [&c](SteamiMemoryBackend& mem, TestScreen& s) {
+            SteamiHistory<20> h;
+            for (size_t i = 0; i < c.n; i++) {
+                h.add(c.values[i]);
+            }
+            s.graph(h, 0, 1000);
+            expectBox(inkBox(mem, STEAMI_LIGHT), c.box[0], c.box[1], c.box[2], c.box[3]);
+        });
+    }
+}
+
+// Spec 5.9, D4: a NAN skips its point and leaves a gap; an isolated valid point draws nothing, and
+// so does a single value.
+static void test_graph_nan_gap(void) {
+    for (const PanelMode p : kPanelModes) {
+        const GraphPins& g = graphPins(p.size);
+        const int16_t bottom = static_cast<int16_t>(g.gy + g.gh);
+        float values[20];
+        for (float& x : values) {
+            x = 950;
+        }
+        values[5] = NAN;
+        TEST_ASSERT_TRUE_MESSAGE(
+            curveOf(p, values, 20, 950, 1050) ==
+                segmentsOf(p, 20, {{0, 4, bottom, bottom}, {6, 19, bottom, bottom}}),
+            "NAN at 5");
+        values[5] = 950;
+        values[0] = NAN;
+        values[19] = NAN;
+        TEST_ASSERT_TRUE_MESSAGE(
+            curveOf(p, values, 20, 950, 1050) == segmentsOf(p, 20, {{1, 18, bottom, bottom}}),
+            "NAN at 0 and 19");
+        static const float kIsolated[3] = {NAN, 950, NAN};
+        TEST_ASSERT_TRUE_MESSAGE(curveOf(p, kIsolated, 3, 950, 1050) == segmentsOf(p, 3, {}),
+                                 "isolated point");
+        static const float kOne[1] = {950};
+        TEST_ASSERT_TRUE_MESSAGE(curveOf(p, kOne, 1, 950, 1050) == segmentsOf(p, 1, {}),
+                                 "one value");
+    }
+}
+
+// D1: graph() reads the ring in place, oldest first: a history that wrapped renders as the array
+// of its last 20 values in order (all pixels).
+static void test_graph_ring_equals_array(void) {
+    for (const PanelMode p : kPanelModes) {
+        const std::vector<uint16_t> ring = rendered(p.size, p.color, [](TestScreen& s) {
+            SteamiHistory<20> h;
+            for (int i = 0; i < 25; i++) {
+                h.add(940.0f + 5.0f * static_cast<float>(i));
+            }
+            s.graph(h, 950, 1050);
+        });
+        const std::vector<uint16_t> array = rendered(p.size, p.color, [](TestScreen& s) {
+            float last20[20];
+            for (int i = 0; i < 20; i++) {
+                last20[i] = 940.0f + 5.0f * static_cast<float>(i + 5);
+            }
+            s.graph(last20, 20, 950, 1050);
+        });
+        TEST_ASSERT_TRUE(ring == array);
+        TEST_ASSERT_FALSE(ring == rendered(p.size, p.color, [](TestScreen& s) {
+                              SteamiHistory<20> h;
+                              s.graph(h, 950, 1050);
+                          }));
+    }
+}
+
+// Review Focus 2 (D4): span 0 counts as 1; minV > maxV inverts the curve; a NAN bound skips every
+// point and its label is "--"; with (-FLT_MAX, FLT_MAX) the span overflows to INF, so FLT_MAX and
+// +-INF give NAN ratios (skipped) while -FLT_MAX and 0 lie on the bottom row. No crash, nothing
+// outside the circle (onPanel), also under native_asan.
+static void test_graph_extremes(void) {
+    for (const PanelMode p : kPanelModes) {
+        const GraphPins& g = graphPins(p.size);
+        const int16_t bottom = static_cast<int16_t>(g.gy + g.gh);
+        static const float kSpanOne[3] = {499, 500, 501};
+        TEST_ASSERT_TRUE_MESSAGE(
+            curveOf(p, kSpanOne, 3, 500, 500) ==
+                segmentsOf(p, 3, {{0, 1, bottom, bottom}, {1, 2, bottom, g.gy}}),
+            "span 0");
+        float flat[20];
+        for (float& x : flat) {
+            x = 950;
+        }
+        TEST_ASSERT_TRUE_MESSAGE(
+            curveOf(p, flat, 20, 1050, 950) == segmentsOf(p, 20, {{0, 19, g.gy, g.gy}}),
+            "inverted");
+        static const float kHuge[7] = {FLT_MAX, -FLT_MAX, INFINITY, -INFINITY, NAN, -FLT_MAX, 0};
+        TEST_ASSERT_TRUE_MESSAGE(
+            curveOf(p, kHuge, 7, -FLT_MAX, FLT_MAX) == segmentsOf(p, 7, {{5, 6, bottom, bottom}}),
+            "-FLT_MAX, FLT_MAX");
+        struct Bounds {
+            float minV, maxV;
+            const char* min;
+            const char* max;
+        };
+        static const Bounds kNanBounds[] = {{NAN, 1050, "--", "1050"}, {950, NAN, "950", "--"}};
+        for (const Bounds& b : kNanBounds) {
+            TEST_ASSERT_TRUE_MESSAGE(curveOf(p, flat, 20, b.minV, b.maxV) == segmentsOf(p, 20, {}),
+                                     "NAN bound");
+            std::vector<bool> widget;
+            onPanel(p.size, p.color, [&](SteamiMemoryBackend& mem, TestScreen& s) {
+                SteamiHistory<20> h;
+                for (float v : flat) {
+                    h.add(v);
+                }
+                s.graph(h, b.minV, b.maxV);
+                widget = interiorDark(mem, g);
+            });
+            std::vector<bool> labels;
+            onPanel(p.size, p.color, [&](SteamiMemoryBackend& mem, TestScreen& s) {
+                const bool minDashes = b.min[0] == '-';
+                const bool maxDashes = b.max[0] == '-';
+                s.textSmall(b.max, g.labelX, maxDashes ? g.maxTopDashes : g.maxTop, STEAMI_DARK, 1);
+                s.textSmall(b.min, g.labelX, minDashes ? g.minTopDashes : g.minTop, STEAMI_DARK, 1);
+                labels = interiorDark(mem, g);
+            });
+            TEST_ASSERT_TRUE_MESSAGE(widget == labels, "NAN label");
+        }
+    }
+}
+
+// Review Focus 4: 70000 points map to x without overflow (uint64_t products) and the LIGHT ink
+// stays in [gx, gx + gw + k - 1] x [gy, gy + gh + k - 1]; nothing outside the circle (onPanel).
+static void test_graph_many_points(void) {
+    static float data[70000];
+    for (size_t i = 0; i < 70000; i++) {
+        data[i] = static_cast<float>(i) / 69999.0f;
+    }
+    for (int16_t size : {128, 240}) {
+        onPanel(size, size == 240, [](SteamiMemoryBackend& mem, TestScreen& s) {
+            s.graph(data, 70000, 0, 1);
+            const GraphPins& g = graphPins(s.width());
+            const InkBox b = inkBox(mem, STEAMI_LIGHT);
+            TEST_ASSERT_TRUE(b.count > 0);
+            TEST_ASSERT_TRUE(b.x0 >= g.gx && b.x1 <= g.gx + g.gw + g.k - 1);
+            TEST_ASSERT_TRUE(b.y0 >= g.gy && b.y1 <= g.gy + g.gh + g.k - 1);
+        });
+    }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_format_integers);
@@ -3970,5 +4194,11 @@ int main(int, char**) {
     RUN_TEST(test_graph_value);
     RUN_TEST(test_graph_two_labels);
     RUN_TEST(test_graph_null_data);
+    RUN_TEST(test_graph_flat_and_clamped);
+    RUN_TEST(test_graph_curve_golden);
+    RUN_TEST(test_graph_nan_gap);
+    RUN_TEST(test_graph_ring_equals_array);
+    RUN_TEST(test_graph_extremes);
+    RUN_TEST(test_graph_many_points);
     return UNITY_END();
 }
