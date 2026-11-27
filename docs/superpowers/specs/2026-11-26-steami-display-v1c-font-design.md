@@ -569,10 +569,9 @@ text.
 **MicroPython constraints** (from the session that writes the MicroPython GC9A01 screen, 2026-11-26, and its
 review of this document against its branch, 2026-11-27):
 
-- **Order:** Spleen enters `steami_screen` only after steamicc/micropython-steami-lib#454 (branch
-  `feat/gc9a01-screen`: GC9A01 driver and V1c screen) is merged, to avoid conflicts with its corrections to
-  `device.py`. The integration starts from that merged branch, with `spleen.py` produced by this repository's
-  generator.
+- **Order:** steamicc/micropython-steami-lib#454 (GC9A01 driver and V1c screen) was merged on 2026-11-27
+  and released in micropython-steami-lib v0.30.0, with the GC9A01 screen frozen. The Spleen integration
+  starts from v0.30.0, with `spleen.py` produced by this repository's generator.
 - **Frame buffer:** the MicroPython V1c frame is a `GS4_HMSB` `FrameBuffer` of palette indices (28 800 B),
   converted to RGB565 by bands in `show()`, not a full RGB565 frame (115 200 B would not fit beside BLE).
 - **Native faces (n = 1), bold included, by blit:**
