@@ -26,3 +26,17 @@ const uint8_t* steamiGlyph8x8(uint8_t code);
 
 // The 5 column bytes of a glyph (7 rows); a code outside 32..127 gives '?'.
 const uint8_t* steamiGlyph5x7(uint8_t code);
+
+// A Spleen face of the 240 px panel, in the generated SteamiFontSpleen.cpp.
+struct SteamiFontFace {
+    uint8_t w;  // cell width = advance
+    uint8_t h;  // cell height
+    uint8_t ascent;
+    uint8_t glyphs;       // 128 (codes 32..159) or 15 (the value key)
+    const uint8_t* data;  // rows top to bottom, (w + 7) / 8 bytes per row, MSB = leftmost column
+};
+
+extern const SteamiFontFace STEAMI_SPLEEN_6X12;
+extern const SteamiFontFace STEAMI_SPLEEN_8X16;
+extern const SteamiFontFace STEAMI_SPLEEN_12X24;
+extern const SteamiFontFace STEAMI_SPLEEN_16X32;
