@@ -349,7 +349,9 @@ name); the face type, the extended decoder and the lookups are declared by hand 
     (the base letter of each accent, `Y` for `Ÿ`; `°` maps to itself, since Arduino's 8x8 has a degree glyph
     and MicroPython's petme128 has none, so the MicroPython PR picks its replacement), so that MicroPython can
     fold on 128 without copying `kFolds` *(designer's call, from the MicroPython review)*. The generator
-    tests check `FOLD` against `kFolds`.
+    tests check the 31 letters of `FOLD` (positions 1..31) against the base letters of `kFolds` in
+    `SteamiFont.cpp`, and the two entries outside `kFolds` by fixed assertions: `FOLD[0] == "°"` and
+    `FOLD[32] == "Y"` (the replacement the C++ fold function gives code 159).
   - Code of a character `ch` (MicroPython iterates code points): `o = ord(ch)`; `32 ≤ o ≤ 126` → `o`;
     otherwise `i = EXTRA.find(ch)`, `i ≥ 0` → `127 + i`; otherwise `ord('?')`. This covers control
     characters, U+007F and every character outside the table, as Arduino draws `?`. In a value set the index
@@ -542,8 +544,9 @@ measured in the face of the whole text; on 240 the value fit stops at f 2 (CENTE
 
 ### 8.1 MicroPython (issue in `steamicc/micropython-steami-lib`)
 
-Filed by the controller when this delivery's PR opens: commit `steami_screen/spleen.py` produced by this
-repository's generator (`--micropython`, contract of 5.6), and on the 240 px backend draw the faces of 5.1
+Filed by the controller when this delivery's PR opens: commit the `spleen.py` produced by this
+repository's generator, at a place that depends on the flash option chosen below (inside `steami_screen/`,
+frozen, with option (a); outside the frozen package, shipped as `spleen.mpy`, with option (b)) (`--micropython`, contract of 5.6), and on the 240 px backend draw the faces of 5.1
 with the rules of 5.2 to 5.4, for the widgets and for the pixel text `text(s, (x, y), c, scale)`: Spleen 8x16
 × scale with its cell's top-left at (x, y), accents drawn (mapped through `EXTRA`), instead of framebuf's 8x8
 or `_draw_scaled_text` on 240. The issue says that native faces, bold included, are blitted from the frozen
@@ -645,9 +648,13 @@ review of this document against its branch, 2026-11-27):
   native-face widget's text takes under 10 ms. Estimate for program 04 on 240: about 31 blits, 3 to 10 ms,
   against about 150 ms for today's per-pixel ×2/×4 text. The gauge's 270 to 560 ms and `show()`'s 167 ms are
   not affected.
-- **128 px:** for MicroPython, the 8x8 font stays at 128 px. MicroPython folds codes 127..159 through `FOLD`
-  before `framebuf.text`, so one code point is one 8 px cell (today `é` is two UTF-8 bytes drawn as two 8x8
-  checkerboards while the layout counts one cell); this is an improvement allowed on the SSD1327. Its rendering
+- **128 px:** for MicroPython, the 8x8 font stays at 128 px. `framebuf.text` draws each UTF-8 byte above
+  127 as glyph 127, a checkerboard (modframebuf.c:844-848), so today `é` or `°` (two bytes) is two
+  checkerboards, 16 px, while the layout counts one cell. MicroPython folds codes 128..159 through `FOLD`
+  before `framebuf.text`, and each folded character reaches it as a single ASCII byte, so an accented letter
+  is one 8 px cell; this is an improvement allowed on the SSD1327. `°` stays two checkerboards until the
+  MicroPython PR picks a single-byte ASCII replacement for it (`FOLD[0]`); even then Arduino draws a real
+  8x8 degree, so `°` at 128 is a listed MicroPython difference. Its rendering
   at 128 may change elsewhere where it improves, with the maintainer's agreement: the MicroPython gauge at 128
   is already a ring filled by horizontal rows, closer to Arduino. This document does not require MicroPython's
   128 rendering to stay pixel-identical; the bit-identical 128 requirement applies to the Arduino library.
