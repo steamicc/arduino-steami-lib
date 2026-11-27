@@ -55,39 +55,184 @@ def count(s):
     return len(glyphs(s))
 
 
+# ---- The Spleen faces of the 240 px panel (4b-font Task 4) ----
+# Parsed from the generated SteamiFontSpleen.cpp by array name and descriptor line (plan D2, D3):
+# rows top to bottom, (w + 7) / 8 bytes per row, MSB = leftmost column. A face's glyphs are held as
+# lists of w-bit row integers (bit w - 1 = column 0). Full sets are indexed by extended code - 32.
+SPLEEN_CPP = FONT_CPP.with_name("SteamiFontSpleen.cpp")
+SPLEEN_NAMES = ("6X12", "8X16", "12X24", "16X32")
+SPLEEN_SIZES = {"6X12": 1536, "8X16": 2048, "12X24": 720, "16X32": 960}
+SPLEEN_METRICS = {"6X12": (6, 12, 9, 128), "8X16": (8, 16, 12, 128), "12X24": (12, 24, 19, 15),
+                  "16X32": (16, 32, 26, 15)}
+FIRST_ACCENTED, CAPITAL_Y_CODE = 128, 159
+ACCENTED = tuple(FOLDS)  # the code points of kFolds, in its order: codes 128..158
+
+
+class Face:
+    def __init__(self, w, h, ascent, glyphs, rows):
+        self.w, self.h, self.ascent, self.glyphs, self.rows = w, h, ascent, glyphs, rows
+
+    def glyph(self, code):
+        """steamiFaceGlyph() of a full set: the rows of code, '?' outside 32..159."""
+        assert self.glyphs == 128
+        valid = code if FIRST_CODE <= code <= CAPITAL_Y_CODE else ord("?")
+        return self.rows[valid - FIRST_CODE]
+
+    def lit(self, row_bits, col):
+        return row_bits >> (self.w - 1 - col) & 1
+
+
+def spleen():
+    """The four faces of SteamiFontSpleen.cpp: {name: Face}."""
+    source = SPLEEN_CPP.read_text(encoding="utf-8")
+    faces = {}
+    for name in SPLEEN_NAMES:
+        array = "kSpleen" + name.lower()
+        size = SPLEEN_SIZES[name]
+        body = source.split(f"const uint8_t {array}[{size}] = {{", 1)[1].split("};", 1)[0]
+        data = []
+        for line in body.splitlines():
+            data += [int(h, 16) for h in re.findall(r"0x[0-9A-Fa-f]{2}", line.split("//", 1)[0])]
+        assert len(data) == size, (name, len(data))
+        pattern = (rf"const SteamiFontFace STEAMI_SPLEEN_{name} = "
+                   rf"\{{(\d+), (\d+), (\d+), (\d+), {array}\}};")
+        descriptor = re.search(pattern, source)
+        assert descriptor, name
+        w, h, ascent, count_ = (int(v) for v in descriptor.groups())
+        per_row = (w + 7) // 8
+        assert count_ * h * per_row == size, name
+        rows = []
+        for g in range(count_):
+            glyph = []
+            for r in range(h):
+                at = (g * h + r) * per_row
+                row = int.from_bytes(bytes(data[at:at + per_row]), "big")
+                glyph.append(row >> (8 * per_row - w))
+            rows.append(glyph)
+        faces[name] = Face(w, h, ascent, count_, rows)
+    return faces
+
+
+SPLEEN = spleen()
+
+
+def codes(s):
+    """steamiNextCode over a str: ASCII 32..126, the degree sign 127, the letters of kFolds
+    128..158, U+0178 159, anything else '?'."""
+    out = []
+    for ch in s:
+        cp = ord(ch)
+        if 32 <= cp <= 126:
+            out.append(cp)
+        elif cp == 0xB0:
+            out.append(DEGREE)
+        elif cp in FOLDS:
+            out.append(FIRST_ACCENTED + ACCENTED.index(cp))
+        elif cp == 0x178:
+            out.append(CAPITAL_Y_CODE)
+        else:
+            out.append(ord("?"))
+    return out
+
+
+def spleen_panel(W):
+    """spleenPanel() (D1): k() == 2, i.e. (width() + 64) / 128 == 2."""
+    return Panel(W).k == 2
+
+
+def text_height(W, scale=1):
+    """textHeight(scale): 16 per scale on a Spleen panel, 8 elsewhere; scale 0 counts as 1."""
+    return (16 if spleen_panel(W) else 8) * max(scale, 1)
+
+
 TEXT, LABEL, VALUE = "TEXT", "LABEL", "VALUE"
 NARROW = (ord("."), ord(":"))  # value text draws them from the column window (2, 4)
 
+# ---- Kernel faces (4b-font Task 5, plan D7 and D12) ----
+# A run's face follows its ink, its factor f and the panel: 8x8 (TEXT, VALUE) and 5x7 (LABEL) off a
+# Spleen panel; on one, LABEL in 6x12 and TEXT in 8x16 at even f (no face at odd f). VALUE keeps 8x8
+# on every panel (D12). None is FaceId::NONE: it inks and draws nothing.
+F8X8, F5X7, F6X12, F8X16 = "F8X8", "F5X7", "F6X12", "F8X16"
+SPLEEN_OF = {F6X12: "6X12", F8X16: "8X16"}  # the Spleen table of a face
 
-def columns(code, ink):
-    """The columns that ink draws for one glyph."""
+
+def face_for(P, s, ink, f):
+    """faceFor(s, ink, f): s is read by the VALUE ladder only, which D12 leaves at 8x8."""
+    if not P.spleen or ink == VALUE:
+        return F5X7 if ink == LABEL else F8X8
     if ink == LABEL:
-        return [c & 0x7F for c in FONT5[code - FIRST_CODE]]
-    cols = FONT8[code - FIRST_CODE]
-    return cols[2:6] if ink == VALUE and code in NARROW else cols
+        return F6X12
+    return F8X16 if f % 2 == 0 else None
 
 
-def advance(code, ink):
-    """Advance of one glyph at f 1."""
+def replication(face, f):
+    """n, the times each font pixel is drawn: f for 8x8 and 5x7, f / 2 for 6x12 and 8x16, 1 for
+    None."""
+    return {F8X8: f, F5X7: f, F6X12: f // 2, F8X16: f // 2}.get(face, 1)
+
+
+def cell_height(face, f):
+    """8f for 8x8 and the TEXT/VALUE Spleen faces, 7f for 5x7, 12 (f / 2) for 6x12."""
+    return {F5X7: 7 * f, F6X12: 12 * (f // 2)}.get(face, 8 * f)
+
+
+def glyph_advance(P, ink, f):
+    """glyphAdvance(ink, f): 8f for TEXT and VALUE and 6f for LABEL off a Spleen panel; on one 4f
+    for TEXT, 6 (f / 2) for LABEL and still 8f for VALUE (D12)."""
     if ink == LABEL:
-        return 6
-    return 4 if ink == VALUE and code in NARROW else 8
+        return 6 * (f // 2) if P.spleen else 6 * f
+    return 4 * f if ink == TEXT and P.spleen else 8 * f
 
 
-def ink_rows(s, n, ink):
+def advance_width(s, n, ink, adv):
+    """advanceWidth(): the first n glyphs at `adv` each, a narrow VALUE '.' or ':' at half."""
+    return sum(adv // 2 if ink == VALUE and code in NARROW else adv for code in glyphs(s)[:n])
+
+
+def cell_width(P, s, n, ink, f):
+    return advance_width(s, n, ink, glyph_advance(P, ink, f))
+
+
+def value_width(P, s, f):
+    return cell_width(P, s, count(s), VALUE, f)
+
+
+def max_chars(P):
+    """maxChars(): width() / glyphAdvance(TEXT, k): 16 on 128, 30 on 240."""
+    return P.W // glyph_advance(P, TEXT, P.k)
+
+
+def face_codes(s, face):
+    """The codes a face draws: folded (steamiNextGlyph) for 8x8 and 5x7, extended (steamiNextCode)
+    for a Spleen face."""
+    return codes(s) if face in SPLEEN_OF else glyphs(s)
+
+
+def glyph_pixels(code, ink, face):
+    """[(column, row)] of one glyph at n 1, the column from the left edge of its drawn window: the
+    8x8 window (2, 4) of a VALUE '.' or ':', the 5x7 rows 0..6, a Spleen glyph's whole cell."""
+    if face in SPLEEN_OF:
+        sp = SPLEEN[SPLEEN_OF[face]]
+        rows = enumerate(sp.glyph(code))
+        return [(c, r) for r, bits in rows for c in range(sp.w) if sp.lit(bits, c)]
+    if face == F5X7:
+        cols = [c & 0x7F for c in FONT5[code - FIRST_CODE]]
+    else:
+        cols = FONT8[code - FIRST_CODE]
+        cols = cols[2:6] if ink == VALUE and code in NARROW else cols
+    return [(i, row) for i, col in enumerate(cols) for row in range(8) if col >> row & 1]
+
+
+def ink_rows(s, n, ink, face):
+    """inkRows(s, n, ink, face): bit r set when font row r of the first n glyphs holds ink; 0 for
+    None."""
+    if face is None:
+        return 0
     m = 0
-    for code in glyphs(s)[:n]:
-        for c in columns(code, ink):
-            m |= c
+    for code in face_codes(s, face)[:n]:
+        for _, row in glyph_pixels(code, ink, face):
+            m |= 1 << row
     return m
-
-
-def cell_width(s, n, ink, f):
-    return sum(advance(code, ink) for code in glyphs(s)[:n]) * f
-
-
-def value_width(s, f):
-    return cell_width(s, count(s), VALUE, f)
 
 
 def lowest_bit(m):
@@ -106,6 +251,7 @@ class Panel:
         self.k = max(1, (W + 64) // 128)
         self.r = min(self.W, self.H) // 2
         self.cx, self.cy = self.W // 2, self.H // 2
+        self.spleen = self.k == 2  # spleenPanel() (D1)
 
     def u(self, v):
         return int(v * self.W / 128)  # truncation toward zero: u(-12) is -22 on 240
@@ -120,11 +266,12 @@ class Panel:
         return (self.cx - min(hs), self.cx + min(hs))
 
     def ink_chord(self, s, n, ink, y, f):  # mask == 0 -> "no ink": always fits
-        m = ink_rows(s, n, ink)
+        face = face_for(self, s, ink, f)
+        m = ink_rows(s, n, ink, face)
         if m == 0:
             return (0, self.W - 1)
-        first, last = lowest_bit(m), highest_bit(m)
-        return self.chord(y + first * f, y + (last + 1) * f - 1)
+        first, last, rep = lowest_bit(m), highest_bit(m), replication(face, f)
+        return self.chord(y + first * rep, y + (last + 1) * rep - 1)
 
     def cap(self):  # 29 on 128, 63 on 240; r + 2 when r <= 52k
         r = self.r
@@ -149,14 +296,15 @@ class Panel:
         return x, y
 
     def fit_glyphs(self, s, ink, f, y, limit, shrink, pad):  # longest prefix, in glyphs
+        face = face_for(self, s, ink, f)  # the face of the whole text, for every prefix
         for n in range(count(s), 0, -1):
-            if ink_rows(s, n, ink) == 0:
+            if ink_rows(s, n, ink, face) == 0:
                 return n
             c = self.ink_chord(s, n, ink, y, f)
             if c is None:
                 continue
             left, right = max(c[0] + shrink, limit[0]), min(c[1] - shrink, limit[1])
-            if cell_width(s, n, ink, f) + pad <= right - left + 1:
+            if cell_width(self, s, n, ink, f) + pad <= right - left + 1:
                 return n
         return 0
 
@@ -166,15 +314,18 @@ class Panel:
         return self.cx + round_q14(d * sin_q14(deg)), self.cy - round_q14(d * cos_q14(deg))
 
 
-def draw_glyphs(s, n, ink, x, y, f):
-    """The pixels drawGlyphs() lights: a set of (x, y)."""
+def draw_glyphs(P, s, n, ink, x, y, f):
+    """The pixels drawGlyphs() lights for the first n glyphs of s at factor f, the first cell's
+    left column at x: a set of (x, y). Each font pixel is an r x r block, r = replication()."""
+    face = face_for(P, s, ink, f)
     lit = set()
-    for code in glyphs(s)[:n]:
-        for i, col in enumerate(columns(code, ink)):
-            for row in range(7 if ink == LABEL else 8):
-                if col >> row & 1:
-                    lit |= {(x + i * f + a, y + row * f + b) for a in range(f) for b in range(f)}
-        x += advance(code, ink) * f
+    if face is None:
+        return lit
+    rep, adv = replication(face, f), glyph_advance(P, ink, f)
+    for code in face_codes(s, face)[:n]:
+        for c, row in glyph_pixels(code, ink, face):
+            lit |= {(x + c * rep + a, y + row * rep + b) for a in range(rep) for b in range(rep)}
+        x += adv // 2 if ink == VALUE and code in NARROW else adv
     return lit
 
 
@@ -224,11 +375,11 @@ def glyph_factor(P, scale):
 
 def clamp_into(P, s, n, ink, y, f, limit, x):
     """x clamped into the region of the prefix (its ink chord shrunk by k, within limit)."""
-    if ink_rows(s, n, ink) == 0:
+    if ink_rows(s, n, ink, face_for(P, s, ink, f)) == 0:
         return x
     c = P.ink_chord(s, n, ink, y, f)
     left, right = max(c[0] + P.k, limit[0]), min(c[1] - P.k, limit[1])
-    return max(left, min(x, right - cell_width(s, n, ink, f) + 1))
+    return max(left, min(x, right - cell_width(P, s, n, ink, f) + 1))
 
 
 def text_layout(P, s, at, scale):
@@ -236,15 +387,15 @@ def text_layout(P, s, at, scale):
     if not s:
         return None
     f = glyph_factor(P, scale)
-    tw = cell_width(s, count(s), TEXT, f)
+    tw = cell_width(P, s, count(s), TEXT, f)
     px, py = P.resolve(at, tw, f)
     panel = (0, P.W - 1)
     if at in ("N", "S", "CENTER"):
         n = P.fit_glyphs(s, TEXT, f, py, panel, 0, 0)
-        return P.cx - cell_width(s, n, TEXT, f) // 2, py, n
+        return P.cx - cell_width(P, s, n, TEXT, f) // 2, py, n
     limit = {"W": (px, P.W - 1), "E": (0, px + tw - 1)}.get(at, panel)
     n = P.fit_glyphs(s, TEXT, f, py, limit, P.k, 0)
-    w = cell_width(s, n, TEXT, f)
+    w = cell_width(P, s, n, TEXT, f)
     x = {"W": px, "E": px + tw - w}[at] if at in ("W", "E") else P.resolve(at, w, f)[0]
     return clamp_into(P, s, n, TEXT, py, f, limit, x), py, n
 
@@ -256,7 +407,7 @@ def text_box(W, s, at, scale=1):
     if place is None:
         return None
     x, y, n = place
-    lit = draw_glyphs(s, n, TEXT, x, y, glyph_factor(P, scale))
+    lit = draw_glyphs(P, s, n, TEXT, x, y, glyph_factor(P, scale))
     return box(lit) if lit else None
 
 
@@ -276,7 +427,7 @@ def subtitle_layout(P, lines):
     if not block:
         return []
     f, panel = P.k, (0, P.W - 1)
-    S = P.resolve("S", max(cell_width(l, count(l), TEXT, f) for l in block), f)[1]
+    S = P.resolve("S", max(cell_width(P, line, count(line), TEXT, f) for line in block), f)[1]
     pitch, n = P.u(11), len(block)
 
     def fits(line, y):
@@ -285,13 +436,13 @@ def subtitle_layout(P, lines):
     start = S + P.u(8) if n == 1 else S - (pitch * (n - 1)) // 2
     lowest = S - (n - 1) * pitch
     y = start
-    while y > lowest and any(ink_rows(l, count(l), TEXT) and not fits(l, y + i * pitch)
-                             for i, l in enumerate(block)):
+    while y > lowest and any(ink_rows(line, count(line), TEXT, face_for(P, line, TEXT, f))
+                             and not fits(line, y + i * pitch) for i, line in enumerate(block)):
         y -= 1
     out = []
     for i, line in enumerate(block):
         kept = P.fit_glyphs(line, TEXT, f, y + i * pitch, panel, 0, 0)
-        out.append((P.cx - cell_width(line, kept, TEXT, f) // 2, y + i * pitch, kept))
+        out.append((P.cx - cell_width(P, line, kept, TEXT, f) // 2, y + i * pitch, kept))
     return out
 
 
@@ -300,7 +451,7 @@ def subtitle_rows(W, lines):
     P = Panel(W)
     out = []
     for line, (x, y, n) in zip(lines, subtitle_layout(P, lines)):
-        lit = draw_glyphs(line, n, TEXT, x, y, P.k)
+        lit = draw_glyphs(P, line, n, TEXT, x, y, P.k)
         out.append((y, n, box(lit) if lit else None))
     return out
 
@@ -336,10 +487,11 @@ assert all(P128.resolve(at, tw, 1) == device_resolve(128, at, tw) for at in ANCH
 
 # ---- Values pinned by test_steami_screen (Task 2) ----
 print("scale quantities")
-print("  128 u(8) u(-12) k maxChars", P128.u(8), P128.u(-12), P128.k, 128 // (8 * P128.k))
+print("  128 u(8) u(-12) k maxChars", P128.u(8), P128.u(-12), P128.k, max_chars(P128))
 print("  128 marginEw(1)", P128.margin_ew(1), "marginNs(8,1) (104,1) (112,1) (160,1) (8,2)",
       *(P128.margin_ns(tw, f) for tw, f in ((8, 1), (104, 1), (112, 1), (160, 1), (8, 2))))
-print("  240 u(8) u(-12) u(40) k maxChars", P240.u(8), P240.u(-12), P240.u(40), P240.k, 240 // (8 * P240.k))
+print("  240 u(8) u(-12) u(40) k maxChars", P240.u(8), P240.u(-12), P240.u(40), P240.k,
+      max_chars(P240))
 print("  240 marginEw(2) (3)", P240.margin_ew(2), P240.margin_ew(3),
       "marginNs(16,2) (176,2) (208,2) (16,4) (16,3)",
       *(P240.margin_ns(tw, f) for tw, f in ((16, 2), (176, 2), (208, 2), (16, 4), (16, 3))))
@@ -350,11 +502,16 @@ print("  128 (20,20) (9,15) (64,64)", P128.chord(20, 20), P128.chord(9, 15), P12
 print("  240 (41,41) (1,14)", P240.chord(41, 41), P240.chord(1, 14), "w(37,37) w(63,63)",
       width(P240.chord(37, 37)), width(P240.chord(63, 63)), "(239,241)", P240.chord(239, 241))
 print("ink rows and widths")
-print("  inkRows _ TEXT 0x%02X, 8. VALUE 0x%02X, spaces 0x%02X, TEMP LABEL 0x%02X" % (
-    ink_rows("_", 1, TEXT), ink_rows("8.", 2, VALUE), ink_rows("   ", 3, TEXT), ink_rows("TEMP", 4, LABEL)))
-print("  cellWidth 23.5 TEXT", cell_width("23.5", 4, TEXT, 1), "valueWidth 23.5 f1 f2 12:34:56",
-      value_width("23.5", 1), value_width("23.5", 2), value_width("12:34:56", 1),
-      "TEMP LABEL f2", cell_width("TEMP", 4, LABEL, 2), "Température", cell_width("Température", 11, TEXT, 1))
+print(f"  inkRows _ TEXT F8X8 0x{ink_rows('_', 1, TEXT, F8X8):02X}, "
+      f"8. VALUE F8X8 0x{ink_rows('8.', 2, VALUE, F8X8):02X}, "
+      f"spaces 0x{ink_rows('   ', 3, TEXT, F8X8):02X}, "
+      f"TEMP LABEL F5X7 0x{ink_rows('TEMP', 4, LABEL, F5X7):02X}")
+print("  advanceWidth 23.5 VALUE 8", advance_width("23.5", 4, VALUE, 8), "TEMP LABEL 12",
+      advance_width("TEMP", 4, LABEL, 12), "Température TEXT 8",
+      advance_width("Température", 11, TEXT, 8))
+print("  128 cellWidth 23.5 TEXT f1", cell_width(P128, "23.5", 4, TEXT, 1),
+      "valueWidth 23.5 f1 f2 12:34:56", value_width(P128, "23.5", 1), value_width(P128, "23.5", 2),
+      value_width(P128, "12:34:56", 1))
 print("fitGlyphs")
 for P, y, f in ((P128, 29, 1), (P240, 63, 2)):
     print("  %d y %d f %d:" % (P.W, y, f), *(P.fit_glyphs(s, TEXT, f, y, (0, P.W - 1), 0, 0) for s in
@@ -367,29 +524,34 @@ for P, tw, f in ((P128, 16, 1), (P240, 32, 2)):
 print("  240 f 4 CENTER", P240.resolve("CENTER", 32, 4))
 print("drawGlyphs VALUE at (10, 10), f 2")
 for s in ("8.8", "8:8"):
-    lit = draw_glyphs(s, 3, VALUE, 10, 10, 2)
+    lit = draw_glyphs(P128, s, 3, VALUE, 10, 10, 2)
     narrow = {p for p in lit if 26 <= p[0] < 34}
     second = {p for p in lit if p[0] >= 34}
     print("  %s box %s, middle glyph box %s, third glyph first column %d" % (
         s, box(lit), box(narrow), min(p[0] for p in second)))
 
 # ---- Self-check of Task 3: titles, text at a scale, subtitles (spec 5.8 rule 7, 5.9, B7, B8) ----
-assert title_row(128, "Temperature") == (20, 11) and title_row(240, "Temperature") == (41, 11)
+# On 240 (4b-font Task 5) a title in 8x16 advances 8 px: every title of at most 21 glyphs sits at
+# row 37 and is whole; the cap stays 13 8x8 cells x k (63) until 4b-font Task 7
+assert title_row(128, "Temperature") == (20, 11) and title_row(240, "Temperature") == (37, 11)
 assert all(title_row(W, s) == (row, 7) for s in ("Comfort", "Battery") for W, row in ((128, 20), (240, 37)))
 for s in ("ABCDEFGHIJKLM", "ABCDEFGHIJKLMNOPQRST"):
-    assert title_row(128, s) == (29, 13) and title_row(240, s) == (63, 13), s
-assert title_row(128, "_" * 14) == (29, 14) and title_row(240, "_" * 14) == (63, 13)
-assert title_row(128, "_" * 14 + "T") == (29, 14) and title_row(240, "_" * 14 + "T") == (63, 13)
-assert text_layout(P128, "ABCDEFGH", "N", 2)[1:] == (36, 7) and text_layout(P240, "ABCDEFGH", "N", 2)[1:] == (67, 6)
+    assert title_row(128, s) == (29, 13) and title_row(240, s) == (37, count(s)), s
+assert title_row(128, "_" * 14) == (29, 14) and title_row(240, "_" * 14) == (37, 14)
+assert title_row(128, "_" * 14 + "T") == (29, 14) and title_row(240, "_" * 14 + "T") == (37, 15)
+assert text_layout(P128, "ABCDEFGH", "N", 2)[1:] == (36, 7)
+assert text_layout(P240, "ABCDEFGH", "N", 2)[1:] == (67, 8)
 CHIPS = ("WSEN-HIDS", "BME280", "APDS-9960")
+# 240 (4b-font Task 5): every line in 8x16 fits at device.py's rows, 202 alone and 177/197 in pairs
 ONE_LINE = {("WSEN-HIDS",): (108, 202), ("BME280",): (108, 202), ("BQ27441",): (108, 202),
-            ("VL53L1X",): (108, 202), ("SURPRISED",): (108, 202), ("Comfortable",): (104, 188),
-            ("VL53L1X ToF",): (104, 188), ("Uncomfortable",): (95, 166), ("20s window",): (107, 196)}
+            ("VL53L1X",): (108, 202), ("SURPRISED",): (108, 202), ("Comfortable",): (104, 202),
+            ("VL53L1X ToF",): (104, 202), ("Uncomfortable",): (95, 202),
+            ("20s window",): (107, 202)}
 TWO_LINES = {("3842 mV", "BQ27441"): ((95, 106), (177, 197))}
 for chip in CHIPS:
-    TWO_LINES[("Comfortable", chip)] = ((95, 106), (173, 193))
-    TWO_LINES[("Uncomfortable", chip)] = ((86, 97), (151, 171))
-    TWO_LINES[(chip, "20s window")] = ((95, 106), (176, 196))
+    TWO_LINES[("Comfortable", chip)] = ((95, 106), (177, 197))
+    TWO_LINES[("Uncomfortable", chip)] = ((86, 97), (177, 197))
+    TWO_LINES[(chip, "20s window")] = ((95, 106), (177, 197))
 for lines, rows in ONE_LINE.items():
     for W, row in zip((128, 240), rows):
         assert [(y, n) for y, n, _ in subtitle_rows(W, lines)] == [(row, count(lines[0]))], (W, lines)
@@ -401,12 +563,16 @@ for lines, rows in TWO_LINES.items():
 # Review Focus 3: 15 glyphs (20 bytes), 13 kept, cells 12..115, ink 13..114 ('T' column 0, 'e' column 7)
 assert text_layout(P128, "Températureéééé", "N", 1) == (12, 29, 13)
 assert text_box(128, "Températureéééé", "N")[0::2] == (13, 114)
-# the available width of a lowercase-only title comes from the rows it inks
+# on 240 it is whole at row 37, its accents drawn (4b-font Task 5)
+assert text_layout(P240, "Températureéééé", "N", 1) == (60, 37, 15)
+# the available width of a lowercase-only title comes from the rows it inks: 8x8 rows on 128, the
+# 8x16 rows of 4b-font Task 5 on 240 (x-height 5..11 against caps 2..11)
 assert width(P128.ink_chord("acemnorsuvwxz", 13, TEXT, 29, 1)) == 109
 assert width(P128.ink_chord("ABCDEFGHIJKLM", 13, TEXT, 29, 1)) == 107
-assert width(P240.ink_chord("acemnorsuvwxz", 13, TEXT, 63, 2)) == 215
-assert width(P240.ink_chord("ABCDEFGHIJKLM", 13, TEXT, 63, 2)) == 211
-assert title_row(128, "acemnorsuvwxzacemnorsuvwxz")[1] == 13 and title_row(240, "acemnorsuvwxzacem")[1] == 13
+assert width(P240.ink_chord("acemnorsuvwxz", 13, TEXT, 63, 2)) == 217
+assert width(P240.ink_chord("ABCDEFGHIJKLM", 13, TEXT, 63, 2)) == 213
+assert title_row(128, "acemnorsuvwxzacemnorsuvwxz")[1] == 13
+assert title_row(240, "acemnorsuvwxzacem")[1] == 17
 
 # ---- Values pinned by test_steami_screen (Task 3) ----
 print("text_box of Hi at the nine anchors (x0 y0 x1 y1)")
@@ -459,7 +625,8 @@ def half_region(P, at, c):
 def kept_room(P, s, n, ink, y, f, limit, shrink):
     """fitGlyphs()'s room on return: the kept prefix's ink chord (the panel without ink) shrunk by
     `shrink`, within limit."""
-    c = P.ink_chord(s, n, ink, y, f) if n and ink_rows(s, n, ink) else (0, P.W - 1)
+    inked = n and ink_rows(s, n, ink, face_for(P, s, ink, f))
+    c = P.ink_chord(s, n, ink, y, f) if inked else (0, P.W - 1)
     return (max(c[0] + shrink, limit[0]), min(c[1] - shrink, limit[1]))
 
 
@@ -477,7 +644,7 @@ def corner_place(P, t, at, scale):
     """5.9 "Corner anchors" (B9): f, top, region, kept glyphs and x of a value at NE, NW, SE, SW."""
     f = glyph_factor(P, scale)
     while True:
-        vw = value_width(t, f)
+        vw = value_width(P, t, f)
         x, top = P.resolve(at, vw, f)
         region = corner_region(P, top, f)
         if region_width(region) > 0 and region[0] <= x and x + vw - 1 <= region[1]:
@@ -489,7 +656,7 @@ def corner_place(P, t, at, scale):
     # longest prefix with value_width <= region width, as fitGlyphs() keeps it (the region lies
     # inside the ink chord of any prefix; a prefix without ink always fits, B9).
     n = P.fit_glyphs(t, VALUE, 1, top, region, 0, 0)
-    w = cell_width(t, n, VALUE, 1)
+    w = cell_width(P, t, n, VALUE, 1)
     x = max(region[0], min(P.resolve(at, w, 1)[0], region[1] - w + 1))
     return {"f": 1, "top": top, "region": region, "n": n, "x": x}
 
@@ -502,23 +669,24 @@ def value_place(P, t, at, unit, scale, y_offset):
     pad = 0 if side else P.u(4)
     f = glyph_factor(P, scale)
     while True:
-        vw = value_width(t, f)
+        vw = value_width(P, t, f)
         if at in ("N", "S"):
             top = P.resolve(at, vw, f)[1]
         else:  # CENTER, W, E
             top = P.cy + P.u(y_offset) - block_height(P, f, has_text(unit)) // 2
         if side:
             region = half_region(P, at, P.chord(top, top + 8 * f - 1))
-            fits = max(vw, value_width(REFERENCE, f)) <= region_width(region)
+            fits = max(vw, value_width(P, REFERENCE, f)) <= region_width(region)
         else:
             region = (0, P.W - 1)
             c = P.ink_chord(t, count(t), VALUE, top, f)
-            fits = ink_rows(t, count(t), VALUE) == 0 or (c is not None and vw + pad <= width(c))
+            no_ink = ink_rows(t, count(t), VALUE, face_for(P, t, VALUE, f)) == 0
+            fits = no_ink or (c is not None and vw + pad <= width(c))
         if fits or f == 1:
             break
         f -= 1
     n = P.fit_glyphs(t, VALUE, f, top, region, 0, pad)  # whole whenever it fits; else cut at f 1
-    w = cell_width(t, n, VALUE, f)
+    w = cell_width(P, t, n, VALUE, f)
     x = region[0] + (region_width(region) - w) // 2 if side else P.cx - w // 2
     return {"f": f, "top": top, "region": region, "n": n, "x": x}
 
@@ -534,7 +702,7 @@ def part_place(P, s, ink, y, at, centre):
         limit, shrink = (0, P.W - 1), 0
     n = P.fit_glyphs(s, ink, P.k, y, limit, shrink, 0)
     room = kept_room(P, s, n, ink, y, P.k, limit, shrink)
-    w = cell_width(s, n, ink, P.k)
+    w = cell_width(P, s, n, ink, P.k)
     if at in ("W", "E"):
         x = room[0] + (region_width(room) - w) // 2
     elif at in CORNERS:
@@ -550,7 +718,7 @@ def value_layout(W, t, at="CENTER", unit=None, label=None, scale=2, y_offset=0):
     P = Panel(W)
     v = value_place(P, t, at, unit, scale, y_offset)
     out = dict(v)
-    lit_value = draw_glyphs(t, v["n"], VALUE, v["x"], v["top"], v["f"])
+    lit_value = draw_glyphs(P, t, v["n"], VALUE, v["x"], v["top"], v["f"])
     out["value"] = box(lit_value) if lit_value else None
     out["value_lit"] = lit_value
     for name, s, ink, y in (("label", label, LABEL, v["top"] - P.u(4) - 7 * P.k),
@@ -559,9 +727,9 @@ def value_layout(W, t, at="CENTER", unit=None, label=None, scale=2, y_offset=0):
         out[name + "_n"] = 0
         out[name + "_lit"] = set()
         if has_text(s):
-            centre = v["x"] + cell_width(t, v["n"], VALUE, v["f"]) // 2
+            centre = v["x"] + cell_width(P, t, v["n"], VALUE, v["f"]) // 2
             x, n, room = part_place(P, s, ink, y, at, centre)
-            lit = draw_glyphs(s, n, ink, x, y, P.k)
+            lit = draw_glyphs(P, s, n, ink, x, y, P.k)
             out[name] = box(lit) if lit else None
             out[name + "_n"], out[name + "_room"], out[name + "_x"] = n, room, x
             out[name + "_lit"] = lit
@@ -583,7 +751,7 @@ def first_cut(W, t, unit, step):
 
 # ---- Self-check of Task 4 ----
 DEG_C = "°C"
-assert all(value_width("23.5", f) == 28 * f for f in range(1, 9))
+assert all(value_width(P, "23.5", f) == 28 * f for P in (P128, P240) for f in range(1, 9))
 v01 = value_layout(128, "23.5", "CENTER", DEG_C)
 assert (v01["f"], v01["top"], v01["x"]) == (2, 50, 36)
 assert v01["value"][1::2] == (50, 63) and v01["unit"][1::2] == (66, 72)
@@ -606,7 +774,7 @@ for t in ("12345678", "-1234.56", "Uncomfortable"):
     assert value_cut(128, t, "W", DEG_C) and value_cut(128, t, "E", DEG_C), t
 assert not value_cut(240, "Uncomfortable", "W", DEG_C) and value_cut(240, "ABCDEFGHIJKLMNO", "W", DEG_C)
 FIFTEEN, NUMERIC = "888888888888888", "-999999936.0000"
-assert value_width(FIFTEEN, 1) == 120 and value_width(NUMERIC, 1) == 116
+assert value_width(P128, FIFTEEN, 1) == 120 and value_width(P128, NUMERIC, 1) == 116
 assert value_cut(128, FIFTEEN, "CENTER", DEG_C, -12) and value_cut(240, FIFTEEN, "CENTER", DEG_C, -50)
 assert not value_cut(128, FIFTEEN, "CENTER", DEG_C) and not value_cut(240, FIFTEEN, "CENTER", DEG_C)
 THRESHOLDS = {128: ((-7, 19), (-12, 14), (-14, 26)), 240: ((-48, 59), (-53, 54), (-49, 60))}
@@ -614,11 +782,13 @@ for W, expected in THRESHOLDS.items():
     got = tuple((first_cut(W, t, unit, -1), first_cut(W, t, unit, 1))
                 for t, unit in ((FIFTEEN, DEG_C), (FIFTEEN, None), (NUMERIC, DEG_C)))
     assert got == expected, (W, got)
-for W, whole in ((128, "TEMPERATU"), (240, "TEMPERAT")):
+# 240 (4b-font Task 5): 6x12 labels advance 6 px, so the 104 px room holds 17 of them
+for W, whole in ((128, "TEMPERATU"), (240, "TEMPERATURES12345")):
     for at in ("W", "E"):
         assert value_layout(W, "23.5", at, DEG_C, whole)["label_n"] == len(whole), (W, at)
         assert value_layout(W, "23.5", at, DEG_C, whole + "R")["label_n"] == len(whole), (W, at)
-        assert value_layout(W, "23.5", at, DEG_C, "TEMPERATURE")["label_n"] == len(whole), (W, at)
+        kept = value_layout(W, "23.5", at, DEG_C, "TEMPERATURE")["label_n"]
+        assert kept == min(len(whole), 11), (W, at)
 
 # ---- Values pinned by test_steami_screen (Task 4) ----
 VALUE_CASES = (
@@ -671,9 +841,11 @@ assert s128["unit"][1::2] == (108, 114) and s128["unit_room"] == (26, 102) and s
 assert s128["x"] + 8 // 2 - 8 // 2 == 103  # "moves from x 103 to x 95"
 c240 = value_layout(240, "8", "NE", "C", "TEMP", 1)
 assert (c240["f"], c240["x"], c240["top"]) == (1, 180, 22), c240  # f 2 leaves the region
-assert c240["label"][1::2] == (1, 14) and c240["label_room"] == (107, 133), c240
-assert (c240["label_n"], c240["label_x"]) == (2, 110), c240  # "TE", 24 px
-assert width(P240.chord(1, 14)) == 31 and region_width(c240["label_room"]) == 27
+# 4b-font Task 5: the 6x12 label, its cell top still 22 - u(4) - 7k = 1, inks rows 2..9, whose
+# chord shrunk by k is [101, 139] (39 px): "TEMP" (24 px) is whole at x 116 (4b: "TE" in 5x7 x 2)
+assert c240["label"][1::2] == (2, 9) and c240["label_room"] == (101, 139), c240
+assert (c240["label_n"], c240["label_x"]) == (4, 116), c240
+assert P240.chord(2, 9) == (99, 141) and region_width(c240["label_room"]) == 39
 # every corner case: each part inside its region (the value) or its room (label, unit), so inside
 # the circle; the 15-glyph text is cut on 128 (cap row 29, region 105 px) and whole on 240
 for W in (128, 240):
@@ -895,96 +1067,6 @@ print("  128 (43,233) (43,127) (44,0) (0,77) (44,-90) (44,270)",
       *(P128.polar(d, a) for d, a in ((43, 233), (43, 127), (44, 0), (0, 77), (44, -90), (44, 270))))
 print("  240 (82,233) (83,0)", P240.polar(82, 233), P240.polar(83, 0))
 
-# ---- The Spleen faces of the 240 px panel (4b-font Task 4) ----
-# Parsed from the generated SteamiFontSpleen.cpp by array name and descriptor line (plan D2, D3):
-# rows top to bottom, (w + 7) / 8 bytes per row, MSB = leftmost column. A face's glyphs are held as
-# lists of w-bit row integers (bit w - 1 = column 0). Full sets are indexed by extended code - 32.
-SPLEEN_CPP = FONT_CPP.with_name("SteamiFontSpleen.cpp")
-SPLEEN_NAMES = ("6X12", "8X16", "12X24", "16X32")
-SPLEEN_SIZES = {"6X12": 1536, "8X16": 2048, "12X24": 720, "16X32": 960}
-SPLEEN_METRICS = {"6X12": (6, 12, 9, 128), "8X16": (8, 16, 12, 128), "12X24": (12, 24, 19, 15),
-                  "16X32": (16, 32, 26, 15)}
-FIRST_ACCENTED, CAPITAL_Y_CODE = 128, 159
-ACCENTED = tuple(FOLDS)  # the code points of kFolds, in its order: codes 128..158
-
-
-class Face:
-    def __init__(self, w, h, ascent, glyphs, rows):
-        self.w, self.h, self.ascent, self.glyphs, self.rows = w, h, ascent, glyphs, rows
-
-    def glyph(self, code):
-        """steamiFaceGlyph() of a full set: the rows of code, '?' outside 32..159."""
-        assert self.glyphs == 128
-        valid = code if FIRST_CODE <= code <= CAPITAL_Y_CODE else ord("?")
-        return self.rows[valid - FIRST_CODE]
-
-    def lit(self, row_bits, col):
-        return row_bits >> (self.w - 1 - col) & 1
-
-
-def spleen():
-    """The four faces of SteamiFontSpleen.cpp: {name: Face}."""
-    source = SPLEEN_CPP.read_text(encoding="utf-8")
-    faces = {}
-    for name in SPLEEN_NAMES:
-        array = "kSpleen" + name.lower()
-        size = SPLEEN_SIZES[name]
-        body = source.split(f"const uint8_t {array}[{size}] = {{", 1)[1].split("};", 1)[0]
-        data = []
-        for line in body.splitlines():
-            data += [int(h, 16) for h in re.findall(r"0x[0-9A-Fa-f]{2}", line.split("//", 1)[0])]
-        assert len(data) == size, (name, len(data))
-        pattern = (rf"const SteamiFontFace STEAMI_SPLEEN_{name} = "
-                   rf"\{{(\d+), (\d+), (\d+), (\d+), {array}\}};")
-        descriptor = re.search(pattern, source)
-        assert descriptor, name
-        w, h, ascent, count_ = (int(v) for v in descriptor.groups())
-        per_row = (w + 7) // 8
-        assert count_ * h * per_row == size, name
-        rows = []
-        for g in range(count_):
-            glyph = []
-            for r in range(h):
-                at = (g * h + r) * per_row
-                row = int.from_bytes(bytes(data[at:at + per_row]), "big")
-                glyph.append(row >> (8 * per_row - w))
-            rows.append(glyph)
-        faces[name] = Face(w, h, ascent, count_, rows)
-    return faces
-
-
-SPLEEN = spleen()
-
-
-def codes(s):
-    """steamiNextCode over a str: ASCII 32..126, the degree sign 127, the letters of kFolds
-    128..158, U+0178 159, anything else '?'."""
-    out = []
-    for ch in s:
-        cp = ord(ch)
-        if 32 <= cp <= 126:
-            out.append(cp)
-        elif cp == 0xB0:
-            out.append(DEGREE)
-        elif cp in FOLDS:
-            out.append(FIRST_ACCENTED + ACCENTED.index(cp))
-        elif cp == 0x178:
-            out.append(CAPITAL_Y_CODE)
-        else:
-            out.append(ord("?"))
-    return out
-
-
-def spleen_panel(W):
-    """spleenPanel() (D1): k() == 2, i.e. (width() + 64) / 128 == 2."""
-    return Panel(W).k == 2
-
-
-def text_height(W, scale=1):
-    """textHeight(scale): 16 per scale on a Spleen panel, 8 elsewhere; scale 0 counts as 1."""
-    return (16 if spleen_panel(W) else 8) * max(scale, 1)
-
-
 # ---- Self-check of 4b-font Task 4 ----
 assert {name: len(f.rows) * f.h * ((f.w + 7) // 8) for name, f in SPLEEN.items()} == SPLEEN_SIZES
 assert sum(SPLEEN_SIZES.values()) == 5264
@@ -993,7 +1075,7 @@ assert len(ACCENTED) == CAPITAL_Y_CODE - FIRST_ACCENTED
 assert ACCENTED[0] == 0xC0 and ACCENTED[-1] == 0xFF
 assert codes("AéŸ°€") == [65, FIRST_ACCENTED + ACCENTED.index(0xE9), 159, 127, 63]
 # 8x16 'A': columns 0..6, rows 2..11, 44 pixels; the degree sign: columns 1..5, rows 1..4, 14 pixels
-F8X16 = SPLEEN["8X16"]
+SPLEEN_8X16 = SPLEEN["8X16"]
 
 
 def face_box(face, code):
@@ -1002,8 +1084,8 @@ def face_box(face, code):
     return box(lit), len(lit)
 
 
-assert face_box(F8X16, ord("A")) == ((0, 2, 6, 11), 44)
-assert face_box(F8X16, DEGREE) == ((1, 1, 5, 4), 14)
+assert face_box(SPLEEN_8X16, ord("A")) == ((0, 2, 6, 11), 44)
+assert face_box(SPLEEN_8X16, DEGREE) == ((1, 1, 5, 4), 14)
 assert face_box(SPLEEN["6X12"], ord("A")) == ((0, 1, 4, 8), 20)  # textSmall's 'A' on 240
 HEIGHTS = [text_height(W, s) for W in (128, 96, 240, 200) for s in (0, 1, 2)]
 assert HEIGHTS == [8, 8, 16] * 2 + [16, 16, 32] * 2
@@ -1011,7 +1093,8 @@ assert text_height(240, 255) == 4080
 print("Spleen faces (4b-font Task 4): name, w, h, ascent, glyphs, bytes")
 for name, f in SPLEEN.items():
     print(f"  {name}: {f.w} {f.h} {f.ascent} {f.glyphs} {SPLEEN_SIZES[name]}")
-print(f"  8x16 'A' box {face_box(F8X16, ord('A'))}, degree box {face_box(F8X16, DEGREE)}; "
+print(f"  8x16 'A' box {face_box(SPLEEN_8X16, ord('A'))}, "
+      f"degree box {face_box(SPLEEN_8X16, DEGREE)}; "
       f"6x12 'A' box {face_box(SPLEEN['6X12'], ord('A'))}")
 
 # ---- A raster of the primitives the round widgets draw through (SteamiDisplay.cpp) ----
@@ -1101,11 +1184,11 @@ def r_text(cv, W, s, x, y, scale, c):
     n = max(scale, 1)
     if spleen_panel(W):
         for code in codes(s):
-            for row, bits in enumerate(F8X16.glyph(code)):
-                for col in range(F8X16.w):
-                    if F8X16.lit(bits, col):
+            for row, bits in enumerate(SPLEEN_8X16.glyph(code)):
+                for col in range(SPLEEN_8X16.w):
+                    if SPLEEN_8X16.lit(bits, col):
                         r_span(cv, W, x + col * n, y + row * n, n, n, c)
-            x += F8X16.w * n
+            x += SPLEEN_8X16.w * n
         return
     for code in glyphs(s):
         for i, col in enumerate(FONT8[code - FIRST_CODE]):
@@ -1477,7 +1560,7 @@ for W in (128, 240):
     for text, deg, d in places:
         x, y = P.polar(d, deg)
         if W == 128:
-            old_cell = (x - cell_width(text, count(text), TEXT, 1) // 2, y - 4)
+            old_cell = (x - cell_width(P, text, count(text), TEXT, 1) // 2, y - 4)
             assert number_cell(P, text, deg, d) == old_cell
             old = {}  # 4b's r_text at f = k = 1: 8x8 glyphs advancing 8
             for g, code in enumerate(glyphs(text)):
@@ -1504,11 +1587,12 @@ for W in (128, 240):
 # ---- Widget of 4b Task 4: gauge() (spec 5.8 table, 5.9 "gauge", the decisions "gauge" and "gaugeLabel") ----
 # Track and fill are arc()s of the same outer radius and width from 225 degrees (noon, clockwise; device.py's
 # 135 in screen-math angles), drawn in device.py's order: track, fill, min label, max label. A label is the
-# integer part of minV or maxV ("--" past 1e9) in 5x7 x k GRAY, its top row on the point at 233 / 127
-# degrees, centred on it by its cell width, then slid into the chord at its inked rows shrunk by k (the 4a
-# corner rule B10, ruling 3). device.py truncates its label points with int(): its min point on 128 is
-# (29, 89) where Q14 rounding gives (30, 90). The cut in drawGaugeLabel (fitGlyphs) is a guard that no label
-# of at most 10 glyphs reaches: the chord at the label rows leaves about 109 / 201 px.
+# integer part of minV or maxV ("--" past 1e9) in the LABEL face at k GRAY (5x7 x k on 128, 6x12 on
+# 240 from 4b-font Task 5), its top row on the point at 233 / 127 degrees, centred on it by its cell
+# width, then slid into the chord at its inked rows shrunk by k (the 4a corner rule B10, ruling 3).
+# device.py truncates its label points with int(): its min point on 128 is (29, 89) where Q14
+# rounding gives (30, 90). The cut in drawGaugeLabel (fitGlyphs) is a guard that no label of at most
+# 10 glyphs reaches: the chord at the label rows leaves about 109 / 207 px.
 GAUGE_START, GAUGE_SWEEP, GAUGE_MIN_ANGLE, GAUGE_MAX_ANGLE = 225, 270, 233, 127
 FLT_MAX = struct.unpack("<f", b"\xff\xff\x7f\x7f")[0]
 
@@ -1556,8 +1640,9 @@ def gauge_layout(W, min_v, max_v, arc_width=0):
         text = gauge_label_text(v)
         px, py = P.polar(d, deg)
         n = P.fit_glyphs(text, LABEL, P.k, py, panel, P.k, 0)
-        x = clamp_into(P, text, n, LABEL, py, P.k, panel, px - cell_width(text, n, LABEL, P.k) // 2)
-        lit = draw_glyphs(text, n, LABEL, x, py, P.k)
+        x = px - cell_width(P, text, n, LABEL, P.k) // 2
+        x = clamp_into(P, text, n, LABEL, py, P.k, panel, x)
+        lit = draw_glyphs(P, text, n, LABEL, x, py, P.k)
         labels.append({"text": text, "point": (px, py), "kept": n, "x": x, "lit": lit,
                        "box": box(lit) if lit else None})
     return {"outer": outer, "width": w, "d": d, "labels": labels}
@@ -1615,6 +1700,12 @@ def gauge_gray(W, min_v, max_v):
     return box(lit), len(lit)
 
 
+def label_cells(P, labels):
+    """The cells [x, x + cell width - 1] of gauge labels (4b-font Task 5)."""
+    return [(lb["x"], lb["x"] + cell_width(P, lb["text"], lb["kept"], LABEL, P.k) - 1)
+            for lb in labels]
+
+
 def device_gauge_points(W):
     """device.py's label points (927e96b l.200-223): int() of float trigonometry on r_label =
     radius - arc_w // 2 - 1 - arc_w - 10, at 143 and 37 degrees in screen-math angles."""
@@ -1666,23 +1757,24 @@ for W in (128, 240):
     for lo, hi in ((0, 100), (0, 500), (0, 1050)):
         for label in gauge_layout(W, lo, hi)["labels"]:
             text, (px, _) = label["text"], label["point"]
-            assert label["kept"] == count(text) and label["x"] == px - cell_width(text, count(text), LABEL, P.k) // 2
-# A long label slides inward and stays whole (10 glyphs at most): on 128 and 240 the two slid labels
-# of (-1e8, 1e8) overlap (128: min cell 10..69, max cell 65..118; 240: min cell 20..139, max cell
-# 113..220), a known difference of the PR; no example draws such labels
+            assert label["kept"] == count(text)
+            assert label["x"] == px - cell_width(P, text, count(text), LABEL, P.k) // 2
+# A long label slides inward and stays whole (10 glyphs at most); no example draws such labels
 for W in (128, 240):
     for lo, hi in ((-100000000.0, 100000000.0), (-999999872, 999999872), (1e9, -1e9)):
         for label in gauge_layout(W, lo, hi)["labels"]:
             assert label["kept"] == count(label["text"]), (W, lo, hi, label["text"])
+# On 128 the two slid labels of (-1e8, 1e8) overlap (min cell 10..69, max cell 65..118), a known
+# difference of the PR
 L128 = gauge_layout(128, -100000000.0, 100000000.0)["labels"]
-assert [(l["x"], l["x"] + cell_width(l["text"], l["kept"], LABEL, 1) - 1) for l in L128] == [(10, 69), (65, 118)]
+CELLS128 = label_cells(P128, L128)
+assert CELLS128 == [(10, 69), (65, 118)]
+# 4b-font Task 5 (design 6): on 240 the 6x12 labels (6 px per glyph) are clear, cells 25..84 and
+# 158..211 (4b: 20..139 and 113..220 in 5x7 x 2)
 L240 = gauge_layout(240, -100000000.0, 100000000.0)["labels"]
-assert [(l["x"], l["x"] + cell_width(l["text"], l["kept"], LABEL, 2) - 1) for l in L240] == [(20, 139), (113, 220)]
-# On 240 a min label of 3 digits such as "100" paints over the ring ends by a few pixels (known difference)
-P = Panel(240)
-touch = sorted(gauge_layout(240, 100, 500)["labels"][0]["lit"] & colour_set(gauge_render(240, 0, 0, 500), "DARK"))
-assert touch == [(39, 181), (39, 182), (40, 181), (40, 182)], touch
-assert not (gauge_layout(240, 0, 500)["labels"][0]["lit"] & colour_set(gauge_render(240, 0, 0, 500), "DARK"))
+CELLS240 = label_cells(P240, L240)
+assert CELLS240 == [(25, 84), (158, 211)]
+assert not (L240[0]["lit"] & L240[1]["lit"])
 # Review Focus 3: nothing outside radius() + 1, whatever the fill, the labels or the width
 for W in (128, 240):
     P = Panel(W)
@@ -1722,13 +1814,13 @@ def paint(cv, lit, c):
 def m_title(cv, W, s, c="GRAY"):
     P = Panel(W)
     x, y, n = text_layout(P, s, "N", 1)
-    paint(cv, draw_glyphs(s, n, TEXT, x, y, glyph_factor(P, 1)), c)
+    paint(cv, draw_glyphs(P, s, n, TEXT, x, y, glyph_factor(P, 1)), c)
 
 
 def m_subtitle(cv, W, lines, c="DARK"):
     P = Panel(W)
     for line, (x, y, n) in zip(lines, subtitle_layout(P, lines)):
-        paint(cv, draw_glyphs(line, n, TEXT, x, y, P.k), c)
+        paint(cv, draw_glyphs(P, line, n, TEXT, x, y, P.k), c)
 
 
 def m_value(cv, W, t, unit=None, at="CENTER", label=None, scale=2, y_offset=0):
@@ -1814,29 +1906,34 @@ WATCH_START = 10 * 3600 + 10 * 60 + 30  # mockup 09: 10:10:30
 PINNED_4A = (
     ("01", 128, "GRAY", None, (21, 20, 106, 27)), ("01", 128, "WHITE", None, (38, 50, 89, 63)),
     ("01", 128, "LIGHT", None, (57, 66, 70, 72)), ("01", 128, "DARK", None, (29, 108, 98, 114)),
-    ("01", 240, "GRAY", None, (34, 41, 205, 56)), ("01", 240, "WHITE", None, (68, 91, 171, 118)),
-    ("01", 240, "LIGHT", None, (106, 123, 133, 136)), ("01", 240, "DARK", None, (74, 202, 165, 215)),
+    ("01", 240, "GRAY", None, (76, 39, 162, 51)), ("01", 240, "WHITE", None, (68, 91, 171, 118)),
+    ("01", 240, "LIGHT", None, (113, 124, 126, 134)),
+    ("01", 240, "DARK", None, (96, 204, 142, 213)),
     ("02", 128, "WHITE", None, (50, 38, 77, 51)), ("02", 128, "LIGHT", None, (61, 54, 66, 60)),
     ("02", 128, "GRID_DARK", None, (83, 72, 107, 79)), ("02", 128, "GREEN", None, (20, 72, 82, 79)),
     ("02", 128, "DARK", (95, 105), (37, 95, 90, 101)), ("02", 128, "DARK", (106, 127), (37, 106, 90, 112)),
-    ("02", 240, "WHITE", None, (92, 69, 147, 96)), ("02", 240, "LIGHT", None, (114, 101, 125, 114)),
+    ("02", 240, "WHITE", None, (92, 69, 147, 96)), ("02", 240, "LIGHT", None, (117, 103, 122, 112)),
     ("02", 240, "GRID_DARK", None, (156, 135, 202, 149)), ("02", 240, "GREEN", None, (38, 135, 155, 149)),
-    ("02", 240, "DARK", (177, 196), (66, 177, 173, 190)), ("02", 240, "DARK", (197, 239), (66, 197, 173, 210)),
+    ("02", 240, "DARK", (177, 196), (92, 179, 146, 188)),
+    ("02", 240, "DARK", (197, 239), (92, 199, 146, 210)),
     ("03", 128, "DARK", None, (64, 32, 64, 95)), ("03", 128, "WHITE", None, (6, 50, 122, 63)),
     ("03", 128, "LIGHT", None, (24, 66, 99, 72)), ("03", 128, "GRAY", (0, 30), (37, 20, 90, 26)),
     ("03", 128, "GRAY", (31, 127), (22, 39, 102, 45)), ("03", 128, "GREEN", (95, 105), (21, 95, 106, 101)),
     ("03", 128, "GREEN", (106, 127), (29, 106, 98, 112)),
     ("03", 240, "DARK", None, (120, 60, 120, 179)), ("03", 240, "WHITE", None, (21, 96, 219, 116)),
-    ("03", 240, "LIGHT", None, (45, 120, 187, 133)), ("03", 240, "GRAY", (0, 60), (66, 37, 173, 50)),
-    ("03", 240, "GRAY", (61, 239), (39, 75, 193, 88)), ("03", 240, "GREEN", (173, 192), (34, 173, 205, 186)),
-    ("03", 240, "GREEN", (193, 239), (74, 193, 165, 206)),
+    ("03", 240, "LIGHT", None, (52, 121, 184, 131)),
+    ("03", 240, "GRAY", (0, 60), (92, 39, 146, 48)),
+    ("03", 240, "GRAY", (61, 239), (51, 76, 185, 83)),
+    ("03", 240, "GREEN", (177, 196), (76, 179, 162, 188)),
+    ("03", 240, "GREEN", (197, 239), (96, 199, 142, 208)),
     # test_mockups_without_sensors: 02 with no gauge, 03 with no sensor
     ("02 none", 128, "GRID_DARK", None, (20, 72, 107, 79)), ("02 none", 128, "DARK", (95, 105), (57, 98, 70, 98)),
     ("02 none", 128, "DARK", (106, 127), (37, 106, 90, 112)),
     ("02 none", 240, "GRID_DARK", None, (38, 135, 202, 149)),
-    ("02 none", 240, "DARK", (177, 196), (106, 183, 133, 184)),
-    ("02 none", 240, "DARK", (197, 239), (66, 197, 173, 210)),
-    ("03 none", 128, "GREEN", None, (13, 86, 114, 92)), ("03 none", 240, "GREEN", None, (18, 151, 221, 164)),
+    ("02 none", 240, "DARK", (177, 196), (113, 184, 126, 184)),
+    ("02 none", 240, "DARK", (197, 239), (92, 199, 146, 210)),
+    ("03 none", 128, "GREEN", None, (13, 86, 114, 92)),
+    ("03 none", 240, "GREEN", None, (68, 179, 170, 188)),
 )
 CHIP_OF = {128: "WSEN-HIDS", 240: "BME280"}
 
@@ -1947,3 +2044,94 @@ for W in (128, 240):
     print("  %d: WHITE %s %s, tips %s %s" % (W, TWELVE_ROWS[W], band_box(mockup_09(W, WATCH_START), "WHITE",
                                                                        *TWELVE_ROWS[W]),
                                            *watch_layout(W, 10, 10, 30)["tips"][:2]))
+
+# ---- Self-check of 4b-font Task 5: TEXT and LABEL faces on the V1c (design 5.1 to 5.3, 6) ----
+# faceFor, replication, cell heights and advances (D7). Values keep 8x8 on every panel (D12), so
+# glyphAdvance(VALUE, 2) is still 16 on 240.
+P200 = Panel(200)
+for P in (P128, P96):
+    assert [face_for(P, "A", TEXT, f) for f in (1, 2, 3, 4)] == [F8X8] * 4
+    assert face_for(P, "A", LABEL, P.k) == F5X7 and face_for(P, "23.5", VALUE, 2) == F8X8
+for P in (P240, P200):
+    assert [face_for(P, "A", TEXT, f) for f in (2, 3, 4, 6)] == [F8X16, None, F8X16, F8X16]
+    assert face_for(P, "A", LABEL, 2) == F6X12 and face_for(P, "23.5", VALUE, 4) == F8X8
+assert [replication(F8X8, 3), replication(F5X7, 2), replication(F6X12, 2), replication(F8X16, 6),
+        replication(None, 5)] == [3, 2, 1, 3, 1]
+assert [cell_height(F8X8, 2), cell_height(F5X7, 1), cell_height(F6X12, 2),
+        cell_height(F8X16, 4)] == [16, 7, 12, 32]
+assert [glyph_advance(P128, TEXT, 1), glyph_advance(P128, LABEL, 1)] == [8, 6]
+ADVANCES240 = [glyph_advance(P240, ink, f)
+               for ink, f in ((TEXT, 2), (TEXT, 4), (LABEL, 2), (VALUE, 2))]
+assert ADVANCES240 == [8, 16, 6, 16]
+assert (max_chars(P128), max_chars(P240)) == (16, 30)
+# The 128 widths of 4b, now through advanceWidth; the face rows of the V1c (bit r = font row r)
+assert (advance_width("23.5", 4, VALUE, 8), advance_width("TEMP", 4, LABEL, 12),
+        advance_width("Température", 11, TEXT, 8)) == (28, 48, 88)
+assert ink_rows("_", 1, TEXT, F8X8) == 0xC0 and ink_rows("TEMP", 4, LABEL, F5X7) == 0x7F
+assert ink_rows("TEMP", 4, LABEL, F6X12) == 0x1FE  # rows 1..8
+assert ink_rows("Hg", 2, TEXT, F8X16) == 0x7FFC  # rows 2..14
+assert ink_rows("A", 1, TEXT, None) == 0
+# Design 6, program 04: "Distance" at row 37, cells 88..151, ink rows 39..48
+assert text_layout(P240, "Distance", "N", 1) == (88, 37, 8)
+assert cell_width(P240, "Distance", 8, TEXT, 2) == 64
+assert text_box(240, "Distance", "N")[1::2] == (39, 48)
+# "VL53L1X ToF" at device.py's row 202 with no rise (S row 187 + u(8)), cells 76..163, ink rows
+# 204..213, the chord at its ink rows [45, 195]
+assert P240.resolve("S", 88, 2)[1] + P240.u(8) == 202
+assert subtitle_layout(P240, ("VL53L1X ToF",)) == [(76, 202, 11)]
+assert cell_width(P240, "VL53L1X ToF", 11, TEXT, 2) == 88
+assert subtitle_rows(240, ("VL53L1X ToF",))[0][2][1::2] == (204, 213)
+assert P240.ink_chord("VL53L1X ToF", 11, TEXT, 202, 2) == (45, 195)
+# The gauge labels "0" at (52, 169) and "500" at (176, 169), 6x12 ink rows 170..177
+L04 = gauge_layout(240, 0, 500)["labels"]
+assert [(lb["text"], lb["x"], lb["point"][1]) for lb in L04] == [("0", 52, 169), ("500", 176, 169)]
+assert all(lb["box"][1::2] == (170, 177) for lb in L04)
+# Ruling 4: the track alone (r_arc), a superset of the DARK pixels of gauge(0, 0, 500) (the positive
+# control); the "100" min label shares no pixel with it, and the distances go to the PR
+GT = {}
+r_arc(GT, 240, P240.cx, P240.cy, G240["outer"], GAUGE_START, GAUGE_SWEEP, G240["width"], "DARK")
+TRACK240 = set(GT)
+DARK04 = colour_set(gauge_render(240, 0, 0, 500), "DARK")
+assert DARK04 and DARK04 <= TRACK240
+L100 = gauge_layout(240, 100, 500)["labels"]
+assert L100[0]["text"] == "100" and not (L100[0]["lit"] & TRACK240)
+
+
+def ring_distance(lit):
+    """The smallest distance, in pixels, from a lit pixel to a pixel of the 240 track."""
+    return min(math.dist(a, b) for a in lit for b in TRACK240)
+
+
+RING_DISTANCES = [round(ring_distance(lb["lit"]), 1) for lb in L04 + L100[:1]]
+assert RING_DISTANCES == [12.7, 9.4, 8.1], RING_DISTANCES  # design 6
+# Other mockups: "Temperature" 88 px at 37 (01), "Mood" 32 px at 37 (08); 01's and 08's subtitles
+# at 202; 03's blocks at 177/197; text("ABCDEFGH", N, c, 2) whole on 240
+assert text_layout(P240, "Temperature", "N", 1) == (76, 37, 11)
+assert cell_width(P240, "Temperature", 11, TEXT, 2) == 88
+assert text_layout(P240, "Mood", "N", 1) == (104, 37, 4)
+assert cell_width(P240, "Mood", 4, TEXT, 2) == 32
+for s in ("BME280", "HAPPY", "SURPRISED"):
+    assert subtitle_rows(240, (s,))[0][:2] == (202, count(s)), s
+for comfort in ("Comfortable", "Uncomfortable"):
+    rows = [r[:2] for r in subtitle_rows(240, (comfort, "BME280"))]
+    assert rows == [(177, count(comfort)), (197, 6)], comfort
+assert text_layout(P240, "ABCDEFGH", "N", 2) == (56, 67, 8)
+# Accents drawn on 240: "Été" is whole at its cell (108, 37); Ÿ in 6x12 is the Y glyph (5.4)
+assert text_layout(P240, "Été", "N", 1) == (108, 37, 3) and codes("Été")[0] != codes("Ete")[0]
+assert SPLEEN["6X12"].glyph(CAPITAL_Y_CODE) == SPLEEN["6X12"].glyph(ord("Y"))
+# A gauge label is textSmall(..., 1) at its cell: "0" of gauge(0, 0, 100) at (27, 90) / (52, 169)
+ZEROS = (G128["labels"][0], G240["labels"][0])
+assert [(lb["x"], lb["point"][1]) for lb in ZEROS] == [(27, 90), (52, 169)]
+
+print("kernel faces (4b-font Task 5)")
+print(f"  240 inkRows TEMP LABEL F6X12 0x{ink_rows('TEMP', 4, LABEL, F6X12):X}, "
+      f"Hg TEXT F8X16 0x{ink_rows('Hg', 2, TEXT, F8X16):X}; "
+      f"maxChars {max_chars(P128)} / {max_chars(P240)}")
+VL_TOF = ("VL53L1X ToF",)
+print(f"  04 on 240: Distance cell {text_layout(P240, 'Distance', 'N', 1)} "
+      f"ink {text_box(240, 'Distance', 'N')}; VL53L1X ToF {subtitle_layout(P240, VL_TOF)} "
+      f"ink {subtitle_rows(240, VL_TOF)[0][2]} chord {P240.ink_chord(VL_TOF[0], 11, TEXT, 202, 2)}")
+print("  04 gauge labels:", *(f"{lb['text']} x {lb['x']} box {lb['box']}" for lb in L04),
+      "; distances to the ring (0, 500, 100):", *RING_DISTANCES)
+print("  (-1e8, 1e8) 240 cells", CELLS240)
+print(f"  Été title cell {text_layout(P240, 'Été', 'N', 1)} ink {text_box(240, 'Été', 'N')}")

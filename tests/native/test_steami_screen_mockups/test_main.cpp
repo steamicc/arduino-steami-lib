@@ -143,10 +143,10 @@ static void test_mockup_01_temperature(void) {
     });
     render("01_temperature", 240, true, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
         mockupTemperature(s, 23.5f, "BME280");
-        expectBox(inkBox(mem, STEAMI_GRAY), 34, 41, 205, 56);  // title row 41
+        expectBox(inkBox(mem, STEAMI_GRAY), 76, 39, 162, 51);  // title row 37, in 8x16
         expectBox(inkBox(mem, STEAMI_WHITE), 68, 91, 171, 118);
-        expectBox(inkBox(mem, STEAMI_LIGHT), 106, 123, 133, 136);
-        expectBox(inkBox(mem, STEAMI_DARK), 74, 202, 165, 215);  // "BME280"
+        expectBox(inkBox(mem, STEAMI_LIGHT), 113, 124, 126, 134);
+        expectBox(inkBox(mem, STEAMI_DARK), 96, 204, 142, 213);  // "BME280", row 202
     });
 }
 
@@ -164,11 +164,11 @@ static void test_mockup_02_battery(void) {
     render("02_battery", 240, true, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
         mockupBattery(s, 72, 3.842f);
         expectBox(inkBox(mem, STEAMI_WHITE), 92, 69, 147, 96);
-        expectBox(inkBox(mem, STEAMI_LIGHT), 114, 101, 125, 114);
+        expectBox(inkBox(mem, STEAMI_LIGHT), 117, 103, 122, 112);
         expectBox(inkBox(mem, STEAMI_GRID_DARK), 156, 135, 202, 149);
         expectBox(inkBox(mem, STEAMI_GREEN), 38, 135, 155, 149);           // 118 px of 165
-        expectBox(inkBox(mem, STEAMI_DARK, 177, 196), 66, 177, 173, 190);  // "3842 mV"
-        expectBox(inkBox(mem, STEAMI_DARK, 197, 239), 66, 197, 173, 210);  // "BQ27441"
+        expectBox(inkBox(mem, STEAMI_DARK, 177, 196), 92, 179, 146, 188);  // "3842 mV"
+        expectBox(inkBox(mem, STEAMI_DARK, 197, 239), 92, 199, 146, 210);  // "BQ27441"
     });
 }
 
@@ -189,11 +189,11 @@ static void test_mockup_03_comfort(void) {
         expectBox(inkBox(mem, STEAMI_DARK), 120, 60, 120, 179);
         // Both values at f 3 (W and E share the size): 7 inked rows x 3.
         expectBox(inkBox(mem, STEAMI_WHITE), 21, 96, 219, 116);
-        expectBox(inkBox(mem, STEAMI_LIGHT), 45, 120, 187, 133);
-        expectBox(inkBox(mem, STEAMI_GRAY, 0, 60), 66, 37, 173, 50);        // title
-        expectBox(inkBox(mem, STEAMI_GRAY, 61, 239), 39, 75, 193, 88);      // "TEMP" and "HUM"
-        expectBox(inkBox(mem, STEAMI_GREEN, 173, 192), 34, 173, 205, 186);  // "Comfortable"
-        expectBox(inkBox(mem, STEAMI_GREEN, 193, 239), 74, 193, 165, 206);  // "BME280"
+        expectBox(inkBox(mem, STEAMI_LIGHT), 52, 121, 184, 131);
+        expectBox(inkBox(mem, STEAMI_GRAY, 0, 60), 92, 39, 146, 48);        // title
+        expectBox(inkBox(mem, STEAMI_GRAY, 61, 239), 51, 76, 185, 83);      // "TEMP" and "HUM"
+        expectBox(inkBox(mem, STEAMI_GREEN, 177, 196), 76, 179, 162, 188);  // "Comfortable"
+        expectBox(inkBox(mem, STEAMI_GREEN, 197, 239), 96, 199, 142, 208);  // "BME280"
     });
 }
 
@@ -210,7 +210,7 @@ static void test_mockup_04_gauge(void) {
     render("04_circular_gauge", 240, true, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
         mockupGauge(s, 342);
         expectBox(inkBox(mem, STEAMI_WHITE), 76, 91, 163, 118);
-        expectBox(inkBox(mem, STEAMI_GRAY, 160, 190), 49, 169, 200, 182);
+        expectBox(inkBox(mem, STEAMI_GRAY, 160, 190), 52, 170, 192, 177);  // 6x12 labels
         expectPixel(mem, 196, 44, STEAMI_LIGHT);
         expectPixel(mem, 208, 59, STEAMI_DARK);
     });
@@ -261,9 +261,9 @@ static void test_mockup_08_reactive(void) {
     });
     render("08_smiley_reactive", 240, true, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
         mockupFaces(s, 6, 100);
-        expectBox(inkBox(mem, STEAMI_GRAY), 90, 37, 149, 50);
+        expectBox(inkBox(mem, STEAMI_GRAY), 104, 39, 134, 48);  // "Mood", row 37
         expectBox(inkBox(mem, STEAMI_LIGHT), 60, 60, 179, 179);
-        expectBox(inkBox(mem, STEAMI_GREEN), 82, 202, 157, 215);
+        expectBox(inkBox(mem, STEAMI_GREEN), 100, 204, 138, 213);  // "HAPPY", row 202
     });
 }
 
@@ -317,8 +317,8 @@ static void test_mockups_without_sensors(void) {
                 expectBox(inkBox(mem, STEAMI_DARK, 106, 127), 37, 106, 90, 112);
             } else {
                 expectBox(inkBox(mem, STEAMI_GRID_DARK), 38, 135, 202, 149);
-                expectBox(inkBox(mem, STEAMI_DARK, 177, 196), 106, 183, 133, 184);  // "--"
-                expectBox(inkBox(mem, STEAMI_DARK, 197, 239), 66, 197, 173, 210);
+                expectBox(inkBox(mem, STEAMI_DARK, 177, 196), 113, 184, 126, 184);  // "--"
+                expectBox(inkBox(mem, STEAMI_DARK, 197, 239), 92, 199, 146, 210);
             }
         });
         const std::vector<bool> zero =
@@ -336,7 +336,7 @@ static void test_mockups_without_sensors(void) {
             if (small) {
                 expectBox(inkBox(mem, STEAMI_GREEN), 13, 86, 114, 92);  // lines at 86 and 97
             } else {
-                expectBox(inkBox(mem, STEAMI_GREEN), 18, 151, 221, 164);  // lines at 151 and 171
+                expectBox(inkBox(mem, STEAMI_GREEN), 68, 179, 170, 188);  // lines at 177 and 197
             }
         });
         const std::vector<bool> dashes03 =
@@ -387,7 +387,7 @@ static void test_mockups_without_sensors(void) {
             if (small) {
                 expectBox(inkBox(mem, STEAMI_YELLOW), 29, 108, 98, 114);
             } else {
-                expectBox(inkBox(mem, STEAMI_YELLOW), 50, 202, 189, 215);
+                expectBox(inkBox(mem, STEAMI_YELLOW), 84, 204, 154, 213);
             }
         });
     }

@@ -10,8 +10,12 @@
 // The +4 of the N/S floor (2 cells + 4) and of the E/W margin (1 cell + 4), times k.
 constexpr int16_t STEAMI_SCREEN_PAD = 4;
 
-// Cells of 8x8 glyphs (times k) that a title row is lowered for at most: the N/S row cap.
+// TEXT-face cells that a title row is lowered for at most: the N/S row cap.
 constexpr int16_t STEAMI_TITLE_CAP_CELLS = 13;
+
+// The cell height of a TEXT or VALUE glyph at factor f is this times f on every panel (8x8 x f,
+// and 8x16 x f / 2 on the 240 px panel): the unit of the vertical layout rules. Not scaled.
+constexpr int16_t STEAMI_CELL_HEIGHT = 8;
 
 // subtitle(): one line starts this far below the S row; several lines are this pitch apart.
 constexpr int16_t STEAMI_SUBTITLE_DROP = 8;
