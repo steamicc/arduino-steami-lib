@@ -607,6 +607,11 @@ review of this document against its branch, 2026-11-27):
     FLASH_APP 496K, FLASH_FS at 0x08084000, length 256K (end 0x080C4000, below the radio stack at
     0x080E0000). `spleen.py` is frozen in `steami_screen/` with the drawing code. The file system is
     reformatted on update, so the user's files are lost; the MicroPython release notes say so.
+  - Radio stack (maintainer, 2026-11-27): the only BLE stack that works with both Arduino (STM32duinoBLE) and
+    MicroPython (NimBLE) is **BLE_HCILayer**; v1.20.0 takes 80 KB at 0x080E0000. The layout is checked
+    against that stack only: the file system ends at 0x080C4000, 112 KB below it. Another stack (Full,
+    extended) is not a target and does not constrain this layout; a later HCILayer version whose start
+    address moves down needs the check again.
   - Set aside: (b), freezing only the drawing code and installing a precompiled `spleen.mpy` on the file
     system. It would cost about 5.3 KB of the roughly 92 KB of heap left with BLE, an installation step lost
     at each reformat, and a fallback to the 8x8 text when the file is missing.
