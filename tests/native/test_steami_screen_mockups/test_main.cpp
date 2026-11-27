@@ -143,8 +143,8 @@ static void test_mockup_01_temperature(void) {
     });
     render("01_temperature", 240, true, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
         mockupTemperature(s, 23.5f, "BME280");
-        expectBox(inkBox(mem, STEAMI_GRAY), 76, 39, 162, 51);  // title row 37, in 8x16
-        expectBox(inkBox(mem, STEAMI_WHITE), 68, 91, 171, 118);
+        expectBox(inkBox(mem, STEAMI_GRAY), 76, 39, 162, 51);    // title row 37, in 8x16
+        expectBox(inkBox(mem, STEAMI_WHITE), 94, 97, 146, 116);  // "23.5" in bold 16x32
         expectBox(inkBox(mem, STEAMI_LIGHT), 113, 124, 126, 134);
         expectBox(inkBox(mem, STEAMI_DARK), 96, 204, 142, 213);  // "BME280", row 202
     });
@@ -163,7 +163,7 @@ static void test_mockup_02_battery(void) {
     });
     render("02_battery", 240, true, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
         mockupBattery(s, 72, 3.842f);
-        expectBox(inkBox(mem, STEAMI_WHITE), 92, 69, 147, 96);
+        expectBox(inkBox(mem, STEAMI_WHITE), 106, 75, 134, 94);  // "72" in 16x32, top 69
         expectBox(inkBox(mem, STEAMI_LIGHT), 117, 103, 122, 112);
         expectBox(inkBox(mem, STEAMI_GRID_DARK), 156, 135, 202, 149);
         expectBox(inkBox(mem, STEAMI_GREEN), 38, 135, 155, 149);           // 118 px of 165
@@ -187,11 +187,12 @@ static void test_mockup_03_comfort(void) {
     render("03_comfort_dual", 240, true, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
         mockupComfort(s, 23.5f, 45.3f, "BME280");
         expectBox(inkBox(mem, STEAMI_DARK), 120, 60, 120, 179);
-        // Both values at f 3 (W and E share the size): 7 inked rows x 3.
-        expectBox(inkBox(mem, STEAMI_WHITE), 21, 96, 219, 116);
-        expectBox(inkBox(mem, STEAMI_LIGHT), 52, 121, 184, 131);
+        // Both values at f 4 (W and E share the size), "23.5" at x 32 and "45.3" at x 152: the
+        // 16x32 digits ink rows 6..25.
+        expectBox(inkBox(mem, STEAMI_WHITE), 34, 97, 206, 116);
+        expectBox(inkBox(mem, STEAMI_LIGHT), 52, 124, 184, 134);
         expectBox(inkBox(mem, STEAMI_GRAY, 0, 60), 92, 39, 146, 48);        // title
-        expectBox(inkBox(mem, STEAMI_GRAY, 61, 239), 51, 76, 185, 83);      // "TEMP" and "HUM"
+        expectBox(inkBox(mem, STEAMI_GRAY, 61, 239), 52, 71, 184, 78);      // "TEMP" and "HUM"
         expectBox(inkBox(mem, STEAMI_GREEN, 177, 196), 76, 179, 162, 188);  // "Comfortable"
         expectBox(inkBox(mem, STEAMI_GREEN, 197, 239), 96, 199, 142, 208);  // "BME280"
     });
@@ -209,7 +210,7 @@ static void test_mockup_04_gauge(void) {
     });
     render("04_circular_gauge", 240, true, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
         mockupGauge(s, 342);
-        expectBox(inkBox(mem, STEAMI_WHITE), 76, 91, 163, 118);
+        expectBox(inkBox(mem, STEAMI_WHITE), 98, 97, 142, 116);  // "342" in bold 16x32 at x 96
         expectBox(inkBox(mem, STEAMI_GRAY, 160, 190), 52, 170, 192, 177);  // 6x12 labels
         expectPixel(mem, 196, 44, STEAMI_LIGHT);
         expectPixel(mem, 208, 59, STEAMI_DARK);

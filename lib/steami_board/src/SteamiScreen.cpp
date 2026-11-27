@@ -26,6 +26,16 @@ bool isNarrow(uint8_t code) {
     return code == '.' || code == ':';
 }
 
+/// True when every glyph of s is a value glyph (the 15 of the value key); nullptr and "" are.
+bool isValueText(const char* s) {
+    for (uint8_t code = steamiNextCode(s); code != 0; code = steamiNextCode(s)) {
+        if (steamiValueIndex(code) < 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool isSide(SteamiAt at) {
     return at == SteamiAt::W || at == SteamiAt::E;
 }
@@ -126,13 +136,22 @@ size_t SteamiScreen::glyphCount(const char* s) {
     return steamiGlyphCount(s);
 }
 
-SteamiScreen::FaceId SteamiScreen::faceFor(const char* /*s*/, Ink ink, uint8_t f) {
-    // Values keep 8x8 on every panel; the TEXT ladder has a face at an even f only.
-    if (!spleenPanel() || ink == Ink::VALUE) {
+SteamiScreen::FaceId SteamiScreen::faceFor(const char* s, Ink ink, uint8_t f) {
+    if (!spleenPanel()) {
         return ink == Ink::LABEL ? FaceId::F5X7 : FaceId::F8X8;
     }
     if (ink == Ink::LABEL) {
         return FaceId::F6X12;
+    }
+    // The VALUE ladder, judged on the whole text: 16x32 x f/4, else 12x24 x f/3. Every other
+    // run, and a value with another glyph, takes the TEXT ladder: 8x16 x f/2 at an even f.
+    if (ink == Ink::VALUE && isValueText(s)) {
+        if (f % 4 == 0) {
+            return FaceId::F16X32;
+        }
+        if (f % 3 == 0) {
+            return FaceId::F12X24;
+        }
     }
     return f % 2 == 0 ? FaceId::F8X16 : FaceId::NONE;
 }
@@ -171,7 +190,7 @@ int32_t SteamiScreen::glyphAdvance(Ink ink, uint8_t f) {
     if (ink == Ink::LABEL) {
         return spleen ? 6 * (ff / 2) : 6 * ff;
     }
-    return ink == Ink::TEXT && spleen ? 4 * ff : 8 * ff;  // values keep 8x8 on every panel
+    return spleen ? 4 * ff : 8 * ff;  // the cell width of every TEXT and VALUE face
 }
 
 const SteamiFontFace* SteamiScreen::spleenFace(FaceId id) {
@@ -203,6 +222,9 @@ uint32_t SteamiScreen::inkRows(const char* s, size_t glyphs, Ink ink, FaceId fac
         for (uint8_t code = steamiNextCode(s); code != 0 && n < glyphs;
              code = steamiNextCode(s), n++) {
             const uint8_t* bits = steamiFaceGlyph(*spleen, code);
+            if (bits == nullptr) {
+                continue;  // a value set has no glyph outside the value key
+            }
             for (uint8_t row = 0; row < spleen->h; row++) {
                 for (size_t b = 0; b < perRow; b++) {
                     if (bits[row * perRow + b] != 0) {
@@ -357,13 +379,19 @@ void SteamiScreen::drawGlyphs(const Run& t, int32_t x, SteamiRgb c) {
     const SteamiFontFace* spleen = spleenFace(t.face);
     const uint8_t n = replication(t.face, t.f);
     const int32_t advance = glyphAdvance(t.ink, t.f);
+    // Values in 12x24 and 16x32 are bold: each glyph struck again one font column to the right.
+    const bool bold = t.ink == Ink::VALUE && (t.face == FaceId::F12X24 || t.face == FaceId::F16X32);
     size_t i = 0;
     // Spleen faces draw the extended codes (accents); 8x8 and 5x7 fold them.
     for (uint8_t code = steamiNextCode(s); code != 0 && i < t.glyphs;
          code = steamiNextCode(s), i++) {
         if (spleen != nullptr) {
-            faceGlyph(*spleen, steamiFaceGlyph(*spleen, code), 0, spleen->w, x, t.y, c, n, false);
-            x += advance;
+            // A VALUE '.' or ':' is the window [w/4, w/4 + w/2) of its cell, half an advance.
+            const bool narrow = t.ink == Ink::VALUE && isNarrow(code);
+            const uint8_t w = spleen->w;
+            faceGlyph(*spleen, steamiFaceGlyph(*spleen, code), narrow ? w / 4 : 0,
+                      narrow ? w / 2 : w, x, t.y, c, n, bold);
+            x += narrow ? advance / 2 : advance;
             continue;
         }
         const uint8_t folded = steamiFoldCode(code);
@@ -500,8 +528,8 @@ void SteamiScreen::value(SteamiValue v, const char* unit, SteamiAt at, const cha
     if (!widgetCanDraw()) {
         return;
     }
-    // From the largest f down to 1 (the decision "Scale"). u(yOffset) is int32_t, so no int16_t
-    // wraps (Review Focus 4).
+    // From the largest f down to k (the decision "Scale"; k is 1 on 128), placeValue() refusing
+    // every f with no face. u(yOffset) is int32_t, so no int16_t wraps (Review Focus 4).
     t.y = u(yOffset);
     t.f = glyphFactor(scale, k());
     while (!placeValue(t, at, unit)) {
@@ -533,6 +561,9 @@ SteamiScreen::Region SteamiScreen::valueRegion(const Run& value, SteamiAt at) {
 
 bool SteamiScreen::placeValue(Run& value, SteamiAt at, const char* unit) {
     value.face = faceFor(value.s, Ink::VALUE, value.f);
+    if (value.face == FaceId::NONE) {
+        return false;  // no face at this f: value() tries the next one down, value.y untouched
+    }
     const int32_t offset = value.y;
     value.glyphs = glyphCount(value.s);
     const int32_t vw = cellWidth(value, value.glyphs);
@@ -559,7 +590,7 @@ bool SteamiScreen::placeValue(Run& value, SteamiAt at, const char* unit) {
         fits = inkRows(value.s, value.glyphs, Ink::VALUE, value.face) == 0 ||
                vw + u(STEAMI_VALUE_FIT_MARGIN) <= inkChord(value).width();
     }
-    if (fits || value.f == 1) {
+    if (fits || value.f == k()) {
         return true;
     }
     value.y = offset;
@@ -590,7 +621,7 @@ void SteamiScreen::drawValueParts(Run& value, SteamiRgb c, const char* unit, con
 }
 
 int32_t SteamiScreen::fitValue(Run& value, SteamiAt at) {
-    // Whole when it fits; at f 1 cut to the longest prefix that fits the same region. A W/E or
+    // Whole when it fits; at f = k cut to the longest prefix that fits the same region. A W/E or
     // corner region lies inside the ink chord of any prefix (the chord at the cell rows is never
     // wider), so fitGlyphs() keeps the longest prefix no wider than the region and hands the
     // region back unchanged.

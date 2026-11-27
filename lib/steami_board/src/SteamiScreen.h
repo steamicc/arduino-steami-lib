@@ -136,8 +136,10 @@ class SteamiScreen : public SteamiDisplay {
     };
 
     /// The face of the text s drawn with `ink` at factor f on this panel. Off a Spleen panel 5x7
-    /// for LABEL, else 8x8. On one 6x12 for LABEL, 8x16 for TEXT at an even f (NONE at an odd f),
-    /// and 8x8 for VALUE.
+    /// for LABEL, else 8x8. On one 6x12 for LABEL and 8x16 for TEXT at an even f (NONE at an odd
+    /// f). A VALUE text made only of value glyphs (nullptr and "" included) takes 16x32 when 4
+    /// divides f, else 12x24 when 3 does, else 8x16 at an even f, else NONE; any other VALUE text
+    /// takes the TEXT rule. The whole of s decides, never a prefix.
     FaceId faceFor(const char* s, Ink ink, uint8_t f);
 
     /// How many times each font pixel of `face` is drawn at factor f: f for 8x8 and 5x7, f / 2 for
@@ -147,8 +149,9 @@ class SteamiScreen : public SteamiDisplay {
     /// The cell height of `face` at factor f: 7f for 5x7, 12 (f / 2) for 6x12, else 8f.
     static int32_t cellHeight(FaceId face, uint8_t f);
 
-    /// The advance of one glyph drawn with `ink` at factor f on this panel: off a Spleen panel 8f
-    /// (6f for LABEL); on one 4f for TEXT, 6 (f / 2) for LABEL and 8f for VALUE.
+    /// The advance of one glyph drawn with `ink` at factor f on this panel, the cell width of its
+    /// face: off a Spleen panel 8f (6f for LABEL); on one 4f for TEXT and VALUE, 6 (f / 2) for
+    /// LABEL. A VALUE '.' or ':' advances half of it.
     int32_t glyphAdvance(Ink ink, uint8_t f);
 
     /// A length in 128-px units on this panel: v * width() / 128, truncated toward zero.
@@ -203,7 +206,9 @@ class SteamiScreen : public SteamiDisplay {
     }
 
     /// Draws the run in its face (fewer glyphs if s ends first), its first cell's left column at
-    /// x; a run whose face is NONE draws nothing.
+    /// x; a run whose face is NONE draws nothing. With VALUE ink a '.' or ':' is drawn from the
+    /// middle half of its cell, and a 12x24 or 16x32 glyph is bold (struck again one font column
+    /// to the right, inside its cell).
     void drawGlyphs(const Run& t, int32_t x, SteamiRgb c);
 
     /// Height of a value block at factor f: 8f + 8f/3 + 8k with a unit (the unit hangs 8f/3 below
@@ -252,20 +257,21 @@ class SteamiScreen : public SteamiDisplay {
     /// u(STEAMI_SUBTITLE_PITCH) lower, fits whole.
     bool linesFit(const char* const* lines, int32_t count, int32_t y);
 
-    /// Puts the value run's block at its f: sets its face, counts the glyphs of value.s, then sets
-    /// value.y to the block's top, on resolve()'s row at N, S and the corners, elsewhere centred on
-    /// centerY() + value.y (value.y holds u(yOffset) on entry; blockHeight() with a non-empty
-    /// unit). Returns true when the value fits there or f is 1; otherwise false, value.y back to
+    /// Puts the value run's block at its f: sets its face (false at once when it is NONE, value.y
+    /// untouched), counts the glyphs of value.s, then sets value.y to the block's top, on
+    /// resolve()'s row at N, S and the corners, elsewhere centred on centerY() + value.y (value.y
+    /// holds u(yOffset) on entry; blockHeight() with a non-empty unit). Returns true when the
+    /// value fits there or f is k (f = k always has a face); otherwise false, value.y back to
     /// u(yOffset). It fits when, at W and E, max(its width, the width of "88.8") fits
     /// valueRegion(); at a corner when resolve()'s cell lies inside valueRegion(); elsewhere when
     /// its width plus u(4) fits the chord at the rows it inks (a value without ink always fits).
     bool placeValue(Run& value, SteamiAt at, const char* unit);
 
     /// Cuts the value run placed by placeValue() to the longest prefix that fits valueRegion()
-    /// (less u(4) at CENTER, N and S), whole whenever it fit there, and returns the left column of
-    /// what it keeps: centred in the region at W and E; at a corner resolve()'s x for the kept
-    /// width, clamped into the region; elsewhere centred on centerX(). Cutting a cut run again
-    /// keeps it unchanged.
+    /// (less u(4) at CENTER, N and S), whole whenever it fit there (a value is cut at f = k only),
+    /// and returns the left column of what it keeps: centred in the region at W and E; at a
+    /// corner resolve()'s x for the kept width, clamped into the region; elsewhere centred on
+    /// centerX(). Cutting a cut run again keeps it unchanged.
     int32_t fitValue(Run& value, SteamiAt at);
 
     /// Cuts a label (LABEL ink, drawn GRAY) or unit (TEXT ink, drawn LIGHT) run of the value run
