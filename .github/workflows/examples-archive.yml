@@ -15,7 +15,10 @@ name: Examples archive
 # (the tag when called by the publication; main for a direct run, any other ref
 # is refused); the package is built with the builder of the tag, checked out
 # in tagged/ (the repository already has a src/ directory). An archive already
-# attached to the release is never replaced.
+# attached and fully uploaded (state "uploaded") is never replaced; one left in
+# another state by an interrupted upload is deleted and uploaded again. Every
+# upload is checked against the local zip (state, size, SHA-256 digest): on a
+# mismatch the asset is deleted and the job fails, so the draft is not published.
 # The zip is always uploaded as a workflow artifact before any write; a manual
 # run with dry_run stops there.
 
@@ -154,13 +157,37 @@ jobs:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
           set -euo pipefail
-          asset="steami-exemples-${TAG}.zip"
-          if ! assets="$(gh release view "$TAG" -R "$DIST_REPO" --json assets --jq '.assets[].name')"; then
+          export ASSET="steami-exemples-${TAG}.zip"
+          # State of the archive already attached, empty if there is none.
+          # "uploaded" means complete; an interrupted upload leaves another
+          # state (e.g. "starter") and an unusable asset.
+          if ! state="$(gh release view "$TAG" -R "$DIST_REPO" --json assets --jq '.assets[] | select(.name == env.ASSET) | .state')"; then
             echo "::error::Cannot read release ${TAG} in ${DIST_REPO} (missing release or no access)"
             exit 1
           fi
-          if grep -qxF "$asset" <<< "$assets"; then
-            echo "::notice::${asset} is already attached to ${TAG} in ${DIST_REPO}: nothing written."
+          if [ "$state" = "uploaded" ]; then
+            echo "::notice::${ASSET} is already attached to ${TAG} in ${DIST_REPO}: nothing written."
             exit 0
           fi
-          gh release upload "$TAG" "$asset" -R "$DIST_REPO"
+          if [ -n "$state" ]; then
+            echo "::warning::${ASSET} is attached to ${TAG} in ${DIST_REPO} in state '${state}' (incomplete upload): deleted and uploaded again."
+            gh release delete-asset "$TAG" "$ASSET" -R "$DIST_REPO" --yes
+          fi
+          gh release upload "$TAG" "$ASSET" -R "$DIST_REPO"
+
+          # Check what GitHub stored against the local file.
+          size="$(stat -c %s "$ASSET")"
+          sha="$(sha256sum "$ASSET" | cut -d ' ' -f 1)"
+          remote="$(gh release view "$TAG" -R "$DIST_REPO" --json assets \
+            --jq '.assets[] | select(.name == env.ASSET) | "\(.state) \(.size) \(.digest // "")"')"
+          read -r r_state r_size r_digest <<< "$remote"
+          if [ "${r_state:-}" != "uploaded" ] || [ "${r_size:-}" != "$size" ] \
+            || { [ -n "${r_digest:-}" ] && [ "$r_digest" != "sha256:${sha}" ]; }; then
+            echo "::error::${ASSET} on ${TAG} in ${DIST_REPO} does not match the local archive (state '${r_state:-missing}', size ${r_size:-none} for ${size}, digest '${r_digest:-none}' for sha256:${sha}). The faulty asset is deleted: re-run this job."
+            gh release delete-asset "$TAG" "$ASSET" -R "$DIST_REPO" --yes || true
+            exit 1
+          fi
+          if [ -z "${r_digest:-}" ]; then
+            echo "::warning::GitHub gave no digest for ${ASSET}: checked on state and size only."
+          fi
+          echo "::notice::${ASSET} attached to ${TAG} in ${DIST_REPO} (${size} bytes, sha256:${sha})."
