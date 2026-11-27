@@ -665,7 +665,9 @@ static_assert(SteamiDisplay::CHAR_W == 8 && SteamiDisplay::CHAR_H == 8, "5.3");
 class TestDisplay : public SteamiDisplay {
    public:
     explicit TestDisplay(SteamiBoard& b) : SteamiDisplay(b, "SteamiTestDisplay") {}
+    using SteamiDisplay::faceGlyph;
     using SteamiDisplay::glyph;
+    using SteamiDisplay::spleenPanel;
     using SteamiDisplay::strokeCircle;
     using SteamiDisplay::strokeLine;
     using SteamiDisplay::textSmall;
@@ -1658,6 +1660,12 @@ static bool litBox(const SteamiMemoryBackend& mem, int16_t w, int16_t h, Box& bo
     return box.x1 >= 0;
 }
 
+/// The 240 px panel draws Spleen (8x16 for text(), 6x12 for textSmall()), the 128 px panel 8x8
+/// and 5x7 (design 5.3).
+static bool onSpleen(const SteamiMemoryBackend& mem) {
+    return mem.width() == 240;
+}
+
 static void glyphSizeCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
     for (uint8_t s = 1; s <= 4; s++) {
         d.clear();
@@ -1665,11 +1673,19 @@ static void glyphSizeCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
         d.text("A", 10, 10, kInk, s);
         Box box;
         TEST_ASSERT_TRUE(litBox(mem, mem.width(), mem.height(), box));
-        TEST_ASSERT_EQUAL_INT16(10 + s, box.x0);
-        TEST_ASSERT_EQUAL_INT16(10 + 7 * s - 1, box.x1);
-        TEST_ASSERT_EQUAL_INT16(10, box.y0);
-        TEST_ASSERT_EQUAL_INT16(10 + 7 * s - 1, box.y1);
-        TEST_ASSERT_EQUAL_size_t(28u * s * s, mem.litCount());
+        if (onSpleen(mem)) {  // 8x16 'A': columns 0..6, rows 2..11, 44 pixels
+            TEST_ASSERT_EQUAL_INT16(10, box.x0);
+            TEST_ASSERT_EQUAL_INT16(10 + 7 * s - 1, box.x1);
+            TEST_ASSERT_EQUAL_INT16(10 + 2 * s, box.y0);
+            TEST_ASSERT_EQUAL_INT16(10 + 12 * s - 1, box.y1);
+            TEST_ASSERT_EQUAL_size_t(44u * s * s, mem.litCount());
+        } else {
+            TEST_ASSERT_EQUAL_INT16(10 + s, box.x0);
+            TEST_ASSERT_EQUAL_INT16(10 + 7 * s - 1, box.x1);
+            TEST_ASSERT_EQUAL_INT16(10, box.y0);
+            TEST_ASSERT_EQUAL_INT16(10 + 7 * s - 1, box.y1);
+            TEST_ASSERT_EQUAL_size_t(28u * s * s, mem.litCount());
+        }
         TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
     }
 }
@@ -1700,20 +1716,50 @@ static void expectSameText(SteamiMemoryBackend& mem, TestDisplay& d, const char*
     TEST_ASSERT_TRUE(first == snapshot(mem));
 }
 
+/// text(a) and text(b) at (10, 10), each on a cleared panel, differ.
+static void expectOtherText(SteamiMemoryBackend& mem, TestDisplay& d, const char* a,
+                            const char* b) {
+    d.clear();
+    d.text(a, 10, 10, kInk);
+    const std::vector<uint16_t> first = snapshot(mem);
+    d.clear();
+    d.text(b, 10, 10, kInk);
+    TEST_ASSERT_FALSE(first == snapshot(mem));
+}
+
+// Design 5.4: accents fold on 128 and are drawn on 240.
 static void accentsCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
-    expectSameText(mem, d, "\xC3\xA9", "e");
-    expectSameText(mem, d, "\xC3\x89", "E");
-    expectSameText(mem, d, "\xC5\xB8", "Y");
+    Box box;
+    if (onSpleen(mem)) {
+        expectOtherText(mem, d, "\xC3\xA9", "e");
+        expectOtherText(mem, d, "\xC3\x89", "E");
+        expectOtherText(mem, d, "\xC5\xB8", "Y");
+        d.clear();
+        d.text("\xC5\xB8", 10, 10, kInk);  // an accented capital inks from row 0 of its cell
+        TEST_ASSERT_TRUE(litBox(mem, mem.width(), mem.height(), box));
+        TEST_ASSERT_EQUAL_INT16(10, box.y0);
+    } else {
+        expectSameText(mem, d, "\xC3\xA9", "e");
+        expectSameText(mem, d, "\xC3\x89", "E");
+        expectSameText(mem, d, "\xC5\xB8", "Y");
+    }
     d.clear();
     d.text("\xC2\xB0", 10, 10, kInk);
-    Box box;
     TEST_ASSERT_TRUE(litBox(mem, mem.width(), mem.height(), box));
-    TEST_ASSERT_EQUAL_INT16(11, box.x0);
-    TEST_ASSERT_EQUAL_INT16(14, box.x1);
-    TEST_ASSERT_EQUAL_INT16(10, box.y0);
-    TEST_ASSERT_EQUAL_INT16(13, box.y1);
+    if (onSpleen(mem)) {  // 8x16 degree sign: columns 1..5, rows 1..4, 14 pixels
+        TEST_ASSERT_EQUAL_INT16(11, box.x0);
+        TEST_ASSERT_EQUAL_INT16(15, box.x1);
+        TEST_ASSERT_EQUAL_INT16(11, box.y0);
+        TEST_ASSERT_EQUAL_INT16(14, box.y1);
+        TEST_ASSERT_EQUAL_size_t(14, mem.litCount());
+    } else {
+        TEST_ASSERT_EQUAL_INT16(11, box.x0);
+        TEST_ASSERT_EQUAL_INT16(14, box.x1);
+        TEST_ASSERT_EQUAL_INT16(10, box.y0);
+        TEST_ASSERT_EQUAL_INT16(13, box.y1);
+    }
 }
-static void test_accents_fold_when_drawn(void) {
+static void test_accents_fold_on_128_drawn_on_240(void) {
     forEachPanel(accentsCheck);
 }
 
@@ -1733,7 +1779,8 @@ static void textClippingCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
     d.text("Hello", 10, h - 3, kInk);
     Box box;
     TEST_ASSERT_TRUE(litBox(mem, mem.width(), h, box));
-    TEST_ASSERT_EQUAL_INT16(h - 3, box.y0);
+    // 8x16 rows 0 and 1 are blank: only font row 2 lands on the panel, at row h - 1.
+    TEST_ASSERT_EQUAL_INT16(onSpleen(mem) ? h - 1 : h - 3, box.y0);
     TEST_ASSERT_EQUAL_INT16(h - 1, box.y1);
     d.clear();
     d.text("Hello", -20, 10, kInk);
@@ -1788,8 +1835,9 @@ static void smallTextCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
     TEST_ASSERT_TRUE(litBox(mem, mem.width(), mem.height(), box));
     TEST_ASSERT_EQUAL_INT16(10, box.x0);
     TEST_ASSERT_EQUAL_INT16(14, box.x1);
-    TEST_ASSERT_EQUAL_INT16(10, box.y0);
-    TEST_ASSERT_EQUAL_INT16(16, box.y1);
+    // 6x12 'A' on 240: rows 1..8; 5x7 'A' on 128: rows 0..6.
+    TEST_ASSERT_EQUAL_INT16(onSpleen(mem) ? 11 : 10, box.y0);
+    TEST_ASSERT_EQUAL_INT16(onSpleen(mem) ? 18 : 16, box.y1);
     TEST_ASSERT_EQUAL_INT16(18, d.textSmallWidth("950"));
     TEST_ASSERT_EQUAL_INT16(36, d.textSmallWidth("950", 2));
     TEST_ASSERT_EQUAL_INT16(0, d.textSmallWidth(nullptr));
@@ -1815,6 +1863,196 @@ static void glyphWindowCheck(SteamiMemoryBackend& mem, TestDisplay& d) {
 }
 static void test_glyph_window(void) {
     forEachPanel(glyphWindowCheck);
+}
+
+// ---- Text on the 240 px panel: textHeight(), faceGlyph() and Spleen 8x16 (4b-font) ----
+
+static size_t popcount(uint32_t v) {
+    size_t n = 0;
+    for (; v != 0; v >>= 1) {
+        n += v & 1U;
+    }
+    return n;
+}
+
+/// Row `row` of a Spleen glyph as a w-bit integer, bit w - 1 = column 0 (MSB left).
+static uint32_t faceRow(const SteamiFontFace& face, const uint8_t* bits, int row) {
+    const int perRow = (face.w + 7) / 8;
+    uint32_t v = 0;
+    for (int i = 0; i < perRow; i++) {
+        v = (v << 8) | bits[row * perRow + i];
+    }
+    return v >> (8 * perRow - face.w);
+}
+
+/// The lit pixels of a whole Spleen glyph.
+static size_t faceInk(const SteamiFontFace& face, const uint8_t* bits) {
+    size_t n = 0;
+    for (int row = 0; row < face.h; row++) {
+        n += popcount(faceRow(face, bits, row));
+    }
+    return n;
+}
+
+// Design 5.3: textHeight(scale) is the cell height of text() on the panel in use, 8 per scale on
+// 128 and 96 px, 16 per scale on 240 and 200 px (plan D1), before begin() too; 8 with no backend.
+static void test_text_height(void) {  // Review Focus 3, 4
+    struct Size {
+        int16_t size;
+        int16_t unit;
+    };
+    for (const Size p : {Size{128, 8}, Size{96, 8}, Size{240, 16}, Size{200, 16}}) {
+        SteamiMemoryBackend mem(p.size, p.size);
+        injectFresh(mem);
+        TestDisplay d(board);
+        for (uint8_t s = 0; s <= 4; s++) {
+            TEST_ASSERT_EQUAL_INT16(p.unit * (s == 0 ? 1 : s), d.textHeight(s));
+        }
+        TEST_ASSERT_EQUAL_INT16(p.unit, d.textHeight());
+        TEST_ASSERT_EQUAL(p.unit == 16, d.spleenPanel());
+        if (p.size == 240) {
+            TEST_ASSERT_EQUAL_INT16(4080, d.textHeight(255));
+        }
+        TEST_ASSERT_EQUAL_UINT32(0, mem.beginCalls());  // never begun
+    }
+    board.end();
+    board.setLogger(&capture);
+    TestDisplay none(board);
+    TEST_ASSERT_EQUAL_INT16(8, none.textHeight());
+    TEST_ASSERT_EQUAL_INT16(24, none.textHeight(3));
+    TEST_ASSERT_FALSE(none.spleenPanel());
+    board.end();
+}
+
+// A backend replaced after drawing: textHeight() and text() follow the new panel.
+static void test_text_follows_a_new_backend(void) {  // Review Focus 5
+    SteamiMemoryBackend big(240, 240);
+    injectFresh(big);
+    TestDisplay d(board);
+    d.text("Ab", 10, 10, kInk);
+    TEST_ASSERT_TRUE(big.litCount() > 0);
+    TEST_ASSERT_EQUAL_INT16(16, d.textHeight());
+    SteamiMemoryBackend small(128, 128);
+    injectFresh(small);
+    TEST_ASSERT_EQUAL_INT16(8, d.textHeight());
+    d.text("Ab", 10, 10, kInk);
+    const std::vector<uint16_t> after = snapshot(small);
+    SteamiMemoryBackend fresh(128, 128);
+    injectFresh(fresh);
+    TestDisplay e(board);
+    e.text("Ab", 10, 10, kInk);
+    TEST_ASSERT_TRUE(fresh.litCount() > 0);
+    TEST_ASSERT_TRUE(after == snapshot(fresh));
+    board.end();
+}
+
+// Plan D6: one span() per run of set bits of a font row, n x n blocks, the column window's left
+// edge at x; bold widens a run [a, b] to [a, b + 1] (row | row >> 1); nullptr draws nothing.
+static void test_face_glyph_runs_and_bold(void) {
+    SteamiMemoryBackend mem(240, 240);
+    injectFresh(mem);
+    TestDisplay d(board);
+    const SteamiFontFace& f8 = STEAMI_SPLEEN_8X16;
+    const uint8_t* dot = steamiFaceGlyph(f8, '.');
+    size_t window = 0;
+    for (int row = 0; row < f8.h; row++) {
+        window += popcount((faceRow(f8, dot, row) >> 2) & 0x0FU);  // columns 2..5
+    }
+    TEST_ASSERT_TRUE(window > 0);
+    d.clear();
+    mem.clearCounters();
+    d.faceGlyph(f8, dot, 2, 4, 10, 10, kInk, 1, false);
+    TEST_ASSERT_EQUAL_size_t(window, mem.litCount());
+    Box box;
+    TEST_ASSERT_TRUE(litBox(mem, mem.width(), mem.height(), box));
+    TEST_ASSERT_TRUE(box.x0 >= 10 && box.x1 <= 13);
+    d.clear();
+    mem.clearCounters();
+    d.faceGlyph(f8, dot, 2, 4, 10, 10, kInk, 2, false);
+    TEST_ASSERT_EQUAL_size_t(4 * window, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+    d.clear();
+    d.faceGlyph(f8, dot, 2, 4, 10, 10, kInk, 0, false);  // n 0 counts as 1
+    TEST_ASSERT_EQUAL_size_t(window, mem.litCount());
+
+    const SteamiFontFace& f16 = STEAMI_SPLEEN_16X32;
+    const uint8_t* five = steamiFaceGlyph(f16, '5');
+    size_t bold = 0;
+    for (int row = 0; row < f16.h; row++) {
+        const uint32_t r = faceRow(f16, five, row);
+        bold += popcount(r | (r >> 1));
+    }
+    TEST_ASSERT_TRUE(bold > faceInk(f16, five));
+    for (uint8_t n : {1, 2}) {
+        d.clear();
+        mem.clearCounters();
+        d.faceGlyph(f16, five, 0, 16, 10, 10, kInk, n, true);
+        TEST_ASSERT_EQUAL_size_t(bold * n * n, mem.litCount());
+        TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
+        TEST_ASSERT_TRUE(litBox(mem, mem.width(), mem.height(), box));
+        TEST_ASSERT_TRUE(box.x1 < 10 + 16 * n);  // the strike stays inside the cell
+    }
+    d.clear();
+    mem.clearCounters();
+    d.faceGlyph(f16, nullptr, 0, 16, 10, 10, kInk, 1, true);
+    TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    TEST_ASSERT_EQUAL_UINT32(0, mem.fillRectCalls());
+    board.end();
+}
+
+// Design 5.3: text() on 240 is 8x16 x scale, never bold, and advances 8 * scale.
+static void test_text_on_240_is_8x16_and_never_bold(void) {
+    SteamiMemoryBackend mem(240, 240);
+    injectFresh(mem);
+    TestDisplay d(board);
+    const size_t eight = faceInk(STEAMI_SPLEEN_8X16, steamiFaceGlyph(STEAMI_SPLEEN_8X16, '8'));
+    d.clear();
+    d.text("88", 10, 10, kInk, 2);
+    TEST_ASSERT_EQUAL_size_t(2 * 4 * eight, mem.litCount());
+    const std::vector<uint16_t> pair = snapshot(mem);
+    d.clear();
+    d.text("8", 10, 10, kInk, 2);
+    d.text("8", 26, 10, kInk, 2);
+    TEST_ASSERT_TRUE(pair == snapshot(mem));
+    board.end();
+}
+
+/// The box of the pixels that hold c in the rows [rowFrom, rowTo]; false when there is none.
+static bool colourBox(const SteamiMemoryBackend& mem, SteamiRgb c, int16_t rowFrom, int16_t rowTo,
+                      Box& box) {
+    const uint16_t v = mem.stored(c);
+    box = {mem.width(), mem.height(), -1, -1};
+    for (int16_t y = rowFrom; y <= rowTo; y++) {
+        for (int16_t x = 0; x < mem.width(); x++) {
+            if (mem.at(x, y) == v) {
+                box.x0 = x < box.x0 ? x : box.x0;
+                box.y0 = y < box.y0 ? y : box.y0;
+                box.x1 = x > box.x1 ? x : box.x1;
+                box.y1 = y > box.y1 ? y : box.y1;
+            }
+        }
+    }
+    return box.x1 >= 0;
+}
+
+// Design 6: on 240 the gallery's two text lines are 8x16 at scale 1, 48 px wide at x 96, in the
+// cell rows of 4b (60..75 and 84..99): "STeaMi" inks rows 62..71, "20°C é" rows 85..95.
+static void test_gallery_text_on_240(void) {
+    SteamiMemoryBackend mem(240, 240, true);
+    injectFresh(mem);
+    SteamiDisplay d(board);
+    drawGallery(d);
+    Box white;
+    TEST_ASSERT_TRUE(colourBox(mem, STEAMI_WHITE, 0, 239, white));
+    TEST_ASSERT_EQUAL_INT16(62, white.y0);
+    TEST_ASSERT_EQUAL_INT16(71, white.y1);
+    TEST_ASSERT_TRUE(white.x0 >= 96 && white.x1 <= 143);
+    Box yellow;
+    TEST_ASSERT_TRUE(colourBox(mem, STEAMI_YELLOW, 80, 100, yellow));
+    TEST_ASSERT_EQUAL_INT16(85, yellow.y0);
+    TEST_ASSERT_EQUAL_INT16(95, yellow.y1);
+    TEST_ASSERT_TRUE(yellow.x0 >= 96 && yellow.x1 <= 143);
+    board.end();
 }
 
 static void test_protected_name_in_messages(void) {
@@ -1912,13 +2150,18 @@ int main(int, char**) {
     RUN_TEST(test_extreme_arcs);
     RUN_TEST(test_glyph_size_at_scales_1_to_4);
     RUN_TEST(test_text_width_counts_glyphs);
-    RUN_TEST(test_accents_fold_when_drawn);
+    RUN_TEST(test_accents_fold_on_128_drawn_on_240);
     RUN_TEST(test_text_invalid_utf8_draws_question_marks);
     RUN_TEST(test_text_clipping);
     RUN_TEST(test_text_nullptr_and_empty_draw_nothing);
     RUN_TEST(test_text_scale_zero_is_one);
     RUN_TEST(test_small_text);
     RUN_TEST(test_glyph_window);
+    RUN_TEST(test_text_height);
+    RUN_TEST(test_text_follows_a_new_backend);
+    RUN_TEST(test_face_glyph_runs_and_bold);
+    RUN_TEST(test_text_on_240_is_8x16_and_never_bold);
+    RUN_TEST(test_gallery_text_on_240);
     RUN_TEST(test_protected_name_in_messages);
     RUN_TEST(test_gallery_ppm);
     return UNITY_END();

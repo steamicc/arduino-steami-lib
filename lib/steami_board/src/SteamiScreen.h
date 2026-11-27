@@ -248,8 +248,8 @@ class SteamiScreen : public SteamiDisplay {
     /// deg + 90 to halfWidth on deg - 90 (mirror images about the centre): a hand, a needle half.
     void pointer(int32_t deg, int32_t length, int32_t halfWidth, SteamiRgb c);
 
-    /// s in 8x8 glyphs at factor k(), its cell centred on the point at distance d and angle deg,
-    /// never cut: the callers keep every cell inside the circle.
+    /// s in text() at scale 1 (8x8 on 128 px, 8x16 on 240 px), its cell centred on the point at
+    /// distance d and angle deg, never cut: the callers keep every cell inside the circle.
     void glyphsAt(const char* s, int32_t deg, int32_t d, SteamiRgb c);
 
     /// The ring of gauge(): arc() of outer radius `outer` and width w from STEAMI_GAUGE_START,

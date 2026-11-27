@@ -1495,8 +1495,10 @@ static void test_value_corner_worked_examples(void) {
         TEST_ASSERT_EQUAL_INT(14, box.y1);
         label = pixelsOf(mem, STEAMI_GRAY);
     });
+    // LABEL stays 5x7 x k here (4b-font Task 5 moves it to 6x12), while textSmall(..., 2) is now
+    // 6x12 x 2 on 240: the reference is the kernel's own LABEL run.
     TEST_ASSERT_TRUE(label == rendered(240, true, [](TestScreen& s) {
-                         s.textSmall("TE", 110, 1, STEAMI_GRAY, 2);
+                         s.drawGlyphs(Run{"TE", 2, 1, Ink::LABEL, 2}, 110, STEAMI_GRAY);
                      }));
 }
 
@@ -2188,7 +2190,7 @@ static void test_watch_numbers_golden(void) {
     });
     onPanel(240, true, [](SteamiMemoryBackend& mem, TestScreen& s) {
         s.watch(1, 37, 5);
-        expectBox(inkBox(mem, STEAMI_WHITE), 37, 35, 202, 202);
+        expectBox(inkBox(mem, STEAMI_WHITE), 39, 37, 199, 200);  // text() in 8x16 (4b-font)
     });
 }
 
@@ -2237,8 +2239,8 @@ struct CompassCase {
 static const CompassCase kCompassCases[] = {
     {128, 0, 64, 20, 61, 3, 66, 9},           {128, 90, 20, 64, 4, 60, 9, 66},
     {128, 180, 64, 108, 61, 117, 66, 123},    {128, 270, 108, 64, 118, 60, 123, 66},
-    {240, 0, 120, 37, 114, 5, 125, 18},       {240, 90, 37, 120, 7, 112, 18, 125},
-    {240, 180, 120, 203, 114, 219, 125, 232}, {240, 270, 203, 120, 221, 112, 232, 125}};
+    {240, 0, 120, 37, 116, 7, 122, 16},       {240, 90, 37, 120, 9, 114, 15, 123},
+    {240, 180, 120, 203, 116, 221, 122, 230}, {240, 270, 203, 120, 223, 114, 229, 123}};
 
 // Spec 7's "compass() at 0, 90, 180, 270: needle tip and N letter positions", on the 128 grey and
 // the 240 colour panel. RED is level 8 on the grey panel and WHITE level 15: no other part of the
@@ -2270,6 +2272,26 @@ static std::vector<bool> colourMask(const SteamiMemoryBackend& mem, SteamiRgb c)
         out.push_back(p == v);
     }
     return out;
+}
+
+// Design 5.3 (F16): a compass letter is text() at scale 1, its cell centred on the Q14 point by
+// textWidth() / 2 and textHeight() / 2, on 128 (8x8) and on 240 (8x16).
+static void test_letters_are_text_at_scale_1(void) {
+    for (int16_t size : {128, 240}) {
+        const bool color = size == 240;
+        std::vector<uint16_t> north;
+        onPanel(size, color, [&north](SteamiMemoryBackend& mem, TestScreen& s) {
+            s.compass(0.0f);
+            north = pixelsOf(mem, STEAMI_WHITE);
+        });
+        TEST_ASSERT_TRUE(
+            north == rendered(size, color, [](TestScreen& s) {
+                const int32_t l =
+                    s.radius() - s.u(STEAMI_COMPASS_INSET) + s.u(STEAMI_COMPASS_LETTERS);
+                s.text("N", static_cast<int16_t>(s.polarX(l, 0) - s.textWidth("N") / 2),
+                       static_cast<int16_t>(s.polarY(l, 0) - s.textHeight() / 2), STEAMI_WHITE, 1);
+            }));
+    }
 }
 
 // Review Focus 2: a heading that points nowhere (NAN, which heading() returns without a sensor,
@@ -2600,6 +2622,7 @@ int main(int, char**) {
     RUN_TEST(test_watch_out_of_range);
     RUN_TEST(test_watch_stays_inside);
     RUN_TEST(test_compass_needle_and_north);
+    RUN_TEST(test_letters_are_text_at_scale_1);
     RUN_TEST(test_compass_without_a_heading);
     RUN_TEST(test_compass_heading_rounding);
     RUN_TEST(test_compass_rose_turns);

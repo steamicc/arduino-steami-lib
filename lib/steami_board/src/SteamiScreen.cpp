@@ -610,11 +610,9 @@ void SteamiScreen::pointer(int32_t deg, int32_t length, int32_t halfWidth, Steam
 }
 
 void SteamiScreen::glyphsAt(const char* s, int32_t deg, int32_t d, SteamiRgb c) {
-    // device.py's lx - tw // 2, ly - CHAR_H // 2, at factor k.
-    const uint8_t f = k();
-    SteamiDisplay::text(
-        s, static_cast<int16_t>(polarX(d, deg) - cellWidth(s, glyphCount(s), Ink::TEXT, f) / 2),
-        static_cast<int16_t>(polarY(d, deg) - SteamiDisplay::CHAR_H / 2 * f), c, f);
+    // device.py's lx - tw // 2, ly - CHAR_H // 2: text() at scale 1, the panel's font (F16).
+    SteamiDisplay::text(s, static_cast<int16_t>(polarX(d, deg) - textWidth(s) / 2),
+                        static_cast<int16_t>(polarY(d, deg) - textHeight() / 2), c, 1);
 }
 
 void SteamiScreen::watch(uint8_t h, uint8_t m, uint8_t s, SteamiRgb c) {

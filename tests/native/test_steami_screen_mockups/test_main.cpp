@@ -224,7 +224,7 @@ static void test_mockup_07_compass(void) {
     });
     render("07_compass", 240, true, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
         mockupCompass(s, 0.0f);
-        expectBox(inkBox(mem, STEAMI_WHITE), 114, 5, 125, 18);
+        expectBox(inkBox(mem, STEAMI_WHITE), 116, 7, 122, 16);  // N in 8x16 (4b-font)
         expectPixel(mem, 120, 37, STEAMI_LIGHT);
     });
 }
@@ -277,7 +277,7 @@ static void test_mockup_09_watch(void) {
     });
     render("09_watch", 240, true, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
         mockupWatch(s, 10 * 3600UL + 10 * 60 + 30);
-        expectBox(inkBox(mem, STEAMI_WHITE, 0, 111), 106, 35, 133, 48);
+        expectBox(inkBox(mem, STEAMI_WHITE, 0, 111), 113, 37, 126, 46);  // "12" in 8x16
         expectPixel(mem, 77, 90, STEAMI_LIGHT);
         expectPixel(mem, 189, 85, STEAMI_LIGHT);
     });

@@ -68,6 +68,11 @@ Sector sectorFrom(int32_t s, int32_t e) {
     return {steamiSinQ14(s), -steamiCosQ14(s), steamiSinQ14(e), -steamiCosQ14(e)};
 }
 
+/// Column col of a Spleen font row (MSB = leftmost column).
+bool faceBit(const uint8_t* row, int32_t col) {
+    return ((row[col / 8] >> (7 - col % 8)) & 1) != 0;
+}
+
 /// glyphs * advance * scale, saturating at 32767; scale 0 counts as 1.
 int16_t textExtent(const char* s, uint8_t advance, uint8_t scale) {
     const uint64_t w =
@@ -494,6 +499,35 @@ void SteamiDisplay::glyph(const uint8_t* columns, uint8_t firstColumn, uint8_t c
     }
 }
 
+void SteamiDisplay::faceGlyph(const SteamiFontFace& face, const uint8_t* bits, uint8_t firstColumn,
+                              uint8_t columnCount, int32_t x, int32_t y, SteamiRgb c, uint8_t n,
+                              bool bold) {
+    SteamiDisplayBackend* b = ready();
+    if (b == nullptr || bits == nullptr) {
+        return;
+    }
+    const int32_t s = n == 0 ? 1 : n;
+    const uint16_t v = c.rgb565();
+    const size_t perRow = (face.w + 7U) / 8U;
+    const int32_t strike = bold ? 1 : 0;  // the generator keeps b + 1 inside the window
+    for (int32_t row = 0; row < face.h; row++) {
+        const uint8_t* bitsOfRow = bits + static_cast<size_t>(row) * perRow;
+        int32_t col = 0;
+        while (col < columnCount) {
+            if (!faceBit(bitsOfRow, firstColumn + col)) {
+                col++;
+                continue;
+            }
+            int32_t end = col;
+            while (end < columnCount && faceBit(bitsOfRow, firstColumn + end)) {
+                end++;
+            }
+            span(b, x + col * s, y + row * s, (end - col + strike) * s, s, v);
+            col = end;
+        }
+    }
+}
+
 void SteamiDisplay::drawText(const char* s, int16_t x, int16_t y, SteamiRgb c, uint8_t scale,
                              bool small) {
     SteamiDisplayBackend* b = ready();
@@ -516,12 +550,43 @@ void SteamiDisplay::drawText(const char* s, int16_t x, int16_t y, SteamiRgb c, u
     }
 }
 
+void SteamiDisplay::drawFaceText(const char* s, int16_t x, int16_t y, SteamiRgb c, uint8_t scale,
+                                 const SteamiFontFace& face) {
+    SteamiDisplayBackend* b = ready();
+    if (b == nullptr || s == nullptr) {
+        return;
+    }
+    const auto n = static_cast<uint8_t>(scale == 0 ? 1 : scale);
+    const int32_t advance = static_cast<int32_t>(face.w) * n;
+    int32_t px = x;
+    for (uint8_t code = steamiNextCode(s); code != 0; code = steamiNextCode(s)) {
+        if (px >= b->width()) {
+            break;  // every further glyph is right of the panel
+        }
+        faceGlyph(face, steamiFaceGlyph(face, code), 0, face.w, px, y, c, n, false);
+        px += advance;
+    }
+}
+
+bool SteamiDisplay::spleenPanel() {
+    return (static_cast<int32_t>(width()) + 64) / 128 == 2;
+}
+
+// Each primitive names its own 240 face: a sketch that never calls textSmall() links no 6x12.
 void SteamiDisplay::text(const char* s, int16_t x, int16_t y, SteamiRgb c, uint8_t scale) {
-    drawText(s, x, y, c, scale, false);
+    if (spleenPanel()) {
+        drawFaceText(s, x, y, c, scale, STEAMI_SPLEEN_8X16);
+    } else {
+        drawText(s, x, y, c, scale, false);
+    }
 }
 
 void SteamiDisplay::textSmall(const char* s, int16_t x, int16_t y, SteamiRgb c, uint8_t scale) {
-    drawText(s, x, y, c, scale, true);
+    if (spleenPanel()) {
+        drawFaceText(s, x, y, c, scale, STEAMI_SPLEEN_6X12);
+    } else {
+        drawText(s, x, y, c, scale, true);
+    }
 }
 
 int16_t SteamiDisplay::textWidth(const char* s, uint8_t scale) const {
@@ -530,4 +595,9 @@ int16_t SteamiDisplay::textWidth(const char* s, uint8_t scale) const {
 
 int16_t SteamiDisplay::textSmallWidth(const char* s, uint8_t scale) const {
     return textExtent(s, 6, scale);
+}
+
+int16_t SteamiDisplay::textHeight(uint8_t scale) {
+    const int32_t n = scale == 0 ? 1 : scale;
+    return static_cast<int16_t>((spleenPanel() ? 16 : 8) * n);  // at most 4080
 }
