@@ -137,8 +137,9 @@ Factors without a native Spleen size *(designer's call)*: a face is a Spleen siz
 font pixel drawn n×n). On 240 the VALUE ladder for f > 4 is 16x32 × f/4 when 4 divides f, else 12x24 × f/3
 when 3 divides f, else 8x16 × f/2 when f is even, else no face (f 6: 12x24 × 2; f 8: 16x32 × 2; f 10: 8x16 × 5).
 A factor with no face is skipped by the value fit. Reasons: scale-n text keeps the meaning "n times bigger"
-(the student's `text(s, at, c, 2)` and `text(s, x, y, c, 2)` are 8x16 doubled), every face keeps a cell
-height of exactly 8f (5.2), and no table bigger than 16x32 is needed.
+(the student's `text(s, at, c, 2)` and `text(s, x, y, c, 2)` are 8x16 doubled), every TEXT and VALUE face
+keeps a cell height of exactly 8f (5.2), and no table bigger than 16x32 is needed. LABEL faces have their own
+cell height: 7k on 128, 12 on 240.
 
 f = 1 never occurs on 240 *(designer's call)*: `value()` now lowers f from `max(scale, 1)·k` **down to k**,
 not to 1 (on 128, k = 1: unchanged), **at every anchor, corners included** (section 6 gives the new NE
@@ -153,7 +154,8 @@ nothing changes. Section 9 rewrites L174-175.
 
 ### 5.2 Metrics
 
-- **Cell height stays 8f on both panels** (8x16 at f 2, 12x24 at 3, 16x32 at 4, replicated faces likewise):
+- **Cell height stays 8f on both panels for TEXT and VALUE faces** (8x16 at f 2, 12x24 at 3, 16x32 at 4,
+  replicated faces likewise; LABEL faces have their own: 7k on 128, 12 on 240):
   every vertical formula of the spec in `8f`, `8k` or `ch` (floor of `margin_ns`, `margin_ew` = device.py's
   `ch + 4`, S row `− 8f`, value block `8f + 8f/3 + 8k`, unit at `value top + 8f`, `glyphsAt` half height)
   keeps its numbers. The builder names this "cell height" in the code instead of `CHAR_W`/`CHAR_H`.
@@ -206,8 +208,8 @@ primitive draws that panel's base face replicated `scale` times (scale 0 counts 
   f = scale·k, and `textSmall(…, 1)` those of LABEL. So `glyphsAt` keeps calling `SteamiDisplay::text`, at
   scale 1 instead of f, with x = point − `textWidth(s)/2` and y = point − `textHeight()/2`: the same cells as
   the kernel computes (F16). Reasons: one font per panel by construction; "scale n is n times bigger" on both
-  layers; `textWidth()`, `CHAR_W` and `maxChars()` stay consistent (`width() / CHAR_W` is 16 and 30, as
-  device.py's `max_chars`); no new table (the 16x32 face carries digits only).
+  layers; `textWidth()`, `CHAR_W` and `maxChars()` stay consistent (`width() / CHAR_W` is 16 and 30); no new
+  table (the 16x32 face carries digits only).
 - Full sets only: primitives never use the 12x24 and 16x32 value sets, bold or the narrow '.' and ':'.
   Reasons: the value sets hold 15 glyphs; picking a face from the string's content would make
   `text("23", x, y, c, 2)` and `text("A23", x, y, c, 2)` differ in height and break "n times bigger"; bold and
@@ -239,10 +241,22 @@ primitive draws that panel's base face replicated `scale` times (scale 0 counts 
 - Value label: its cell bottom stays `u(4)` above the value's cell top, using the label face's cell height
   (7k on 128 as today, 12 on 240) instead of the literal `7·k`.
 - `maxChars()` = `width() / advance(TEXT, k)`: 16 on 128, **30** on 240 *(designer's call: it answers "how
-  many characters fit on a line", which doubled; it also equals device.py's `width // CHAR_W`)*.
+  many characters fit on a line", which doubled)*. device.py on `main` returns `width // CHAR_W` (30), but
+  the branch `feat/gc9a01-screen` (micropython-steami-lib#454) changed it to `width // (CHAR_W * k)` (15 on
+  240); the MicroPython follow-up sets `max_chars` to `width // advance` of the TEXT face at k (16 / 30), and
+  8.1 lists that change.
 - `menu()` visible rows (B3): "the marker plus 10 cells" is 12 TEXT cells, 96 px on both panels. On 240 the
   chord of row 6 (the spec's rows `u(35 + 14·i)`: cells 196..211) is 157 px, so **6 rows are visible on 240**
   (5 on 128), as mockup 06 *(designer's call: V1c first; the MP mark "6" disappears on 240)*. 4c builds it.
+  Six rows hold only with B3's highlight clipped per scanline to the chord (left + k .. right − k): a fixed
+  bar `u(15)..W − u(15)`, as MicroPython draws it today, leaves the disc on row 6 (rows 193..218, about 23 px
+  past the chord on each side). The MicroPython follow-up clips its bar the same way (one `fill_rect` per
+  scanline, 26 on 240) or keeps 5 rows on 240 as a listed difference (8.1).
+- Graph axis labels (B1, 4c; 6x12 on 240) *(designer's call, answering the MicroPython review: ink edges, as
+  device.py reads B1)*: the max label's first inked row is `y + u(2)`, the min label's last inked row is
+  `y + h − k − u(2)`, both read from `inkRows()` (6x12 digits: rows 1..8). On 240 with the default box: max
+  cell top 73 (ink 74..81), min cell top 155 (ink 156..163). On 128 (5x7, ink = cell) the rows are unchanged.
+  device.py's `8*k` term in these formulas becomes the LABEL face's metrics.
 - Compass and watch letters (`glyphsAt`): `SteamiDisplay::text(s, x, y, c, 1)`, the cell centred on the same
   Q14 point, as device.py (F16). The cap ink of 8x16 (rows 2..11, centre 6.5) sits 1 px above the cell centre
   (row 7.5), 1.5 px above the Q14 point (row 8); accepted *(designer's call: parity with MicroPython's
@@ -270,9 +284,15 @@ the extended code space 32..159: 32..126 ASCII, 127 degree, 128..158 the 31 Lati
 Format *(designer's call)*: rows top to bottom, each row `ceil(w/8)` bytes, most significant bit = leftmost
 column (MicroPython `framebuf.MONO_HLSB`). Full sets are 128 glyphs indexed by code − 32; value sets are 15
 glyphs in the order of the 15-character key `" +-.:0123456789"`. A glyph of face (w, h) is the
-`h·ceil(w/8)` bytes at `index·h·ceil(w/8)` of its face's blob. MicroPython can wrap one glyph of a native-size
-face (n = 1) in a `FrameBuffer` and `blit` it (with a palette argument on the RGB565 backend); replicated
-faces and the bold strike need a row drawer, as in Arduino (section 8 says so in the issue).
+`h·ceil(w/8)` bytes at `index·h·ceil(w/8)` of its face's blob (the stride `ceil(w/8)` is MicroPython's
+MONO_HLSB stride). MicroPython blits one glyph of a native-size face (n = 1) straight from the frozen table,
+bold included (a second blit at x + 1); only replicated faces (n ≥ 2) need a row drawer. Section 8.1 gives
+the method (read-only blit source, palette and key on the GS4 frame).
+
+Bold at n ≥ 2 *(designer's call, from the MicroPython review, for both languages)*: the union of the strikes
+at x and x + n is each run of set bits widened by one font column, physical span `[a·n, (b + 2)·n − 1]`
+instead of `[a·n, (b + 1)·n − 1]`, so a row drawer draws bold with no extra call. Arduino may draw the strike
+either way; the pixels are the same.
 
 Figures for Spleen 2.1.0 (row-aligned; bit-packed in brackets):
 
@@ -325,7 +345,16 @@ name); the face type, the extended decoder and the lookups are declared by hand 
   delivery *(designer's call, answering the builder)*, so the MicroPython follow-up consumes it as is:
   - `VERSION = "2.1.0"`; `VALUE_KEY = " +-.:0123456789"`; `EXTRA`, the 33 characters of codes 127..159
     (`°`, the 31 letters of 5.4 in order, `Ÿ`), so MicroPython maps a character to a code without the C++
-    decoder.
+    decoder; `FOLD`, a 33-character `str` parallel to `EXTRA` giving the 8x8 replacement of codes 127..159
+    (the base letter of each accent, `Y` for `Ÿ`; `°` maps to itself, since Arduino's 8x8 has a degree glyph
+    and MicroPython's petme128 has none, so the MicroPython PR picks its replacement), so that MicroPython can
+    fold on 128 without copying `kFolds` *(designer's call, from the MicroPython review)*. The generator
+    tests check `FOLD` against `kFolds`.
+  - Code of a character `ch` (MicroPython iterates code points): `o = ord(ch)`; `32 ≤ o ≤ 126` → `o`;
+    otherwise `i = EXTRA.find(ch)`, `i ≥ 0` → `127 + i`; otherwise `ord('?')`. This covers control
+    characters, U+007F and every character outside the table, as Arduino draws `?`. In a value set the index
+    is `VALUE_KEY.find(ch)`; a character not in the key sends the text to the TEXT ladder (5.1). Widths count
+    one cell per code point.
   - Four faces `F6X12`, `F8X16`, `F12X24`, `F16X32`, each a tuple `(w, h, ascent, key, data)`: `key` is
     `None` for a full set (index = code − 32) and `VALUE_KEY` for a value set (index = position in the key);
     `data` is one `bytes` per face in the format of 5.5. One blob per face, no per-glyph offsets (every glyph of a
@@ -517,14 +546,16 @@ Filed by the controller when this delivery's PR opens: commit `steami_screen/spl
 repository's generator (`--micropython`, contract of 5.6), and on the 240 px backend draw the faces of 5.1
 with the rules of 5.2 to 5.4, for the widgets and for the pixel text `text(s, (x, y), c, scale)`: Spleen 8x16
 × scale with its cell's top-left at (x, y), accents drawn (mapped through `EXTRA`), instead of framebuf's 8x8
-or `_draw_scaled_text` on 240. The issue says that a `FrameBuffer` blit works only for native-size faces
-(with a palette on RGB565), and that replicated faces and the bold strike need a row drawer. device.py keeps
+or `_draw_scaled_text` on 240. The issue says that native faces, bold included, are blitted from the frozen
+tables (bold = a second blit at x + 1) with a 2-entry palette and a key on the GS4_HMSB frame, and that only
+replicated faces use the row drawer, with the bold strike folded into each run (5.5). device.py keeps
 `CHAR_W = CHAR_H = 8` (its 128-unit layout constants); a public text height mirroring `textHeight()` is the
 MicroPython PR's choice. Below `steami_screen`, the GC9A01 and SSD1327 drivers' own `text()` and
 `framebuf.text` stay 8x8, as the Arduino drivers' `text()` keep their fonts (spec anti-goal L73).
 
 **Parity** means *(designer's calls)*: on 240, for the same widget calls, the text uses the same glyphs (same
-tables), the same faces, cells and positions as the Arduino goldens; and the pixel text `text(s, (x, y), c,
+tables), the same faces, cells and positions as the Arduino goldens, except where device.py keeps a listed
+MicroPython difference (Layout, below); and the pixel text `text(s, (x, y), c,
 scale)` draws **the same pixels** as Arduino's `text(s, x, y, c, scale)` (F17): same tables, integer
 position, the same n×n replication, so this costs nothing beyond using the tables, and the issue asks for a
 test that renders a string with accents and compares it with the glyph rows of `spleen.py`. Pixel parity of
@@ -533,30 +564,93 @@ the triangle edges, Q14 trigonometry and `isqrt`. MicroPython on 128 keeps frame
 completes the GC9A01 issue of spec section 12 (#368) and replaces its "k = 2, a real `draw_scaled_text`" for
 text.
 
-**MicroPython constraints** (from the session that writes the MicroPython GC9A01 screen, 2026-11-26):
+**MicroPython constraints** (from the session that writes the MicroPython GC9A01 screen, 2026-11-26, and its
+review of this document against its branch, 2026-11-27):
 
-- **Order:** Spleen enters `steami_screen` only after the PR of branch `feat/gc9a01-screen` (GC9A01 driver
-  and V1c screen) is merged, to avoid conflicts with its corrections to `device.py`. The integration starts from
-  that merged branch, with `spleen.py` produced by this repository's generator.
+- **Order:** Spleen enters `steami_screen` only after steamicc/micropython-steami-lib#454 (branch
+  `feat/gc9a01-screen`: GC9A01 driver and V1c screen) is merged, to avoid conflicts with its corrections to
+  `device.py`. The integration starts from that merged branch, with `spleen.py` produced by this repository's
+  generator.
 - **Frame buffer:** the MicroPython V1c frame is a `GS4_HMSB` `FrameBuffer` of palette indices (28 800 B),
   converted to RGB565 by bands in `show()`, not a full RGB565 frame (115 200 B would not fit beside BLE).
-  - A native-size face is drawn as a `MONO_HLSB` `FrameBuffer` blitted with a 2-entry GS4 palette.
-  - Replicated faces and the bold strike use a row drawer with one `fill_rect` per run of set bits, never one
-    call per pixel. Per-pixel drawing is what made a gauge take 5 to 11 s.
-- **Firmware flash:** about 6 KB of margin is left in the firmware where `steami` is frozen, against about
-  5.3 KB of tables. The choice is the maintainer's, at integration time:
-  - (a) move `FLASH_FS` up by 16 KB (0x08080000 to 0x08084000, still below the BLE stack), which reformats the
-    file system on update. The MicroPython session prefers this option.
-  - (b) do not freeze `spleen.py`, so the tables take about 5.3 KB of the roughly 92 KB of heap left with BLE.
-- **Layout:** MicroPython follows spec 5.8 on 240 (k = 2), with three kept MicroPython differences: the
-  `_resolve` margins use the real glyph height plus the title row floor and cap, the gauge outer radius is
-  `radius − u(4)`, and the face cell is `W·11/128`. Its tests reuse the Arduino native goldens. The 5.8 rules
-  restated in font metrics in 5.2 and 5.3 of this document (advance, cell height, ascent, ink rows, title cap,
-  floor) are the ones both languages apply, so `device.py` is parameterised by face instead of `8 × k`.
-- **128 px:** for MicroPython, the font does not change at 128 px. Its rendering at 128 may still change
-  where it improves, with the maintainer's agreement: the MicroPython gauge at 128 is already a ring filled
-  by horizontal rows, closer to Arduino. This document does not require MicroPython's 128 rendering to stay
-  pixel-identical; the bit-identical 128 requirement applies to the Arduino library.
+- **Native faces (n = 1), bold included, by blit:**
+  - Source: the read-only tuple `(memoryview(data)[o:o + h·bpr], w, h, framebuf.MONO_HLSB)`, with
+    `bpr = (w + 7) // 8` and `o = index·h·bpr`. `framebuf.FrameBuffer()` needs a writable buffer and refuses
+    the frozen `bytes` of `spleen.py` (TypeError on the board); `blit` accepts the tuple read-only. A copy into
+    one reused `bytearray` per face size, wrapped by a pre-built FrameBuffer, also works. The MicroPython
+    framebuf stub must reject a read-only buffer in its constructor so that host tests catch this.
+  - Palette and key: `blit` compares the key with the colour **after** the palette. The palette is a 2×1
+    `GS4_HMSB` FrameBuffer whose entry 1 is the text colour index c and entry 0 an index b ≠ c (for example
+    b = 1 if c == 0 else 0), and `key = b`, built once per string. Only set bits are drawn and the background
+    (rings, bars, the selected menu row) stays. A naive palette (0, c) without a key paints black cells; with
+    key 0 it makes BLACK text invisible.
+  - Bold: the same glyph blitted again at x + 1 (two C-level blits per glyph, the double-strike pixels of 5.2).
+  - Narrow '.' and ':' of a native face: the whole glyph blitted at x − w/4; its columns outside the window
+    are transparent, so the window of 5.2 is drawn without cropping (the generator checks that the ink and
+    the bold column lie inside the window).
+  - Where: on the driver's `framebuf`. The GC9A01 driver's `blit` gains the `palette` argument (today
+    `blit(fb, x, y, key)` drops it), and the adapter exposes a text or blit method with the colour resolved
+    once.
+- **Replicated faces (n ≥ 2)** use a row drawer with one `fill_rect` per run of set bits, never one call per
+  pixel (per-pixel drawing made a gauge take 5 to 11 s), and the bold strike folded into each run (5.5). The
+  measured cost is about 1 ms of Python per row-level operation through the adapter (about 230 rows of fill
+  take 270 to 560 ms in the gauge), so the drawer keeps the Python work per row and per glyph minimal.
+- **Firmware flash:** after #454 the margin is 5 572 B (text+data 518 716 B, frozen with `mpy-cross -O3`). A
+  stand-in `spleen.py` with the contract of 5.6 and the sizes of 5.5 compiles to about 5 535 B of `.mpy`, and
+  the drawing code (decoder, face ladder, narrow window, bold, row drawer, ink bounds, adapter method) adds
+  about 1.5 to 3 KB. The fonts therefore cannot be frozen in the current flash layout. The maintainer chooses
+  at integration time:
+  - (a) move `FLASH_FS` up by 16 KB in a STeaMi-specific copy of `stm32wb55xg.ld` (the shared file also
+    serves NUCLEO_WB55 and USBDONGLE_WB55), named in `LD_FILES` of `STEAM32_WB55RG/mpconfigboard.mk` for both
+    the mboot and plain builds: FLASH 528K, FLASH_APP 496K, FLASH_FS at 0x08084000, length 256K (end
+    0x080C4000, below the radio stack at 0x080E0000). The file system is reformatted on update, so the
+    user's files are lost. The MicroPython session prefers this option.
+  - (b) freeze only the drawing code (it must fit in the 5 572 B) and keep `spleen.py` out of the frozen
+    package: outside `steami_screen/`, or an explicit `module()` list in place of `package("steami_screen")`,
+    which freezes every `.py` of the package. Ship it as a `spleen.mpy` built by `mpy-cross`, never as `.py`
+    source (compiling about 15 KB of `bytes` literals on the board peaks far above the 5.3 KB it keeps).
+    Install it on the file system as a documented step (lost when the file system is reformatted). Import it
+    in `Screen.begin()`, so that a missing file or a lack of heap gives E31 or a clear error and the 240 screen
+    falls back to the 8x8 text, instead of failing at the first `text()`. Count its ~5.3 KB, plus the module
+    object, in the RAM figure (about 92 KB of heap are left with BLE).
+  - The integration PR reports the firmware text+data and the margin before and after.
+- **Layout:** MicroPython follows spec 5.8 on 240 (k = 2), with three kept MicroPython differences: the `_at`
+  margins use the real glyph height plus the title row floor and cap, the gauge outer radius is
+  `radius − u(4)`, and the face cell is `W·11/128`. device.py also keeps the behaviours that spec 5.9 marks
+  **MP**:
+  - no narrow '.' and ':' (B6): every value glyph is 8f wide, "88.8" is 32f;
+  - three graph labels, with "1k" formatting;
+  - a fixed menu bar with left-aligned items;
+  - a gauge fill 2 px thicker;
+  - the value label lowered when no character fits.
+
+  With Spleen these give other positions on 240 (in mockup 03, Arduino draws "23.5" 56 px wide at x 32 and
+  152; device.py would draw 64 px at x 28 and 148). The integration therefore (1) adds the narrow window
+  `[w/4, 3w/4)` and the `w/2` advance of 5.2 to device.py's `_fit`, `_put` and `_value` ("88.8" = 3 advances
+  + advance/2), and (2) either adopts B1 and B3 for the graph and menu or lists them as remaining differences.
+  The Arduino goldens are reused only for title, subtitle, value, unit, label, gauge labels, compass and
+  watch letters, and `text(s, at)`. The 5.8 rules restated in font metrics in 5.2 and 5.3 (advance, cell
+  height, ascent, ink rows, title cap, floor, graph labels) are the ones both languages apply, so `device.py`
+  is parameterised by face instead of `8 × k`.
+- **device.py changes the issue lists:** `max_chars` = `width // advance` of the TEXT face at k (16 / 30;
+  #454 gives 15 on 240, 5.3); the menu's 6 rows on 240 with a bar clipped per scanline, or 5 rows kept as a
+  difference (5.3); the graph label rows of 5.3 if B1 is adopted.
+- **Visible change and tests:** `text(s, (x, y))` on the V1c is 16 px tall at scale 1 (changelog, like
+  Arduino). Tests to rewrite: `test_mock_widget_text_is_scaled_by_k` (routing), the 240 goldens imported from
+  Arduino (`kHiBoxes` and the others, regenerated by 4b-font), the menu row count. `gauge_demo.py`: its
+  comment "8x8 scaled by k" is updated; its erase box (112 × 18) still covers "1234 mm" (56 × 16) and stays.
+- **Timing** (V1c, measured with `time.ticks_us` in the MicroPython PR, reported before and after): title,
+  value with unit and label, subtitle and gauge labels of programs 01 and 04, and `text(s, (x, y), c, 2)` of
+  15 characters. Acceptance: no widget's text draws slower than with today's `_draw_scaled_text`, and a
+  native-face widget's text takes under 10 ms. Estimate for program 04 on 240: about 31 blits, 3 to 10 ms,
+  against about 150 ms for today's per-pixel ×2/×4 text. The gauge's 270 to 560 ms and `show()`'s 167 ms are
+  not affected.
+- **128 px:** for MicroPython, the 8x8 font stays at 128 px. MicroPython folds codes 127..159 through `FOLD`
+  before `framebuf.text`, so one code point is one 8 px cell (today `é` is two UTF-8 bytes drawn as two 8x8
+  checkerboards while the layout counts one cell); this is an improvement allowed on the SSD1327. Its rendering
+  at 128 may change elsewhere where it improves, with the maintainer's agreement: the MicroPython gauge at 128
+  is already a ring filled by horizontal rows, closer to Arduino. This document does not require MicroPython's
+  128 rendering to stay pixel-identical; the bit-identical 128 requirement applies to the Arduino library.
 
 ### 8.2 Wiki (`steamicc/wiki_steami`, after the release that ships this delivery)
 
@@ -743,6 +837,11 @@ Designer's calls (reversible), numbered for the spec:
   1)` its LABEL; `glyphsAt` calls `text(…, 1)` and builds no `Run`. Tested (section 7).
 - **F17** MicroPython: the pixel text on 240 draws the same pixels as Arduino's `text()` (a goal); other
   primitives stay layout parity only.
+- **F18** (from the MicroPython review, 2026-11-27) `spleen.py` also carries `FOLD`, and its code mapping
+  sends any character outside the table to `?` (5.6); bold at n ≥ 2 widens each run by one font column (5.5);
+  graph axis labels placed by their ink edges (5.3); six menu rows on 240 require the scanline-clipped bar
+  (5.3). The MicroPython method of 8.1 (read-only blit source, palette with key, bold as a second blit,
+  freezing only with a moved `FLASH_FS`, timing acceptance) is that session's, recorded for the issue.
 
 ## 12. Left to the builder
 
@@ -766,4 +865,5 @@ Designer's calls (reversible), numbered for the spec:
 None open: both questions of the first draft are answered (section 11), and the three questions of the second
 builder check (narrow '.' and ':' in a mixed VALUE text, kernel signatures, wiki sentences) are settled as
 designer's calls in 5.1, 5.7 and 8.2. Every designer's call stays open to correction; F13 to F17 are new in
-this revision and follow from the answer "Spleen aussi".
+this revision and follow from the answer "Spleen aussi". F18 records the MicroPython session's review of 2026-11-27 (21 findings, each
+cross-checked); every one is applied in 5.1 to 5.6 and 8.1.
