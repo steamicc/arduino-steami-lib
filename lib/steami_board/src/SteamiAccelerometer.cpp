@@ -2,6 +2,7 @@
 
 #include "SteamiAccelerometer.h"
 
+#include <Arduino.h>
 #include <math.h>
 
 namespace {
@@ -9,6 +10,11 @@ namespace {
 constexpr SteamiFunctionInfo kInfo = {SteamiFunction::ACCELEROMETER, "SteamiAccelerometer",
                                       "accelerometer", "Check the board or try another one.",
                                       "read() will return NAN."};
+
+// After switching the range, wait for two samples at 104 Hz: until then the
+// output registers hold the last +-2 g sample, which the +-8 g scale would
+// read 4 times too large.
+constexpr uint32_t kSettleMs = 20;
 
 }  // namespace
 
@@ -23,6 +29,7 @@ bool SteamiAccelerometer::begin() {
         SteamiISM330DL* imu = _handle.board().ism330dl();
         if (imu != nullptr) {
             imu->configureAccel(SteamiISM330DL::AccelOdr::HZ_104, SteamiISM330DL::AccelScale::G_8);
+            delay(kSettleMs);
         }
     }
     return true;
