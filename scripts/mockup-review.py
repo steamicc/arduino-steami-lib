@@ -40,6 +40,8 @@ MOCKUPS: tuple[str, ...] = (
     "02_battery",
     "03_comfort_dual",
     "04_circular_gauge",
+    "05_scrolling_graph",
+    "06_dpad_menu",
     "07_compass",
     "08_smiley_happy",
     "08_smiley_sad",

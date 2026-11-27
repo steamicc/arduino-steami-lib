@@ -62,6 +62,17 @@ class SteamiDisplayRulesTest(unittest.TestCase):
         self.assertTrue(self._compiles("SteamiValue v(1L); (void)v;", header="SteamiValue.h"))
         self.assertFalse(self._compiles("SteamiValue v(1LL); (void)v;", header="SteamiValue.h"))
 
+    def test_history_capacity_bounds(self) -> None:
+        self.assertTrue(
+            self._compiles(
+                "SteamiHistory<1> a; SteamiHistory<65535> b; (void)a; (void)b;",
+                "SteamiHistory.h",
+            )
+        )
+        for body in ("SteamiHistory<0> a; (void)a;", "SteamiHistory<65536> a; (void)a;"):
+            with self.subTest(body=body):
+                self.assertFalse(self._compiles(body, "SteamiHistory.h"))
+
     def test_backends_never_call_driver_drawing(self) -> None:
         # The layer draws; a backend only forwards pixels, rectangles and controls. Inline
         # forwarding overrides live in the headers, so both files of each backend are checked.
@@ -119,17 +130,20 @@ class SteamiDisplayRulesTest(unittest.TestCase):
 
     @classmethod
     def _calls(cls, text: str) -> list[tuple[str, list[str]]]:
-        """Every statement of text that starts with "screen.": (method name, literal tokens)."""
+        """Every statement of text that calls "screen.": (method name, literal tokens).
+
+        The call may follow an if or an assignment ("selected = screen.menu(...)"); the tokens
+        are read from "screen." on, so the condition or the assigned name adds none.
+        """
         code = "\n".join(line.split("//")[0] for line in text.splitlines())
         out: list[tuple[str, list[str]]] = []
         for raw in re.split(r"[;{}]", code):  # no string of the mockups holds ; { or }
             statement = " ".join(raw.split())
-            method = re.match(r"screen\.(\w+)", statement)
+            method = re.search(r"\bscreen\.(\w+)", statement)
             if method is None:
                 continue
-            tokens = [
-                m.group(0) for m in cls._TOKEN.finditer(statement) if m.group("ident") is None
-            ]
+            call = statement[method.start() :]
+            tokens = [m.group(0) for m in cls._TOKEN.finditer(call) if m.group("ident") is None]
             out.append((method.group(1), tokens))
         return out
 
@@ -156,6 +170,14 @@ class SteamiDisplayRulesTest(unittest.TestCase):
                 ("face", ["SteamiFace::HAPPY"]),
             ],
         )
+        # A call after an if or an assignment counts, from "screen." on; another object's does not.
+        self.assertEqual(
+            self._calls(
+                "if (c) screen.graph(h, 950, 1050);\nselected = screen.menu(ITEMS, selected);"
+                "\nx = notscreen.foo(1);"
+            ),
+            [("graph", ["950", "1050"]), ("menu", [])],
+        )
 
     def test_screen_examples_draw_the_mockups(self) -> None:
         # Each example's loop() makes the screen calls of its mockup helper, with the same
@@ -171,6 +193,9 @@ class SteamiDisplayRulesTest(unittest.TestCase):
             ("ScreenCompass", "mockupCompass"),
             ("ScreenFaces", "mockupFaces"),
             ("ScreenWatch", "mockupWatch"),
+            ("ScreenGraph", "mockupGraph"),
+            ("ScreenMenu", "mockupMenu"),
+            ("WeatherStation", "weatherPage"),
         ):
             with self.subTest(example=example):
                 sketch = examples / example / f"{example}.ino"
@@ -183,6 +208,30 @@ class SteamiDisplayRulesTest(unittest.TestCase):
                 self.assertEqual(sketch_calls, helper_calls)
                 self.assertIn("screen.show();", loop)
                 self.assertTrue(drawing.rstrip().endswith("screen.show();"))
+
+    def test_string_arrays_match_the_mockups(self) -> None:
+        # The call tokens skip names, so screen.menu(ITEMS, ...) and screen.menu(MENU_ITEMS, ...),
+        # or screen.title(PAGES[page]) and screen.title(WEATHER_PAGES[page]), compare equal
+        # whatever the arrays hold: their strings are compared here, in order.
+        def strings(path: Path, name: str) -> list[str]:
+            text = path.read_text(encoding="utf-8")
+            array = re.search(rf"\b{name}\[\d*\]\s*=\s*\{{(.*?)\}};", text, re.S)
+            if array is None:
+                self.fail(f"{path.name} has no array {name}")
+            return re.findall(r'"(?:[^"\\]|\\.)*"', array.group(1))
+
+        helpers = ROOT / "tests" / "native" / "helpers" / "SteamiMockups.h"
+        examples = ROOT / "lib" / "steami_board" / "examples"
+        for example, name, mockup_name, count in (
+            ("ScreenMenu", "ITEMS", "MENU_ITEMS", 6),
+            ("WeatherStation", "PAGES", "WEATHER_PAGES", 4),
+        ):
+            with self.subTest(example=example):
+                sketch = examples / example / f"{example}.ino"
+                self.assertTrue(sketch.is_file(), f"{example}.ino is missing")
+                mockup = strings(helpers, mockup_name)
+                self.assertEqual(len(mockup), count)
+                self.assertEqual(strings(sketch, name), mockup)
 
 
 if __name__ == "__main__":

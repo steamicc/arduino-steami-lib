@@ -2516,8 +2516,12 @@ PINNED_POINTS = (
 
 
 def mockup_render(name, W):
+    # 05 and 06 (4c Task 5) are defined below; their pins are checked there
     return {"04": lambda: mockup_04(W, 342), "07": lambda: compass_render(W, 0.0),
-            "08": lambda: mockup_08(W, 6, 100), "09": lambda: mockup_09(W, WATCH_START)}[name]()
+            "08": lambda: mockup_08(W, 6, 100), "09": lambda: mockup_09(W, WATCH_START),
+            "05": lambda: mockup_05(W, GRAPH_05_VALUES, "APDS-9960"),
+            "05 pressure": lambda: mockup_05(W, PRESSURE_V1C, "BME280", has_light=False),
+            "06": lambda: mockup_06(W, 2)}[name]()
 
 
 MOCKUP_BOXES = [(name, W, c, rows, band_box(mockup_render(name, W), c, *(rows or ())))
@@ -2534,3 +2538,625 @@ for name, W, c, rows, got in MOCKUP_BOXES:
     print(f"    {name:<3} {W} {c:<6} {str(rows or ''):<10} {got}")
 print("  mockup points (name W point colour):",
       *(f"{n} {W} {p} {c}" for n, W, p, c in PINNED_POINTS))
+
+# ---- Widget of 4c Task 2: graph() frame, value and labels (spec 5.9 "graph", B1; font design
+# 5.3) ----
+# The box (D3) in 128-px units through u(): x u(21), y u(38), w W - u(15) - u(21), h u(52). The
+# current value (D5) is the integer part of the last value ("--" for NAN, past 1e9 or an empty
+# series), text() at scale 1 in WHITE, centred on centerX() at row u(31), never cut. The two axis
+# labels (D6, B1) are the integer parts of maxV and minV in the LABEL face at k, DARK: the max
+# label's first inked row at y + u(2), the min label's last inked row at y + h - k - u(2), each at
+# x = max(chord left at its inked rows, box left + k) + u(2), cut to [x, chord right - k]. The
+# middle line is GRID_DARK dashes of u(3) every u(3) + u(3) from x + k, k rows thick, the last one
+# cut at x + w - 1; the axes are strokeLine()s of width k, left and bottom. Drawing order: value,
+# labels, dashes, axes (the curve of Task 3 comes last).
+GRAPH_MARGIN, GRAPH_X_OFFSET, GRAPH_Y, GRAPH_HEIGHT, GRAPH_VALUE_Y = 15, 6, 38, 52, 31
+GRAPH_DASH, GRAPH_GAP, GRAPH_LABEL_INSET = 3, 3, 2
+
+
+def graph_box(P):
+    """(gx, gy, gw, gh) of D3: the box x is u(21), never u(15) + u(6)."""
+    gx = P.u(GRAPH_MARGIN + GRAPH_X_OFFSET)
+    return gx, P.u(GRAPH_Y), P.W - P.u(GRAPH_MARGIN) - gx, P.u(GRAPH_HEIGHT)
+
+
+def graph_label(P, v, top):
+    """drawGraphLabel() (D6): (the kept text, its left column x, its cell top row)."""
+    gx, gy, _, gh = graph_box(P)
+    text = gauge_label_text(v)  # integerText(): the formatter gaugeLabel() shares (D5)
+    face = face_for(P, text, LABEL, P.k)
+    m, n, inset = ink_rows(text, count(text), LABEL, face), replication(face, P.k), P.u(2)
+    first, last = lowest_bit(m), highest_bit(m)
+    y = gy + inset - first * n if top else gy + gh - P.k - inset - (last + 1) * n + 1
+    c = P.ink_chord(text, count(text), LABEL, y, P.k)
+    x = max(c[0] if c else 0, gx + P.k) + inset
+    kept = P.fit_glyphs(text, LABEL, P.k, y, (x, P.W - 1), P.k, 0)
+    return text[:kept], x, y  # the labels are ASCII: a glyph is a character
+
+
+def graph_layout(W, min_v, max_v):
+    """The box, the value's centre column and row, the labels (max then min) as (text, x, top),
+    the dash spans [(x0, x1)] and the dash rows (y0, y1)."""
+    P = Panel(W)
+    gx, gy, gw, gh = graph_box(P)
+    dash, step = P.u(GRAPH_DASH), P.u(GRAPH_DASH) + P.u(GRAPH_GAP)
+    dashes = [(x, min(x + dash - 1, gx + gw - 1)) for x in range(gx + P.k, gx + gw, step)] \
+        if dash > 0 else []
+    row = gy + gh // 2
+    return {"box": (gx, gy, gw, gh), "value": (P.cx, P.u(GRAPH_VALUE_Y)),
+            "labels": [graph_label(P, max_v, True), graph_label(P, min_v, False)],
+            "dashes": dashes, "dash_rows": (row, row + P.k - 1)}
+
+
+def graph_axes(W):
+    """The two axes, left then bottom, each on its own canvas: strokeLine(gx, gy, gx, gy + gh)
+    and strokeLine(gx, gy + gh, gx + gw - 1, gy + gh), width k, DARK."""
+    P = Panel(W)
+    gx, gy, gw, gh = graph_box(P)
+    left, bottom = {}, {}
+    r_stroke_line(left, W, gx, gy, gx, gy + gh, P.k, "DARK")
+    r_stroke_line(bottom, W, gx, gy + gh, gx + gw - 1, gy + gh, P.k, "DARK")
+    return left, bottom
+
+
+def graph_frame(cv, W, min_v, max_v, value_text):
+    """Paints graph()'s value, labels, dashes and axes onto cv, in that order (D3)."""
+    P = Panel(W)
+    g = graph_layout(W, min_v, max_v)
+    cx, vy = g["value"]
+    r_text(cv, W, value_text, cx - 8 * count(value_text) // 2, vy, 1, "WHITE")  # textWidth: 8/glyph
+    for text, x, y in g["labels"]:
+        for p in draw_glyphs(P, text, count(text), LABEL, x, y, P.k):
+            cv[p] = "DARK"
+    y0, y1 = g["dash_rows"]
+    for x0, x1 in g["dashes"]:
+        r_span(cv, W, x0, y0, x1 - x0 + 1, y1 - y0 + 1, "GRID_DARK")
+    for axis in graph_axes(W):
+        cv.update(axis)
+    return cv
+
+
+def graph_label_box(W, min_v, max_v, which):
+    """The DARK ink box of label `which` (0 max, 1 min) drawn alone."""
+    P = Panel(W)
+    text, x, y = graph_layout(W, min_v, max_v)["labels"][which]
+    return box(draw_glyphs(P, text, count(text), LABEL, x, y, P.k))
+
+
+# ---- Self-check of 4c Task 2 ----
+GL128, GL240 = graph_layout(128, 950, 1050), graph_layout(240, 950, 1050)
+assert GL128["box"] == (21, 38, 92, 52) and GL240["box"] == (39, 71, 173, 97)  # D3
+assert GL128["value"] == (64, 31) and GL240["value"] == (120, 58)  # D5: value row u(31)
+assert [P.u(GRAPH_DASH) for P in (P128, P240)] == [3, 5]  # dash and gap 3 / 5
+assert [P.u(GRAPH_GAP) for P in (P128, P240)] == [3, 5]
+assert GL128["dash_rows"] == (64, 64) and GL240["dash_rows"] == (119, 120)  # k rows thick
+assert GL128["dashes"][0] == (22, 24) and GL240["dashes"][0] == (41, 45)  # from gx + k
+assert GL128["dashes"][-1] == (112, 112) and GL240["dashes"][-1] == (211, 211)  # cut at gx + gw - 1
+for G in (GL128, GL240):
+    gx, _, gw, _ = G["box"]
+    assert all(x1 <= gx + gw - 1 for _, x1 in G["dashes"])
+# D6 and font design 5.3: max cell top 40 / 73, min cell top 81 / 155, x 24 / 44, for every
+# digit label of the examples
+for lo, hi in ((950, 1050), (0, 1000)):
+    for W, tops, x in ((128, (40, 81), 24), (240, (73, 155), 44)):
+        labels = graph_layout(W, lo, hi)["labels"]
+        assert [lb[0] for lb in labels] == [str(hi), str(lo)], (W, labels)
+        assert [lb[2] for lb in labels] == list(tops), (W, lo, hi, labels)
+        assert [lb[1] for lb in labels] == [x, x], (W, lo, hi, labels)
+# On 240 the 6x12 digits ink rows 1..8: max ink 74..81, min ink 156..163 (font design 5.3); on
+# 128 the 5x7 ink is the whole cell: 40..46 and 81..87, the min label's last inked row at
+# y + h - k - u(2) = 87
+assert [graph_label_box(240, 950, 1050, i)[1::2] for i in (0, 1)] == [(74, 81), (156, 163)]
+assert [graph_label_box(128, 950, 1050, i)[1::2] for i in (0, 1)] == [(40, 46), (81, 87)]
+assert [graph_label_box(240, 0, 1000, i)[1::2] for i in (0, 1)] == [(74, 81), (156, 163)]
+# Label widths on 240: "1050" 24 px and "950" 18 px (6 px a glyph in 6x12)
+assert [cell_width(P240, t, count(t), LABEL, 2) for t in ("1050", "950")] == [24, 18]
+# "--" (NAN, INF bounds): the rule as written gives 37 / 84 on 128 and 69 / 158 on 240
+for W, tops in ((128, (37, 84)), (240, (69, 158))):
+    labels = graph_layout(W, NAN, INF)["labels"]
+    assert [(lb[0], lb[2]) for lb in labels] == [("--", tops[0]), ("--", tops[1])], (W, labels)
+# Every label of at most 10 glyphs is whole (the cut is a guard)
+for W in (128, 240):
+    for lo, hi in ((-100000000.0, 100000000.0), (-999999872, 999999872), (1e9, -1e9)):
+        for text, _, _ in graph_layout(W, lo, hi)["labels"]:
+            assert text == gauge_label_text(lo) or text == gauge_label_text(hi), (W, text)
+# The axes: on 240 device.py's _sline lines ink x 39..40 and rows 168..169 (D3)
+assert [box(a) for a in graph_axes(128)] == [(21, 38, 21, 90), (21, 90, 112, 90)]
+assert [box(a) for a in graph_axes(240)] == [(39, 71, 40, 169), (39, 168, 212, 169)]
+# Labels inside the box interior (gx + k <= x <= gx + gw - 1, gy <= y < gy + gh)
+for W in (128, 240):
+    P = Panel(W)
+    gx, gy, gw, gh = graph_box(P)
+    for lo, hi in ((950, 1050), (0, 1000), (NAN, INF), (-100000000.0, 100000000.0)):
+        for i in (0, 1):
+            x0, y0, x1, y1 = graph_label_box(W, lo, hi, i)
+            assert gx + P.k <= x0 and x1 <= gx + gw - 1 and gy <= y0 and y1 < gy + gh, (W, lo, hi)
+# The value: 10 glyphs at most, inside the chord at rows 31..38 and 58..73 (D5)
+LONGEST_VALUE = gauge_label_text(-999999900)
+assert LONGEST_VALUE == "-999999872" and count(LONGEST_VALUE) == 10
+# Nothing outside radius() + 1, for these bounds and values
+for W in (128, 240):
+    P = Panel(W)
+    for lo, hi in ((950, 1050), (0, 1000), (-100000000.0, 100000000.0), (NAN, INF)):
+        for value in ("--", "1013", LONGEST_VALUE):
+            assert not outside_circle(graph_frame({}, W, lo, hi, value), P), (W, lo, hi, value)
+
+# ---- Values pinned by test_steami_screen (4c Task 2) ----
+print("graph (4c Task 2): box (gx, gy, gw, gh); value centre and row; dash rows; dash spans")
+for W in (128, 240):
+    G = graph_layout(W, 950, 1050)
+    print(f"  {W}: box {G['box']} value {G['value']} dash rows {G['dash_rows']}")
+    print(f"    dashes {G['dashes']}")
+print("graph axes: left box, bottom box")
+for W in (128, 240):
+    print(f"  {W}: {[box(a) for a in graph_axes(W)]}")
+print("graph labels (minV, maxV): max then min, (text, x, cell top) and DARK ink box")
+for W in (128, 240):
+    for lo, hi in ((950, 1050), (0, 1000), (NAN, INF)):
+        labels = graph_layout(W, lo, hi)["labels"]
+        boxes = [graph_label_box(W, lo, hi, i) for i in (0, 1)]
+        print(f"  {W} ({lo!r}, {hi!r}): {labels[0]} {boxes[0]}, {labels[1]} {boxes[1]}")
+
+# ---- Widget of 4c Task 3: graph() curve (spec 5.9, 7; D4) ----
+# n = the series' count; with n < 2 no curve. Point i sits at x = gx + i * gw // (n - 1) (integer
+# product, so the last point is at gx + gw) and y = gy + gh - ceilf(ratio * gh), ratio = (v - minV)
+# / span in float32, span = maxV - minV with span 0 replaced by 1. A NAN ratio skips the point;
+# otherwise the ratio is clamped to [0, 1] (INF included). A segment strokeLine(..., k, c) joins
+# two consecutive valid points only: a NAN leaves a gap and an isolated point draws nothing.
+GRAPH_05_VALUES = [354, 378, 415, 390, 451, 524, 561, 537, 573, 610,
+                   585, 622, 598, 634, 610, 622, 585, 610, 646, 847]  # D13
+
+
+def curve_row(v, min_v, max_v, top, h):
+    """curveRow(): the row of v, or None for a skipped point (NAN ratio)."""
+    v, min_v, max_v = f32(v), f32(min_v), f32(max_v)
+    span = f32(max_v - min_v)
+    if span == 0:
+        span = 1.0
+    ratio = f32(f32(v - min_v) / span)
+    if math.isnan(ratio):
+        return None
+    ratio = min(max(ratio, 0.0), 1.0)
+    return top + h - math.ceil(f32(ratio * h))
+
+
+def graph_points(W, values, min_v, max_v):
+    """D4's points [(x, y) or None], one per value; [] below 2 values (no curve)."""
+    gx, gy, gw, gh = graph_box(Panel(W))
+    n = len(values)
+    if n < 2:
+        return []
+    out = []
+    for i, v in enumerate(values):
+        y = curve_row(v, min_v, max_v, gy, gh)
+        out.append(None if y is None else (gx + i * gw // (n - 1), y))
+    return out
+
+
+def graph_render(W, values, min_v, max_v, c="LIGHT"):
+    """graph(): graph_frame() (value of the last point, "--" when empty), then the segments
+    between consecutive valid points, strokeLine() of width k in c."""
+    P = Panel(W)
+    cv = graph_frame({}, W, min_v, max_v, gauge_label_text(values[-1]) if values else "--")
+    pts = graph_points(W, values, min_v, max_v)
+    for a, b in zip(pts[:-1], pts[1:], strict=True):
+        if a is not None and b is not None:
+            r_stroke_line(cv, W, a[0], a[1], b[0], b[1], P.k, c)
+    return cv
+
+
+# ---- Self-check of 4c Task 3 ----
+for W, last in ((128, 113), (240, 212)):
+    gx, gy, gw, gh = graph_box(Panel(W))
+    pts = graph_points(W, [950] * 20, 950, 1050)
+    assert [p[0] for p in pts] == [gx + i * gw // 19 for i in range(20)] and pts[-1][0] == last
+    assert {p[1] for p in pts} == {gy + gh}  # 20 x 950 on the bottom axis row
+    assert {p[1] for p in graph_points(W, [1050] * 20, 950, 1050)} == {gy}  # 20 x 1050 on the top
+    # Clamped (spec 7): below minV on the bottom row, above maxV on the top row, INF included
+    assert {p[1] for p in graph_points(W, [-5, -INF, 2000, INF], 950, 1050)} == {gy + gh, gy}
+    # Fewer than 2 values: no curve; 2 values stretch across the box (D4)
+    assert graph_points(W, [], 950, 1050) == [] and graph_points(W, [1000], 950, 1050) == []
+    assert [p[0] for p in graph_points(W, [0, 1000], 0, 1000)] == [gx, gx + gw]
+    # A NAN ratio skips the point: NAN values, NAN bounds, INF - INF and INF / INF
+    assert graph_points(W, [NAN, 950, NAN], 950, 1050)[0::2] == [None, None]
+    assert all(p is None for p in graph_points(W, [1000] * 3, NAN, 1050))
+    assert all(p is None for p in graph_points(W, [1000] * 3, 950, NAN))
+    assert [p is None for p in graph_points(W, [FLT_MAX, -FLT_MAX, INF, -INF, NAN, -FLT_MAX, 0],
+                                            -FLT_MAX, FLT_MAX)] == [True, False, True, True,
+                                                                    True, False, False]
+    # span 0 is replaced by 1: 499, 500, 501 on (500, 500) give bottom, bottom, top
+    assert [p[1] for p in graph_points(W, [499, 500, 501], 500, 500)] == [gy + gh, gy + gh, gy]
+    # minV > maxV inverts the curve, as gauge() does
+    assert {p[1] for p in graph_points(W, [950] * 20, 1050, 950)} == {gy}
+# Nothing outside radius() + 1 for each history of spec 7, on both panels, and the LIGHT ink
+# stays in [gx, gx + gw + k - 1] x [gy, gy + gh + k - 1]
+for W in (128, 240):
+    P = Panel(W)
+    gx, gy, gw, gh = graph_box(P)
+    for values in ([], [950] * 20, [1050] * 20, [2000] * 20, [-5] * 20, [2000, -5] * 10,
+                   [INF] * 20, [-INF] * 20, [INF, -INF] * 10):
+        cv = graph_render(W, values, 950, 1050)
+        assert not outside_circle(cv, P), (W, values)
+        lit = colour_box(cv, "LIGHT")
+        assert lit is None if not values else lit is not None, (W, values)
+        if lit:
+            x0, y0, x1, y1 = lit
+            assert gx <= x0 and x1 <= gx + gw + P.k - 1 and gy <= y0 and y1 <= gy + gh + P.k - 1
+
+# ---- Values pinned by test_steami_screen (4c Task 3) ----
+print("graph curve (4c Task 3): LIGHT box on (0, 1000) of the ramp 50 * i (20 values), of the")
+print("mockup 05 values (D13) and of 2 points (0, 1000)")
+for W in (128, 240):
+    boxes = [colour_box(graph_render(W, values, 0, 1000), "LIGHT")
+             for values in ([50 * i for i in range(20)], GRAPH_05_VALUES, [0, 1000])]
+    print(f"  {W}: ramp {boxes[0]} mockup 05 {boxes[1]} two points {boxes[2]}")
+
+# ---- Widget of 4c Task 4: menu() (spec 5.9 "menu", B3; font design 5.3) ----
+# Row i (of the window) has its top at u(35 + 14 i), never u(35) + i u(14) (D7). The visible rows
+# are counted from row 0 while the chord at the row's full TEXT cell (top .. top + 8k - 1) holds 12
+# TEXT cells (the marker plus 10 cells: 96 px on both panels), then capped at n. The index wraps
+# modulo n in int32_t (C++ %, truncated toward zero, plus n when negative), n above INT32_MAX
+# counting as INT32_MAX; the window starts at clamp(s - visible / 2, 0, n - visible). The selected
+# row draws, in this order: the DARK bar on rows [top - u(2), top - u(2) + u(14) - 1], each scanline
+# y filling [chord(y, y) left + k, min(chord(y, y) right - k, W - 1)] (D8); the marker "> " at the
+# chord's left edge at the item's inked rows (the marker's own when the item inks none) plus u(2)
+# (D9); the item, cut with pad u(2) to [marker x + width of "> ", W - 1] and drawn at
+# max(cx - w / 2, the kept room's left). Every other item is cut with pad u(2) to the whole panel
+# and drawn at cx - w / 2 in GRAY (D10). Items and marker are TEXT ink at k.
+MENU_TOP, MENU_PITCH, MENU_BAR_RISE, MENU_ROW_CELLS = 35, 14, 2, 12
+MENU_MARKER_INSET, MENU_ITEM_PAD, MENU_MARKER = 2, 2, "> "
+INT32_MIN, INT32_MAX = -(2 ** 31), 2 ** 31 - 1
+K_SIX = ("Temperature", "Humidity", "Distance", "Light", "Battery", "Proximity")  # program 06
+K_ELEVEN = ("Temperature", "Humidity_RH", "Distance_mm", "Light_level", "Battery_pct",
+            "Proximity_1")  # six items of 11 characters (spec 7)
+
+
+def menu_top(P, row):
+    """The cell top of window row `row`: u(35 + 14 row)."""
+    return P.u(MENU_TOP + MENU_PITCH * row)
+
+
+def menu_cell_chord(P, row):
+    """The chord at the full TEXT cell rows of window row `row` (top .. top + 8k - 1)."""
+    top = menu_top(P, row)
+    return P.chord(top, top + 8 * P.k - 1)
+
+
+def menu_rows(P, n):
+    """menuRows(n) (D7): rows counted from 0 while their full-cell chord holds 12 TEXT cells, at
+    most n."""
+    need, v = MENU_ROW_CELLS * glyph_advance(P, TEXT, P.k), 0
+    while v < n and menu_cell_chord(P, v) is not None and \
+            region_width(menu_cell_chord(P, v)) >= need:
+        v += 1
+    return v
+
+
+def menu_wrap(selected, n):
+    """The wrapped index: selected % n as C++ computes it in int32_t, plus n when negative; 0 for
+    n == 0."""
+    n = min(n, INT32_MAX)
+    if n == 0:
+        return 0
+    r = abs(selected) % n
+    r = -r if selected < 0 else r
+    return r + n if r < 0 else r
+
+
+def menu_bar(P, top):
+    """menuBar(top) (D8): {y: (x0, x1)} of the DARK scanlines of the bar of the item row `top`."""
+    y0 = top - P.u(MENU_BAR_RISE)
+    out = {}
+    for y in range(max(y0, 0), min(y0 + P.u(MENU_PITCH), P.H)):
+        c = P.chord(y, y)
+        if c is None:
+            continue
+        x0, x1 = c[0] + P.k, min(c[1] - P.k, P.W - 1)
+        if x1 >= x0:
+            out[y] = (x0, x1)
+    return out
+
+
+def menu_marker_x(P, item, top):
+    """D9: the chord's left edge at the item's inked rows (the marker's own when the item inks
+    none) plus u(2)."""
+    face = face_for(P, item, TEXT, P.k)
+    s = item if ink_rows(item, count(item), TEXT, face) else MENU_MARKER
+    c = P.ink_chord(s, count(s), TEXT, top, P.k)
+    return (c[0] if c else 0) + P.u(MENU_MARKER_INSET)
+
+
+def menu_item(P, item, top, marker_x):
+    """D10: (x, kept glyphs) of an item; marker_x None for an unselected item."""
+    limit = (0, P.W - 1)
+    if marker_x is not None:
+        limit = (marker_x + cell_width(P, MENU_MARKER, 2, TEXT, P.k), P.W - 1)
+    pad = P.u(MENU_ITEM_PAD)
+    n = P.fit_glyphs(item, TEXT, P.k, top, limit, 0, pad)
+    room = kept_room(P, item, n, TEXT, top, P.k, limit, 0)
+    return max(P.cx - cell_width(P, item, n, TEXT, P.k) // 2, room[0]), n
+
+
+def menu_layout(W, items, selected):
+    """menu(items, n, selected) on a W panel: the wrapped index, the visible rows, the window start,
+    the rows [(index, top, x, kept glyphs)], the marker (x, top) or None, the bar {y: (x0, x1)}."""
+    P = Panel(W)
+    n = len(items)
+    s, v = menu_wrap(selected, n), menu_rows(P, n)
+    start = min(max(s - v // 2, 0), n - v)
+    rows, marker, bar = [], None, {}
+    for row in range(v):
+        i, top = start + row, menu_top(P, row)
+        item = items[i] or ""
+        mx = None
+        if i == s:
+            bar = menu_bar(P, top)
+            mx = menu_marker_x(P, item, top)
+            marker = (mx, top)
+        x, kept = menu_item(P, item, top, mx)
+        rows.append((i, top, x, kept))
+    return {"selected": s, "visible": v, "start": start, "rows": rows, "marker": marker,
+            "bar": bar}
+
+
+def menu_render(W, items, selected, c="WHITE"):
+    """menu(): per row, the bar (DARK), then the marker and the item in c when selected, else the
+    item in GRAY. c is painted as given: the lift of spec 5.10 is the C++ lifted()'s."""
+    P = Panel(W)
+    g = menu_layout(W, items, selected)
+    cv = {}
+    for y, (x0, x1) in g["bar"].items():
+        r_span(cv, W, x0, y, x1 - x0 + 1, 1, "DARK")
+    for i, top, x, kept in g["rows"]:
+        item = items[i] or ""
+        colour = c if i == g["selected"] else "GRAY"
+        if i == g["selected"]:
+            paint(cv, draw_glyphs(P, MENU_MARKER, 2, TEXT, g["marker"][0], top, P.k), colour)
+        paint(cv, draw_glyphs(P, item, kept, TEXT, x, top, P.k), colour)
+    return cv
+
+
+# ---- Self-check of 4c Task 4 ----
+for W, tops in ((128, (35, 49, 63, 77, 91)), (240, (65, 91, 118, 144, 170, 196))):
+    assert tuple(menu_top(Panel(W), i) for i in range(len(tops))) == tops, W  # D7
+# The full-cell chords of rows 1 to 6 (spec 5.9) and the visible rows 5 / 6
+assert [region_width(menu_cell_chord(P128, i)) for i in range(6)] == [115, 125, 127, 121, 109, 85]
+assert [region_width(menu_cell_chord(P240, i)) for i in range(6)] == [213, 233, 239, 227, 201, 157]
+assert menu_rows(P128, 6) == 5 and menu_rows(P240, 6) == 6
+assert menu_rows(P128, 3) == 3 and menu_rows(P240, 0) == 0  # min(n, visible)
+# The bar of row 6 on 240 runs over rows 193..218 (font design 5.3), and every bar row spans
+# exactly [chord left + k, min(chord right - k, W - 1)]
+assert sorted(menu_bar(P240, menu_top(P240, 5))) == list(range(193, 219))
+assert sorted(menu_bar(P128, menu_top(P128, 0))) == list(range(33, 47))
+for P in (P128, P240):
+    for row in range(menu_rows(P, 6)):
+        for y, (x0, x1) in menu_bar(P, menu_top(P, row)).items():
+            c = P.chord(y, y)
+            assert (x0, x1) == (c[0] + P.k, min(c[1] - P.k, P.W - 1)), (P.W, row, y)
+# The wraps of spec 7 and Review Focus 4, for n = 6
+assert [menu_wrap(s, 6) for s in (-1, 6, 13, INT32_MIN, INT32_MAX)] == [5, 0, 1, 4, 1]
+assert [menu_wrap(s, 6) for s in range(6)] == list(range(6)) and menu_wrap(3, 0) == 0
+# The marker x: the chord's left edge at the selected item's inked rows, plus u(2); an item
+# without ink takes the marker's own inked rows
+for W in (128, 240):
+    P = Panel(W)
+    for sel in range(6):
+        g = menu_layout(W, K_ELEVEN, sel)
+        mx, top = g["marker"]
+        c = P.ink_chord(K_ELEVEN[sel], 11, TEXT, top, P.k)
+        assert mx == c[0] + P.u(2), (W, sel)
+    for empty in ("", None):
+        g = menu_layout(W, ["A", empty, "", "B"], 1)
+        mx, top = g["marker"]
+        assert mx == P.ink_chord(MENU_MARKER, 2, TEXT, top, P.k)[0] + P.u(2), (W, empty)
+        assert g["rows"][1][3] == 0  # nothing kept of the empty item
+# kEleven at every selected index on both panels: every item whole, nothing outside the circle
+for W in (128, 240):
+    P = Panel(W)
+    for sel in range(6):
+        g = menu_layout(W, K_ELEVEN, sel)
+        assert all(kept == 11 for _, _, _, kept in g["rows"]), (W, sel, g["rows"])
+        assert not outside_circle(menu_render(W, K_ELEVEN, sel), P), (W, sel)
+        # the selected item starts after the marker; the others are centred on cx
+        for i, _, x, kept in g["rows"]:
+            w = cell_width(P, K_ELEVEN[i], kept, TEXT, P.k)
+            if i == g["selected"]:
+                assert x >= g["marker"][0] + cell_width(P, MENU_MARKER, 2, TEXT, P.k)
+            else:
+                assert x == P.cx - w // 2
+# The window of eight items: start 0 / 2 / 3 on 128 and 0 / 1 / 2 on 240
+EIGHT = tuple(f"Item{i}" for i in range(8))
+assert [menu_layout(128, EIGHT, s)["start"] for s in (0, 4, 7)] == [0, 2, 3]
+assert [menu_layout(240, EIGHT, s)["start"] for s in (0, 4, 7)] == [0, 1, 2]
+# Other widths (D7): 6 rows on 200 px, 0 on 96 px (row 1's full-cell chord is 85 px)
+assert menu_rows(Panel(200), 6) == 6 and menu_rows(P96, 6) == 0
+assert region_width(menu_cell_chord(P96, 0)) == 85
+for W in (96, 200):
+    for sel in range(6):
+        assert not outside_circle(menu_render(W, K_ELEVEN, sel), Panel(W)), (W, sel)
+# The 40-glyph strings and their cut: nothing outside the circle
+LONG40 = ("Été: 23.5°C à 12:30, Ünïçödé ÿ 0.5 Ÿes:9", "-1234.56:78.90 +12:34.5 -0.000:99.9 8.8:")
+assert [count(t) for t in LONG40] == [40, 40]
+for W in (128, 240):
+    for sel in (0, 1):
+        assert not outside_circle(menu_render(W, (*LONG40, None), sel), Panel(W)), (W, sel)
+
+# ---- Values pinned by test_steami_screen (4c Task 4) ----
+print("menu (4c Task 4): selected, visible, start; rows (index, top, x, kept); marker (x, top);")
+print("bar rows and spans of the first and last bar row")
+for W in (128, 240):
+    for name, items, sels in (("kEleven", K_ELEVEN, range(6)), ("kSix", K_SIX, (2, 3)),
+                              ("Item0..Item7", EIGHT, (0, 4, 7)),
+                              ("kLong + nullptr", (*LONG40, None), (0, 1)),
+                              ('{"A", nullptr, "", "B"}', ("A", None, "", "B"), (1, 2))):
+        for sel in sels:
+            g = menu_layout(W, items, sel)
+            ys = sorted(g["bar"])
+            print(f"  {W} {name} sel {sel}: s {g['selected']} v {g['visible']} start "
+                  f"{g['start']} marker {g['marker']}")
+            print(f"    rows {g['rows']}")
+            print(f"    bar {ys[0]}..{ys[-1]} {g['bar'][ys[0]]} .. {g['bar'][ys[-1]]}")
+print("menu visible rows of 6 items on 96 and 200 px:",
+      [menu_rows(Panel(W), 6) for W in (96, 200)])
+
+# ---- Mockups 05 and 06 (4c Task 5) ----
+# mockupGraph(history, hasLight, chip) and mockupMenu(selected) of SteamiMockups.h, composed in
+# their programs' drawing order (spec section 6): title, graph, then the two-line subtitle (05);
+# title, then menu (06). 05 is the light branch with D13's 20 values and "APDS-9960" on both
+# panels; 05_pressure_v1c is the pressure branch at 240 (20 x 1013.0, "BME280"), the V1c photo
+# reference; 06 has selected 2 and program 06's six items.
+PRESSURE_V1C = [1013.0] * 20
+WINDOW_05 = "20s window"
+
+
+def mockup_05(W, values, chip, has_light=True):
+    cv = {}
+    m_title(cv, W, "Light" if has_light else "Pressure")
+    cv.update(graph_render(W, values, *((0, 1000) if has_light else (950, 1050))))
+    m_subtitle(cv, W, (chip, WINDOW_05))
+    return cv
+
+
+def mockup_06(W, selected):
+    cv = {}
+    m_title(cv, W, "Menu")
+    cv.update(menu_render(W, K_SIX, selected))
+    return cv
+
+
+def box_from(cv, c, x_from, row_from, row_to):
+    """band_box() of the columns x >= x_from only: the suite's inkBoxFrom()."""
+    lit = [p for p, v in cv.items() if v == c and p[0] >= x_from and row_from <= p[1] <= row_to]
+    return box(lit) if lit else None
+
+
+def label_rows(W, which):
+    """The rows of graph label `which` (0 max, 1 min): its 5x7 / 6x12 cell, k scaled."""
+    P = Panel(W)
+    _, _, top = graph_layout(W, 950, 1050)["labels"][which]
+    return top, top + cell_height(face_for(P, "0", LABEL, P.k), P.k) - 1
+
+
+def label_band(W):
+    """The DARK labels inside the box rows: columns from gx + k (right of the left axis), rows gy
+    to gy + gh - 1 (above the bottom axis)."""
+    gx, gy, _, gh = graph_box(Panel(W))
+    return gx + Panel(W).k, gy, gy + gh - 1
+
+
+SUBTITLE_BAND_05 = {128: (95, 113), 240: (177, 213)}
+TITLE_BAND_06 = {128: (0, 30), 240: (0, 60)}
+PINNED_MOCKUPS_4C = (
+    ("05", 128, "GRAY", None, (45, 20, 82, 27)), ("05", 128, "WHITE", None, (53, 31, 74, 37)),
+    ("05", 128, "LIGHT", None, (21, 45, 113, 71)),
+    ("05", 128, "DARK", (95, 113), (25, 95, 103, 112)),
+    ("05", 240, "GRAY", None, (100, 39, 138, 51)), ("05", 240, "WHITE", None, (108, 60, 130, 69)),
+    ("05", 240, "LIGHT", None, (39, 85, 213, 134)),
+    ("05", 240, "DARK", (177, 213), (80, 179, 158, 208)),
+    ("05 pressure", 240, "GRAY", None, (88, 39, 150, 48)),
+    ("05 pressure", 240, "WHITE", None, (105, 60, 134, 69)),
+    ("05 pressure", 240, "LIGHT", None, (39, 106, 213, 107)),
+    ("06", 128, "GRAY", (0, 30), (49, 20, 78, 26)),
+    ("06", 128, "GRAY", (31, 127), (21, 35, 106, 98)),
+    ("06", 128, "WHITE", None, (4, 63, 94, 69)), ("06", 128, "DARK", None, (1, 61, 127, 74)),
+    ("06", 240, "GRAY", (0, 60), (104, 39, 134, 48)),
+    ("06", 240, "GRAY", (61, 239), (76, 67, 162, 210)),
+    ("06", 240, "WHITE", None, (5, 120, 150, 129)), ("06", 240, "DARK", None, (2, 115, 238, 140)),
+)
+# The DARK labels right of the left axis: (name, W, x_from, rows, box)
+PINNED_LABELS_4C = (
+    ("05", 128, 22, (38, 89), (24, 40, 46, 87)), ("05", 240, 41, (71, 167), (44, 74, 66, 163)),
+    ("05 pressure", 240, 41, (73, 84), (45, 74, 66, 81)),
+    ("05 pressure", 240, 41, (155, 166), (44, 156, 60, 163)),
+)
+PINNED_POINTS_4C = (
+    ("05", 128, (113, 45), "LIGHT"), ("05", 240, (212, 85), "LIGHT"),
+    ("06", 128, (2, 67), "DARK"), ("06", 128, (126, 67), "DARK"),
+    ("06", 240, (3, 127), "DARK"), ("06", 240, (237, 127), "DARK"),
+)
+PINNED_MOCKUPS += PINNED_MOCKUPS_4C
+PINNED_POINTS += PINNED_POINTS_4C
+
+# ---- Self-check of 4c Task 5 ----
+for name, W, c, rows, expected in PINNED_MOCKUPS_4C:
+    got = band_box(mockup_render(name, W), c, *(rows or ()))
+    assert got == expected, (name, W, c, rows, got)
+for name, W, x_from, rows, expected in PINNED_LABELS_4C:
+    got = box_from(mockup_render(name, W), "DARK", x_from, *rows)
+    assert got == expected, (name, W, x_from, rows, got)
+for name, W, p, c in PINNED_POINTS_4C:
+    assert mockup_render(name, W).get(p) == c, (name, W, p, c)
+# 05: the two-line subtitle at 95/106 on 128 and 177/197 on 240 (spec 5.9 "subtitle"), with
+# either chip; its band holds the subtitle's DARK only
+for W, rows in ((128, (95, 106)), (240, (177, 197))):
+    for chip in ("APDS-9960", "BME280"):
+        assert tuple(r[0] for r in subtitle_rows(W, (chip, WINDOW_05))) == rows, (W, chip)
+    lines = subtitle_rows(W, ("APDS-9960", WINDOW_05))
+    assert band_box(mockup_render("05", W), "DARK", *SUBTITLE_BAND_05[W]) == \
+        box([p for _, _, b in lines for p in ((b[0], b[1]), (b[2], b[3]))])
+# 05: the label band is the two labels drawn alone, inside the box; the last curve point is the
+# last of D4's points; the WHITE value is "847"
+for name, W, lo, hi in (("05", 128, 0, 1000), ("05", 240, 0, 1000),
+                        ("05 pressure", 240, 950, 1050)):
+    P = Panel(W)
+    gx, gy, gw, gh = graph_box(P)
+    labels = [graph_label_box(W, lo, hi, i) for i in (0, 1)]
+    got = box_from(mockup_render(name, W), "DARK", *label_band(W))
+    assert got == box([p for b in labels for p in ((b[0], b[1]), (b[2], b[3]))]), (name, W)
+    assert gx + P.k <= got[0] and got[2] <= gx + gw - 1 and gy <= got[1] and got[3] < gy + gh
+for W in (128, 240):
+    pts = graph_points(W, GRAPH_05_VALUES, 0, 1000)
+    assert ("05", W, pts[-1], "LIGHT") in PINNED_POINTS_4C
+    assert pts[-1][0] == graph_box(Panel(W))[0] + graph_box(Panel(W))[2]
+    white = {}
+    r_text(white, W, "847", Panel(W).cx - 12, Panel(W).u(GRAPH_VALUE_Y), 1, "WHITE")
+    assert colour_set(mockup_render("05", W), "WHITE") == set(white), W
+# 05 pressure: "1050" and "950" in 6x12 (font design 6: 24 and 18 px), the flat curve of 1013 on
+# one row pair (k 2), the title "Pressure"
+assert [lb[0] for lb in graph_layout(240, 950, 1050)["labels"]] == ["1050", "950"]
+assert [cell_width(P240, t, count(t), LABEL, 2) for t in ("1050", "950")] == [24, 18]
+assert [label_rows(240, i) for i in (0, 1)] == [(73, 84), (155, 166)]
+assert {p[1] for p in graph_points(240, PRESSURE_V1C, 950, 1050)} == {106}
+# 06: 5 visible rows on 128 and 6 on 240, "Distance" (index 2) selected on row 3 of both; the bar
+# ends at chord + k on its middle row
+for W, visible in ((128, 5), (240, 6)):
+    P = Panel(W)
+    g = menu_layout(W, K_SIX, 2)
+    assert (g["selected"], g["visible"], g["start"]) == (2, visible, 0), (W, g)
+    assert g["rows"][2][0] == 2 and K_SIX[2] == "Distance" and g["marker"][1] == menu_top(P, 2)
+    ys = sorted(g["bar"])
+    mid = (ys[0] + ys[-1]) // 2
+    x0, x1 = g["bar"][mid]
+    assert ("06", W, (x0, mid), "DARK") in PINNED_POINTS_4C
+    assert ("06", W, (x1, mid), "DARK") in PINNED_POINTS_4C
+    # the window shows items 0 to visible - 1
+    assert {i for i, *_ in g["rows"]} == set(range(visible))
+# Nothing outside the circle in any render of 05 and 06
+for name, W in (("05", 128), ("05", 240), ("05 pressure", 240), ("06", 128), ("06", 240)):
+    assert not outside_circle(mockup_render(name, W), Panel(W)), (name, W)
+
+# ---- Values pinned by test_steami_screen_mockups (4c Task 5) ----
+print("mockups 05 and 06 (4c Task 5): name W colour rows box")
+for name, W, c, rows, _ in PINNED_MOCKUPS_4C:
+    print(f"  {name:<11} {W} {c:<5} {str(rows or ''):<10} "
+          f"{band_box(mockup_render(name, W), c, *(rows or ()))}")
+print("  DARK labels right of the left axis (name W x_from rows box):")
+for name, W, x_from, rows, _ in PINNED_LABELS_4C:
+    print(f"    {name:<11} {W} {x_from} {rows} "
+          f"{box_from(mockup_render(name, W), 'DARK', x_from, *rows)}")
+print("  points (name W point colour):", *(f"{n} {W} {p} {c}" for n, W, p, c in PINNED_POINTS_4C))
+print("06 item cell tops, one row past the window (u(35 + 14 i)): rows with GRAY or WHITE ink")
+for W in (128, 240):
+    P = Panel(W)
+    v = menu_layout(W, K_SIX, 2)["visible"]
+    tops = [menu_top(P, i) for i in range(v + 1)]
+    cv = mockup_render("06", W)
+    inked = [t for t in tops if band_box(cv, "GRAY", t, t + 8 * P.k - 1) or
+             band_box(cv, "WHITE", t, t + 8 * P.k - 1)]
+    assert inked == tops[:v], (W, inked)
+    print(f"  {W}: tops {tops}, inked {len(inked)}, cell height {8 * P.k}")
+print("05_pressure_v1c at 240: label rows, texts and boxes ('1050' 24 px, '950' 18 px of cells)")
+for i in (0, 1):
+    text, x, top = graph_layout(240, 950, 1050)["labels"][i]
+    print(f"  {text}: x {x} cell top {top} rows {label_rows(240, i)} "
+          f"box {box_from(mockup_render('05 pressure', 240), 'DARK', 41, *label_rows(240, i))}")

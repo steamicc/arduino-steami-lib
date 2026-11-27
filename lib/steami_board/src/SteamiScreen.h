@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "SteamiDisplay.h"
+#include "SteamiHistory.h"
 #include "SteamiScreenConst.h"
 #include "SteamiValue.h"
 
@@ -98,6 +99,32 @@ class SteamiScreen : public SteamiDisplay {
     /// default. No value and no unit: draw them with value().
     void gauge(float v, float minV = 0, float maxV = 100, SteamiRgb c = STEAMI_LIGHT,
                uint8_t arcWidth = 0);
+
+    /// A box with the curve of the values from the oldest (left) to the newest (right), the
+    /// integer part of the newest above it, minV and maxV written inside the box; a NAN leaves a
+    /// gap; values outside [minV, maxV] stay on the edge. The axes and the labels are DARK, the
+    /// newest value WHITE ("--" when there is none or it is NAN), the curve in c.
+    template <size_t N>
+    void graph(const SteamiHistory<N>& h, float minV = 0, float maxV = 100,
+               SteamiRgb c = STEAMI_LIGHT) {
+        graphSeries(Series{h._data, N, h.first(), h._count}, minV, maxV, c);
+    }
+    /// The same with the n values of an array, data[0] the oldest; nullptr draws no curve.
+    void graph(const float* data, size_t n, float minV = 0, float maxV = 100,
+               SteamiRgb c = STEAMI_LIGHT);
+
+    /// A list of items, one per row, centred; the selected one in c with a "> " marker on a DARK
+    /// bar whose ends follow the circle, the others GRAY; an item too wide is cut. 5 rows show on
+    /// the 128 px screen and 6 on the 240 px one, scrolling with the selection. The index wraps
+    /// (-1 is the last item, the number of items is the first) and is returned:
+    /// `selected = screen.menu(ITEMS, selected);`. Keep the index in an int: another integer type
+    /// may call the second form below. An empty list draws nothing and returns 0.
+    template <size_t N>
+    int menu(const char* const (&items)[N], int selected = 0, SteamiRgb c = STEAMI_WHITE) {
+        return menu(items, N, selected, c);
+    }
+    /// The same with the n items of an array; nullptr draws nothing and still returns the index.
+    int menu(const char* const* items, size_t n, int selected = 0, SteamiRgb c = STEAMI_WHITE);
 
    protected:  // the layout kernel of the widgets, not for the student
     /// A run of columns [left, right], inclusive; empty when right < left.
@@ -242,6 +269,17 @@ class SteamiScreen : public SteamiDisplay {
     int32_t polarX(int32_t d, int32_t deg);
     int32_t polarY(int32_t d, int32_t deg);
 
+    /// The values graph() draws, read in place: `count` values from index `first` of `data`, which
+    /// holds `capacity` slots in a ring (a SteamiHistory) or in order (an array, first 0).
+    struct Series {
+        const float* data;
+        size_t capacity;
+        size_t first;
+        size_t count;
+        /// The i-th value, 0 the oldest: data[(first + i) % capacity]; i < count.
+        float at(size_t i) const;
+    };
+
    private:
     /// The entry of every widget: begins the display on first use; false when it draws nothing.
     bool widgetCanDraw();
@@ -307,6 +345,55 @@ class SteamiScreen : public SteamiDisplay {
     /// Fills columns [left, right] of the u(STEAMI_BAR_HEIGHT) rows from row top in c, each row
     /// cut to the panel and to the chord at that row; a row with nothing left draws nothing.
     void barRows(int32_t left, int32_t right, int32_t top, SteamiRgb c);
+
+    /// The widget behind both graph() overloads: the newest value, the max and min labels, the
+    /// frame, then the curve (the spec's order: the curve paints over the labels).
+    void graphSeries(const Series& s, float minV, float maxV, SteamiRgb c);
+
+    /// The newest value's integer part ("--" for NAN or |v| >= 1e9) in text() at scale 1, WHITE,
+    /// centred on centerX() at row u(31), never cut.
+    void graphValue(float v);
+
+    /// One axis label: v's integer part ("--" for NAN or |v| >= 1e9) in the LABEL face at k, the
+    /// max label when top, else the min label.
+    void graphLabel(float v, bool top);
+
+    /// Draws the label run of graphLabel() in DARK inside the box: the max label's first inked row
+    /// u(2) below the box top, the min label's last inked row k + u(2) above the bottom axis; its
+    /// left column x = max(the chord's left edge at its inked rows, box left + k) + u(2); cut to
+    /// the longest prefix that fits [x, that chord's right edge - k].
+    void drawGraphLabel(Run& t, bool top);
+
+    /// The dashed GRID_DARK middle line, dashes k rows thick, and the left and bottom axes in DARK
+    /// strokes of width k.
+    void graphFrame();
+
+    /// The curve of the series in c, stroke k, from the oldest point (box left) to the newest
+    /// (box left + width), the values clamped to [minV, maxV]; a NAN point is skipped, leaving a
+    /// gap, and fewer than 2 points draw nothing.
+    void graphCurve(const Series& s, float minV, float maxV, SteamiRgb c);
+
+    /// The rows menu() shows of n items (D7): rows counted from the first while the chord at the
+    /// row's full TEXT cell (top .. top + 8k - 1) holds STEAMI_MENU_ROW_CELLS TEXT cells, at most
+    /// n. 5 on 128 px, 6 on 240 px, 0 on 96 px.
+    int32_t menuRows(size_t n);
+
+    /// One menu row, its cell top at row top, in TEXT ink at k: when marked, the bar, the marker
+    /// (menuMarker()) and the item cut with a pad of u(2) to the columns after the marker, centred
+    /// unless that overlaps the marker; otherwise only the item, cut with a pad of u(2) to the
+    /// panel and centred. Marker and item in c.
+    void menuRow(const char* item, int32_t top, bool marked, SteamiRgb c);
+
+    /// The DARK bar of the item row top: u(14) rows from top - u(2), each scanline y filled from
+    /// chord(y, y).left + k to min(chord(y, y).right - k, width() - 1), so its ends follow the
+    /// circle; a scanline with nothing left draws nothing.
+    void menuBar(int32_t top);
+
+    /// Draws the marker "> " of the selected row in c, on the item run's row, u(2) right of the
+    /// chord's left edge at the item's inked rows (at the marker's own when the item inks none, so
+    /// that it is always placed), and returns the first column after it. Kept out of menuRow() so
+    /// that each frame stays within 64 B.
+    int32_t menuMarker(const Run& item, SteamiRgb c);
 
     uint8_t _decimals = 1;
 };

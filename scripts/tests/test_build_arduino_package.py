@@ -167,6 +167,7 @@ class BuildPackageTest(unittest.TestCase):
             "SteamiSSD1327.h",
             "SteamiGC9A01.h",
             "SteamiScreen.h",
+            "SteamiHistory.h",
             "SteamiValue.h",
             "SteamiScreenConst.h",
         ):

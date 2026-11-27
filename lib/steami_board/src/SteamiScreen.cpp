@@ -95,6 +95,58 @@ int32_t gaugeSweep(float v, float minV, float maxV) {
     return static_cast<int32_t>(lroundf(static_cast<float>(STEAMI_GAUGE_SWEEP) * ratio));
 }
 
+/// The integer part of v, truncated toward zero as device.py's int() (-0.5 gives "0"), or "--"
+/// when |v| >= 1e9 (NAN and INF included), which keeps the float-to-long cast defined: the labels
+/// of gauge() and graph(), and graph()'s current value.
+void integerText(float v, char* out, size_t size) {
+    if (fabsf(v) < 1e9f) {
+        SteamiValue(static_cast<long>(v)).format(out, size, 0);
+    } else {
+        SteamiValue(NAN).format(out, size, 0);  // "--"
+    }
+}
+
+/// The lowest and the highest set bit of a non-zero row mask: the first and the last inked row.
+int32_t firstRow(uint32_t rows) {
+    int32_t r = 0;
+    while (((rows >> r) & 1U) == 0) {
+        r++;
+    }
+    return r;
+}
+
+int32_t lastRow(uint32_t rows) {
+    int32_t r = 31;
+    while (((rows >> r) & 1U) == 0) {
+        r--;
+    }
+    return r;
+}
+
+/// The row of v in graph()'s curve (D4), for a box h rows tall from row top: top + h -
+/// ceilf(ratio * h), ratio = (v - minV) / span in float, span = maxV - minV with 0 replaced by 1
+/// (device.py), so that the row is device.py's int(top + h - ratio * h) without its float
+/// subtraction. False for a NAN ratio (a NAN value or bound, INF - INF, INF / INF): the point is
+/// skipped. Otherwise the ratio is clamped to [0, 1], INF included, which keeps the row in the
+/// box; minV > maxV inverts the curve.
+bool curveRow(float v, float minV, float maxV, int32_t top, int32_t h, int32_t* row) {
+    float span = maxV - minV;
+    if (span == 0.0f) {
+        span = 1.0f;
+    }
+    float ratio = (v - minV) / span;
+    if (isnan(ratio)) {
+        return false;
+    }
+    if (ratio < 0.0f) {
+        ratio = 0.0f;
+    } else if (ratio > 1.0f) {
+        ratio = 1.0f;
+    }
+    *row = top + h - static_cast<int32_t>(ceilf(ratio * static_cast<float>(h)));
+    return true;
+}
+
 }  // namespace
 
 int32_t SteamiScreen::Region::width() const {
@@ -258,16 +310,8 @@ SteamiScreen::Region SteamiScreen::rowsChord(uint32_t rows, const Run& t) {
     if (rows == 0) {
         return {0, static_cast<int32_t>(width()) - 1};
     }
-    int32_t first = 0;
-    while (((rows >> first) & 1U) == 0) {
-        first++;
-    }
-    int32_t last = 31;
-    while (((rows >> last) & 1U) == 0) {
-        last--;
-    }
     const int32_t n = replication(t.face, t.f);
-    return chord(t.y + first * n, t.y + (last + 1) * n - 1);
+    return chord(t.y + firstRow(rows) * n, t.y + (lastRow(rows) + 1) * n - 1);
 }
 
 SteamiScreen::Region SteamiScreen::inkChord(const Run& t) {
@@ -838,15 +882,9 @@ void SteamiScreen::gaugeArc(int32_t outer, int32_t sweep, SteamiRgb c, uint8_t w
 }
 
 void SteamiScreen::gaugeLabel(float v, int16_t deg, int32_t d) {
-    // The integer part, truncated toward zero as device.py's int() (-0.5 shows "0"); |v| < 1e9
-    // keeps the float-to-long cast defined. The frame holds the 16 B buffer and the run only:
-    // drawGaugeLabel() fits, places and draws.
+    // The frame holds the 16 B buffer and the run only: drawGaugeLabel() fits, places and draws.
     char text[16];
-    if (fabsf(v) < 1e9f) {
-        SteamiValue(static_cast<long>(v)).format(text, sizeof text, 0);
-    } else {
-        SteamiValue(NAN).format(text, sizeof text, 0);  // "--"
-    }
+    integerText(v, text, sizeof text);
     Run t{text,
           glyphCount(text),
           polarY(d, deg),
@@ -865,4 +903,198 @@ void SteamiScreen::drawGaugeLabel(Run& t, int32_t px) {
     t.glyphs = fitGlyphs(t, &room);
     const int32_t w = cellWidth(t, t.glyphs);
     drawGlyphs(t, larger(room.left, smaller(px - w / 2, room.right - w + 1)), STEAMI_GRAY);
+}
+
+float SteamiScreen::Series::at(size_t i) const {
+    return data[(first + i) % capacity];
+}
+
+void SteamiScreen::graph(const float* data, size_t n, float minV, float maxV, SteamiRgb c) {
+    // An array is a series in order; nullptr holds no value.
+    graphSeries(Series{data, n, 0, data == nullptr ? 0 : n}, minV, maxV, c);
+}
+
+void SteamiScreen::graphSeries(const Series& s, float minV, float maxV, SteamiRgb c) {
+    if (!widgetCanDraw()) {
+        return;
+    }
+    // D3's order: value, labels, dashes, axes, curve. An empty series shows "--" (spec 5.9).
+    graphValue(s.count == 0 ? static_cast<float>(NAN) : s.at(s.count - 1));
+    graphLabel(maxV, true);
+    graphLabel(minV, false);
+    graphFrame();
+    graphCurve(s, minV, maxV, c);
+}
+
+void SteamiScreen::graphValue(float v) {
+    // text() at scale 1 as glyphsAt() draws it: at most 10 glyphs, 80 px, inside the chord at the
+    // value rows on 128 and 240.
+    char text[16];
+    integerText(v, text, sizeof text);
+    SteamiDisplay::text(text, static_cast<int16_t>(centerX() - textWidth(text) / 2),
+                        static_cast<int16_t>(u(STEAMI_GRAPH_VALUE_Y)), STEAMI_WHITE, 1);
+}
+
+void SteamiScreen::graphLabel(float v, bool top) {
+    // The frame holds the 16 B buffer and the run only: drawGraphLabel() places, cuts and draws.
+    // The run shrinks by k at each end of its chord: the cut of D6.
+    char text[16];
+    integerText(v, text, sizeof text);
+    Run t{text, glyphCount(text), 0, Ink::LABEL, k(), k(), faceFor(text, Ink::LABEL, k())};
+    drawGraphLabel(t, top);
+}
+
+void SteamiScreen::drawGraphLabel(Run& t, bool top) {
+    const uint32_t rows = inkRows(t.s, t.glyphs, t.ink, t.face);
+    if (rows == 0) {
+        return;  // no ink: nothing to place
+    }
+    // B1 by ink edges (font design 5.3): the max label's first inked row u(2) below the box top,
+    // the min label's last inked row k + u(2) above the bottom axis.
+    const int32_t n = replication(t.face, t.f);
+    const int32_t gy = u(STEAMI_GRAPH_Y);
+    const int32_t inset = u(STEAMI_GRAPH_LABEL_INSET);
+    t.y = top ? gy + inset - firstRow(rows) * n
+              : gy + u(STEAMI_GRAPH_HEIGHT) - k() - inset - (lastRow(rows) + 1) * n + 1;
+    // x = max(chord left at the inked rows, box left + k) + u(2); the room runs to the chord's
+    // right edge less k (t.shrink), so fitGlyphs() keeps the longest prefix that fits [x, right].
+    Region room = rowsChord(rows, t);
+    room = {larger(room.left, u(STEAMI_GRAPH_MARGIN + STEAMI_GRAPH_X_OFFSET) + k()) + inset,
+            static_cast<int32_t>(width()) - 1};
+    const int32_t x = room.left;
+    t.glyphs = fitGlyphs(t, &room);
+    drawGlyphs(t, x, STEAMI_DARK);
+}
+
+void SteamiScreen::graphFrame() {
+    // The box of D3: x u(21) (not u(15) + u(6)), y u(38), w W - u(15) - u(21), h u(52).
+    const int32_t gx = u(STEAMI_GRAPH_MARGIN + STEAMI_GRAPH_X_OFFSET);
+    const int32_t gy = u(STEAMI_GRAPH_Y);
+    const int32_t right = width() - u(STEAMI_GRAPH_MARGIN) - 1;  // gx + gw - 1
+    const int32_t bottom = gy + u(STEAMI_GRAPH_HEIGHT);
+    // The middle line (device.py v0.30.2): dashes of u(3) from gx + k every u(3) + u(3), the last
+    // one cut at gx + gw - 1, each a k-row rect() (rule 2; strokeLine()'s brush would widen it).
+    const int32_t row = gy + u(STEAMI_GRAPH_HEIGHT) / 2;
+    const int32_t dash = u(STEAMI_GRAPH_DASH);
+    const int32_t step = dash + u(STEAMI_GRAPH_GAP);
+    for (int32_t x = gx + k(); dash > 0 && x <= right; x += step) {
+        rect(static_cast<int16_t>(x), static_cast<int16_t>(row),
+             static_cast<int16_t>(smaller(dash, right - x + 1)), k(), STEAMI_GRID_DARK, true);
+    }
+    // The axes, device.py's _sline lines: left, then bottom.
+    strokeLine(static_cast<int16_t>(gx), static_cast<int16_t>(gy), static_cast<int16_t>(gx),
+               static_cast<int16_t>(bottom), k(), STEAMI_DARK);
+    strokeLine(static_cast<int16_t>(gx), static_cast<int16_t>(bottom), static_cast<int16_t>(right),
+               static_cast<int16_t>(bottom), k(), STEAMI_DARK);
+}
+
+void SteamiScreen::graphCurve(const Series& s, float minV, float maxV, SteamiRgb c) {
+    if (s.count < 2) {
+        return;  // 0 or 1 point: the frame and the value only
+    }
+    // D4: n = count, so a partial series stretches across the box. Point i at x = gx + i * gw /
+    // (n - 1) in uint64_t (the last one at gx + gw, as device.py and the mockup) and the row of
+    // curveRow(); a segment joins two consecutive valid points only, so a NAN leaves a gap.
+    const int32_t gx = u(STEAMI_GRAPH_MARGIN + STEAMI_GRAPH_X_OFFSET);
+    const uint64_t gw = static_cast<uint64_t>(larger(0, width() - u(STEAMI_GRAPH_MARGIN) - gx));
+    const uint64_t last = s.count - 1;
+    int32_t px = 0;
+    int32_t py = 0;
+    bool previous = false;
+    for (size_t i = 0; i < s.count; i++) {
+        int32_t y = 0;
+        const bool valid =
+            curveRow(s.at(i), minV, maxV, u(STEAMI_GRAPH_Y), u(STEAMI_GRAPH_HEIGHT), &y);
+        const int32_t x = gx + static_cast<int32_t>(static_cast<uint64_t>(i) * gw / last);
+        if (valid && previous) {
+            strokeLine(static_cast<int16_t>(px), static_cast<int16_t>(py), static_cast<int16_t>(x),
+                       static_cast<int16_t>(y), k(), c);
+        }
+        px = x;
+        py = y;
+        previous = valid;
+    }
+}
+
+int SteamiScreen::menu(const char* const* items, size_t n, int selected, SteamiRgb c) {
+    // D7: the index wraps in int32_t (n above INT32_MAX counts as INT32_MAX) before the panel is
+    // asked, so a sketch's navigation never depends on the screen (E30, E31, nullptr).
+    const int32_t count = n > static_cast<size_t>(INT32_MAX) ? INT32_MAX : static_cast<int32_t>(n);
+    int32_t s = count == 0 ? 0 : selected % count;
+    if (s < 0) {
+        s += count;
+    }
+    if (!widgetCanDraw() || items == nullptr || count == 0) {
+        return static_cast<int>(s);
+    }
+    // The window keeps the selection in its middle row, clamped to the list: clamp(s - visible /
+    // 2, 0, n - visible). Row i's top is u(35 + 14 i), never u(35) + i u(14).
+    const int32_t visible = menuRows(n);
+    const int32_t start = larger(0, smaller(s - visible / 2, count - visible));
+    for (int32_t row = 0; row < visible; row++) {
+        const int32_t i = start + row;
+        // The selected line over the DARK bar is lifted on the grey panel (spec 5.10).
+        menuRow(items[static_cast<size_t>(i)], u(STEAMI_MENU_TOP + STEAMI_MENU_PITCH * row), i == s,
+                i == s ? lifted(c, STEAMI_DARK) : STEAMI_GRAY);
+    }
+    return static_cast<int>(s);
+}
+
+int32_t SteamiScreen::menuRows(size_t n) {
+    // B3: the marker plus 10 cells, 12 TEXT cells (96 px on 128 and on 240), at the full cell rows.
+    const int32_t need = STEAMI_MENU_ROW_CELLS * glyphAdvance(Ink::TEXT, k());
+    int32_t rows = 0;
+    for (; static_cast<size_t>(rows) < n; rows++) {
+        const int32_t top = u(STEAMI_MENU_TOP + STEAMI_MENU_PITCH * rows);
+        if (chord(top, top + STEAMI_CELL_HEIGHT * k() - 1).width() < need) {
+            break;  // an empty chord below the circle stops it too
+        }
+    }
+    return rows;
+}
+
+void SteamiScreen::menuRow(const char* item, int32_t top, bool marked, SteamiRgb c) {
+    Run t{item, glyphCount(item), top, Ink::TEXT, k(), 0, faceFor(item, Ink::TEXT, k())};
+    Region room{0, static_cast<int32_t>(width()) - 1};
+    if (marked) {
+        menuBar(top);
+        room.left = menuMarker(t, c);  // the selected item starts after the marker
+    }
+    // D10: the longest prefix whose width plus u(2) fits the room at its inked rows, centred, or
+    // after the marker when centring would overlap it.
+    t.glyphs = fitGlyphs(t, &room, u(STEAMI_MENU_ITEM_PAD));
+    const int32_t w = cellWidth(t, t.glyphs);
+    drawGlyphs(t, larger(centerX() - w / 2, room.left), c);
+}
+
+void SteamiScreen::menuBar(int32_t top) {
+    // D8: u(14) rows from top - u(2), each cut to its own chord shrunk by k at each end (spec 5.9:
+    // "its ends follow the circle"); the chord of the centre row reaches column width().
+    const int32_t first = top - u(STEAMI_MENU_BAR_RISE);
+    const int32_t to = smaller(first + u(STEAMI_MENU_PITCH), height()) - 1;
+    for (int32_t y = larger(first, 0); y <= to; y++) {
+        const Region inside = chord(y, y);
+        const int32_t x0 = inside.left + k();
+        const int32_t x1 = smaller(inside.right - k(), width() - 1);
+        if (x1 >= x0) {
+            rect(static_cast<int16_t>(x0), static_cast<int16_t>(y),
+                 static_cast<int16_t>(x1 - x0 + 1), 1, STEAMI_DARK, true);
+        }
+    }
+}
+
+int32_t SteamiScreen::menuMarker(const Run& item, SteamiRgb c) {
+    // A TEXT run's face does not depend on its text, so the marker takes the item's (D9); "> " is
+    // ASCII, one glyph a byte.
+    const Run m{STEAMI_MENU_MARKER, sizeof(STEAMI_MENU_MARKER) - 1, item.y, Ink::TEXT, item.f, 0,
+                item.face};
+    // u(2) right of the chord's left edge at the item's inked rows, or at the marker's own when
+    // the item inks none (nullptr, "").
+    uint32_t rows = inkRows(item.s, item.glyphs, Ink::TEXT, item.face);
+    if (rows == 0) {
+        rows = inkRows(m.s, m.glyphs, Ink::TEXT, m.face);
+    }
+    const int32_t x = rowsChord(rows, m).left + u(STEAMI_MENU_MARKER_INSET);
+    drawGlyphs(m, x, c);
+    return x + cellWidth(m, m.glyphs);
 }
