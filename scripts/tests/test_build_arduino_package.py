@@ -4,16 +4,27 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parent.parent / "build-arduino-package.py"
+FONTS_SCRIPT = SCRIPT.with_name("gen-spleen-fonts.py")
+REAL_ROOT = SCRIPT.parent.parent
 
 
 def load_module():
     spec = importlib.util.spec_from_file_location("build_arduino_package", SCRIPT)
     module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_fonts_module():
+    spec = importlib.util.spec_from_file_location("gen_spleen_fonts", FONTS_SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -173,6 +184,18 @@ class BuildPackageTest(unittest.TestCase):
         self.build()
         self.assertEqual((self.out / "LICENSE").read_text(), "GPL fixture\n")
         self.assertIn("1.2.3", (self.out / "README.md").read_text())
+
+    def test_package_readme_carries_the_font_notices(self) -> None:
+        template = REAL_ROOT / "scripts" / "arduino-package" / "README.md"
+        readme = template.read_text(encoding="utf-8").format(version="1.2.3")
+        source = REAL_ROOT / "lib" / "steami_board" / "src" / "SteamiFont.cpp"
+        lines = source.read_text(encoding="utf-8").splitlines()[6:29]
+        mit = "\n".join(line[3:] if line.startswith("// ") else "" for line in lines) + "\n"
+        self.assertTrue(mit.startswith("This file is part of the MicroPython project"), mit)
+        self.assertTrue(mit.endswith("THE SOFTWARE.\n"), mit)
+        self.assertIn(mit, readme)
+        self.assertIn(load_fonts_module().NOTICE, readme)
+        self.assertIn("v1.2.3", readme)
 
     def test_out_dir_rebuilt(self) -> None:
         write(self.out / "stale.txt", "old")
