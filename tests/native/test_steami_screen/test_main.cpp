@@ -3575,6 +3575,44 @@ static void test_values_at_scale_255(void) {
     });
 }
 
+// Design 7: no pixel outside radius() + 1 for every widget with long strings. Two 40-glyph strings,
+// one mixing accents, digits, '.', ':' and letters, one made of value glyphs only (the value faces
+// and their bold), in every text widget: title, a 3-line subtitle, text() and value() with a label
+// and a unit at every anchor and scale 1 to 4, and the gauge labels of +-1e8.
+static void test_long_strings_stay_inside(void) {
+    static const char* const kLong[] = {"Été: 23.5°C à 12:30, Ünïçödé ÿ 0.5 Ÿes:9",
+                                        "-1234.56:78.90 +12:34.5 -0.000:99.9 8.8:"};
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        for (const char* t : kLong) {
+            TEST_ASSERT_EQUAL_size_t(40, s.glyphCount(t));
+            s.clear();
+            s.title(t);
+            s.subtitle(t, t, t);
+            TEST_ASSERT_TRUE(inkBox(mem, STEAMI_GRAY).count > 0);
+            TEST_ASSERT_TRUE(inkBox(mem, STEAMI_DARK).count > 0);
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mem.outsideCircle(), "title or subtitle");
+            for (SteamiAt at : kAnchors) {
+                for (uint8_t scale = 1; scale <= 4; scale++) {
+                    s.clear();
+                    s.text(t, at, STEAMI_WHITE, scale);
+                    TEST_ASSERT_TRUE(inkBox(mem, STEAMI_WHITE).count > 0);
+                    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mem.outsideCircle(), "text");
+                    s.clear();
+                    s.value(t, t, at, t, STEAMI_WHITE, scale);
+                    TEST_ASSERT_TRUE(inkBox(mem, STEAMI_WHITE).count > 0);
+                    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mem.outsideCircle(), "value");
+                }
+            }
+        }
+        for (float v : {-1e8f, 1e8f}) {
+            s.clear();
+            s.gauge(0, v, -v);
+            TEST_ASSERT_TRUE(inkBox(mem, STEAMI_GRAY).count > 0);
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mem.outsideCircle(), "gauge labels");
+        }
+    });
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_format_integers);
@@ -3659,5 +3697,6 @@ int main(int, char**) {
     RUN_TEST(test_point_centred_in_its_window);
     RUN_TEST(test_unknown_characters_in_values);
     RUN_TEST(test_values_at_scale_255);
+    RUN_TEST(test_long_strings_stay_inside);
     return UNITY_END();
 }

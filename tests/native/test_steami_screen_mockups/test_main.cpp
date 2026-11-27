@@ -218,6 +218,46 @@ static void test_mockup_04_gauge(void) {
     });
 }
 
+/// Some pixel is set in both masks.
+static bool overlaps(const std::vector<bool>& a, const std::vector<bool>& b) {
+    for (size_t i = 0; i < a.size() && i < b.size(); i++) {
+        if (a[i] && b[i]) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Design 2 and 7: program 04 draws no text on the V1c ring. The track is gauge()'s DARK arc drawn
+// alone (ruling 4: in a gauge render the GRAY labels paint over the track and would hide the
+// overlap); the DARK pixels of gauge(0, 0, 500) lie on it (the positive control). The title, the
+// subtitle and the GRAY labels of gauge(342, 0, 500), each drawn alone, share no pixel with it.
+// golden_layout.py "Program 04 on 240" prints their distances to the ring: 13.6, 30.5, 12.7, 9.4.
+static void test_mockup_04_text_clears_the_ring(void) {
+    const std::vector<bool> track = maskAlone(240, true, STEAMI_DARK, [](SteamiScreen& s) {
+        const int16_t w = static_cast<int16_t>(s.radius() / STEAMI_GAUGE_WIDTH_DIVISOR);
+        s.arc(s.centerX(), s.centerY(), static_cast<int16_t>(s.radius() - 4 * s.width() / 128),
+              STEAMI_GAUGE_START, STEAMI_GAUGE_SWEEP, STEAMI_DARK,
+              static_cast<uint8_t>(w > STEAMI_GAUGE_MIN_WIDTH ? w : STEAMI_GAUGE_MIN_WIDTH));
+    });
+    const std::vector<bool> dark =
+        maskAlone(240, true, STEAMI_DARK, [](SteamiScreen& s) { s.gauge(0, 0, 500); });
+    TEST_ASSERT_TRUE(any(dark));
+    for (size_t i = 0; i < dark.size(); i++) {
+        TEST_ASSERT_TRUE_MESSAGE(!dark[i] || track[i], "gauge DARK pixel off the track");
+    }
+    const std::vector<bool> title =
+        maskAlone(240, true, STEAMI_GRAY, [](SteamiScreen& s) { s.title("Distance"); });
+    const std::vector<bool> subtitle =
+        maskAlone(240, true, STEAMI_DARK, [](SteamiScreen& s) { s.subtitle("VL53L1X ToF"); });
+    const std::vector<bool> labels =
+        maskAlone(240, true, STEAMI_GRAY, [](SteamiScreen& s) { s.gauge(342, 0, 500); });
+    TEST_ASSERT_TRUE(any(title) && any(subtitle) && any(labels));
+    TEST_ASSERT_FALSE_MESSAGE(overlaps(title, track), "title on the ring");
+    TEST_ASSERT_FALSE_MESSAGE(overlaps(subtitle, track), "subtitle on the ring");
+    TEST_ASSERT_FALSE_MESSAGE(overlaps(labels, track), "gauge labels on the ring");
+}
+
 static void test_mockup_07_compass(void) {
     render("07_compass", 128, false, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
         mockupCompass(s, 0.0f);
@@ -401,6 +441,7 @@ int main(int, char**) {
     RUN_TEST(test_mockup_02_battery);
     RUN_TEST(test_mockup_03_comfort);
     RUN_TEST(test_mockup_04_gauge);
+    RUN_TEST(test_mockup_04_text_clears_the_ring);
     RUN_TEST(test_mockup_07_compass);
     RUN_TEST(test_mockup_08_faces);
     RUN_TEST(test_mockup_08_reactive);
