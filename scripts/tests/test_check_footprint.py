@@ -113,6 +113,11 @@ class CheckFootprintTest(unittest.TestCase):
             self.mod.violations("s", self.mod.Footprint(458752, 53248), lim), []
         )
 
+    def test_sketches(self) -> None:
+        self.assertEqual(
+            self.mod.SKETCHES, ("steami_board/Drawing", "steami_board/ScreenGauge")
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

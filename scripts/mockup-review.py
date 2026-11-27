@@ -35,7 +35,21 @@ from dataclasses import dataclass
 from pathlib import Path
 
 TUTORIALS_COMMIT = "83d8e2ca23abb0eeca7afca2d001cdd95b1df76b"
-MOCKUPS: tuple[str, ...] = ("01_temperature", "02_battery", "03_comfort_dual")
+MOCKUPS: tuple[str, ...] = (
+    "01_temperature",
+    "02_battery",
+    "03_comfort_dual",
+    "04_circular_gauge",
+    "07_compass",
+    "08_smiley_happy",
+    "08_smiley_sad",
+    "08_smiley_surprised",
+    "08_smiley_angry",
+    "08_smiley_sleeping",
+    "08_smiley_love",
+    "08_smiley_reactive",
+    "09_watch",
+)
 PANELS: tuple[tuple[int, str], ...] = ((128, "gray"), (240, "color"))
 MASK_RATIO = 0.95
 SSIM_HINT = 0.7

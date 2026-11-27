@@ -427,13 +427,16 @@ right, `y` down. On the OLED a colour becomes its grey level.
 | `void circle(int16_t cx, int16_t cy, int16_t r, SteamiRgb c = STEAMI_WHITE, bool fill = false)` | A circle, outline or filled. |
 | `void triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, SteamiRgb c = STEAMI_WHITE, bool fill = false)` | A triangle, outline or filled. |
 | `void arc(int16_t cx, int16_t cy, int16_t r, int16_t startDeg, int16_t sweepDeg, SteamiRgb c = STEAMI_WHITE, uint8_t width = 1)` | A ring segment. Degrees, 0 = noon, clockwise; `r` is the outer radius and the ring is `width` thick inward. |
-| `void text(const char* s, int16_t x, int16_t y, SteamiRgb c = STEAMI_WHITE, uint8_t scale = 1)` | Text in 8x8 glyphs (`CHAR_W`, `CHAR_H`). UTF-8: accents are folded to their plain letter, and `°` is drawn. |
+| `void text(const char* s, int16_t x, int16_t y, SteamiRgb c = STEAMI_WHITE, uint8_t scale = 1)` | Text in 8x8 glyphs on the 128 px screen, Spleen 8x16 on the 240 px screen, `scale` times larger; the same width on both (`CHAR_W`, 8 px per glyph at scale 1), height `textHeight(scale)` (`CHAR_H`, 8, is the glyph height on the 128 px screen only). UTF-8: `°` is drawn; accents are drawn on the 240 px screen and folded to their plain letter on the 128 px screen. |
 | `int16_t textWidth(const char* s, uint8_t scale = 1) const` | Width in pixels; counts glyphs, not bytes. |
+| `int16_t textHeight(uint8_t scale = 1)` | Line height in pixels: 8 per scale on 128, 16 on 240. |
 | `void show()` | Send the drawing to the panel. |
 | `void rotate(bool upsideDown)` | Turn the picture by 180 degrees. |
 | `void invert(bool on)` | Invert the panel. |
 | `void powerOn()` / `void powerOff()` | Switch the panel on or off. |
 | `SteamiDisplayBackend* backend()` | The backend of the board, built but not begun; `nullptr` without one. |
+
+Since this release, `text()` is 16 px tall at scale 1 on the V1c, and stacked lines use `textHeight()`.
 
 Rules:
 
@@ -505,7 +508,19 @@ widget paints over an earlier one), then `show()`.
 | `void bar(float v, float maxV = 100, int16_t yOffset = 0, SteamiRgb c = STEAMI_LIGHT)` | `STEAMI_LIGHT` | A horizontal bar filled from 0 to `maxV`. |
 | `void bar(float v, float maxV, SteamiRgb c)` | | The bar at the centre, with a colour. |
 | `void text(const char* s, SteamiAt at = SteamiAt::CENTER, SteamiRgb c = STEAMI_WHITE, uint8_t scale = 1)` | `STEAMI_WHITE` | Text at a position; `text(s, x, y, ...)` of `SteamiDisplay` is still there, in pixels. |
-| `uint8_t maxChars()` | | Characters of scale 1 across the panel: 16 on 128, 15 on 240. |
+| `uint8_t maxChars()` | | Characters of scale 1 across the panel: 16 on 128, 30 on 240. |
+| `void gauge(float v, float minV = 0, float maxV = 100, SteamiRgb c = STEAMI_LIGHT, uint8_t arcWidth = 0)` | track `STEAMI_DARK`, labels `STEAMI_GRAY`, fill `STEAMI_LIGHT` | A ring of 270 degrees near the edge, gap at the bottom, filled clockwise from the lower left; the integer parts of `minV` and `maxV` sit inside its two ends. No value: draw it with `value()`. |
+| `void compass(float headingDeg, SteamiRgb c = STEAMI_LIGHT)` | rose `STEAMI_DARK`, N `STEAMI_WHITE`, E S W `STEAMI_GRAY`, needle `c` | A compass rose whose needle points to real north. |
+| `void watch(uint8_t h, uint8_t m, uint8_t s = 0, SteamiRgb c = STEAMI_LIGHT)` | dial `STEAMI_DARK`, 12 3 6 9 `STEAMI_WHITE`, seconds and pivot `STEAMI_GRAY`, hour and minute hands `c` | An analog watch. |
+| `void face(SteamiFace f, bool compact = false, SteamiRgb c = STEAMI_LIGHT)` | `STEAMI_LIGHT` | A pixel-art face, centred. |
+| `void face(SteamiFace f, SteamiRgb c)` | | The same, with a colour. |
+| `void face(const uint8_t bitmap[8], bool compact = false, SteamiRgb c = STEAMI_LIGHT)` | `STEAMI_LIGHT` | Your own 8x8 face. |
+
+`SteamiFace` names the six faces: `HAPPY`, `SAD`, `SURPRISED`, `SLEEPING`,
+`ANGRY` and `LOVE`. `compact` draws them with smaller squares (8 px instead of
+11 on the 128 px screen), half a square higher, to leave room for a title and
+a subtitle. `face(bitmap)` takes your own picture: 8 bytes, one per row from top
+to bottom, the leftmost pixel in the high bit (`0x80`); `nullptr` draws nothing.
 
 `SteamiAt` names the nine positions: `N`, `NE`, `E`, `SE`, `S`, `SW`, `W`, `NW`
 and `CENTER` (as `"N"` ... `"CENTER"` in MicroPython).
@@ -520,17 +535,28 @@ is the formatter `value()` uses, in `SteamiValue.h`.
 Layout rules:
 
 * The same sketch runs on 128 and 240 px: positions and `yOffset` are in the
-  units of the 128 px screen, and glyphs are twice as large on 240.
-* `yOffset` is in the units of the 128 px screen, also on 240 (an offset of 8
-  moves the value by 15 px there).
+  units of the 128 px screen, also on 240 (an offset of 8 moves the value by
+  15 px there), and text on 240 uses fonts drawn for that panel (8 px per
+  character, 16 px tall), for widgets and `text()` alike.
 * Text never leaves the circle: it is cut (no ellipsis), or `value()` drops to
   a smaller size first.
 * A title of up to 11 characters stays at the top; the examples keep to that.
 * The values at `W` and `E` share one size, so two values side by side always
   match.
-* A bar fill is lifted to at least 4 grey levels above its track on the V1a/V1b
-  grey screen (`STEAMI_BLUE` becomes visible). The primitives of `SteamiDisplay`
-  never adjust a colour.
+* A bar fill or a gauge fill is lifted to at least 4 grey levels above its
+  track on the V1a/V1b grey screen (`STEAMI_BLUE` over the `STEAMI_DARK` gauge
+  track becomes grey 10; the bar's track is `STEAMI_GRID_DARK`). The primitives
+  of `SteamiDisplay` never adjust a colour.
+* `gauge()` draws the ring and the min/max labels only: call `value()` after it
+  to show the number (as in MicroPython). Its `arcWidth` is in pixels of the
+  panel, not in 128 px units; 0 keeps the default.
+* The needle of `compass()` points to real north and the rose turns, so the
+  letters stay upright (see [Heading convention](#heading-convention)): at
+  heading 90 the N is on the left. `NAN` (no sensor) draws the rose without a
+  needle.
+* `watch()` takes hours 0 to 23 and minutes and seconds 0 to 59; the hands move
+  in whole degrees (the hour hand with the minutes, the minute hand with the
+  seconds).
 
 | MicroPython | Arduino |
 |-------------|---------|
@@ -539,6 +565,8 @@ Layout rules:
 | `screen.subtitle("a", "b", color=C)` | `screen.subtitle("a", "b", C)` (3 lines at most) |
 | `screen.bar(v, max_val=100, color=C)` | `screen.bar(v, 100, C)` |
 | `screen.text("x", at="NE", scale=2)` | `screen.text("x", SteamiAt::NE, STEAMI_WHITE, 2)` |
+| `screen.gauge(v, min_val, max_val, color=C)` | `screen.gauge(v, min, max, C)` |
+| `screen.face("happy", color=C)` | `screen.face(SteamiFace::HAPPY, C)` |
 | `"N"` `"NE"` ... `"CENTER"`, `BLACK` ... `YELLOW` | `SteamiAt::N` ... `SteamiAt::CENTER`, `STEAMI_BLACK` ... `STEAMI_YELLOW` |
 | `screen.center`, `screen.radius`, `screen.width` | `centerX()`, `centerY()`, `radius()`, `width()` |
 
@@ -549,6 +577,10 @@ Examples, each reproducing a mockup of the tutorials:
 | `ScreenTemperature` | `01_temperature_ref.png`: title, value with its unit, sensor name |
 | `ScreenBattery` | `02_battery_ref.png`: charge in percent, green bar, voltage and gauge name |
 | `ScreenComfort` | `03_comfort_dual_ref.png`: temperature and humidity side by side, comfort verdict |
+| `ScreenGauge` | `04_circular_gauge_ref.png`: distance of the VL53L1X in a ring |
+| `ScreenCompass` | `07_compass_ref.png`: the rose turns with the compass heading |
+| `ScreenFaces` | `08_smiley_*_ref.png`: the six faces (button A shows the next) and the reactive smiley |
+| `ScreenWatch` | `09_watch_ref.png`: an analog watch |
 
 Messages of the screen are those of the display, with `who` = `SteamiScreen`:
 
@@ -592,7 +624,7 @@ void setup() {
 make test-native/steami_board   # detection, routing, messages, lazy slots
 make test-native/steami_display_board   # display primitives, E30, E31
 make test-native/steami_screen   # widgets, layout rules, SteamiValue, E30, E31
-make test-native/steami_screen_mockups   # the three mockups at 128 and 240 px
+make test-native/steami_screen_mockups   # mockups 01 to 04 and 07 to 09 at 128 and 240 px
 # score the mockup renders against the tutorials' images (needs Pillow and NumPy)
 mkdir -p /tmp/mockups   # writePpm does not create the folder
 STEAMI_PPM_DIR=/tmp/mockups .venv/bin/pio test -e native -f native/test_steami_screen_mockups
@@ -602,6 +634,67 @@ python3 scripts/mockup-review.py --ppm-dir /tmp/mockups --out /tmp/mockup-review
 make test-examples/steami_board
 make build
 make lint
+```
+
+## Third-party fonts
+
+The 8x8 font of the 128 px screen is MicroPython's `extmod/font_petme128_8x8.h`
+(commit b0a1b60a9b425cdb24e36d71974e902338ffb059), under the MIT license:
+
+```text
+This file is part of the MicroPython project, http://micropython.org/
+
+The MIT License (MIT)
+
+Copyright (c) 2013, 2014 Damien P. George
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+```
+
+The fonts of the 240 px screen are generated from Spleen 2.1.0
+(<https://github.com/fcambus/spleen>), under the BSD-2-Clause license:
+
+```text
+Copyright (c) 2018-2024, Frederic Cambus
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+  * Redistributions of source code must retain the above copyright
+    notice, this list of conditions and the following disclaimer.
+
+  * Redistributions in binary form must reproduce the above copyright
+    notice, this list of conditions and the following disclaimer in the
+    documentation and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS
+BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+POSSIBILITY OF SUCH DAMAGE.
 ```
 
 ## License

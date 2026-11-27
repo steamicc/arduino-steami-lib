@@ -1,7 +1,8 @@
 # STeaMi display layer: SteamiDisplay and SteamiScreen
 
 Status: Approved by the maintainer on 2026-11-25 (the whole document, with the designer's calls B1 to B10 and
-decision 6 of section 9: the V1c rendering comes first).
+decision 6 of section 9: the V1c rendering comes first). Amended on 2026-11-26 by
+`2026-11-26-steami-display-v1c-font-design.md` (V1c fonts).
 Repository: `steamicc/arduino-steami-lib`, base `main` at v0.34.0 (`SteamiBoard`, `SteamiHandle`, the 13
 per-function classes, `Steami.wire()`, `SteamiSSD1327`, `SteamiGC9A01`). Each delivery branches from `main`.
 
@@ -40,8 +41,10 @@ corrections go back to MicroPython in separate PRs (section 12), so that both la
 What the mockups fix and what they do not: they were drawn on 200x200 with anti-aliased vector fonts (value
 in 36 pt bold, about 23 px on the OLED as a font size; the digits are about 17 px tall). The board has a
 bitmap font only. The mockups therefore fix the **layout, hierarchy and colours**, not the glyphs: the
-mockups' text sizes (value, unit, title, subtitle, secondary labels) become the 8x8 font at scale 1 or 2,
-plus a 5x7 font for secondary labels.
+mockups' text sizes (value, unit, title, subtitle, secondary labels) become the 8x8 font at scale 1 or 2 on the 128 px panel,
+plus a 5x7 font for secondary labels. On the 240 px panel all text, widgets and primitives alike, uses
+Spleen bitmap fonts drawn for that panel (8x16, 6x12, and 12x24 and 16x32 for values); the 128 px panel
+keeps the 8x8 and the 5x7 (`2026-11-26-steami-display-v1c-font-design.md`).
 
 ## 2. Goals, non-goals, anti-goals
 
@@ -55,8 +58,10 @@ Goals
 - Everything is testable without a board, including a rendering of every mockup at 128 and 240 px.
 
 Non-goals (may come later)
-- Pixel-identical rendering with MicroPython (layout parity is the goal; MicroPython has no 5x7 font).
-- Anti-aliasing, vector or proportional fonts, a big-digits font (revisit after the V1c review on the board).
+- Pixel-identical rendering with MicroPython (layout parity is the goal; MicroPython has no 5x7 font; on 240 the text of widgets and
+  primitives uses the same glyph tables, faces and cells as MicroPython, and the pixel text draws the same
+  pixels, decision 7).
+- Anti-aliasing, vector or proportional fonts, Spleen on 128, or a face above 16x32.
 - Partial refresh (`showRect()` with a dirty rectangle) and DMA transfers.
 - `scroll()` in the layer (the SSD1327 scroll allocates a second 8 KB buffer; use the driver).
 - Images/bitmaps other than the 8x8 face bitmaps, touch, double buffering, a circular clipping mask (the
@@ -74,8 +79,8 @@ Anti-goals (things this layer must never do)
 - Never use `double` arithmetic or `sin()`/`cos()` in drawing code (single-precision FPU; integer tables).
 - Never guess the panel on an unknown release (both panels are write-only SPI): E30.
 - No text drawn outside the visible circle by a widget: it is truncated or scaled down.
-- No student-visible second font, scale factor or unit system: the 5x7 font, `k` and 128-px units are
-  internal.
+- No student-visible second font, scale factor or unit system: the 5x7 font, the Spleen faces, `k` and 128-px
+  units are internal. "No student-visible second font" holds on each panel (one font per panel).
 
 ## 3. Constraints
 
@@ -86,10 +91,10 @@ Anti-goals (things this layer must never do)
 - Two panels: SSD1327 128x128, 4-bit grey, SPI at 10 MHz, byte-wise `show()`; GC9A01 240x240, RGB565
   big-endian buffer, SPI at 16 MHz, block `show()`.
 - Round screens: the visible area is the disc of radius `radius()` centred on `(centerX(), centerY())`; the
-  usable chord shrinks near the top and bottom (93 px at row 20 on 128; 173 to 181 px at rows 37 to 41 on
-  240; chord convention in 5.8 rule 6).
+  usable chord shrinks near the top and bottom (93 px at row 20 on 128; 173 px at row 37 on 240, where
+  titles stay; chord convention in 5.8 rule 6).
 - Font: MicroPython's 8x8 framebuf font, so `steami_screen` layout constants port verbatim; a 5x7 font for
-  secondary labels.
+  secondary labels; on 240, Spleen 2.1.0 (BSD-2) bitmap fonts, whose generated tables are committed.
 - Integer drawing: Bresenham, scanlines, integer square root, a quarter-wave sine table. `float` is accepted at
   widget inputs (values, ratios) on the single-precision FPU; literals carry the `f` suffix.
 - Both cores: STM32duino 2.12 (PlatformIO) and 3.1.0 (Arduino IDE), `-std=gnu++17 -fno-rtti -fno-exceptions
@@ -105,8 +110,8 @@ Anti-goals (things this layer must never do)
 | Question | Options weighed | Taken, and why |
 |---|---|---|
 | Units of the primitives called on `screen` (`line`, `circle`, `text(x, y)`) | (a) physical pixels, as MicroPython level 3; (b) 128-px units scaled like the widgets | **(a)**. Same meaning as MicroPython, the 240 px resolution stays reachable, `SteamiScreen` does not contradict `SteamiDisplay`. Portability comes from `centerX()`, `centerY()`, `radius()`. Tutorial 03 is fixed to use them. |
-| Text on 240 px | (a) scale 1 as MicroPython today (tiny on V1c); (b) fractional glyph scaling (no anti-aliasing: uneven strokes); (c) integer glyph factor k = 1 or 2, layout ×15/8 | **(c)**, decision 9 of the functional-layer spec, extended to strokes. Pixel-art look consistent with the faces; text is 7 % wider relative to the layout on V1c. |
-| Fonts | (a) 8x8 only (parity); (b) 8x8 + internal 5x7 for secondary labels; (c) + big digits 12x16; (d) Scale2x smoothing | **(b)**. Fixes the clipped axis labels and follows the mockup hierarchy for about 480 B. (c) and (d) wait for the V1c review on the board; neither changes the API. |
+| Text on 240 px | (a) scale 1 as MicroPython today (tiny on V1c); (b) fractional glyph scaling (no anti-aliasing: uneven strokes); (c) integer glyph factor k = 1 or 2, layout ×15/8 | **(c)**, decision 9 of the functional-layer spec, extended to strokes. Pixel-art look consistent with the faces; text is 7 % wider relative to the layout on V1c. On the V1c, section 4 of `2026-11-26-steami-display-v1c-font-design.md` supersedes this row. |
+| Fonts | (a) 8x8 only (parity); (b) 8x8 + internal 5x7 for secondary labels; (c) + big digits 12x16; (d) Scale2x smoothing | **(b)**. Fixes the clipped axis labels and follows the mockup hierarchy for about 480 B. (c) and (d) wait for the V1c review on the board; neither changes the API. On the V1c, section 4 of `2026-11-26-steami-display-v1c-font-design.md` supersedes this row (Spleen faces). |
 | `value()` argument type | (a) six overloads × options (old 5.8); (b) a template; (c) one `SteamiValue` with implicit constructors | **(c)**. One function, no ambiguity for `0`, `23.5`, `millis()`, `uint8_t`; short error messages. |
 | Arc drawing | (a) float segments (MicroPython, artefacts #351); (b) Bresenham per radius (moiré holes); (c) integer scanline over the ring with an angular test | **(c)**. Every pixel decided once by distance and two cross products: no holes, no overlap, no `sin` per pixel. |
 | `gauge()` and the value | (a) gauge draws value and unit (tutorials' copy); (b) arc and min/max only, `value()` separate (MicroPython lib) | **(b)**, decision 3. Composable, same rule as the other widgets; tutorial 04 and the mockups README are updated. |
@@ -124,7 +129,8 @@ All in `lib/steami_board/src` (flattened into the package):
 | File | Content |
 |---|---|
 | `SteamiRgb.h` | header-only colour type and the `STEAMI_*` colours; no screen dependency |
-| `SteamiFont.h/.cpp` | 8x8 and 5x7 glyph tables, UTF-8 decoding and accent folding |
+| `SteamiFont.h/.cpp` | 8x8 and 5x7 glyph tables, UTF-8 decoding and accent folding; the Spleen face type and the extended decoder |
+| `SteamiFontSpleen.cpp` | generated Spleen 2.1.0 tables and face descriptors (never edited by hand) |
 | `SteamiTrig.h/.cpp` | quarter-wave sine table, `steamiSinQ14()`, `steamiCosQ14()`, `steamiIsqrt()` |
 | `SteamiDisplayBackend.h` | the backend interface |
 | `SteamiSsd1327Backend.h/.cpp`, `SteamiGc9a01Backend.h/.cpp` | the two panel backends |
@@ -171,18 +177,26 @@ constexpr SteamiRgb STEAMI_BLACK{0,0,0}, STEAMI_DARK{102,102,102}, STEAMI_GRAY{1
 ### 5.3 Fonts and text
 
 - **8x8**: port of MicroPython's framebuf font (MIT, attribution in the file header), characters 32..126,
-  plus a degree glyph: 96 glyphs, about 770 B of flash. It is the only font the student sees
-  (`text()`, `textWidth()`, `CHAR_W = CHAR_H = 8`).
+  plus a degree glyph: 96 glyphs, about 770 B of flash. One font per panel: on 128 the 8x8 is the font of the primitives
+  and the widgets (5x7 for secondary labels); on 240 both draw Spleen (8x16 × scale, 6x12 for labels).
+  `CHAR_W = CHAR_H = 8` stay the 8x8 metrics; `textHeight()` gives the panel's line height.
 - **5x7**: the table already in both drivers (columns, bit 0 on top), characters 32..126 plus a degree glyph,
   about 480 B; advance 6 px, line height 8 px at scale 1. Copied into `SteamiFont.cpp` (the drivers' copies
   are `static` and stay; `--gc-sections` drops them when the drivers' `text()` is unused). Used only by
   `SteamiScreen` for secondary labels: graph axes, gauge min/max, the `label` of `value()`.
+- **Spleen 2.1.0 (240 px)**: faces 6x12 and 8x16 (128 glyphs: ASCII, degree, accents) and 12x24 and 16x32
+  (the 15 value glyphs), BSD-2, in the generated `SteamiFontSpleen.cpp`. The cell height stays `8·f` for
+  TEXT and VALUE, the advance is the face's cell width (`4·f` on 240), values from the 12x24 and 16x32
+  faces are bold by a 1-px double strike, and the narrow '.' and ':' take the window `[w/4, 3w/4)` of
+  their face. On 240 the primitives draw the panel's base face × scale and the accents are drawn from the
+  extended code space 32..159. The faces and ladders are in sections 5.1 to 5.4 of `2026-11-26-steami-display-v1c-font-design.md`.
 - **UTF-8**: strings are decoded; U+00B0 maps to the degree glyph; `à â ä ç é è ê ë î ï ô ö ù û ü ÿ` and their
-  capitals fold to the base letter, so "Température" and "°C" render. Any other code point and any invalid
+  capitals fold to the base letter on 128 (they are drawn on 240), so "Température" and "°C" render. Any other code point and any invalid
   byte sequence draws `?`. `textWidth()` counts glyphs, not bytes.
 - Rendering: each glyph row is drawn as horizontal runs of set pixels, one clipped `fillRect(x, y, run·s, s)`
-  per run at scale `s`. Glyphs are never rotated. Every glyph advances `8·s`, except '.' and ':' inside
-  `SteamiScreen::value()`, drawn from a 4-column window with a `4·s` advance (5.9, B6).
+  per run at scale `s`. Glyphs are never rotated. Every glyph advances `8·s` on both panels, except '.' and ':' inside
+  `SteamiScreen::value()`, drawn from the window `[w/4, 3w/4)` of their glyph with a `w/2` advance (a 4-column window and `4·s`
+  for the 8x8; 5.9, B6).
 
 ### 5.4 Backends
 
@@ -263,15 +277,17 @@ class SteamiDisplay {
   void arc(int16_t cx, int16_t cy, int16_t r, int16_t startDeg, int16_t sweepDeg,
            SteamiRgb c = STEAMI_WHITE, uint8_t width = 1);
   void text(const char* s, int16_t x, int16_t y, SteamiRgb c = STEAMI_WHITE, uint8_t scale = 1);
+                                   // 8x8 × scale on 128, Spleen 8x16 × scale on 240
   int16_t textWidth(const char* s, uint8_t scale = 1) const;   // glyphs, not bytes
+  int16_t textHeight(uint8_t scale = 1);   // 8·scale on 128, 16·scale on 240
   void show();
   void rotate(bool upsideDown);  void invert(bool on);  void powerOn();  void powerOff();
   SteamiDisplayBackend* backend();
-  static constexpr uint8_t CHAR_W = 8, CHAR_H = 8;
+  static constexpr uint8_t CHAR_W = 8, CHAR_H = 8;   // 8x8 metrics (the 128 px screen)
 
  protected:   // for SteamiScreen, not for the student
   constexpr SteamiDisplay(SteamiBoard& board, const char* who) noexcept;   // "SteamiScreen" in messages
-  void textSmall(const char* s, int16_t x, int16_t y, SteamiRgb c, uint8_t scale = 1);   // 5x7
+  void textSmall(const char* s, int16_t x, int16_t y, SteamiRgb c, uint8_t scale = 1);   // 5x7 on 128, 6x12 on 240
   int16_t textSmallWidth(const char* s, uint8_t scale = 1) const;
   void strokeLine(int16_t x1, int16_t y1, int16_t x2, int16_t y2, uint8_t w, SteamiRgb c);
   void strokeCircle(int16_t cx, int16_t cy, int16_t r, uint8_t w, SteamiRgb c);   // arc(…, 0, 360, c, w)
@@ -354,7 +370,7 @@ template <size_t N> class SteamiHistory {   // ring of the last N values, no hea
 class SteamiScreen : public SteamiDisplay {
  public:
   explicit constexpr SteamiScreen(SteamiBoard& board = Steami) noexcept;
-  uint8_t maxChars();                 // width() / (8·k): 16 on 128, 15 on 240
+  uint8_t maxChars();                 // width() / advance of the TEXT face at k: 16 on 128, 30 on 240
 
   // Level 1: widgets (device.py order: value, unit, at, label, color, scale, y_offset)
   void title(const char* text, SteamiRgb c = STEAMI_GRAY);
@@ -427,15 +443,17 @@ Layout rules, applied by every widget:
 
 1. Every widget constant (margins, offsets, bar size, graph box, menu rows, radius offsets) and every widget
    offset argument (`yOffset` of `value()` and `bar()`) is in 128-px units and goes through `u()`.
-2. Glyphs and strokes are physical: an 8x8 glyph at widget scale s is `8·s·k` px; a 5x7 label advances
-   `6·s·k` px; a widget line, circle, tick or curve is `k` px wide.
+2. Glyphs and strokes are physical: a glyph's width is its face's advance (`8·s·k` px for an 8x8 glyph, `4·s·k`
+   for a Spleen glyph at widget scale s), and its cell is `8·s·k` px high on both panels; a 5x7 label advances
+   `6·s·k` px on 128 and a 6x12 label 6 px on 240 (cell 12 px high); a widget line, circle, tick or curve is `k` px wide.
 3. Rows are computed with the device.py formulas in 128-px units, using 128-px glyph sizes (`8·s`), then mapped
    with `u()`. Two exceptions are computed in physical pixels:
    - the value block of `value()` (5.9), because its physical factor can be odd on 240 (×3), where no
      128-px scale `s` exists;
    - the N/S rows of `_resolve`, used by titles, subtitles, and `text(s, at)` and `value()` at N, S, NE,
      NW, SE and SW (which all share device.py's `margin_ns`), so a text that is 7 % wider on V1c moves down
-     far enough to fit *(designer's call, B3)*. Margin and glyph height are both physical: with the physical
+     far enough to fit *(designer's call, B3)*; this holds for the 128-unit layouts only, and on 240 titles stay
+     at row 37. Margin and glyph height are both physical: with the physical
      glyph factor `f = s·k`, the N row (also NE, NW) is `margin_ns` and the S row (also SE, SW) is
      `H − margin_ns − 8·f` (100 on 128 and 187 on 240 for a short text at scale 1). With `r = radius()` and the
      physical text width `tw`, `m = r − isqrt(r² − (tw/2)²) + 2` when `tw < 2r`, and `m = cap` when
@@ -443,11 +461,13 @@ Layout rules, applied by every widget:
      `margin_ns = max(floor_f, min(m, cap))` *(designer's call, B8)*, where:
      - `floor_f = (16·f + 4·k)·W / (128·k)` in integers, which is `u(2·8·s + 4)` for an integer s: 20 on 128
        and 37 on 240 at scale 1, 36 and 67 at scale 2 (and it is defined for the odd f = 3 of a value on 240);
-     - **the cap is fixed for every scale**: the safe margin of a 13-cell text at scale 1 (`tw = 13·8·k`),
-       **29 on 128, 63 on 240**.
-     At scale 2 and above the floor is above the cap, so such text sits at its floor and is truncated there
+     - **the cap is fixed for every scale**: the safe margin of a text of 13 TEXT cells at scale 1 in the
+       panel's face (`tw` = 13 advances = 104 px on both panels), **29 on 128, 14 on 240**.
+     On 128 at scale 2 and above, and on 240 at every scale, the floor is above the cap, so such text sits at
+     its floor and is truncated there
      (rule 7). The title band is the range of a title's **top row**, from the scale-1 floor to the cap: 20 to
-     29 on 128, 37 to 63 on 240; a title inks down to row 36 on 128 and 78 on 240.
+     29 on 128, row 37 only on 240, where the cap (14) is below the floor (37); a title inks down to row 36 on
+     128 and row 51 on 240.
    Columns use a separate side margin, physical too: `margin_ew = (8·f + 4·k)·W / (128·k)` in integers,
    device.py's `ch + 4` mapped through `u()` for an integer s (12 on 128 and 22 on 240 at scale 1; 30 for the
    odd f = 3 of a value on 240). Centred text at `centerX() − physicalWidth/2`; left-anchored (W, NW, SW) at
@@ -457,8 +477,8 @@ Layout rules, applied by every widget:
 5. Round widgets scale from `radius()`: `radius() − u(c)` and fractions of it.
 6. **Available width** *(designer's call, B3)*: the width available to a text at a given position is the chord
    of the circle of radius `r = radius()` at the pixel rows the text actually inks (the union of the inked
-   rows of its glyphs, read from the font bitmaps at the drawn scale), not at the full 8-row cell; the
-   narrowest of those rows decides. The text's width is its cell width (`textWidth()`, or `valueWidth()` for
+   rows of its glyphs, read from the font bitmaps at the drawn scale), not at the full cell; the
+   narrowest of those rows decides. The text's width is its cell width, from the face's advance (`textWidth()`, or `valueWidth()` for
    a value, B6). **Chord convention**, used by every number in this document: at pixel row y,
    `chord(y) = 2·isqrt(r² − dy²) + 1` with `dy = y − centerY()`, from `centerX() − isqrt(r² − dy²)` to
    `centerX() + isqrt(r² − dy²)` inclusive, and 0 when `|dy| > r`. Edge cases *(designer's call, B9)*:
@@ -468,7 +488,7 @@ Layout rules, applied by every widget:
      available width or region of width ≤ 0 is empty and that part draws nothing; `isqrt` is never called on a
      negative number;
    - truncation keeps the **longest prefix** whose cell width (`textWidth()`, or `valueWidth()`) fits the chord
-     at that prefix's own inked rows (so `"______________T"` keeps 14 cells at the cap on 128, 13 on 240).
+     at that prefix's own inked rows (so `"______________T"` keeps 14 cells at the cap on 128, 15 on 240).
 7. Nothing a widget draws leaves the circle of radius `radius() + 1`. Every cut keeps the longest fitting
    prefix (rule 6), with no ellipsis *(designer's call, B10)*:
    - titles, subtitle lines and menu items are truncated to their available width;
@@ -480,9 +500,9 @@ Layout rules, applied by every widget:
      edge, which leaves the disc even for short text, for example NW at x 12 against an edge of 18 at row 20
      on 128);
    - the label and unit of `value()` are truncated and clamped to their region (5.9);
-   - `value()` lowers its glyph scale one step at a time (minimum 1) until the text fits its region (the
+   - `value()` lowers its glyph scale one step at a time (minimum k at every anchor; on 240 an f with no face is skipped) until the text fits its region (the
      CENTER width, the W/E half region, or the corner region of NE, NW, SE and SW), then truncates it to that
-     region at scale 1 (5.9).
+     region at f = k (5.9).
 8. Primitives and `text(s, x, y, c, scale)` apply none of this (decision 1); `text(s, at, c, scale)` uses
    `scale × k`.
 
@@ -492,28 +512,29 @@ applies every 5.9 rule, not device.py as is. Result, per element:
 
 | Element | OLED 128 (k = 1) | TFT 240 (k = 2, positions ×15/8) |
 |---|---|---|
-| Title | 8x8, row 20 up to 11 characters, down to row 29 (cap) at 13 | 16x16, row 37 up to 10, 41 for "Temperature" (11), down to 63 (cap) at 13 |
-| Value, centred | 8x8 ×2 = 16 px | ×4 = 32 px (lower when the region is too narrow) |
-| Values side by side (W and E) | ×2 = 16 px for values up to the width of "88.8" (B6) | ×3 = 24 px |
-| '.' and ':' inside a value | 4·f px advance instead of 8·f (B6) | same |
-| Unit, subtitle, menu items, compass and watch letters | 8x8 | 16x16 |
-| Secondary labels (graph min/max, gauge min/max, value label) | 5x7 | 5x7 ×2 |
+| Title | 8x8, row 20 up to 11 characters, down to row 29 (cap) at 13 | Spleen 8x16, row 37 whatever the length (the cap, 14, is below the floor), whole up to 22 cells |
+| Value, centred | 8x8 ×2 = 16 px | f 4 = 16x32 bold, 32 px (lower, down to f 2, when the region is too narrow) |
+| Values side by side (W and E) | ×2 = 16 px for values up to the width of "88.8" (B6) | f 4 = 32 px |
+| '.' and ':' inside a value | 4·f px advance instead of 8·f (B6) | `w/2` of the face: 2·f px instead of 4·f |
+| Unit, subtitle, menu items, compass and watch letters | 8x8 | Spleen 8x16 |
+| Secondary labels (graph min/max, gauge min/max, value label) | 5x7 | Spleen 6x12 |
 | Strokes (circles, ticks, curve, axes) | 1 px | 2 px |
 | Gauge | outer radius 60, thickness 7 | 113, 13 |
-| Menu | 5 visible rows of 14 px | 5 visible rows of 26 px |
+| Menu | 5 visible rows of 14 px | 6 visible rows of 26 px |
 | Face | 11 px cells (88 px) | 20 px cells (160 px) |
 
 Long titles *(designer's call, B8)*: as in device.py, a longer title moves down until it fits, but never
-below the cap; at the cap it is truncated to its available width. Titles of up to 13 characters are drawn
-whole on both panels; a title of 14 characters or more stays at the cap and is truncated to the chord at the
-rows it inks: a text that inks the top rows keeps 13 cells (chord 107 px at row 29 on 128, 211 px at row 63 on
-240), while one that inks only its bottom rows, such as 14 '_' or '.', fits whole on 128 (chord 115 px for '_', 113 px for '.', against
-112). A title of 12 or 13 characters sits at rows 24 to 29 on 128 and can meet a
-widget placed just below the title band (the graph's current value at row 31): the examples keep titles to 11
-characters. "Temperature" (11 cells) fits on both panels: on 128 its inked rows start at row 20, where the
-chord is 93 px for 88 px of text; on 240 the physical safe margin puts it at row 41 (instead of 37), where the
-chord is 181 px for 176 px of text. At row 37 it would not have fitted (chord 173 px, and the capital T inks
-the top row).
+below the cap; at the cap it is truncated to its available width. On 128, titles of up to 13 characters
+are drawn whole; a title of 14 characters or more stays at the cap and is truncated to the chord at the
+rows it inks: a text that inks the top rows keeps 13 cells (chord 107 px at row 29), while one that inks
+only its bottom rows, such as 14 '_' or '.', fits whole (chord 115 px for '_', 113 px for '.', against
+112). On 240 every title sits at row 37 and is never moved down (the cap, 14, is below the floor):
+ordinary text is drawn whole up to 22 cells (176 px in the chord of 177 px at rows 39..51) and a longer
+title is truncated to the chord at the rows it inks. A title of 12 or 13 characters sits at rows 24 to 29
+on 128 and can meet a widget placed just below the title band (the graph's current value at row 31): the
+examples keep titles to 11 characters. "Temperature" (11 cells) fits on both panels: on 128 its inked rows
+start at row 20, where the chord is 93 px for 88 px of text; on 240 it sits at row 37 and inks rows 39 to
+51, where the chord is 177 px for 88 px of text.
 
 ### 5.9 Widgets
 
@@ -521,15 +542,15 @@ Constants in 128-px units (`SteamiScreenConst.h`); "MP" marks a deliberate diffe
 
 | Widget | Layout and behaviour |
 |---|---|
-| `title` | `text(s, N)` in GRAY: row = `max(floor_f, min(m, cap))` (rule 3, B8; `floor_f = u(2·8·s + 4)`, 20 / 37 at scale 1): 20 on 128 up to 11 characters; 37 on 240 up to 10, 41 for "Temperature"; at most 29 on 128 and 63 on 240. Truncated to its available width (rule 6) only if it still does not fit at that row: from 14 characters when the text inks its top rows (*designer's call, B8*). At scale 2 (`text(s, N, c, 2)`) the row is the floor, 36 on 128 and 67 on 240. |
-| `subtitle` | 1 to 3 lines, 8x8 (×k), DARK by default. The S row comes from `_resolve(S)` with the widest line (rule 3: margin and glyph height physical, so its `− ch` is `8·k`, 16 on 240; the B8 floor and cap apply): 100 on 128 and 187 on 240 for a short text. device.py's position: one line at `S row + u(8)` (its `+ CHAR_H` goes through `u()`: 8 on 128, 15 on 240), several lines centred on the S row, the first at `S row − u(11)·(n − 1)/2` with device.py's integer halving, pitch `u(11)`. **Placement** *(designer's call, B7)*: from that position, the line (or the block of lines) rises one row at a time until every line fits its available width (rule 6), never higher than the point where its last line's top reaches the S row; only then is a line that still does not fit truncated (rule 7). As one line (128 / 240): short lines keep device.py's row, 108 / 202; "Comfortable" and "VL53L1X ToF" rise to 104 / 188, "Uncomfortable" to 95 / 166, "20s window" to 107 / 196 (**MP**: device.py keeps the row and the line is cut by the circle). The two-line blocks of the examples, first and second line: 02 at 95/106 and 177/197; 03 "Comfortable" at 95/106 and 173/193; 03 "Uncomfortable" at 86/97 and 151/171; 05 at 95/106, and on 240 it rises from 177 to 176, so 176/196. Each line centred and truncated to its available width (rule 6). The colour applies to every line, as MicroPython. |
-| `value` | Text from `SteamiValue::format()` with `setDecimals()`; NAN gives `--`. Physical glyph factor f, tried from `max(scale, 1)·k` (default 2k; a scale of 0 counts as 1, B9) down to 1. **Value glyphs** *(designer's call, B6)*: in value text only, '.' and ':' are drawn from a 4-column window of their glyph (columns 2 to 5) with an advance of `4·f`; every other glyph advances `8·f`. An internal `valueWidth()` measures this; `textWidth()`, `text()` and the other widgets are unchanged (**MP**: 8·f for every glyph). **Block**, in physical pixels for any f (rule 3): height `8f + 8f/3 + 8k` with a unit, `8f` without, centred on `centerY() + u(yOffset)`; at the default scale on 128 this is device.py's `16 + 5 + 8`, top row 50. Unit: 8x8 ×k, LIGHT, centred under the value at `value top + 8f` (as device.py). Label: **5x7** ×k, GRAY, centred above the value with a `u(4)` gap (**MP**: 8x8). **Label and unit fit** *(designer's call, B9)*: each is truncated to its available width at its own inked rows (rule 6); above or below a W/E value that width is further limited to the half region taken at the label's or unit's rows ([left chord edge + k, `centerX() − u(3)`), E mirrored), and the text is centred in what remains. Labels of up to 9 characters on 128 and 8 on 240 stay whole above a W/E value. **At NE, NW, SE and SW**, the label's (or unit's) region is the chord at its own inked rows shrunk by k at each end; the text is cut to the longest prefix that fits, centred on the value's centre, then x is clamped into [region left, region right − width]; an empty region draws nothing (rule 6). Worked examples: on 128, `value(8, "C", SteamiAt::NE, "TEMP", STEAMI_WHITE, 1)` puts the value at x 102, row 20; the label's rows 9..15 have the chord [32, 96], so the region is [33, 95] and "TEMP" (24 px) moves from x 94 to x 72 (72..95); at SE the unit "C" (rows 108..114, region [26, 102]) moves from x 103 to x 95. On 240, the same NE call puts the value at x 180, row 22; the label's rows 1..14 leave the region [107, 133] (27 px), so "TEMP" (48 px) is cut to "TE" (24 px) at x 110. **CENTER, N and S**: centred on `centerX()` (**MP** for CENTER: device.py halves the width twice, #351), at the centre row or at `_resolve`'s row; f is the largest at which `valueWidth(text)` fits the available width of rule 6 minus `u(4)`. **Corner anchors, NE, NW, SE and SW** *(designer's call, B9)*: for each f tried, the position comes from `_resolve` with that f (rule 3: `margin_ns` for the row, `margin_ew` for the column); the region is the chord at the block's value-cell rows shrunk by k at each end; f fits when `[x, x + valueWidth)` lies inside the region (**MP**: device.py places the text from the screen edge, and a value at a corner can leave the disc). At f = 1, x is clamped into [region left, region right − width], and a text still too wide is truncated to the region. "23.5" at ×2 is 56 px instead of 64, so its x moves 4 px from a device.py golden (**MP**, B6). **Side by side, W and E** *(designer's calls, B2 and B6)*: half region W = [left chord edge + k, `centerX() − u(3)`), E its mirror, the chord taken at the block's value-cell rows for the f being tried (full cell rows, so the result does not depend on the digits). f is the largest at which **`max(valueWidth(text), valueWidth("88.8"))`** fits the region, and the value is centred in it (**MP**: device.py keeps the requested scale at `W/4 − tw/2`). The computation uses neither the other value nor any state, and the two regions are mirror images, so every value no wider than "88.8" (three digits or signs plus one '.' or ':', such as "45", "100", "-5.2", "23.5") gets the same f in both columns when both calls have the same options (unit or not, `scale`, `yOffset`): "23.5" and "45" at **×2 on 128** (56 px in a 58 px region) and **×3 on 240** (84 px in 110 px; ×4 would need 112 px in 109). A wider value gets its own, smaller f: "8888" and 6-character values ×1 on 128 (region 59 px at ×1); on 240 "8888" stays ×3 (96 px) and a 6-character value gets ×2 (96 px in 111). **Truncation**: at f = 1 a text that still does not fit its region is truncated to its longest fitting prefix, no ellipsis (rules 6, 7). Exact cases: on 128, a W/E value wider than its 59 px region at ×1, such as "12345678" (64 px), "-1234.56" (60 px) or the text "Uncomfortable" (104 px); "12:34:56" is 56 px with two narrow ':' and fits. On 240 the ×1 W/E region is 112 px, so "Uncomfortable" fits and a 15-character text (120 px) is truncated. At the default rows a CENTER value always fits at ×1: the formatting buffer allows 15 characters, at most 120 px. A 15-character CENTER value is truncated only when `yOffset` moves it toward the edge: on 128 from `yOffset` −7 or +19 with a unit (−12 or +14 without), on 240 from −48 or +59 with a unit (−53 or +54 without). These thresholds are for a 15-character text value with no '.' or ':' (120 px). A 15-character numeric value is always `-NNNNNNNNN.dddd` (116 px) and is truncated only from −14 or +26 on 128 and −49 or +60 on 240, with a unit. |
+| `title` | `text(s, N)` in GRAY: row = `max(floor_f, min(m, cap))` (rule 3, B8; `floor_f = u(2·8·s + 4)`, 20 / 37 at scale 1): 20 on 128 up to 11 characters, at most 29; 37 on 240 for every title (the cap, 14, is below the floor, so a title is never moved down). Truncated to its available width (rule 6) only if it still does not fit at that row: on 128 from 14 characters when the text inks its top rows (*designer's call, B8*), on 240 from 23 characters of ordinary text (22 cells fit the chord at rows 39..51). At scale 2 (`text(s, N, c, 2)`) the row is the floor, 36 on 128 and 67 on 240. |
+| `subtitle` | 1 to 3 lines, 8x8 (×k) on 128 and 8x16 on 240, DARK by default. The S row comes from `_resolve(S)` with the widest line (rule 3: margin and glyph height physical, so its `− ch` is `8·k`, 16 on 240; the B8 floor and cap apply): 100 on 128 and 187 on 240 for a short text. device.py's position: one line at `S row + u(8)` (its `+ CHAR_H` goes through `u()`: 8 on 128, 15 on 240), several lines centred on the S row, the first at `S row − u(11)·(n − 1)/2` with device.py's integer halving, pitch `u(11)`. **Placement** *(designer's call, B7)*: from that position, the line (or the block of lines) rises one row at a time until every line fits its available width (rule 6), never higher than the point where its last line's top reaches the S row; only then is a line that still does not fit truncated (rule 7). As one line (128 / 240): short lines keep device.py's row, 108 / 202; on 128 "Comfortable" and "VL53L1X ToF" rise to 104, "Uncomfortable" to 95 and "20s window" to 107, and on 240 no line rises from 202 (**MP** on 128: device.py keeps the row and the line is cut by the circle). The two-line blocks of the examples, first and second line: 02 at 95/106 and 177/197; 03 "Comfortable" at 95/106 and 177/197; 03 "Uncomfortable" at 86/97 and 177/197; 05 at 95/106 and 177/197 (on 240 no block rises). Each line centred and truncated to its available width (rule 6). The colour applies to every line, as MicroPython. |
+| `value` | Text from `SteamiValue::format()` with `setDecimals()`; NAN gives `--`. Physical glyph factor f, tried from `max(scale, 1)·k` (default 2k; a scale of 0 counts as 1, B9) down to k (an f with no face is skipped on 240). **Value glyphs** *(designer's call, B6)*: in every VALUE text, whatever its face, '.' and ':' are drawn from the window `[w/4, 3w/4)` of their glyph with an advance of `w/2` (w = the cell width of the face: columns 2 to 5 and `4·f` for the 8x8 on 128, `2·f` on 240); every other glyph advances the face's cell width (`8·f` on 128, `4·f` on 240) (5.1 and 5.2 of the font document). An internal `valueWidth()` measures this; `textWidth()`, `text()` and the other widgets are unchanged (**MP**: 8·f for every glyph). **Block**, in physical pixels for any f (rule 3): height `8f + 8f/3 + 8k` with a unit, `8f` without, centred on `centerY() + u(yOffset)`; at the default scale on 128 this is device.py's `16 + 5 + 8`, top row 50. Unit: 8x8 ×k on 128, 8x16 on 240, LIGHT, centred under the value at `value top + 8f` (as device.py). Label: **5x7** ×k on 128, 6x12 on 240, GRAY, centred above the value with a `u(4)` gap, from the label face's cell height (7k on 128, 12 on 240) (**MP**: 8x8). **Label and unit fit** *(designer's call, B9)*: each is truncated to its available width at its own inked rows (rule 6); above or below a W/E value that width is further limited to the half region taken at the label's or unit's rows ([left chord edge + k, `centerX() − u(3)`), E mirrored), and the text is centred in what remains. Labels of up to 9 characters on 128 and 17 on 240 stay whole above a W/E value. **At NE, NW, SE and SW**, the label's (or unit's) region is the chord at its own inked rows shrunk by k at each end; the text is cut to the longest prefix that fits, centred on the value's centre, then x is clamped into [region left, region right − width]; an empty region draws nothing (rule 6). Worked examples: on 128, `value(8, "C", SteamiAt::NE, "TEMP", STEAMI_WHITE, 1)` puts the value at x 102, row 20; the label's rows 9..15 have the chord [32, 96], so the region is [33, 95] and "TEMP" (24 px) moves from x 94 to x 72 (72..95); at SE the unit "C" (rows 108..114, region [26, 102]) moves from x 103 to x 95. On 240, the same NE call keeps the value at f 2 (the fit stops at k): row 37 (`margin_ns`), region [36, 204], x clamped from 210 to 197; the label's cell top is 37 − 7 − 12 = 18, its rows 19..26 leave the region [58, 182] (125 px), so "TEMP" (24 px in 6x12) is whole at x 159. **CENTER, N and S**: centred on `centerX()` (**MP** for CENTER: device.py halves the width twice, #351), at the centre row or at `_resolve`'s row; f is the largest at which `valueWidth(text)` fits the available width of rule 6 minus `u(4)`. **Corner anchors, NE, NW, SE and SW** *(designer's call, B9)*: for each f tried, the position comes from `_resolve` with that f (rule 3: `margin_ns` for the row, `margin_ew` for the column); the region is the chord at the block's value-cell rows shrunk by k at each end; f fits when `[x, x + valueWidth)` lies inside the region (**MP**: device.py places the text from the screen edge, and a value at a corner can leave the disc). At f = k, x is clamped into [region left, region right − width], and a text still too wide is truncated to the region. "23.5" at ×2 is 56 px instead of 64, so its x moves 4 px from a device.py golden (**MP**, B6). **Side by side, W and E** *(designer's calls, B2 and B6)*: half region W = [left chord edge + k, `centerX() − u(3)`), E its mirror, the chord taken at the block's value-cell rows for the f being tried (full cell rows, so the result does not depend on the digits). f is the largest at which **`max(valueWidth(text), valueWidth("88.8"))`** fits the region, and the value is centred in it (**MP**: device.py keeps the requested scale at `W/4 − tw/2`). The computation uses neither the other value nor any state, and the two regions are mirror images, so every value no wider than "88.8" (three digits or signs plus one '.' or ':', such as "45", "100", "-5.2", "23.5") gets the same f in both columns when both calls have the same options (unit or not, `scale`, `yOffset`): "23.5" and "45" at **×2 on 128** (56 px in a 58 px region) and **f 4 on 240** (56 px in 109 px). A wider value gets its own, smaller f: "8888" and 6-character values ×1 on 128 (region 59 px at ×1); on 240 "8888" stays f 4 (64 px) and so does a 6-character value (96 px in 109). **Truncation**: at f = k a text that still does not fit its region is truncated to its longest fitting prefix, no ellipsis (rules 6, 7). Exact cases: on 128, a W/E value wider than its 59 px region at ×1, such as "12345678" (64 px), "-1234.56" (60 px) or the text "Uncomfortable" (104 px); "12:34:56" is 56 px with two narrow ':' and fits. On 240 the f 2 W/E region is 111 px, so "Uncomfortable" (104 px) fits and a 15-character text (120 px) is truncated to 13 cells. At the default rows a CENTER value always fits at its last step (×1 on 128, f 2 on 240): the formatting buffer allows 15 characters, at most 120 px. A 15-character CENTER value is truncated only when `yOffset` moves it toward the edge: on 128 from `yOffset` −7 or +19 with a unit (−12 or +14 without), on 240 from −47 or +59 with a unit (−52 or +54 without). These thresholds are for a 15-character text value with no '.' or ':' (120 px). A 15-character numeric value is always `-NNNNNNNNN.dddd` (116 px) and is truncated only from −14 or +26 on 128 and −47 or +60 on 240, with a unit. |
 | `bar` | Width `W − u(40)`, height `u(8)`, centred, top at `centerY() + u(20) + u(yOffset)`. Track **GRID_DARK** (`#333`, grey level 3; mockup 02 uses `#222`, level 2; **MP**: DARK); fill `width · clamp(v, 0, maxV) / maxV`; NAN or `maxV <= 0` leaves it empty. |
-| `gauge` | `arc()` of 270°, start 225° (noon, clockwise; device.py's 135° in screen-math angles), outer radius `radius() − u(4)`, thickness `arcWidth` (physical) or `max(5, radius()/9)`: ring 54..60 on 128 as in mockup 04 (**MP**: device.py's `radius − arc_w/2 − 1` is the centreline, ring 57..63). Track **DARK** (mockup 04: `#666`) at full sweep; fill `round(270 · ratio)` with ratio clamped to [0, 1], NAN or `maxV == minV` gives 0; **track and fill have the same thickness** (mockup 04; **MP**: fill is 2 px thicker). Min/max labels (integer part) in **5x7** ×k, GRAY, horizontally centred on the point at angle 233° (min) or 127° (max) and distance `outer − thickness − u(10)`, top row on that point (as device.py). No value, no unit (decision 3). |
-| `graph` | Box: x `u(21)`, y `u(38)`, w `W − u(15) − u(21)`, h `u(52)`; axes DARK (left and bottom, stroke k); dashed middle line GRID_DARK, dash `u(3)`, gap `u(3)`. Current value (integer part of the last value, `--` if NAN) in 8x8 ×k WHITE centred at row 31. Axis labels *(designer's call, B1)*: **only max and min** (no middle label), integer part written in full (`950`, `1050`; no `1k`), in **5x7** ×k, DARK, **inside the plot box**: the max label's top at `y + u(2)`, the min label's bottom at `y + h − k − u(2)`; each left-aligned at `max(chord left edge at its inked rows, box left + k) + u(2)`. With the default box the box edge is the binding term on both panels (chord edge at the label rows about 5 px on 128 and 8 to 10 px on 240, box left 21 and 39 px); the chord term keeps the rule valid for any box (**MP**: three 8x8 labels left of the axis, clipped by the circle). Labels are drawn before the curve, which paints over them. Curve of stroke k from oldest to newest across the box width; NAN points are skipped (gap in the curve); 0 or 1 point draws the frame and the value only. |
-| `menu` | Rows of 14 from row 35. **Visible rows** *(designer's call, B3)*: a row is used only if the chord at its full cell rows holds the marker plus 10 cells (12 cells: 96 px on 128, 192 px on 240). Chords of rows 1 to 6: 115, 125, 127, 121, 109, 85 px on 128; 213, 233, 239, 227, 201, 157 px on 240; so **5 visible rows on both panels** (`min(n, 5)`; **MP**: 6). Window start `clamp(sel − visible/2, 0, n − visible)`. `selected` wrapped modulo n in signed arithmetic (−1 → n−1, n → 0) and **returned** (**MP**: no wrap, `None`). Highlight bar DARK from `row − u(2)`, one row high, each scanline **clipped to the chord at that scanline** (from left edge + k to right edge − k), so its ends follow the circle *(B3; **MP**: device.py and mockup 06 draw a fixed bar from x 15 to 113)*. The `"> "` marker starts at the **chord's left edge** at the item's inked rows, plus `u(2)` *(B3; **MP**: device.py and mockup 06 put it right before the item)*. Items are **centred** horizontally (**MP**: left at x 18; mockup 06: staggered left edges); the selected item starts after the marker if centring would overlap it; every item is truncated to its available width minus `u(2)`. Selected item in `c`, others GRAY. `n == 0` draws nothing and returns 0. |
-| `compass` | **Real rose** (decision 2): every element at angle a is drawn at `a − heading`, heading rounded to a degree. Circles of radius `R = radius() − u(12)` and `R·7/10`, DARK, stroke k; 8 ticks from `R − u(6)` to `R`, cardinal LIGHT, diagonal DARK; letters N (WHITE) and E, S, W (GRAY) centred at `R + u(5)`, glyphs upright; needle: north half in `c` from the centre to `R·85/100` toward north, half width `u(3)`, south half DARK, filled triangles; pivot filled circle `u(3)` GRAY. Heading convention of v0.34.0: 0° when the top of the screen points north, clockwise (`atan2(-x, y)`). At heading 0 the drawing is the mockup; at 90 the N letter is on the left. NAN: rose at 0, pivot, no needle. |
-| `watch` | `R = radius() − u(8)`, dial circle DARK; 12 ticks, every third from `R − u(8)` LIGHT, others from `R − u(5)` GRAY; 12, 3, 6, 9 in WHITE 8x8 ×k at `R − u(15)`; hour hand `R/2`, half width `u(3)`; minute hand `3R/4`, half width `u(2)` (device.py widths; mockup 09's hands are thinner, about 2 and 1, listed in section 6); both in `c`; second hand line `R·85/100` GRAY stroke k; pivot `u(3)` GRAY. Integer angles: hour `(h % 12)·30 + m/2`, minute `m·6 + s/10`, second `s·6`. |
+| `gauge` | `arc()` of 270°, start 225° (noon, clockwise; device.py's 135° in screen-math angles), outer radius `radius() − u(4)`, thickness `arcWidth` (physical) or `max(5, radius()/9)`: ring 54..60 on 128 as in mockup 04 (**MP**: device.py's `radius − arc_w/2 − 1` is the centreline, ring 57..63). Track **DARK** (mockup 04: `#666`) at full sweep; fill `round(270 · ratio)` with ratio clamped to [0, 1], NAN or `maxV == minV` gives 0; **track and fill have the same thickness** (mockup 04; **MP**: fill is 2 px thicker). Min/max labels (integer part) in **5x7** ×k on 128, 6x12 on 240, GRAY, horizontally centred on the point at angle 233° (min) or 127° (max) and distance `outer − thickness − u(10)`, top row on that point (as device.py). No value, no unit (decision 3). |
+| `graph` | Box: x `u(21)`, y `u(38)`, w `W − u(15) − u(21)`, h `u(52)`; axes DARK (left and bottom, stroke k); dashed middle line GRID_DARK, dash `u(3)`, gap `u(3)`. Current value (integer part of the last value, `--` if NAN) in 8x8 ×k on 128, 8x16 on 240, WHITE centred at row 31. Axis labels *(designer's call, B1)*: **only max and min** (no middle label), integer part written in full (`950`, `1050`; no `1k`), in **5x7** ×k on 128, 6x12 on 240, DARK, **inside the plot box**: the max label's first inked row at `y + u(2)`, the min label's last inked row at `y + h − k − u(2)` (read from the face's ink rows: on 128 the 5x7 ink is the whole cell, so these rows are unchanged; on 240 with the default box the max cell top is 73 and the min cell top 155); each left-aligned at `max(chord left edge at its inked rows, box left + k) + u(2)`. With the default box the box edge is the binding term on both panels (chord edge at the label rows about 5 px on 128 and 8 to 10 px on 240, box left 21 and 39 px); the chord term keeps the rule valid for any box (**MP**: three 8x8 labels left of the axis, clipped by the circle). Labels are drawn before the curve, which paints over them. Curve of stroke k from oldest to newest across the box width; NAN points are skipped (gap in the curve); 0 or 1 point draws the frame and the value only. |
+| `menu` | Rows of 14 from row 35. **Visible rows** *(designer's call, B3)*: a row is used only if the chord at its full cell rows holds the marker plus 10 cells (12 TEXT cells: 96 px on both panels). Chords of rows 1 to 6: 115, 125, 127, 121, 109, 85 px on 128; 213, 233, 239, 227, 201, 157 px on 240; so **5 visible rows on 128** (`min(n, 5)`; **MP**: 6) **and 6 on 240** (`min(n, 6)`, as MicroPython). Window start `clamp(sel − visible/2, 0, n − visible)`. `selected` wrapped modulo n in signed arithmetic (−1 → n−1, n → 0) and **returned** (**MP**: no wrap, `None`). Highlight bar DARK from `row − u(2)`, one row high, each scanline **clipped to the chord at that scanline** (from left edge + k to right edge − k), so its ends follow the circle *(B3; **MP**: device.py and mockup 06 draw a fixed bar from x 15 to 113)*. The `"> "` marker starts at the **chord's left edge** at the item's inked rows, plus `u(2)` *(B3; **MP**: device.py and mockup 06 put it right before the item)*. Items are **centred** horizontally (**MP**: left at x 18; mockup 06: staggered left edges); the selected item starts after the marker if centring would overlap it; every item is truncated to its available width minus `u(2)`. Selected item in `c`, others GRAY. `n == 0` draws nothing and returns 0. |
+| `compass` | **Real rose** (decision 2): every element at angle a is drawn at `a − heading`, heading rounded to a degree. Circles of radius `R = radius() − u(12)` and `R·7/10`, DARK, stroke k; 8 ticks from `R − u(6)` to `R`, cardinal LIGHT, diagonal DARK; letters N (WHITE) and E, S, W (GRAY) centred at `R + u(5)` (8x8 ×k on 128, 8x16 through `text(…, 1)` on 240, the cell centred on the point), glyphs upright; needle: north half in `c` from the centre to `R·85/100` toward north, half width `u(3)`, south half DARK, filled triangles; pivot filled circle `u(3)` GRAY. Heading convention of v0.34.0: 0° when the top of the screen points north, clockwise (`atan2(-x, y)`). At heading 0 the drawing is the mockup; at 90 the N letter is on the left. NAN: rose at 0, pivot, no needle. |
+| `watch` | `R = radius() − u(8)`, dial circle DARK; 12 ticks, every third from `R − u(8)` LIGHT, others from `R − u(5)` GRAY; 12, 3, 6, 9 in WHITE 8x8 ×k on 128, 8x16 through `text(…, 1)` on 240, at `R − u(15)`; hour hand `R/2`, half width `u(3)`; minute hand `3R/4`, half width `u(2)` (device.py widths; mockup 09's hands are thinner, about 2 and 1, listed in section 6); both in `c`; second hand line `R·85/100` GRAY stroke k; pivot `u(3)` GRAY. Integer angles: hour `(h % 12)·30 + m/2`, minute `m·6 + s/10`, second `s·6`. |
 | `face` | 8x8 bitmap (const.py `FACES`, MSB left), cells of `W·11/128` (full) or `W/16` (compact, raised by half a cell), centred, filled squares in `c`. |
 | `text(s, at)` | `_resolve(at, len, scale)` of device.py under rules 3, 6 and 7 (truncated to its longest fitting prefix, no ellipsis; corners clamped, B10). |
 
@@ -565,7 +586,7 @@ Constants in 128-px units (`SteamiScreenConst.h`); "MP" marks a deliberate diffe
 | Board slots | two backend objects in `.bss`, a few dozen bytes each | same |
 | `SteamiHistory<N>` | 4N + 4 B in the sketch | same |
 | Widget stack | at most 64 B | same |
-| Flash | 8x8 ≈ 770 B, 5x7 ≈ 480 B, faces 48 B, sine 182 B, code ≈ 8 to 12 KB | same |
+| Flash | 8x8 ≈ 770 B, 5x7 ≈ 480 B, faces 48 B, sine 182 B, Spleen tables 5 264 B (the 8x16 table is also linked by sketches that call `text()`), code ≈ 14 to 18 KB | same |
 
 Refresh time:
 - GC9A01 `show()`: 115 200 B at 16 MHz is **57.6 ms at least**, about 15 frames/s full screen. `clear()`
@@ -793,24 +814,30 @@ What the student meets: one `screen` object, `clear` … `show`, one object per 
 Known differences from the mockups, accepted. The golden script and the reviewers expect them; **MP** marks
 those where device.py also differs from the mockup or where this layer differs from device.py:
 
-- Fonts: title, unit and subtitle share one 8x8 size where the mockups use three, so they are 1.3 to 1.9
+- Fonts, 128: title, unit and subtitle share one 8x8 size where the mockups use three, so they are 1.3 to 1.9
   times wider ("Temperature" 88 px against about 55 on 128); the value is shorter (14 px of ink against about
   17 in mockup 01 and about 15.6 in 03), thinner, and a little wider ("23.5" 56 px of cells with the narrow
   '.' of B6, against about 53 in mockup 01 and about 47 in 03).
+- Fonts, 240: title, unit and subtitle are Spleen 8x16, one size where the mockups use three ("Temperature" 88 px
+  against about 103); the value is 16x32 bold, shorter than the mockups (20 px of ink against about 32 in
+  mockup 01).
 - Secondary labels (graph and gauge min/max, value labels): the 5x7 font is about 1.6 to 1.75 times taller
-  than the mockups' 8 to 9 pt labels on 128 (7 px against about 4) and about 1.75 to 1.87 times on 240 (14 px
-  against about 7.5 to 8), because the glyph factor k = 2 grows faster than the ×15/8 applied to the mockup. Inside the
+  than the mockups' 8 to 9 pt labels on 128 (7 px against about 4); on 240 the 6x12 label inks 8 px against
+  about 7.5 to 8, close to the mockups' size. Inside the
   graph box a 4-digit label takes about a quarter of the plot width and lies under the curve (B1, **MP**).
 - Value block: centred on `centerY()` as device.py, so the value sits about 2 to 7 units higher than in
-  mockups 01 and 04 (ink rows 50..63 against 52..69 and 54..70; about 7 to 13 px on 240). The unit sits about
-  10 units higher (rows 66..72 against 76..83; about 20 px on 240), because it is drawn at `value top + 8f`
+  mockups 01 and 04 (ink rows 50..63 against 52..69 and 54..70 on 128; on 240 the "342" of 04 inks rows 97..116 against about
+  101..131 in the mockup). The unit sits about 10 units higher (rows 66..72 against 76..83 on 128; on 240
+  the unit of 04 inks rows 128..134 against about 142..156), because it is drawn at `value top + 8f`
   with no gap, as device.py.
 - 02: the unit under the value (mockup: "72%" in line).
 - 03: humidity with one decimal ("45.3"; mockup "45"), so that a missing sensor still shows `--`; the second
   subtitle line in the first line's colour (mockup: grey), as device.py.
+- 04: the title and the subtitle paint over the ends of the gauge ring on 128 (V1a/V1b); on 240 (V1c) no text
+  touches the ring (the title is 13.6 px, the subtitle 30.5 px and the gauge labels 12.7 and 9.4 px away).
 - 05: title "Light" without "(lux)" (`SteamiLight` reads a raw count); axis labels min and max only, in full,
   inside the box (B1, **MP**; mockup: `1k`, `500`, `0` left of the axis).
-- 06: 5 rows instead of 6 (B3, **MP**); the highlight bar follows the chord at each scanline and the `"> "`
+- 06: 5 rows instead of 6 on 128 only (B3, **MP**; 6 rows on 240); the highlight bar follows the chord at each scanline and the `"> "`
   marker sits at the disc's left edge, away from the centred item (B3, **MP**; mockup: a 98 px square bar from
   x 15 to 113 and the marker next to the item); items centred instead of the mockup's staggered left edges
   (**MP**).
@@ -828,7 +855,9 @@ Native suites (`tests/native`, Unity, env:native and an AddressSanitizer + UBSan
    - `SteamiRgb`: gray4 and rgb565 of every const.py colour against golden values from a 10-line Python
      script; `operator==`; no implicit conversion from an integer (compile-fail script).
    - `SteamiColor::rgb()` normalisation over the APDS-9960 register mock (largest channel 255, zeros black).
-   - Fonts: glyph sizes at scales 1 to 4, `textWidth("°C") == 16`, `"é"` draws `e`, invalid UTF-8 draws `?`.
+   - Fonts: glyph sizes per panel at scales 1 to 4 (8x8 × scale on 128, Spleen 8x16 × scale on 240),
+     `textWidth("°C") == 16` on both, `"é"` draws `e` on 128 and `é` on 240, invalid UTF-8 draws `?` on both,
+     `textHeight()` (8·s on 128, 16·s on 240).
    - Clipping: `pixel(-1, 0)`, `pixel(200, 5)`, text at y 125 and x −20, line (−50, −50)–(300, 300), circles and
      arcs crossing every edge; the out-of-bounds counter stays 0 and ASan stays silent.
    - Shapes: circles 8-way symmetric; filled triangle identical for the 6 vertex orders; `arc(…, 0, 360)` equals
@@ -846,22 +875,22 @@ Native suites (`tests/native`, Unity, env:native and an AddressSanitizer + UBSan
      rule of 5.9 applied (all MP marks and designer's calls B1 to B10; a small Python script, kept in
      `tests/native/test_steami_screen/`), and at 240 from the rules of 5.8;
    - every widget, with long strings and extreme values, leaves no pixel outside the circle of radius
-     `radius() + 1`; titles at scale 1 have their top row in the title band (5.8 rule 3: 20 to 29 on 128, 37 to
-     63 on 240) and their inked rows within 20 to 36 on 128 and 37 to 78 on 240; for a subtitle of n lines, the last line's top lies between the S row (the highest B7
+     `radius() + 1`; titles at scale 1 have their top row in the title band (5.8 rule 3: 20 to 29 on 128, row 37 on 240) and their inked rows within 20 to 36 on 128 and 37 to 51 on 240; for a subtitle of n lines, the last line's top lies between the S row (the highest B7
      allows) and device.py's starting row for that line (`S row + u(8)` for one line,
      `S row − u(11)·(n − 1)/2 + u(11)·(n − 1)` for n lines), the lines keep the pitch `u(11)`, and a line is
      truncated only when the block has reached that limit;
    - `value()` overload smoke test with `0`, `23`, `23.5`, `23.5f`, `millis()`, `analogRead()`, `uint8_t`,
      `int16_t`, `size_t`, `"text"`, NAN; `"--"` for NAN;
-   - (4a) value glyphs (B6): `valueWidth("23.5")` is `28·f` while `textWidth("23.5")` stays 32 at scale 1;
-     '.' and ':' advance `4·f` and keep their ink (glyph columns 3 and 4) centred in the window; "23.5" at
-     CENTER ×2 is 56 px wide;
+   - (4a) value glyphs (B6): `valueWidth("23.5")` is `28·f` on 128 (`14·f` on 240, where the face advances `4·f`) while `textWidth("23.5")` stays 32 at
+     scale 1;
+     '.' and ':' advance `w/2` (`4·f` on 128) and keep their ink (glyph columns 3 and 4 of the 8x8, 7 and 8 of
+     the 16x32) centred in the window; "23.5" at CENTER is 56 px wide (×2 on 128, f 4 on 240);
    - (4a) values side by side (B2, B6): `value(23.5, "°C", W, "TEMP")` and `value(45, "%", E, "HUM")` get the
-     same glyph scale, ×2 on 128 and ×3 on 240; so do `"1"` against `"88.8"`; `"8888"` gets ×1 on 128 (×3 on
-     240); a 6-character W value gets ×1 on 128 and ×2 on 240 and stays in its half region; the result does not
+     same glyph scale, ×2 on 128 and f 4 on 240; so do `"1"` against `"88.8"`; `"8888"` gets ×1 on 128 (f 4 on
+     240); a 6-character W value gets ×1 on 128 and f 4 on 240 and stays in its half region; the result does not
      depend on the order of the two calls;
    - (4a) value truncation, per panel: the text value `"Uncomfortable"` at W is truncated at ×1 on 128 (104 px
-     in 59) and drawn whole at ×1 on 240 (104 px in 112); a 15-character W text is truncated on 240;
+     in 59) and drawn whole at f 2 on 240 (104 px in 111); a 15-character W text is truncated on 240;
      `"12:34:56"` at W fits whole on 128; `SteamiValue("888888888888888")` with a unit at CENTER is truncated
      at `yOffset` −12 on 128 and −50 on 240, and whole at `yOffset` 0 on both; every truncated text stays inside its region
      and the circle;
@@ -870,30 +899,31 @@ Native suites (`tests/native`, Unity, env:native and an AddressSanitizer + UBSan
      outside the circle; golden positions for these anchors. With a label and a unit: `value(8, "C", NE,
      "TEMP", STEAMI_WHITE, 1)` and the same at SE, NW and SW, with labels of 4, 11 and 14 characters, at scale 1
      and at the default scale on both panels, leave no pixel outside the circle; golden x for the clamped
-     labels and units (on 128 the NE label ends at x ≤ 95 on rows 9..15; on 240 it is cut to "TE" at x 110);
+     labels and units (on 128 the NE label ends at x ≤ 95 on rows 9..15; on 240 "TEMP" is whole at x 159 and the value stays at f 2);
    - (4a) `text(s, at)` (B10): short strings at NE, NW, SE and SW at scale 1, 15-character strings at W and E,
-     and `text("ABCDEFGH", SteamiAt::N, c, 2)`, truncated to 7 cells on 128 (chord 115 px at row 36) and 6 on
-     240 (215 px at row 67), leave no pixel outside the circle;
+     and `text("ABCDEFGH", SteamiAt::N, c, 2)`, truncated to 7 cells on 128 (chord 115 px at row 36) and whole on
+     240 (8 cells of 16 px at row 67), leave no pixel outside the circle;
    - (4a) label and unit (B9): `value(23.5, "°C", W, "TEMPERATURE")` and the same at E cut the label to the
-     cells that fit, with no pixel outside the circle on 128 or 240; labels of up to 9 characters on 128 and 8
-     on 240 are drawn whole;
+     cells that fit (9 on 128; the 11 characters are whole on 240), with no pixel outside the circle on 128 or
+     240; labels of up to 9 characters on 128 and 17 on 240 are drawn whole;
    - (4a) edge cases (B9): a title of spaces only, `value()` with scale 0 (drawn as 1), and a W value whose
      `yOffset` moves its rows out of the disc (draws nothing) neither crash nor draw outside the circle;
-   - (4a) titles (B3, B8): "Temperature" is drawn whole at row 20 on 128 and row 41 on 240; a 13-character
-     title whole at row 29 / 63 (the cap); a 20-character title at the cap, truncated to 13 cells, with no
-     pixel outside the circle; 14 '_' whole at the cap on 128; `text(s, SteamiAt::N, c, 2)` at its floor, row 36
+   - (4a) titles (B3, B8): "Temperature" is drawn whole at row 20 on 128 and row 37 on 240; a 13-character
+     title whole at row 29 on 128 (the cap) and at row 37 on 240; a 20-character title at the cap, truncated
+     to 13 cells, on 128 and whole at row 37 on 240, and a 23-character title truncated to 22 cells on 240,
+     with no pixel outside the circle; 14 '_' whole at the cap on 128; `text(s, SteamiAt::N, c, 2)` at its floor, row 36
      on 128 and 67 on 240; a lowercase-only title (no top-row ink) and a title with descenders use the rows
      they ink;
    - (4a) subtitles (B7): drawn in full on both panels for every line of the examples, "WSEN-HIDS", "BME280",
      "BQ27441", "VL53L1X", "VL53L1X ToF", "Comfortable", "Uncomfortable", "20s window", "SURPRISED", and for the
      two-line subtitles of examples 02, 03 and 05. As one line (128 / 240): short lines at device.py's row,
-     108 / 202; "Comfortable" and "VL53L1X ToF" at 104 / 188; "Uncomfortable" at 95 / 166; "20s window" at
-     107 / 196. Two-line blocks (first/second line): 02 at 95/106 and 177/197; 03 "Comfortable" at 95/106 and
-     173/193; 03 "Uncomfortable" at 86/97 and 151/171; 05 at 95/106 and 176/196;
+     108 / 202; on 128 "Comfortable" and "VL53L1X ToF" at 104, "Uncomfortable" at 95 and "20s window" at 107, and on
+     240 every one of them at 202. Two-line blocks (first/second line): 02 at 95/106 and 177/197; 03
+     "Comfortable" at 95/106 and 177/197; 03 "Uncomfortable" at 86/97 and 177/197; 05 at 95/106 and 177/197;
    - `gauge(50, 0, 100)` lights half of the track within 2 %; track and fill of equal thickness;
    - `compass()` at 0, 90, 180, 270: needle tip and N letter positions; NAN draws no needle;
    - `watch(3, 0, 0)` hand directions; faces equal const.py;
-   - (4c) menu: 5 visible rows on both panels, window and wrap (−1, n, 2n + 1, n == 0); the highlight bar,
+   - (4c) menu: 5 visible rows on 128 and 6 on 240, window and wrap (−1, n, 2n + 1, n == 0); the highlight bar,
      the marker and every item stay inside the circle for 6 items of 11 characters, selected at each index;
      the marker starts `u(2)` from the chord's left edge; `menu()` with `const char* const[]` and
      `const char*[]`;
@@ -908,7 +938,10 @@ Native suites (`tests/native`, Unity, env:native and an AddressSanitizer + UBSan
    (`scripts/mockup-review.py`, Pillow + NumPy) fetches the tutorials' `_ref.png` at a pinned commit, resizes
    them to 128 and 240, masks outside the disc, computes the SSIM as `validate.py` does, and writes PNGs and a
    side-by-side page uploaded as a CI artefact. **A review tool, not a gate**: the indicative threshold is
-   about 0.7 (bitmap font against TTF); a drop between two PRs is the signal to look.
+   about 0.7 (bitmap font against TTF); a drop between two PRs is the signal to look. On 240 the SSIM of every mockup is expected to rise with the
+   Spleen fonts (the delivery gives the before and after), and program 04 on 240 is checked geometrically: the
+   title, the subtitle and the gauge's GRAY labels, each rendered alone, draw no pixel on the ring (the arc
+   drawn alone: radius 101..113, sweep 225° to 135° clockwise).
 
 Build and package CI: every new example compiles with arduino-cli (core 3.1.0) and PlatformIO (core 2.12);
 `STeaMi.h` includes the new headers; duplicate-name check; footprint gate (flash under the cap with margin,
@@ -952,6 +985,7 @@ checked on hardware, and a V1a/V1b rendering defect does not block a delivery (B
 | 3b | Backends and board | `SteamiSsd1327Backend`, `SteamiGc9a01Backend`, board slots, `display()`, `setDisplayBackend()`, `beginDisplay()`, E30/E31, `Drawing` example, footprint gate; README (primitives, E30/E31) and keywords. Outside `lib/steami_board`: `tests/native/test_steami_display_board/`, SPI mock additions in `tests/native/helpers/`, `.github/workflows/` (footprint gate, example builds), `scripts/build-arduino-package.py` (duplicate-name check, `STeaMi.h` content) | `test_steami_display_board` passes; `Drawing` builds on both cores; reviewed on V1c (photo matches the 240 px primitives gallery), and on V1a/V1b if available; V1c `begin()` with BLE initialised succeeds; V1c `show()` time recorded. |
 | 4a | Layout | `SteamiScreen`, `u()` and `k`, `SteamiAt`, `_resolve` (margin `m`, floor, cap, `margin_ew`), available width, `title`, `subtitle`, `SteamiValue`, `value` (fit, side by side, NAN), `setDecimals`, `text(at)`, `bar`, contrast rule; examples 01 to 03; README and keywords. Outside `lib/steami_board`: `tests/native/test_steami_screen/` (with the golden script), `tests/native/test_steami_screen_mockups/`, `scripts/mockup-review.py`, `.github/workflows/` (review artefact) | 128 goldens pass; mockups 01, 02, 03 render natively at 128 and 240 with no pixel outside the circle; their examples reviewed on V1c, and on V1a/V1b if available. |
 | 4b | Round widgets | `gauge`, `compass` (real rose), `watch`, `face` + `SteamiFace` + bitmaps; examples 04, 07, 08, 09; README and keywords. Outside `lib/steami_board`: the two screen suites under `tests/native/` | Mockups 04, 07, 08 (seven images), 09 render natively at 128 and 240; their examples reviewed on V1c, and on V1a/V1b if available; on V1c the needle is checked against a known north. |
+| 4b-font | V1c fonts | Generator and its tests, `SteamiFontSpleen.cpp`, extended decoder, faces in the kernel (`cellWidth`, `inkRows`, `drawGlyphs`, `glyphsAt`, label height, cap, fit floor, bold), the primitives on 240 (`text()`, `textSmall()`, `textHeight()`), `maxChars()`, the `Drawing` example, README and `keywords.txt` edits and "Third-party fonts", spec edits of section 9. Outside `lib/steami_board`: `scripts/gen-spleen-fonts.py`, `scripts/tests/` (generator and package tests), `scripts/arduino-package/README.md`, `scripts/check-footprint.py` (`SKETCHES`), `.gitignore` (font cache), `tests/native/helpers/SteamiGallery.h`, `tests/native/test_steami_display/` (240 expectations), the two screen suites and `golden_layout.py`, `.github/workflows/` (regeneration check) | 128 goldens and PPM hashes unchanged (primitives gallery included); 240 goldens and primitive expectations regenerated and passing, natively and under ASan/UBSan; `test_steami_display_board` and `test_steami_display_rules.py` pass unchanged; widget frames and bound helpers ≤ 64 B; footprint gate passes with ScreenGauge's and Drawing's deltas reported, Drawing linking the 8x16 blob only; the package README carries both font notices (test); examples 01 to 04 and 07 to 09 and `Drawing` reviewed on V1c under the webcam, 04 with no text on the ring, `Drawing` matching the new 240 gallery dump; SSIM before/after in the PR. |
 | 4c | Data and navigation | `SteamiHistory`, `graph`, `menu`; examples 05 and 06, `WeatherStation`; README (widget reference, vocabulary table) and keywords. Outside `lib/steami_board`: the two screen suites under `tests/native/`, `scripts/qualify.py` if WeatherStation needs a case | Mockups 05, 06 render natively; their examples and WeatherStation reviewed on V1c, and on V1a/V1b if available. Sub-project 4 is done: **every mockup has its Arduino example, rendered natively at 128 and 240 and reviewed against `_ref.png` on V1c (and on V1a/V1b when a board is available).** |
 
 ## 9. Decisions
@@ -965,8 +999,8 @@ Maintainer, 2026-11-25 (the five recommendations of the design study):
 3. `gauge()` draws the **arc only** (+ min/max labels); the value comes from a separate `value()`. Tutorial 04
    and the mockups README are updated.
 4. An **internal 5x7 font** for secondary labels, invisible to the student; no big-digits font in v1
-   (revisit after the V1c review on the board).
-5. The **128 → 240 scaling rule** (×15/8 for positions and sizes, k = 1 or 2 for glyphs and strokes) applies
+   (revisited by decision 7).
+5. The **128 → 240 scaling rule** (×15/8 for positions and sizes, k = 1 or 2 for strokes and the 128 glyphs; on 240 glyphs follow decision 7) applies
    in Arduino now; MicroPython gets the same rule in a separate issue completing #368.
 
 Maintainer, 2026-11-25 (on approving this document):
@@ -976,6 +1010,12 @@ Maintainer, 2026-11-25 (on approving this document):
    best effort. The 128 px rules of this document stay (they are the base of the scaling rule and the
    native tests cover them), but when a rule cannot serve both panels equally, the V1c wins, and a V1a/V1b
    defect does not block a delivery. V1a/V1b are not checked on hardware.
+
+Maintainer, 2026-11-26 (V1c fonts, `2026-11-26-steami-display-v1c-font-design.md`):
+
+7. **V1c text uses Spleen** (option 2): widgets and primitives draw Spleen bitmap fonts drawn for 240 px,
+   one font per panel; values bold by a 1-px double strike; the same tables in MicroPython; and the
+   designer's calls F1 to F18 of section 11 of that document.
 
 Designer's calls (reversible): grey minimum contrast and GRID_DARK bar track; centred, wrapping `menu()`;
 NAN shows `--`; `SteamiValue`; `arc()` angles 0° = noon, clockwise. Taken while writing this document:
@@ -987,14 +1027,14 @@ the board rather than extending `claim()`; mockup examples instead of one `Scree
 Designer's calls answering the builder's questions and the verification of the design (2026-11-25), for the
 maintainer to review; the document marks each place they apply with B1 to B10:
 
-- **B1, graph axis labels**: only min and max, in full (`950`, `1050`, no `1k`), 5x7, inside the plot box,
+- **B1, graph axis labels**: only min and max, in full (`950`, `1050`, no `1k`), 5x7 on 128 and 6x12 on 240, inside the plot box,
   left-aligned to the larger of the chord's left edge at their inked rows and the box edge (5.9).
 - **B2, values side by side** (its reference is replaced by B6): each W or E value is sized against the same
   reference in mirror-image half regions, so the two columns share the largest scale that fits both halves,
   without state between calls (5.9).
 - **B3, edges**: the available width is the chord at the rows the glyphs ink, radius `radius()` (5.8 rule 6);
-  the N/S safe margin uses the physical width, so "Temperature" fits on V1c at row 41; the menu bar is clipped
-  to the chord, the marker starts at the chord's left edge, and 5 rows are visible on both panels (5.9). The
+  the N/S safe margin uses the physical width, so "Temperature" fits on V1c at row 37; the menu bar is clipped
+  to the chord, the marker starts at the chord's left edge, and 5 rows are visible on 128, 6 on 240 (5.9). The
   bar and the marker differ from mockup 06 (section 6, known differences).
 - **B4, scope**: deliveries change only this repository: the code, examples, README and `keywords.txt` of
   `lib/steami_board`, its native tests and helpers under `tests/native`, scripts under `scripts/`, and
@@ -1004,9 +1044,10 @@ maintainer to review; the document marks each place they apply with B1 to B10:
   reference named in section 7 for `Drawing` and WeatherStation); V1a/V1b covered by the native rendering
   tests only (decision 6; sections 7, 8).
 - **B6, value glyphs and side-by-side scale** (replaces B2's `max(len, 4)` reference): in `value()` text only,
-  '.' and ':' are drawn from a 4-column window (glyph columns 2 to 5) with a `4·f` advance; the W/E scale is
+  '.' and ':' are drawn from the window `[w/4, 3w/4)` of their glyph with a `w/2` advance (columns 2 to 5 and
+  `4·f` for the 8x8), in every VALUE text whatever its face; the W/E scale is
   the largest at which `max(valueWidth(text), valueWidth("88.8"))` fits the half region. "23.5" and "45" get ×2
-  on 128 (as in mockup 03) and ×3 on 240. The narrow '.' also applies to CENTER values, which moves "23.5" by 4
+  on 128 (as in mockup 03) and f 4 on 240. The narrow '.' also applies to CENTER values, which moves "23.5" by 4
   px from the device.py golden (MP) (5.9).
 - **B7, subtitle placement**: a subtitle starts at device.py's row (S row + `u(8)` for one line) and rises one
   row at a time until every line fits its available width, never higher than the point where its last line's
@@ -1014,13 +1055,13 @@ maintainer to review; the document marks each place they apply with B1 to B10:
   the example subtitles are drawn in full on both panels (5.9). Applied to blocks of several lines too, so
   the 05 two-line subtitle fits on 240.
 - **B8, long titles**: device.py's guard for `tw ≥ 2r`, and the N/S margin capped at the safe margin of a
-  13-cell text at scale 1 (29 on 128, 63 on 240, the same cap for every scale); beyond that a title is
+  13-cell text at scale 1 (29 on 128, 14 on 240, the same cap for every scale); beyond that a title is
   truncated, so titles of up to 13 characters are whole on both panels and the title band is rows 20 to 29 on
-  128, 37 to 63 on 240. The floor wins when it is above the cap: N/S text at scale 2 sits at its floor (36 on
+  128, row 37 on 240. The floor wins when it is above the cap (on 240 at every scale): N/S text at scale 2 sits at its floor (36 on
   128, 67 on 240) and is truncated there. N/S rows, margin and glyph height are physical for N, S, NE, NW, SE
   and SW, so a short subtitle line sits at 202 on 240 (5.8 rule 3).
 - **B9, edge cases**: a value at NE, NW, SE or SW fits a corner region (the chord at its rows, shrunk by k)
-  and is clamped and truncated there at ×1; the label and unit of `value()` are truncated to their available
+  and is clamped and truncated there at f = k (×1 on 128); the label and unit of `value()` are truncated to their available
   width (and to the half region at W/E); truncation keeps the longest fitting prefix; a text with no inked
   rows always fits; an empty chord draws nothing; a scale of 0 counts as 1 (5.8 rules 6 and 7, 5.9). At a
   corner, the label and unit get their own region (the chord at their inked rows, shrunk by k): they are cut
@@ -1055,7 +1096,7 @@ unless its V1c backend already scales") is answered by "it does not"; two copies
    rows, title cap and subtitle placement (B3, B7, B8); value block in physical pixels, narrow '.' and ':' in
    values and the "88.8" side-by-side reference (B6); truncation of values at scale 1.
 8. `gauge()` start 225° (was `STEAMI_GAUGE_START_ANGLE 135` in screen-math angles), no value, equal thickness;
-   `menu()` takes an `int`, wraps, returns the index, centres items, shows 5 rows and clips its bar to the
+   `menu()` takes an `int`, wraps, returns the index, centres items, shows 5 rows (6 on 240) and clips its bar to the
    circle; `graph()` draws only min and max labels, in full, inside the box (`STEAMI_GRAPH_VALUE_Y` and the box
    constants stay); W/E values share one scale; `compass()` is a real rose.
 9. Section 6: the WeatherStation program is replaced by the one in section 6 here (no compact face over the
@@ -1082,10 +1123,13 @@ delivery.
 - Real compass rose, linked to #434 (and #371).
 - GC9A01 wrapper with the 128 → 240 rule (×15/8, k = 2, a real `draw_scaled_text`): new issue completing #368,
   before the first courses on V1c.
-- `menu()` centred, wrapping, returning the index, 5 visible rows, bar clipped to the circle; graph axis
+- `menu()` centred, wrapping, returning the index, 5 visible rows on 128 and 6 on 240, bar clipped to the circle; graph axis
   labels min and max only, in full, inside the box (B1); W/E values at one shared scale with the narrow '.'
   and ':' of B6 (a one-line advance table in `draw_scaled_text`); N/S safe margin from the physical width,
   capped (B3, B8); subtitle placement (B7).
+- Spleen fonts on the 240 px backend: the font issue of section 8.1 of `2026-11-26-steami-display-v1c-font-design.md`: commit the `spleen.py` produced by
+  this repository's generator, draw the faces of its 5.1 with the rules of its 5.2 to 5.4 for the widgets and for
+  the pixel text `text(s, (x, y), c, scale)`, which draws the same pixels as Arduino's `text()`.
 
 `steamicc/micropython-steami-tutorials`:
 - Tutorial 03: the separator drawn from `screen.center` and `screen.radius` instead of `line(64, 32, 64, 96)`.
@@ -1102,6 +1146,8 @@ STeaMi wiki: an Arduino screen page with the vocabulary table of 5.7, and E30/E3
 - Exact rounding where device.py's float formulas become integers (the 128 goldens decide), the golden
   generation script, and the per-widget constants not listed in 5.9.
 - The degree glyph design in both fonts and the exact accent-folding table.
+- The face type, the face switch, the row drawer, the helper signatures, the generator's command line and the
+  regenerated 240 numbers: section 12 of `2026-11-26-steami-display-v1c-font-design.md`.
 - The SSD1327 backend colour cache, span merging and other speed details, as long as fills use spans.
 - Whether the native build uses a separate ASan environment or flags in env:native; where the compile-fail
   checks live.
