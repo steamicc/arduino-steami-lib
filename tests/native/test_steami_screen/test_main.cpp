@@ -3613,6 +3613,77 @@ static void test_long_strings_stay_inside(void) {
     });
 }
 
+// ---- SteamiHistory (4c) ----
+
+[[maybe_unused]] static constexpr SteamiHistory<3> kConstHistory{};  // constant-initialised (D2)
+static_assert(sizeof(SteamiHistory<1>) == 8 && sizeof(SteamiHistory<20>) == 84 &&
+                  sizeof(SteamiHistory<40>) == 164,
+              "4N + 4 bytes (spec 5.12)");
+static_assert(SteamiHistory<20>::capacity() == 20, "capacity() is a constant expression");
+
+static void test_history_starts_empty(void) {
+    SteamiHistory<20> h;
+    TEST_ASSERT_EQUAL_UINT32(0, h.size());
+    TEST_ASSERT_TRUE(isnan(h.last()));
+    TEST_ASSERT_TRUE(isnan(h[0]));
+    h.add(1);
+    h.add(2);
+    h.clear();
+    TEST_ASSERT_EQUAL_UINT32(0, h.size());
+    TEST_ASSERT_TRUE(isnan(h.last()));
+    TEST_ASSERT_TRUE(isnan(h[0]));
+}
+
+static void test_history_keeps_the_last_n(void) {
+    SteamiHistory<20> h;
+    for (int i = 1; i <= 25; i++) {
+        h.add(static_cast<float>(i));
+    }
+    TEST_ASSERT_EQUAL_UINT32(20, h.size());
+    TEST_ASSERT_EQUAL_FLOAT(6, h[0]);
+    TEST_ASSERT_EQUAL_FLOAT(25, h[19]);
+    TEST_ASSERT_EQUAL_FLOAT(25, h.last());
+    TEST_ASSERT_TRUE(isnan(h[20]));
+    SteamiHistory<20> p;
+    for (int i = 1; i <= 3; i++) {
+        p.add(static_cast<float>(i));
+    }
+    TEST_ASSERT_EQUAL_UINT32(3, p.size());
+    TEST_ASSERT_EQUAL_FLOAT(1, p[0]);
+    TEST_ASSERT_EQUAL_FLOAT(3, p[2]);
+    TEST_ASSERT_TRUE(isnan(p[3]));
+    SteamiHistory<1> one;
+    one.add(7);
+    one.add(8);
+    TEST_ASSERT_EQUAL_UINT32(1, one.size());
+    TEST_ASSERT_EQUAL_FLOAT(8, one[0]);
+}
+
+static void test_history_counts_nan(void) {
+    SteamiHistory<20> h;
+    h.add(1);
+    h.add(NAN);
+    h.add(3);
+    TEST_ASSERT_EQUAL_UINT32(3, h.size());
+    TEST_ASSERT_TRUE(isnan(h[1]));
+    TEST_ASSERT_EQUAL_FLOAT(3, h.last());
+    h.add(NAN);
+    TEST_ASSERT_TRUE(isnan(h.last()));
+    TEST_ASSERT_EQUAL_UINT32(4, h.size());
+}
+
+static void test_history_at_65535(void) {
+    static SteamiHistory<65535> h;
+    for (uint32_t i = 0; i <= 65536; i++) {
+        h.add(static_cast<float>(i));
+    }
+    TEST_ASSERT_EQUAL_UINT32(65535, h.size());
+    TEST_ASSERT_EQUAL_FLOAT(2, h[0]);
+    TEST_ASSERT_EQUAL_FLOAT(65536, h[65534]);
+    TEST_ASSERT_EQUAL_FLOAT(65536, h.last());
+    TEST_ASSERT_TRUE(isnan(h[65535]));
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_format_integers);
@@ -3698,5 +3769,9 @@ int main(int, char**) {
     RUN_TEST(test_unknown_characters_in_values);
     RUN_TEST(test_values_at_scale_255);
     RUN_TEST(test_long_strings_stay_inside);
+    RUN_TEST(test_history_starts_empty);
+    RUN_TEST(test_history_keeps_the_last_n);
+    RUN_TEST(test_history_counts_nan);
+    RUN_TEST(test_history_at_65535);
     return UNITY_END();
 }

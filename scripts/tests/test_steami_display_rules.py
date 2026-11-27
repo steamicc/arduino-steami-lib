@@ -62,6 +62,17 @@ class SteamiDisplayRulesTest(unittest.TestCase):
         self.assertTrue(self._compiles("SteamiValue v(1L); (void)v;", header="SteamiValue.h"))
         self.assertFalse(self._compiles("SteamiValue v(1LL); (void)v;", header="SteamiValue.h"))
 
+    def test_history_capacity_bounds(self) -> None:
+        self.assertTrue(
+            self._compiles(
+                "SteamiHistory<1> a; SteamiHistory<65535> b; (void)a; (void)b;",
+                "SteamiHistory.h",
+            )
+        )
+        for body in ("SteamiHistory<0> a; (void)a;", "SteamiHistory<65536> a; (void)a;"):
+            with self.subTest(body=body):
+                self.assertFalse(self._compiles(body, "SteamiHistory.h"))
+
     def test_backends_never_call_driver_drawing(self) -> None:
         # The layer draws; a backend only forwards pixels, rectangles and controls. Inline
         # forwarding overrides live in the headers, so both files of each backend are checked.

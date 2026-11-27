@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "SteamiDisplay.h"
+#include "SteamiHistory.h"
 #include "SteamiScreenConst.h"
 #include "SteamiValue.h"
 
