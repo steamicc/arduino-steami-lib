@@ -427,13 +427,16 @@ right, `y` down. On the OLED a colour becomes its grey level.
 | `void circle(int16_t cx, int16_t cy, int16_t r, SteamiRgb c = STEAMI_WHITE, bool fill = false)` | A circle, outline or filled. |
 | `void triangle(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int16_t x2, int16_t y2, SteamiRgb c = STEAMI_WHITE, bool fill = false)` | A triangle, outline or filled. |
 | `void arc(int16_t cx, int16_t cy, int16_t r, int16_t startDeg, int16_t sweepDeg, SteamiRgb c = STEAMI_WHITE, uint8_t width = 1)` | A ring segment. Degrees, 0 = noon, clockwise; `r` is the outer radius and the ring is `width` thick inward. |
-| `void text(const char* s, int16_t x, int16_t y, SteamiRgb c = STEAMI_WHITE, uint8_t scale = 1)` | Text in 8x8 glyphs (`CHAR_W`, `CHAR_H`). UTF-8: accents are folded to their plain letter, and `°` is drawn. |
+| `void text(const char* s, int16_t x, int16_t y, SteamiRgb c = STEAMI_WHITE, uint8_t scale = 1)` | Text in 8x8 glyphs on the 128 px screen, Spleen 8x16 on the 240 px screen, `scale` times larger; the same width on both (`CHAR_W`, 8 px per glyph at scale 1), height `textHeight(scale)` (`CHAR_H`, 8, is the glyph height on the 128 px screen only). UTF-8: `°` is drawn; accents are drawn on the 240 px screen and folded to their plain letter on the 128 px screen. |
 | `int16_t textWidth(const char* s, uint8_t scale = 1) const` | Width in pixels; counts glyphs, not bytes. |
+| `int16_t textHeight(uint8_t scale = 1)` | Line height in pixels: 8 per scale on 128, 16 on 240. |
 | `void show()` | Send the drawing to the panel. |
 | `void rotate(bool upsideDown)` | Turn the picture by 180 degrees. |
 | `void invert(bool on)` | Invert the panel. |
 | `void powerOn()` / `void powerOff()` | Switch the panel on or off. |
 | `SteamiDisplayBackend* backend()` | The backend of the board, built but not begun; `nullptr` without one. |
+
+Since this release, `text()` is 16 px tall at scale 1 on the V1c, and stacked lines use `textHeight()`.
 
 Rules:
 
@@ -505,7 +508,7 @@ widget paints over an earlier one), then `show()`.
 | `void bar(float v, float maxV = 100, int16_t yOffset = 0, SteamiRgb c = STEAMI_LIGHT)` | `STEAMI_LIGHT` | A horizontal bar filled from 0 to `maxV`. |
 | `void bar(float v, float maxV, SteamiRgb c)` | | The bar at the centre, with a colour. |
 | `void text(const char* s, SteamiAt at = SteamiAt::CENTER, SteamiRgb c = STEAMI_WHITE, uint8_t scale = 1)` | `STEAMI_WHITE` | Text at a position; `text(s, x, y, ...)` of `SteamiDisplay` is still there, in pixels. |
-| `uint8_t maxChars()` | | Characters of scale 1 across the panel: 16 on 128, 15 on 240. |
+| `uint8_t maxChars()` | | Characters of scale 1 across the panel: 16 on 128, 30 on 240. |
 | `void gauge(float v, float minV = 0, float maxV = 100, SteamiRgb c = STEAMI_LIGHT, uint8_t arcWidth = 0)` | track `STEAMI_DARK`, labels `STEAMI_GRAY`, fill `STEAMI_LIGHT` | A ring of 270 degrees near the edge, gap at the bottom, filled clockwise from the lower left; the integer parts of `minV` and `maxV` sit inside its two ends. No value: draw it with `value()`. |
 | `void compass(float headingDeg, SteamiRgb c = STEAMI_LIGHT)` | rose `STEAMI_DARK`, N `STEAMI_WHITE`, E S W `STEAMI_GRAY`, needle `c` | A compass rose whose needle points to real north. |
 | `void watch(uint8_t h, uint8_t m, uint8_t s = 0, SteamiRgb c = STEAMI_LIGHT)` | dial `STEAMI_DARK`, 12 3 6 9 `STEAMI_WHITE`, seconds and pivot `STEAMI_GRAY`, hour and minute hands `c` | An analog watch. |
@@ -533,7 +536,8 @@ Layout rules:
 
 * The same sketch runs on 128 and 240 px: positions and `yOffset` are in the
   units of the 128 px screen, also on 240 (an offset of 8 moves the value by
-  15 px there), and glyphs are twice as large on 240.
+  15 px there), and text on 240 uses fonts drawn for that panel (8 px per
+  character, 16 px tall), for widgets and `text()` alike.
 * Text never leaves the circle: it is cut (no ellipsis), or `value()` drops to
   a smaller size first.
 * A title of up to 11 characters stays at the top; the examples keep to that.

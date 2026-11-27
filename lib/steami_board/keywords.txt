@@ -136,6 +136,7 @@ triangle	KEYWORD2
 arc	KEYWORD2
 text	KEYWORD2
 textWidth	KEYWORD2
+textHeight	KEYWORD2
 title	KEYWORD2
 subtitle	KEYWORD2
 value	KEYWORD2
