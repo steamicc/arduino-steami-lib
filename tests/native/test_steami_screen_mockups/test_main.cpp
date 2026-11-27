@@ -191,8 +191,9 @@ static void test_mockup_03_comfort(void) {
         // 16x32 digits ink rows 6..25.
         expectBox(inkBox(mem, STEAMI_WHITE), 34, 97, 206, 116);
         expectBox(inkBox(mem, STEAMI_LIGHT), 52, 124, 184, 134);
-        expectBox(inkBox(mem, STEAMI_GRAY, 0, 60), 92, 39, 146, 48);        // title
-        expectBox(inkBox(mem, STEAMI_GRAY, 61, 239), 52, 71, 184, 78);      // "TEMP" and "HUM"
+        expectBox(inkBox(mem, STEAMI_GRAY, 0, 60), 92, 39, 146, 48);  // title
+        // "TEMP" and "HUM": one 6x12 cell above the values, cell top 91 - 7 - 12 = 72.
+        expectBox(inkBox(mem, STEAMI_GRAY, 61, 239), 51, 73, 184, 80);
         expectBox(inkBox(mem, STEAMI_GREEN, 177, 196), 76, 179, 162, 188);  // "Comfortable"
         expectBox(inkBox(mem, STEAMI_GREEN, 197, 239), 96, 199, 142, 208);  // "BME280"
     });

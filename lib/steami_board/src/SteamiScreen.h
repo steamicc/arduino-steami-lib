@@ -189,7 +189,7 @@ class SteamiScreen : public SteamiDisplay {
     size_t fitGlyphs(const Run& t, Region* room = nullptr, int32_t pad = 0);
 
     /// The N/S row margin for a text tw px wide at factor f: the safe margin of the circle, at
-    /// least the floor of two cells plus the pad, at most the 13-cell cap.
+    /// least the floor of two cells plus the pad, at most the cap of 13 TEXT-face cells.
     int32_t marginNs(int32_t tw, uint8_t f);
 
     /// The E/W column margin at factor f: one cell plus the pad.
@@ -222,11 +222,11 @@ class SteamiScreen : public SteamiDisplay {
     Region valueRegion(const Run& value, SteamiAt at);
 
     /// Draws a value run whose f and top row value() chose: its label (in the LABEL face at k,
-    /// GRAY, its top u(4) + 7k above the value), the value in c as fitValue() cuts and places it,
-    /// and its unit (in the TEXT face at k, LIGHT, its top 8f below the value's). Label and unit
-    /// are cut to the chord at their own inked rows: at W and E also to the half region taken at
-    /// those rows, and centred in what remains; at a corner shrunk by k, centred on the value's
-    /// centre, then clamped into it; elsewhere centred on centerX().
+    /// GRAY, its top u(4) plus one LABEL cell above the value's), the value in c as fitValue()
+    /// cuts and places it, and its unit (in the TEXT face at k, LIGHT, its top 8f below the
+    /// value's). Label and unit are cut to the chord at their own inked rows: at W and E also to
+    /// the half region taken at those rows, and centred in what remains; at a corner shrunk by k,
+    /// centred on the value's centre, then clamped into it; elsewhere centred on centerX().
     void drawValueParts(Run& value, SteamiRgb c, const char* unit, const char* label, SteamiAt at);
 
     /// fg, or on the grey panel a grey STEAMI_MIN_CONTRAST levels above bg when fg is darker.

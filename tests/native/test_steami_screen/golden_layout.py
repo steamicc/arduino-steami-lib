@@ -307,9 +307,10 @@ class Panel:
         first, last, rep = lowest_bit(m), highest_bit(m), replication(face, f)
         return self.chord(y + first * rep, y + (last + 1) * rep - 1)
 
-    def cap(self):  # 29 on 128, 63 on 240; r + 2 when r <= 52k
-        r = self.r
-        return r - isqrt(max(0, r * r - (13 * 8 * self.k // 2) ** 2)) + 2
+    def cap(self):  # 29 on 128, 14 on 240; r + 2 when r <= 52
+        # 13 TEXT-face cells of glyphAdvance(TEXT, k): 104 px on 128 and on 240 (4b-font Task 7)
+        r, half13 = self.r, 13 * glyph_advance(self, TEXT, self.k) // 2
+        return r - isqrt(max(0, r * r - half13 * half13)) + 2
 
     def margin_ns(self, tw, f):
         r, tw = self.r, max(tw, 0)
@@ -499,7 +500,7 @@ def width(c):
 
 
 # ---- Self-check: every number the spec states ----
-assert (P128.k, P240.k) == (1, 2) and (P128.cap(), P240.cap()) == (29, 63)
+assert (P128.k, P240.k) == (1, 2) and (P128.cap(), P240.cap()) == (29, 14)  # 4b-font Task 7
 assert [P128.u(v) for v in (8, 11, 4, 3, 20, 40, -12)] == [8, 11, 4, 3, 20, 40, -12]
 assert [P240.u(v) for v in (8, 11, 4, 3, 20, 40, -12)] == [15, 20, 7, 5, 37, 75, -22]
 # floor_f: 20/37 at scale 1, 36/67 at scale 2, 52 for f = 3 on 240; margin_ew 12/22, 30 for f = 3
@@ -565,8 +566,8 @@ for s in ("8.8", "8:8"):
         s, box(lit), box(narrow), min(p[0] for p in second)))
 
 # ---- Self-check of Task 3: titles, text at a scale, subtitles (spec 5.8 rule 7, 5.9, B7, B8) ----
-# On 240 (4b-font Task 5) a title in 8x16 advances 8 px: every title of at most 21 glyphs sits at
-# row 37 and is whole; the cap stays 13 8x8 cells x k (63) until 4b-font Task 7
+# On 240 (4b-font Task 5) a title in 8x16 advances 8 px; the cap is 13 cells of 8 px (14, below
+# the floor) from 4b-font Task 7, so every title sits at row 37 and keeps up to 22 glyphs
 assert title_row(128, "Temperature") == (20, 11) and title_row(240, "Temperature") == (37, 11)
 assert all(title_row(W, s) == (row, 7) for s in ("Comfort", "Battery") for W, row in ((128, 20), (240, 37)))
 for s in ("ABCDEFGHIJKLM", "ABCDEFGHIJKLMNOPQRST"):
@@ -600,11 +601,12 @@ assert text_box(128, "Températureéééé", "N")[0::2] == (13, 114)
 # on 240 it is whole at row 37, its accents drawn (4b-font Task 5)
 assert text_layout(P240, "Températureéééé", "N", 1) == (60, 37, 15)
 # the available width of a lowercase-only title comes from the rows it inks: 8x8 rows on 128, the
-# 8x16 rows of 4b-font Task 5 on 240 (x-height 5..11 against caps 2..11)
+# 8x16 rows of 4b-font Task 5 on 240 (x-height 5..11 against caps 2..11), at the lowest title row
+# (the cap row 29 on 128, row 37 on 240 from 4b-font Task 7)
 assert width(P128.ink_chord("acemnorsuvwxz", 13, TEXT, 29, 1)) == 109
 assert width(P128.ink_chord("ABCDEFGHIJKLM", 13, TEXT, 29, 1)) == 107
-assert width(P240.ink_chord("acemnorsuvwxz", 13, TEXT, 63, 2)) == 217
-assert width(P240.ink_chord("ABCDEFGHIJKLM", 13, TEXT, 63, 2)) == 213
+assert width(P240.ink_chord("acemnorsuvwxz", 13, TEXT, 37, 2)) == 183
+assert width(P240.ink_chord("ABCDEFGHIJKLM", 13, TEXT, 37, 2)) == 177
 assert title_row(128, "acemnorsuvwxzacemnorsuvwxz")[1] == 13
 assert title_row(240, "acemnorsuvwxzacem")[1] == 17
 
@@ -760,7 +762,10 @@ def value_layout(W, t, at="CENTER", unit=None, label=None, scale=2, y_offset=0):
     lit_value = draw_glyphs(P, t, v["n"], VALUE, v["x"], v["top"], v["f"])
     out["value"] = box(lit_value) if lit_value else None
     out["value_lit"] = lit_value
-    for name, s, ink, y in (("label", label, LABEL, v["top"] - P.u(4) - 7 * P.k),
+    # The label's cell sits u(4) above the value, one LABEL cell high: 7k in 5x7, 12 in 6x12
+    # (4b-font Task 7; the 7k rule before)
+    label_top = v["top"] - P.u(4) - cell_height(face_for(P, label, LABEL, P.k), P.k)
+    for name, s, ink, y in (("label", label, LABEL, label_top),
                             ("unit", unit, TEXT, v["top"] + 8 * v["f"])):
         out[name] = None
         out[name + "_n"] = 0
@@ -890,11 +895,12 @@ c240 = value_layout(240, "8", "NE", "C", "TEMP", 1)
 # (margin_ns), region [36, 204], x clamped from 210 to 197, the 8x16 '8' inking columns 197..203
 assert (c240["f"], c240["x"], c240["top"], c240["region"]) == (2, 197, 37, (36, 204)), c240
 assert P240.resolve("NE", 8, 2)[0] == 210 and c240["value"] == (197, 39, 203, 48), c240
-# the 6x12 label, its cell top 37 - u(4) - 7k = 16 until 4b-font Task 7, inks rows 17..24, whose
-# chord shrunk by k is [61, 179]: "TEMP" (24 px) is whole, centred on the value's centre at 189
-assert c240["label"][1::2] == (17, 24) and c240["label_room"] == (61, 179), c240
-assert (c240["label_n"], c240["label_x"]) == (4, 156), c240
-assert P240.chord(17, 24) == (59, 181) and 197 + 8 // 2 - 24 // 2 == 189  # then clamped to 156
+# the 6x12 label, its cell top 37 - u(4) - 12 = 18 (one 6x12 cell, 4b-font Task 7), inks rows
+# 19..26, whose chord shrunk by k is [58, 182]: "TEMP" (24 px) is whole, centred on the value's
+# centre at 189, then clamped to 159
+assert c240["label"][1::2] == (19, 26) and c240["label_room"] == (58, 182), c240
+assert (c240["label_n"], c240["label_x"]) == (4, 159), c240
+assert P240.chord(19, 26) == (56, 184) and 197 + 8 // 2 - 24 // 2 == 189  # then clamped to 159
 # every corner case: each part inside its region (the value) or its room (label, unit), so inside
 # the circle; the 15-glyph text is cut on 128 (cap row 29, region 105 px) and whole on 240
 for W in (128, 240):
@@ -1973,7 +1979,7 @@ PINNED_4A = (
     ("03", 240, "DARK", None, (120, 60, 120, 179)), ("03", 240, "WHITE", None, (34, 97, 206, 116)),
     ("03", 240, "LIGHT", None, (52, 124, 184, 134)),
     ("03", 240, "GRAY", (0, 60), (92, 39, 146, 48)),
-    ("03", 240, "GRAY", (61, 239), (52, 71, 184, 78)),
+    ("03", 240, "GRAY", (61, 239), (51, 73, 184, 80)),  # labels at cell top 72 (4b-font Task 7)
     ("03", 240, "GREEN", (177, 196), (76, 179, 162, 188)),
     ("03", 240, "GREEN", (197, 239), (96, 199, 142, 208)),
     # test_mockups_without_sensors: 02 with no gauge, 03 with no sensor
@@ -2231,11 +2237,11 @@ assert (V02["f"], V02["top"]) == (4, 69)
 # 03: both side values at f 4, "23.5" at x 32 and "45.3" at x 152
 V03 = (value_layout(240, "23.5", "W", DEG_C, "TEMP"), value_layout(240, "45.3", "E", "%", "HUM"))
 assert [(v["f"], v["x"]) for v in V03] == [(4, 32), (4, 152)]
-# The NE example: f 2, row 37, region [36, 204], x 197; its label cell top 37 - 7 - 14 = 16 under
-# the 7k label rule (4b-font Task 7 replaces it)
+# The NE example: f 2, row 37, region [36, 204], x 197; its label (4b-font Task 7) at x 159,
+# cell top 37 - 7 - 12 = 18
 VNE = value_layout(240, "8", "NE", "C", "TEMP", 1)
 assert (VNE["f"], VNE["top"], VNE["region"], VNE["x"]) == (2, 37, (36, 204), 197)
-assert VNE["top"] - P240.u(4) - 7 * P240.k == 16 and (VNE["label_n"], VNE["label_x"]) == (4, 156)
+assert (VNE["label_n"], VNE["label_x"]) == (4, 159)
 
 # The fit floor and the skipped factors: on the grid scale 1..8 x the nine anchors x five texts,
 # value(text, nullptr, at, nullptr, WHITE, scale) on 240 ends at an f >= k that has a face
@@ -2265,12 +2271,15 @@ SIDE_CUTS = {t: [(value_layout(240, t, at, DEG_C)["f"], value_layout(240, t, at,
                  for at in ("W", "E")] for t in ("12345678", "-1234.56", "Uncomfortable", ALPHA)}
 assert SIDE_CUTS == {"12345678": [(3, 8)] * 2, "-1234.56": [(3, 8)] * 2,
                      "Uncomfortable": [(2, 13)] * 2, ALPHA: [(2, 13)] * 2}, SIDE_CUTS
-# Rows out of the disc (test_value_edge_cases): at yOffset 80 the f 2 block (37 px) leaves the
-# first glyph of its "TEMP" label at rows 232..239, inside the disc; from 81 on nothing is drawn
-OUT80, OUT81 = (value_layout(240, "23.5", "W", DEG_C, "TEMP", 2, y) for y in (80, 81))
-assert (OUT80["value"], OUT80["unit"], OUT80["label_n"]) == (None, None, 1)
-assert OUT80["label"] == (108, 232, 112, 239)
-assert OUT81["value"] is None and OUT81["label"] is None and OUT81["unit"] is None
+# Rows out of the disc (test_value_edge_cases): at yOffset 79 the f 2 block (37 px) leaves the
+# first glyph of its "TEMP" label at rows 232..239, inside the disc; from 80 on nothing is drawn,
+# as on 128 (the 12 px label cell of 4b-font Task 7 sits 2 rows lower than the 7k one)
+OUT79, OUT80 = (value_layout(240, "23.5", "W", DEG_C, "TEMP", 2, y) for y in (79, 80))
+assert (OUT79["value"], OUT79["unit"], OUT79["label_n"]) == (None, None, 1)
+assert OUT79["label"] == (108, 232, 112, 239)
+assert OUT80["value"] is None and OUT80["label"] is None and OUT80["unit"] is None
+assert all(value_layout(128, "23.5", "W", DEG_C, "TEMP", 2, 80)[part] is None
+           for part in ("value", "label", "unit"))
 # value(8888, nullptr, W, nullptr, WHITE, 4): f 8 (16x32 x 2, 128 px) is too wide for the 109 px
 # region, f 7 has no face, f 6 (12x24 x 2, 96 px) fits
 W8888 = value_layout(240, "8888", "W", None, None, 4)
@@ -2327,7 +2336,7 @@ print(f"  04 '342': f {V342['f']} x {V342['x']} box {V342['value']} unit {V342['
       f"01 '23.5' box {V01['value']} unit {V01['unit']}; "
       f"02 '72' top {V02['top']} box {V02['value']}")
 print(f"  NE value(8, C, NE, TEMP, 1): f {VNE['f']} top {VNE['top']} x {VNE['x']} "
-      f"box {VNE['value']}; label {'TEMP'[:VNE['label_n']]!r} x {VNE['label_x']} cell top 16 "
+      f"box {VNE['value']}; label {'TEMP'[:VNE['label_n']]!r} x {VNE['label_x']} cell top 18 "
       f"box {VNE['label']}")
 V1230 = value_layout(240, "12:30 PM", "CENTER", None, None, 1)
 COLON = draw_glyphs(P240, ":", 1, VALUE, V1230["x"] + 2 * 8, V1230["top"], 2)
@@ -2344,8 +2353,8 @@ print(f"  nowhere (scale 4; CENTER {FIFTEEN!r} with °C at yOffset -50, W and NE
       *(f"{at} f {v['f']} kept {v['n']} box {v['value']} count {len(v['value_lit'])}"
         for at, v in NOWHERE.items()))
 print("  W/E on 240 (f, kept):", SIDE_CUTS)
-print(f"  value(23.5, °C, W, TEMP, 2, 80): label kept {OUT80['label_n']} box {OUT80['label']}; "
-      "yOffset 81 draws nothing")
+print(f"  value(23.5, °C, W, TEMP, 2, 79): label kept {OUT79['label_n']} box {OUT79['label']}; "
+      "yOffset 80 draws nothing")
 print(f"  value(8888, W, scale 4): f {W8888['f']} x {W8888['x']} box {W8888['value']} "
       f"count {len(W8888['value_lit'])}")
 print("  bold '-88.8' CENTER (scale: f x0 valueWidth count):", BOLD_CASES)
@@ -2359,3 +2368,40 @@ for scale in range(1, 9):
         cells = (GRID[(scale, at, t)] for t in GRID_TEXTS)
         print("   ", scale, at, *(f"{t!r} {g['f']} {g['n']} {g['value']} {len(g['value_lit'])}"
                                   for t, g in zip(GRID_TEXTS, cells, strict=True)))
+
+# ---- Self-check of 4b-font Task 7: the title cap and the label height (design 5.2, 6) ----
+# The cap counts 13 TEXT-face cells of glyphAdvance(TEXT, k), 104 px on both panels: 29 on 128, 14
+# on 240, below its floor 37, so every title on 240 sits at row 37 (4b: 13 x 8 x k, up to row 63)
+assert (P128.cap(), P240.cap()) == (29, 14)
+assert P240.margin_ns(176, 2) == P240.margin_ns(208, 2) == 37
+assert all(title_row(240, s)[0] == 37 for s in TITLES)
+# 22 cells (176 px) are whole at row 37; a 23rd cell (184 px) leaves the 177 px chord of the ink
+# rows 39..51 (8x16 rows 2..14 of "_" and "T"), so the title keeps 22
+TITLE22, TITLE23 = "ABCDEFGHIJKLMNOPQRSTUV", "_" * 22 + "T"
+assert title_row(240, TITLE22) == (37, 22) and text_box(240, TITLE22, "N")[1] == 39
+ROWS23 = ink_rows(TITLE23, 23, TEXT, F8X16)
+assert (lowest_bit(ROWS23), highest_bit(ROWS23)) == (2, 14)  # "T" rows 2..11, "_" row 14
+assert P240.ink_chord(TITLE23, 23, TEXT, 37, 2) == P240.chord(39, 51) == (32, 208)
+assert cell_width(P240, TITLE23, 23, TEXT, 2) == 184 > 177 == width(P240.chord(39, 51))
+assert title_row(240, TITLE23) == (37, 22) and title_row(240, TITLE22 + "W") == (37, 22)
+assert text_box(240, TITLE23, "N") == text_box(240, "_" * 22, "N")
+# The label cell is one LABEL cell above the value's gap: u(4) + 7k on 128 (unchanged), u(4) + 12
+# on 240. The NE label: cell top 18, ink 19..26, room [58, 182], "TEMP" whole at x 159
+assert [cell_height(face_for(P, "TEMP", LABEL, P.k), P.k) for P in (P128, P240)] == [7, 12]
+LNE = value_layout(240, "8", "NE", "C", "TEMP", 1)
+assert LNE["top"] - P240.u(4) - 12 == 18 and LNE["label"][1::2] == (19, 26)
+assert (LNE["label_room"], LNE["label_n"], LNE["label_x"]) == ((58, 182), 4, 159)
+# 03's labels at cell top 72 (91 - 7 - 12), ink rows 73..80
+L03 = (value_layout(240, "23.5", "W", DEG_C, "TEMP"), value_layout(240, "45.3", "E", "%", "HUM"))
+assert all(v["top"] - P240.u(4) - 12 == 72 and v["label"][1::2] == (73, 80) for v in L03)
+# 04's "mm" and 01's "°C" rows stay those of 4b-font Task 6 (the unit is not moved)
+assert value_layout(240, "342", "CENTER", "mm")["unit"][1::2] == (128, 134)
+assert value_layout(240, "23.5", "CENTER", DEG_C)["unit"][1::2] == (124, 134)
+
+print("layout rules on the V1c (4b-font Task 7)")
+print(f"  cap {P128.cap()} / {P240.cap()}; 240 marginNs(176, 2) {P240.margin_ns(176, 2)} "
+      f"(208, 2) {P240.margin_ns(208, 2)}")
+for s in (TITLE22, TITLE22 + "W", TITLE23, "_" * 22):
+    print(f"  title {s!r}: (row, kept) {title_row(240, s)} ink {text_box(240, s, 'N')}")
+print(f"  NE label: x {LNE['label_x']} cell top 18 box {LNE['label']} room {LNE['label_room']}")
+print("  03 labels:", *(f"{v['label']} room {v['label_room']}" for v in L03))

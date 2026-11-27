@@ -317,8 +317,9 @@ static void test_scale_quantities(void) {
         TEST_ASSERT_EQUAL_INT32(22, s.marginEw(2));
         TEST_ASSERT_EQUAL_INT32(30, s.marginEw(3));
         TEST_ASSERT_EQUAL_INT32(37, s.marginNs(16, 2));
-        TEST_ASSERT_EQUAL_INT32(41, s.marginNs(176, 2));
-        TEST_ASSERT_EQUAL_INT32(63, s.marginNs(208, 2));
+        // The cap counts 13 cells of 8 px (14, below the floor): every title row is 37 (4b-font).
+        TEST_ASSERT_EQUAL_INT32(37, s.marginNs(176, 2));
+        TEST_ASSERT_EQUAL_INT32(37, s.marginNs(208, 2));
         TEST_ASSERT_EQUAL_INT32(67, s.marginNs(16, 4));
         TEST_ASSERT_EQUAL_INT32(52, s.marginNs(16, 3));
     });
@@ -733,7 +734,7 @@ struct TitleCase {
 };
 
 // Values printed by golden_layout.py: the GRAY ink box of title(s) on 128 and on 240. On 240 every
-// title here is whole at row 37, in 8x16 advancing 8 px (4b-font).
+// title here is whole at row 37, in 8x16 advancing 8 px (4b-font; test_titles_stay_on_row_37).
 static const TitleCase kTitles[] = {
     {"Temperature", {21, 20, 106, 27}, {76, 39, 162, 51}},  // whole: cells 20..107 / 76..163
     {"Comfort", {37, 20, 90, 26}, {92, 39, 146, 48}},
@@ -794,9 +795,10 @@ static void test_title_band(void) {
                                          "gjpqygjpqygjpqygjpqy", "                    "};
     forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
         const bool big = s.width() == 240;
+        // On 240 the cap (14) is below the floor: the band is the one row 37 (4b-font).
         const int32_t topMin = big ? 37 : 20;
-        const int32_t topMax = big ? 63 : 29;
-        const int32_t inkMax = big ? 78 : 36;
+        const int32_t topMax = big ? 37 : 29;
+        const int32_t inkMax = big ? 52 : 36;
         char buf[21];
         for (const char* kind : kKinds) {
             for (size_t len = 1; len <= 20; len++) {
@@ -823,15 +825,16 @@ static void test_title_band(void) {
                 }
             }
         }
-        // A lowercase-only title takes its width from the rows it inks, not from its cell row.
+        // A lowercase-only title takes its width from the rows it inks, not from its cell row, at
+        // the lowest title row.
         const int32_t capRow = topMax;
         const uint8_t f = s.k();
         const int32_t lower =
             s.inkChord(runOf(s, "acemnorsuvwxz", 13, capRow, Ink::TEXT, f)).width();
         const int32_t upper =
             s.inkChord(runOf(s, "ABCDEFGHIJKLM", 13, capRow, Ink::TEXT, f)).width();
-        TEST_ASSERT_EQUAL_INT32(big ? 217 : 109, lower);  // 8x16 rows 5..11 / 2..11 on 240
-        TEST_ASSERT_EQUAL_INT32(big ? 213 : 107, upper);
+        TEST_ASSERT_EQUAL_INT32(big ? 183 : 109, lower);  // 8x16 rows 5..11 / 2..11 on 240
+        TEST_ASSERT_EQUAL_INT32(big ? 177 : 107, upper);
         // On 128 both still keep 13 cells at the cap; on 240 the 20 glyphs are whole at row 37.
         s.clear();
         s.title("acemnorsuvwxz");
@@ -845,6 +848,47 @@ static void test_title_band(void) {
                                      inkBox(mem, STEAMI_GRAY).count);
         }
     });
+}
+
+// On 240 the cap counts 13 TEXT cells of 8 px (14, below the floor 37), so every title sits at
+// row 37 (4b-font). Values printed by golden_layout.py: 22 cells (176 px) are whole; a 23rd cell
+// (184 px) leaves the 177 px chord of the ink rows 39..51, so the title keeps 22.
+static void test_titles_stay_on_row_37(void) {
+    static const char kTitle22[] = "ABCDEFGHIJKLMNOPQRSTUV";
+    static const char kTitle23[] = "______________________T";
+    onPanel(240, true, [](SteamiMemoryBackend& mem, TestScreen& s) {
+        const uint8_t f = s.k();
+        // kept: the glyphs drawn (the title itself when it is whole).
+        auto expectRow37 = [&mem, &s, f](const char* title, const char* kept) {
+            s.clear();
+            s.title(title);
+            const size_t n = TestScreen::glyphCount(title);
+            const Run t = runOf(s, title, n, 0, Ink::TEXT, f);
+            TEST_ASSERT_EQUAL_INT32_MESSAGE(37, s.resolve(SteamiAt::N, s.cellWidth(t, n), f).y,
+                                            title);
+            // The ink starts at the face's first ink row of the cell: row 39 for a capital.
+            const int32_t rise = firstInkRow(kept, t.face) * s.replication(t.face, f);
+            TEST_ASSERT_EQUAL_INT_MESSAGE(37 + rise, inkBox(mem, STEAMI_GRAY).y0, title);
+        };
+        for (const TitleCase& t : kTitles) {
+            expectRow37(t.s, t.s);
+        }
+        expectRow37(kTitle22, kTitle22);
+        expectBox(inkBox(mem, STEAMI_GRAY), 32, 39, 206, 50);
+        TEST_ASSERT_EQUAL_size_t(wholeInk(kTitle22, f, FaceId::F8X16),
+                                 inkBox(mem, STEAMI_GRAY).count);
+        expectRow37(kTitle23, "______________________");
+        expectBox(inkBox(mem, STEAMI_GRAY), 32, 51, 206, 51);
+        const Run whole = runOf(s, kTitle23, 23, 37, Ink::TEXT, f);
+        expectRegion(s.inkChord(whole), 32, 208);  // rows 39..51, 177 px < 184
+        TEST_ASSERT_EQUAL_INT32(184, s.cellWidth(whole, 23));
+    });
+    // The 23-cell title keeps 22 glyphs: the same pixels as its first 22 alone.
+    TEST_ASSERT_TRUE(rendered(240, true, [](TestScreen& s) { s.title(kTitle23); }) ==
+                     rendered(240, true, [](TestScreen& s) { s.title("______________________"); }));
+    TEST_ASSERT_TRUE(
+        rendered(240, true, [](TestScreen& s) { s.title(kTitle22); }) ==
+        rendered(240, true, [](TestScreen& s) { s.title("ABCDEFGHIJKLMNOPQRSTUVW"); }));
 }
 
 // Review Focus 3: a cut counts glyphs and never splits a code point; no '?' is drawn.
@@ -1157,7 +1201,7 @@ static const ValueCase kValues[] = {
      {22, 39, 44, 45},
      {24, 66, 37, 72},
      {34, 97, 86, 116},
-     {52, 71, 74, 78},
+     {51, 73, 73, 80},
      {52, 124, 65, 134}},
     {"45.3",
      SteamiAt::E,
@@ -1168,7 +1212,7 @@ static const ValueCase kValues[] = {
      {86, 39, 102, 45},
      {94, 66, 99, 72},
      {154, 97, 206, 116},
-     {168, 71, 184, 78},
+     {168, 73, 184, 80},
      {179, 125, 184, 134}},
     {"23.5",
      SteamiAt::N,
@@ -1460,13 +1504,13 @@ static void test_value_labels_and_units(void) {
                                      label.count);
             if (at == SteamiAt::W) {
                 if (big) {
-                    expectBox(label, 31, 71, 95, 78);
+                    expectBox(label, 30, 73, 94, 80);
                 } else {
                     expectBox(label, 7, 39, 59, 45);
                 }
             } else {
                 if (big) {
-                    expectBox(label, 144, 71, 208, 78);
+                    expectBox(label, 144, 73, 208, 80);
                 } else {
                     expectBox(label, 68, 39, 120, 45);
                 }
@@ -1543,17 +1587,17 @@ static void test_value_edge_cases(void) {
     }
     forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
         // Rows out of the disc: nothing drawn (onPanel checks the circle). On 240 the value ends at
-        // f 2, whose 37 px block leaves at yOffset 80 the first glyph of its label at rows
-        // 232..239, inside the disc, cut to the chord; from 81 on nothing is drawn (values printed
-        // by golden_layout.py).
+        // f 2, whose 37 px block leaves at yOffset 79 the first glyph of its label (one 12 px
+        // 6x12 cell) at rows 232..239, inside the disc, cut to the chord; from 80 on nothing is
+        // drawn, as on 128 (values printed by golden_layout.py).
         if (s.width() == 240) {
-            s.value(23.5f, kDegC, SteamiAt::W, "TEMP", STEAMI_WHITE, 2, 80);
+            s.value(23.5f, kDegC, SteamiAt::W, "TEMP", STEAMI_WHITE, 2, 79);
             expectBox(inkBox(mem, STEAMI_GRAY), 108, 232, 112, 239);
             TEST_ASSERT_EQUAL_size_t(runInk("T", 1, Ink::LABEL, 2, FaceId::F6X12),
                                      inkBoxAll(mem).count);
             s.clear();
         }
-        s.value(23.5f, kDegC, SteamiAt::W, "TEMP", STEAMI_WHITE, 2, s.width() == 240 ? 81 : 80);
+        s.value(23.5f, kDegC, SteamiAt::W, "TEMP", STEAMI_WHITE, 2, 80);
         TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
         // An empty value draws its label and unit only.
         s.clear();
@@ -1645,8 +1689,8 @@ static void test_value_corner_worked_examples(void) {
     });
     // 240 colour, the NE call (design 6, F2): the value stays at f 2 (8x16), row 37, its x clamped
     // from 210 to 197 (the 8x16 '8' inks columns 0..6 and rows 2..11). The 6x12 label (cell top
-    // 37 - 7 - 14 = 16 under the 7k rule) inks rows 17..24, whose chord shrunk by k is [61, 179]:
-    // "TEMP" (24 px) is whole at x 156 (values printed by golden_layout.py).
+    // 37 - 7 - 12 = 18, one 6x12 cell above the gap) inks rows 19..26, whose chord shrunk by k is
+    // [58, 182]: "TEMP" (24 px) is whole at x 159 (values printed by golden_layout.py).
     std::vector<uint16_t> label;
     std::vector<uint16_t> white;
     onPanel(240, true, [&label, &white](SteamiMemoryBackend& mem, TestScreen& s) {
@@ -1658,10 +1702,10 @@ static void test_value_corner_worked_examples(void) {
         TEST_ASSERT_EQUAL_size_t(valueInk("8", 2, FaceId::F8X16), value.count);
         white = pixelsOf(mem, STEAMI_WHITE);
         const InkBox box = inkBox(mem, STEAMI_GRAY);
-        TEST_ASSERT_EQUAL_INT(156, box.x0);
-        TEST_ASSERT_TRUE(box.x1 <= 179);
-        TEST_ASSERT_EQUAL_INT(17, box.y0);
-        TEST_ASSERT_EQUAL_INT(24, box.y1);
+        TEST_ASSERT_EQUAL_INT(159, box.x0);
+        TEST_ASSERT_TRUE(box.x1 <= 182);
+        TEST_ASSERT_EQUAL_INT(19, box.y0);
+        TEST_ASSERT_EQUAL_INT(26, box.y1);
         TEST_ASSERT_EQUAL_size_t(runInk("TEMP", 4, Ink::LABEL, 2, FaceId::F6X12), box.count);
         label = pixelsOf(mem, STEAMI_GRAY);
     });
@@ -1671,7 +1715,7 @@ static void test_value_corner_worked_examples(void) {
                          s.drawGlyphs(runOf(s, "8", 1, 37, Ink::VALUE, 2), 197, STEAMI_WHITE);
                      }));
     TEST_ASSERT_TRUE(label == rendered(240, true, [](TestScreen& s) {
-                         s.textSmall("TEMP", 156, 16, STEAMI_GRAY, 1);
+                         s.textSmall("TEMP", 159, 18, STEAMI_GRAY, 1);
                      }));
 }
 
@@ -1780,77 +1824,77 @@ static const CornerCase kCorners[] = {
     {{128, "ABCDEFGHIJKLMNO", kDegC, SteamiAt::SW, "TEMPERATURES12", 2},
      {1, 13, 14, {13, 91, 115, 97}, {22, 80, 104, 86}, {57, 99, 70, 105}}},
     {{240, "8", "C", SteamiAt::NE, "TEMP", 1},
-     {2, 1, 4, {197, 39, 203, 48}, {156, 17, 178, 24}, {197, 55, 203, 64}}},
+     {2, 1, 4, {197, 39, 203, 48}, {159, 19, 181, 26}, {197, 55, 203, 64}}},
     {{240, "8", "C", SteamiAt::NE, "TEMPERATURE", 1},
-     {2, 1, 11, {197, 39, 203, 48}, {114, 17, 178, 24}, {197, 55, 203, 64}}},
+     {2, 1, 11, {197, 39, 203, 48}, {117, 19, 181, 26}, {197, 55, 203, 64}}},
     {{240, "8", "C", SteamiAt::NE, "TEMPERATURES12", 1},
-     {2, 1, 14, {197, 39, 203, 48}, {96, 17, 178, 24}, {197, 55, 203, 64}}},
+     {2, 1, 14, {197, 39, 203, 48}, {99, 19, 181, 26}, {197, 55, 203, 64}}},
     {{240, "8", "C", SteamiAt::NE, "TEMP", 2},
-     {4, 1, 4, {189, 73, 201, 92}, {183, 47, 205, 54}, {191, 101, 197, 110}}},
+     {4, 1, 4, {189, 73, 201, 92}, {183, 49, 205, 56}, {191, 101, 197, 110}}},
     {{240, "8", "C", SteamiAt::NE, "TEMPERATURE", 2},
-     {4, 1, 11, {189, 73, 201, 92}, {148, 47, 212, 54}, {191, 101, 197, 110}}},
+     {4, 1, 11, {189, 73, 201, 92}, {149, 49, 213, 56}, {191, 101, 197, 110}}},
     {{240, "8", "C", SteamiAt::NE, "TEMPERATURES12", 2},
-     {4, 1, 14, {189, 73, 201, 92}, {130, 47, 212, 54}, {191, 101, 197, 110}}},
+     {4, 1, 14, {189, 73, 201, 92}, {131, 49, 213, 56}, {191, 101, 197, 110}}},
     {{240, "-12345.7", kDegC, SteamiAt::NE, "TEMPERATURES12", 2},
-     {4, 8, 14, {85, 73, 201, 92}, {101, 47, 183, 54}, {136, 100, 149, 110}}},
+     {4, 8, 14, {85, 73, 201, 92}, {101, 49, 183, 56}, {136, 100, 149, 110}}},
     {{240, "Uncomfortable", kDegC, SteamiAt::NE, "TEMPERATURES12", 2},
-     {2, 13, 14, {101, 39, 203, 48}, {96, 17, 178, 24}, {146, 54, 159, 64}}},
+     {2, 13, 14, {101, 39, 203, 48}, {99, 19, 181, 26}, {146, 54, 159, 64}}},
     {{240, "ABCDEFGHIJKLMNO", kDegC, SteamiAt::NE, "TEMPERATURES12", 2},
-     {2, 15, 14, {85, 39, 203, 48}, {96, 17, 178, 24}, {138, 54, 151, 64}}},
+     {2, 15, 14, {85, 39, 203, 48}, {99, 19, 181, 26}, {138, 54, 151, 64}}},
     {{240, "8", "C", SteamiAt::NW, "TEMP", 1},
-     {2, 1, 4, {36, 39, 42, 48}, {61, 17, 83, 24}, {36, 55, 42, 64}}},
+     {2, 1, 4, {36, 39, 42, 48}, {58, 19, 80, 26}, {36, 55, 42, 64}}},
     {{240, "8", "C", SteamiAt::NW, "TEMPERATURE", 1},
-     {2, 1, 11, {36, 39, 42, 48}, {61, 17, 125, 24}, {36, 55, 42, 64}}},
+     {2, 1, 11, {36, 39, 42, 48}, {58, 19, 122, 26}, {36, 55, 42, 64}}},
     {{240, "8", "C", SteamiAt::NW, "TEMPERATURES12", 1},
-     {2, 1, 14, {36, 39, 42, 48}, {61, 17, 143, 24}, {36, 55, 42, 64}}},
+     {2, 1, 14, {36, 39, 42, 48}, {58, 19, 140, 26}, {36, 55, 42, 64}}},
     {{240, "8", "C", SteamiAt::NW, "TEMP", 2},
-     {4, 1, 4, {39, 73, 51, 92}, {33, 47, 55, 54}, {41, 101, 47, 110}}},
+     {4, 1, 4, {39, 73, 51, 92}, {33, 49, 55, 56}, {41, 101, 47, 110}}},
     {{240, "8", "C", SteamiAt::NW, "TEMPERATURE", 2},
-     {4, 1, 11, {39, 73, 51, 92}, {27, 47, 91, 54}, {41, 101, 47, 110}}},
+     {4, 1, 11, {39, 73, 51, 92}, {26, 49, 90, 56}, {41, 101, 47, 110}}},
     {{240, "8", "C", SteamiAt::NW, "TEMPERATURES12", 2},
-     {4, 1, 14, {39, 73, 51, 92}, {27, 47, 109, 54}, {41, 101, 47, 110}}},
+     {4, 1, 14, {39, 73, 51, 92}, {26, 49, 108, 56}, {41, 101, 47, 110}}},
     {{240, "-12345.7", kDegC, SteamiAt::NW, "TEMPERATURES12", 2},
-     {4, 8, 14, {39, 73, 155, 92}, {55, 47, 137, 54}, {90, 100, 103, 110}}},
+     {4, 8, 14, {39, 73, 155, 92}, {55, 49, 137, 56}, {90, 100, 103, 110}}},
     {{240, "Uncomfortable", kDegC, SteamiAt::NW, "TEMPERATURES12", 2},
-     {2, 13, 14, {36, 39, 138, 48}, {61, 17, 143, 24}, {81, 54, 94, 64}}},
+     {2, 13, 14, {36, 39, 138, 48}, {58, 19, 140, 26}, {81, 54, 94, 64}}},
     {{240, "ABCDEFGHIJKLMNO", kDegC, SteamiAt::NW, "TEMPERATURES12", 2},
-     {2, 15, 14, {36, 39, 154, 48}, {61, 17, 143, 24}, {89, 54, 102, 64}}},
+     {2, 15, 14, {36, 39, 154, 48}, {58, 19, 140, 26}, {89, 54, 102, 64}}},
     {{240, "8", "C", SteamiAt::SE, "TEMP", 1},
-     {2, 1, 4, {198, 189, 204, 198}, {190, 167, 212, 174}, {185, 205, 191, 214}}},
+     {2, 1, 4, {198, 189, 204, 198}, {190, 169, 212, 176}, {185, 205, 191, 214}}},
     {{240, "8", "C", SteamiAt::SE, "TEMPERATURE", 1},
-     {2, 1, 11, {198, 189, 204, 198}, {160, 167, 224, 174}, {185, 205, 191, 214}}},
+     {2, 1, 11, {198, 189, 204, 198}, {159, 169, 223, 176}, {185, 205, 191, 214}}},
     {{240, "8", "C", SteamiAt::SE, "TEMPERATURES12", 1},
-     {2, 1, 14, {198, 189, 204, 198}, {142, 167, 224, 174}, {185, 205, 191, 214}}},
+     {2, 1, 14, {198, 189, 204, 198}, {141, 169, 223, 176}, {185, 205, 191, 214}}},
     {{240, "8", "C", SteamiAt::SE, "TEMP", 2},
-     {4, 1, 4, {189, 147, 201, 166}, {183, 121, 205, 128}, {191, 175, 197, 184}}},
+     {4, 1, 4, {189, 147, 201, 166}, {183, 123, 205, 130}, {191, 175, 197, 184}}},
     {{240, "8", "C", SteamiAt::SE, "TEMPERATURE", 2},
-     {4, 1, 11, {189, 147, 201, 166}, {162, 121, 226, 128}, {191, 175, 197, 184}}},
+     {4, 1, 11, {189, 147, 201, 166}, {162, 123, 226, 130}, {191, 175, 197, 184}}},
     {{240, "8", "C", SteamiAt::SE, "TEMPERATURES12", 2},
-     {4, 1, 14, {189, 147, 201, 166}, {153, 121, 235, 128}, {191, 175, 197, 184}}},
+     {4, 1, 14, {189, 147, 201, 166}, {153, 123, 235, 130}, {191, 175, 197, 184}}},
     {{240, "-12345.7", kDegC, SteamiAt::SE, "TEMPERATURES12", 2},
-     {4, 8, 14, {85, 147, 201, 166}, {101, 121, 183, 128}, {136, 174, 149, 184}}},
+     {4, 8, 14, {85, 147, 201, 166}, {101, 123, 183, 130}, {136, 174, 149, 184}}},
     {{240, "Uncomfortable", kDegC, SteamiAt::SE, "TEMPERATURES12", 2},
-     {2, 13, 14, {102, 189, 204, 198}, {112, 167, 194, 174}, {147, 204, 160, 214}}},
+     {2, 13, 14, {102, 189, 204, 198}, {112, 169, 194, 176}, {147, 204, 160, 214}}},
     {{240, "ABCDEFGHIJKLMNO", kDegC, SteamiAt::SE, "TEMPERATURES12", 2},
-     {2, 15, 14, {86, 189, 204, 198}, {104, 167, 186, 174}, {139, 204, 152, 214}}},
+     {2, 15, 14, {86, 189, 204, 198}, {104, 169, 186, 176}, {139, 204, 152, 214}}},
     {{240, "8", "C", SteamiAt::SW, "TEMP", 1},
-     {2, 1, 4, {35, 189, 41, 198}, {27, 167, 49, 174}, {48, 205, 54, 214}}},
+     {2, 1, 4, {35, 189, 41, 198}, {27, 169, 49, 176}, {48, 205, 54, 214}}},
     {{240, "8", "C", SteamiAt::SW, "TEMPERATURE", 1},
-     {2, 1, 11, {35, 189, 41, 198}, {15, 167, 79, 174}, {48, 205, 54, 214}}},
+     {2, 1, 11, {35, 189, 41, 198}, {16, 169, 80, 176}, {48, 205, 54, 214}}},
     {{240, "8", "C", SteamiAt::SW, "TEMPERATURES12", 1},
-     {2, 1, 14, {35, 189, 41, 198}, {15, 167, 97, 174}, {48, 205, 54, 214}}},
+     {2, 1, 14, {35, 189, 41, 198}, {16, 169, 98, 176}, {48, 205, 54, 214}}},
     {{240, "8", "C", SteamiAt::SW, "TEMP", 2},
-     {4, 1, 4, {39, 147, 51, 166}, {33, 121, 55, 128}, {41, 175, 47, 184}}},
+     {4, 1, 4, {39, 147, 51, 166}, {33, 123, 55, 130}, {41, 175, 47, 184}}},
     {{240, "8", "C", SteamiAt::SW, "TEMPERATURE", 2},
-     {4, 1, 11, {39, 147, 51, 166}, {12, 121, 76, 128}, {41, 175, 47, 184}}},
+     {4, 1, 11, {39, 147, 51, 166}, {12, 123, 76, 130}, {41, 175, 47, 184}}},
     {{240, "8", "C", SteamiAt::SW, "TEMPERATURES12", 2},
-     {4, 1, 14, {39, 147, 51, 166}, {3, 121, 85, 128}, {41, 175, 47, 184}}},
+     {4, 1, 14, {39, 147, 51, 166}, {3, 123, 85, 130}, {41, 175, 47, 184}}},
     {{240, "-12345.7", kDegC, SteamiAt::SW, "TEMPERATURES12", 2},
-     {4, 8, 14, {39, 147, 155, 166}, {55, 121, 137, 128}, {90, 174, 103, 184}}},
+     {4, 8, 14, {39, 147, 155, 166}, {55, 123, 137, 130}, {90, 174, 103, 184}}},
     {{240, "Uncomfortable", kDegC, SteamiAt::SW, "TEMPERATURES12", 2},
-     {2, 13, 14, {35, 189, 137, 198}, {45, 167, 127, 174}, {80, 204, 93, 214}}},
+     {2, 13, 14, {35, 189, 137, 198}, {45, 169, 127, 176}, {80, 204, 93, 214}}},
     {{240, "ABCDEFGHIJKLMNO", kDegC, SteamiAt::SW, "TEMPERATURES12", 2},
-     {2, 15, 14, {35, 189, 153, 198}, {53, 167, 135, 174}, {88, 204, 101, 214}}},
+     {2, 15, 14, {35, 189, 153, 198}, {53, 169, 135, 176}, {88, 204, 101, 214}}},
 };
 
 #undef NO_BOX
@@ -3553,6 +3597,7 @@ int main(int, char**) {
     RUN_TEST(test_text_every_anchor_golden);
     RUN_TEST(test_title_rows);
     RUN_TEST(test_title_band);
+    RUN_TEST(test_titles_stay_on_row_37);
     RUN_TEST(test_title_cut_keeps_whole_code_points);
     RUN_TEST(test_text_cut_at_every_anchor);
     RUN_TEST(test_subtitle_rows);

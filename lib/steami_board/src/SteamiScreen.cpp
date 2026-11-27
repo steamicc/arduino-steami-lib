@@ -325,8 +325,9 @@ int32_t SteamiScreen::marginNs(int32_t tw, uint8_t f) {
     const int32_t r = radius();
     const int32_t kk = k();
     const int32_t w = width();
-    // The safe margin of a 13-cell text; r + 2 when the panel is narrower than 13 cells.
-    const int32_t half13 = STEAMI_TITLE_CAP_CELLS * SteamiDisplay::CHAR_W * kk / 2;
+    // The safe margin of a 13-cell text in the TEXT face (104 px on 128 and on 240, where the cap
+    // falls below the floor); r + 2 when the panel is narrower than 13 cells.
+    const int32_t half13 = STEAMI_TITLE_CAP_CELLS * glyphAdvance(Ink::TEXT, k()) / 2;
     const int32_t cap = r - rootOf(larger(0, r * r - half13 * half13)) + 2;
     const int32_t t = larger(tw, 0);
     // t < 2r below, so (t / 2)^2 < r^2: the argument of the root is positive.
@@ -600,14 +601,16 @@ bool SteamiScreen::placeValue(Run& value, SteamiAt at, const char* unit) {
 void SteamiScreen::drawValueParts(Run& value, SteamiRgb c, const char* unit, const char* label,
                                   SteamiAt at) {
     // Label, value, unit: the drawing order of the decision "Label and unit of value()". A corner
-    // label is centred on the value, so drawValuePart() asks fitValue() where the value goes.
+    // label is centred on the value, so drawValuePart() asks fitValue() where the value goes. The
+    // label's cell is one LABEL cell high (7k in 5x7, 12 in 6x12), u(4) above the value.
     Run part{label,
              glyphCount(label),
-             value.y - u(STEAMI_VALUE_LABEL_GAP) - 7 * k(),
+             value.y - u(STEAMI_VALUE_LABEL_GAP),
              Ink::LABEL,
              k(),
              0,
              faceFor(label, Ink::LABEL, k())};
+    part.y -= cellHeight(part.face, part.f);
     drawValuePart(part, value, at);
     drawGlyphs(value, fitValue(value, at), c);
     part = {unit,
