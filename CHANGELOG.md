@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.41.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.40.0...v0.41.0) (2026-11-27)
+
+
+### Features
+
+* **board:** Add the scrolling graph, the menu and SteamiHistory. ([#289](https://github.com/steamicc/arduino-steami-lib/issues/289)) ([cc05443](https://github.com/steamicc/arduino-steami-lib/commit/cc054437356205b5d8014cdaacd4587bf0536ecb))
+
 # [0.40.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.39.1...v0.40.0) (2026-11-27)
 
 
