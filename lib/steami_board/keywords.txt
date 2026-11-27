@@ -38,6 +38,7 @@ SteamiScreen	KEYWORD1
 SteamiAt	KEYWORD1
 SteamiFace	KEYWORD1
 SteamiValue	KEYWORD1
+SteamiHistory	KEYWORD1
 SteamiDisplayBackend	KEYWORD1
 SteamiSsd1327Backend	KEYWORD1
 SteamiGc9a01Backend	KEYWORD1
@@ -63,6 +64,12 @@ built	KEYWORD2
 printInfo	KEYWORD2
 setLogger	KEYWORD2
 lastError	KEYWORD2
+graph	KEYWORD2
+menu	KEYWORD2
+add	KEYWORD2
+size	KEYWORD2
+capacity	KEYWORD2
+last	KEYWORD2
 report	KEYWORD2
 wire	KEYWORD2
 pins	KEYWORD2

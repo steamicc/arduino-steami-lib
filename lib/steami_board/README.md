@@ -510,6 +510,8 @@ widget paints over an earlier one), then `show()`.
 | `void text(const char* s, SteamiAt at = SteamiAt::CENTER, SteamiRgb c = STEAMI_WHITE, uint8_t scale = 1)` | `STEAMI_WHITE` | Text at a position; `text(s, x, y, ...)` of `SteamiDisplay` is still there, in pixels. |
 | `uint8_t maxChars()` | | Characters of scale 1 across the panel: 16 on 128, 30 on 240. |
 | `void gauge(float v, float minV = 0, float maxV = 100, SteamiRgb c = STEAMI_LIGHT, uint8_t arcWidth = 0)` | track `STEAMI_DARK`, labels `STEAMI_GRAY`, fill `STEAMI_LIGHT` | A ring of 270 degrees near the edge, gap at the bottom, filled clockwise from the lower left; the integer parts of `minV` and `maxV` sit inside its two ends. No value: draw it with `value()`. |
+| `template <size_t N> void graph(const SteamiHistory<N>& h, float minV = 0, float maxV = 100, SteamiRgb c = STEAMI_LIGHT)` and `void graph(const float* data, size_t n, float minV = 0, float maxV = 100, SteamiRgb c = STEAMI_LIGHT)` | axes and labels `STEAMI_DARK`, curve `STEAMI_LIGHT` | A curve of the last values, oldest on the left, between the min and max labels. |
+| `template <size_t N> int menu(const char* const (&items)[N], int selected = 0, SteamiRgb c = STEAMI_WHITE)` and `int menu(const char* const* items, size_t n, int selected = 0, SteamiRgb c = STEAMI_WHITE)` | bar `STEAMI_DARK`, selected `STEAMI_WHITE`, others `STEAMI_GRAY` | A list of items with the selected one marked; returns the selected index, wrapped into the list. |
 | `void compass(float headingDeg, SteamiRgb c = STEAMI_LIGHT)` | rose `STEAMI_DARK`, N `STEAMI_WHITE`, E S W `STEAMI_GRAY`, needle `c` | A compass rose whose needle points to real north. |
 | `void watch(uint8_t h, uint8_t m, uint8_t s = 0, SteamiRgb c = STEAMI_LIGHT)` | dial `STEAMI_DARK`, 12 3 6 9 `STEAMI_WHITE`, seconds and pivot `STEAMI_GRAY`, hour and minute hands `c` | An analog watch. |
 | `void face(SteamiFace f, bool compact = false, SteamiRgb c = STEAMI_LIGHT)` | `STEAMI_LIGHT` | A pixel-art face, centred. |
@@ -521,6 +523,11 @@ widget paints over an earlier one), then `show()`.
 11 on the 128 px screen), half a square higher, to leave room for a title and
 a subtitle. `face(bitmap)` takes your own picture: 8 bytes, one per row from top
 to bottom, the leftmost pixel in the high bit (`0x80`); `nullptr` draws nothing.
+
+`SteamiHistory<N>` (in `SteamiHistory.h`) keeps the last `N` values for `graph()`:
+`add(v)`, `size()`, `capacity()`, `operator[](i)` (0 is the oldest; `NAN` past
+`size()`), `last()` (`NAN` when empty) and `clear()`. It takes 4N + 4 bytes, no
+heap, with `N` from 1 to 65535. Draw it with `screen.graph(history, min, max)`.
 
 `SteamiAt` names the nine positions: `N`, `NE`, `E`, `SE`, `S`, `SW`, `W`, `NW`
 and `CENTER` (as `"N"` ... `"CENTER"` in MicroPython).
@@ -554,6 +561,13 @@ Layout rules:
   letters stay upright (see [Heading convention](#heading-convention)): at
   heading 90 the N is on the left. `NAN` (no sensor) draws the rose without a
   needle.
+* `graph()` writes only the min and max labels, in full inside the box; a `NAN`
+  leaves a gap in the curve; values outside the range stay on the edge.
+* `menu()` shows 5 rows on 128 px and 6 on 240 px; the bar follows the circle;
+  `-1` wraps to the last item, and the index is returned. Keep it in an `int`:
+  with a `const char* const` array, a `long`, `unsigned` or `size_t` index calls
+  the `(items, n)` form, with `n` set to the index.
+* The selected text of `menu()` is lifted on the grey screen, as the fills are.
 * `watch()` takes hours 0 to 23 and minutes and seconds 0 to 59; the hands move
   in whole degrees (the hour hand with the minutes, the minute hand with the
   seconds).
@@ -566,6 +580,8 @@ Layout rules:
 | `screen.bar(v, max_val=100, color=C)` | `screen.bar(v, 100, C)` |
 | `screen.text("x", at="NE", scale=2)` | `screen.text("x", SteamiAt::NE, STEAMI_WHITE, 2)` |
 | `screen.gauge(v, min_val, max_val, color=C)` | `screen.gauge(v, min, max, C)` |
+| `screen.graph(data, min_val, max_val)` | `screen.graph(history, min, max)` with `SteamiHistory<N>` |
+| `screen.menu(items, selected=i)` | `i = screen.menu(ITEMS, i);` (array size deduced, index wrapped) |
 | `screen.face("happy", color=C)` | `screen.face(SteamiFace::HAPPY, C)` |
 | `"N"` `"NE"` ... `"CENTER"`, `BLACK` ... `YELLOW` | `SteamiAt::N` ... `SteamiAt::CENTER`, `STEAMI_BLACK` ... `STEAMI_YELLOW` |
 | `screen.center`, `screen.radius`, `screen.width` | `centerX()`, `centerY()`, `radius()`, `width()` |
@@ -579,6 +595,9 @@ Examples, each reproducing a mockup of the tutorials:
 | `ScreenComfort` | `03_comfort_dual_ref.png`: temperature and humidity side by side, comfort verdict |
 | `ScreenGauge` | `04_circular_gauge_ref.png`: distance of the VL53L1X in a ring |
 | `ScreenCompass` | `07_compass_ref.png`: the rose turns with the compass heading |
+| `ScreenGraph` | `05_scrolling_graph_ref.png`: light, or pressure on the V1c, over the last 20 s |
+| `ScreenMenu` | `06_dpad_menu_ref.png`: six items, UP and DOWN |
+| `WeatherStation` | no mockup of its own: four pages, as mockups 01, 04, 05 and 07 |
 | `ScreenFaces` | `08_smiley_*_ref.png`: the six faces (button A shows the next) and the reactive smiley |
 | `ScreenWatch` | `09_watch_ref.png`: an analog watch |
 
@@ -624,7 +643,7 @@ void setup() {
 make test-native/steami_board   # detection, routing, messages, lazy slots
 make test-native/steami_display_board   # display primitives, E30, E31
 make test-native/steami_screen   # widgets, layout rules, SteamiValue, E30, E31
-make test-native/steami_screen_mockups   # mockups 01 to 04 and 07 to 09 at 128 and 240 px
+make test-native/steami_screen_mockups   # mockups 01 to 09 at 128 and 240 px
 # score the mockup renders against the tutorials' images (needs Pillow and NumPy)
 mkdir -p /tmp/mockups   # writePpm does not create the folder
 STEAMI_PPM_DIR=/tmp/mockups .venv/bin/pio test -e native -f native/test_steami_screen_mockups
