@@ -209,22 +209,29 @@ class SteamiDisplayRulesTest(unittest.TestCase):
                 self.assertIn("screen.show();", loop)
                 self.assertTrue(drawing.rstrip().endswith("screen.show();"))
 
-    def test_menu_items_match_the_mockup(self) -> None:
-        # The call tokens skip names, so screen.menu(ITEMS, ...) and screen.menu(MENU_ITEMS, ...)
-        # compare equal whatever the arrays hold: their strings are compared here, in order.
-        def items(path: Path, name: str) -> list[str]:
+    def test_string_arrays_match_the_mockups(self) -> None:
+        # The call tokens skip names, so screen.menu(ITEMS, ...) and screen.menu(MENU_ITEMS, ...),
+        # or screen.title(PAGES[page]) and screen.title(WEATHER_PAGES[page]), compare equal
+        # whatever the arrays hold: their strings are compared here, in order.
+        def strings(path: Path, name: str) -> list[str]:
             text = path.read_text(encoding="utf-8")
             array = re.search(rf"\b{name}\[\d*\]\s*=\s*\{{(.*?)\}};", text, re.S)
             if array is None:
                 self.fail(f"{path.name} has no array {name}")
             return re.findall(r'"(?:[^"\\]|\\.)*"', array.group(1))
 
-        sketch = ROOT / "lib" / "steami_board" / "examples" / "ScreenMenu" / "ScreenMenu.ino"
         helpers = ROOT / "tests" / "native" / "helpers" / "SteamiMockups.h"
-        self.assertTrue(sketch.is_file(), "ScreenMenu.ino is missing")
-        mockup = items(helpers, "MENU_ITEMS")
-        self.assertEqual(len(mockup), 6)
-        self.assertEqual(items(sketch, "ITEMS"), mockup)
+        examples = ROOT / "lib" / "steami_board" / "examples"
+        for example, name, mockup_name, count in (
+            ("ScreenMenu", "ITEMS", "MENU_ITEMS", 6),
+            ("WeatherStation", "PAGES", "WEATHER_PAGES", 4),
+        ):
+            with self.subTest(example=example):
+                sketch = examples / example / f"{example}.ino"
+                self.assertTrue(sketch.is_file(), f"{example}.ino is missing")
+                mockup = strings(helpers, mockup_name)
+                self.assertEqual(len(mockup), count)
+                self.assertEqual(strings(sketch, name), mockup)
 
 
 if __name__ == "__main__":
