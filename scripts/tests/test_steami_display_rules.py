@@ -193,6 +193,8 @@ class SteamiDisplayRulesTest(unittest.TestCase):
             ("ScreenCompass", "mockupCompass"),
             ("ScreenFaces", "mockupFaces"),
             ("ScreenWatch", "mockupWatch"),
+            ("ScreenGraph", "mockupGraph"),
+            ("ScreenMenu", "mockupMenu"),
         ):
             with self.subTest(example=example):
                 sketch = examples / example / f"{example}.ino"
@@ -205,6 +207,23 @@ class SteamiDisplayRulesTest(unittest.TestCase):
                 self.assertEqual(sketch_calls, helper_calls)
                 self.assertIn("screen.show();", loop)
                 self.assertTrue(drawing.rstrip().endswith("screen.show();"))
+
+    def test_menu_items_match_the_mockup(self) -> None:
+        # The call tokens skip names, so screen.menu(ITEMS, ...) and screen.menu(MENU_ITEMS, ...)
+        # compare equal whatever the arrays hold: their strings are compared here, in order.
+        def items(path: Path, name: str) -> list[str]:
+            text = path.read_text(encoding="utf-8")
+            array = re.search(rf"\b{name}\[\d*\]\s*=\s*\{{(.*?)\}};", text, re.S)
+            if array is None:
+                self.fail(f"{path.name} has no array {name}")
+            return re.findall(r'"(?:[^"\\]|\\.)*"', array.group(1))
+
+        sketch = ROOT / "lib" / "steami_board" / "examples" / "ScreenMenu" / "ScreenMenu.ino"
+        helpers = ROOT / "tests" / "native" / "helpers" / "SteamiMockups.h"
+        self.assertTrue(sketch.is_file(), "ScreenMenu.ino is missing")
+        mockup = items(helpers, "MENU_ITEMS")
+        self.assertEqual(len(mockup), 6)
+        self.assertEqual(items(sketch, "ITEMS"), mockup)
 
 
 if __name__ == "__main__":
