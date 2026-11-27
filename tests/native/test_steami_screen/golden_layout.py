@@ -1614,7 +1614,6 @@ def mockup_04(W, d):
 
 def mockup_08(W, shown, d):
     """mockupFaces(shown, d): FACES[shown] alone for 0..5; 6 is the reactive mood of distance d."""
-    P = Panel(W)
     cv = {}
     if shown < 6:
         mood, line = MOOD_FACES[shown], None
@@ -1694,7 +1693,8 @@ for W in (128, 240):
     P = Panel(W)
     G = gauge_layout(W, 0, 500)
     mid = G["outer"] - G["width"] // 2  # 57 / 107
-    assert mid == {128: 57, 240: 107}[W] and gauge_sweep(342, 0, 500) == 185 and (225 + 185) % 360 == 50
+    # the sweep starts at 225 degrees, so 185 degrees of sweep end at (225 + 185) % 360 = 50
+    assert mid == {128: 57, 240: 107}[W] and gauge_sweep(342, 0, 500) == 185
     assert (P.polar(mid, 45), P.polar(mid, 55)) == FILL_END[W]
     cv = mockup_04(W, 342)
     assert cv[P.polar(mid, 45)] == "LIGHT" and cv[P.polar(mid, 55)] == "DARK", W
