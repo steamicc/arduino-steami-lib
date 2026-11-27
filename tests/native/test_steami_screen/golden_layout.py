@@ -16,7 +16,10 @@ FIRST_CODE, DEGREE, GLYPHS = 32, 127, 96
 
 
 def _table(source, header, width):
-    """The rows of the table that starts at `header`, up to the next `};`: `width` hex bytes each."""
+    """The rows of the table that starts at `header`, up to the next `};`.
+
+    Each row holds `width` hex bytes.
+    """
     body = source.split(header, 1)[1].split("};", 1)[0]
     rows = []
     for line in body.splitlines():
@@ -31,8 +34,8 @@ def _table(source, header, width):
 _SOURCE = FONT_CPP.read_text(encoding="utf-8")
 FONT8 = _table(_SOURCE, "const uint8_t kFont8x8[kGlyphCount][8] = {", 8)
 FONT5 = _table(_SOURCE, "const uint8_t kFont5x7[kGlyphCount][5] = {", 5)
-FOLDS = {int(h, 16): c for h, c in re.findall(r"\{(0x[0-9A-Fa-f]{2}), '(.)'\}",
-                                              _SOURCE.split("const Fold kFolds[] = {", 1)[1].split("};", 1)[0])}
+_FOLD_TABLE = _SOURCE.split("const Fold kFolds[] = {", 1)[1].split("};", 1)[0]
+FOLDS = {int(h, 16): c for h, c in re.findall(r"\{(0x[0-9A-Fa-f]{2}), '(.)'\}", _FOLD_TABLE)}
 
 
 def glyphs(s):
@@ -132,7 +135,8 @@ class Panel:
 
     def margin_ns(self, tw, f):
         r, tw = self.r, max(tw, 0)
-        m = self.cap() if tw >= 2 * r else r - isqrt(r * r - (tw // 2) ** 2) + 2  # tw < 2r: argument > 0
+        # tw < 2r: the argument of isqrt is > 0
+        m = self.cap() if tw >= 2 * r else r - isqrt(r * r - (tw // 2) ** 2) + 2
         return max((16 * f + 4 * self.k) * self.W // (128 * self.k), min(m, self.cap()))
 
     def margin_ew(self, f):
@@ -232,7 +236,10 @@ def clamp_into(P, s, n, ink, y, f, limit, x):
 
 
 def text_layout(P, s, at, scale):
-    """(x, y, n): the cell top-left and the glyphs kept by text(s, at, c, scale); None draws nothing."""
+    """(x, y, n): the cell top-left and the glyphs kept by text(s, at, c, scale).
+
+    None draws nothing.
+    """
     if not s:
         return None
     f = glyph_factor(P, scale)
@@ -276,7 +283,7 @@ def subtitle_layout(P, lines):
     if not block:
         return []
     f, panel = P.k, (0, P.W - 1)
-    S = P.resolve("S", max(cell_width(l, count(l), TEXT, f) for l in block), f)[1]
+    S = P.resolve("S", max(cell_width(text, count(text), TEXT, f) for text in block), f)[1]
     pitch, n = P.u(11), len(block)
 
     def fits(line, y):
@@ -285,8 +292,8 @@ def subtitle_layout(P, lines):
     start = S + P.u(8) if n == 1 else S - (pitch * (n - 1)) // 2
     lowest = S - (n - 1) * pitch
     y = start
-    while y > lowest and any(ink_rows(l, count(l), TEXT) and not fits(l, y + i * pitch)
-                             for i, l in enumerate(block)):
+    while y > lowest and any(ink_rows(text, count(text), TEXT) and not fits(text, y + i * pitch)
+                             for i, text in enumerate(block)):
         y -= 1
     out = []
     for i, line in enumerate(block):
@@ -299,7 +306,7 @@ def subtitle_rows(W, lines):
     """[(row, kept, ink box or None)] per line of subtitle(*lines) on a W panel."""
     P = Panel(W)
     out = []
-    for line, (x, y, n) in zip(lines, subtitle_layout(P, lines)):
+    for line, (x, y, n) in zip(lines, subtitle_layout(P, lines), strict=False):
         lit = draw_glyphs(line, n, TEXT, x, y, P.k)
         out.append((y, n, box(lit) if lit else None))
     return out
@@ -318,8 +325,10 @@ assert (P128.k, P240.k) == (1, 2) and (P128.cap(), P240.cap()) == (29, 63)
 assert [P128.u(v) for v in (8, 11, 4, 3, 20, 40, -12)] == [8, 11, 4, 3, 20, 40, -12]
 assert [P240.u(v) for v in (8, 11, 4, 3, 20, 40, -12)] == [15, 20, 7, 5, 37, 75, -22]
 # floor_f: 20/37 at scale 1, 36/67 at scale 2, 52 for f = 3 on 240; margin_ew 12/22, 30 for f = 3
-assert (P128.margin_ns(8, 1), P240.margin_ns(16, 2), P128.margin_ns(8, 2), P240.margin_ns(16, 4)) == (20, 37, 36, 67)
-assert P240.margin_ns(16, 3) == 52 and (P128.margin_ew(1), P240.margin_ew(2), P240.margin_ew(3)) == (12, 22, 30)
+assert (P128.margin_ns(8, 1), P240.margin_ns(16, 2),
+        P128.margin_ns(8, 2), P240.margin_ns(16, 4)) == (20, 37, 36, 67)
+assert P240.margin_ns(16, 3) == 52
+assert (P128.margin_ew(1), P240.margin_ew(2), P240.margin_ew(3)) == (12, 22, 30)
 assert P128.chord(20, 20) == (18, 110)  # 93 px
 assert width(P128.chord(29, 29)) == 107
 assert width(P128.chord(36, 36)) == 115
@@ -330,16 +339,19 @@ assert P128.chord(9, 15) == (32, 96) and P240.chord(1, 14) == (105, 135)
 assert P128.chord(-1, 0) is None and P240.chord(239, 241) is None
 # no screen (W 0) and a narrow injected panel: isqrt never sees a negative number (B9)
 assert (P0.k, P0.cap(), P0.margin_ns(8, 1), P0.margin_ns(160, 1)) == (1, 2, 2, 2)
-assert (P96.cap(), P96.margin_ns(200, 1), P96.margin_ns(160, 1)) == (50, 50, 50)  # r 48 < 52: cap r + 2
+# r 48 < 52: cap r + 2
+assert (P96.cap(), P96.margin_ns(200, 1), P96.margin_ns(160, 1)) == (50, 50, 50)
 # the 128 anchors are device.py's wherever 5.9 changes nothing (f 1, tw <= 104: below the cap)
-assert all(P128.resolve(at, tw, 1) == device_resolve(128, at, tw) for at in ANCHORS for tw in range(0, 105, 8))
+assert all(P128.resolve(at, tw, 1) == device_resolve(128, at, tw)
+           for at in ANCHORS for tw in range(0, 105, 8))
 
 # ---- Values pinned by test_steami_screen (Task 2) ----
 print("scale quantities")
 print("  128 u(8) u(-12) k maxChars", P128.u(8), P128.u(-12), P128.k, 128 // (8 * P128.k))
 print("  128 marginEw(1)", P128.margin_ew(1), "marginNs(8,1) (104,1) (112,1) (160,1) (8,2)",
       *(P128.margin_ns(tw, f) for tw, f in ((8, 1), (104, 1), (112, 1), (160, 1), (8, 2))))
-print("  240 u(8) u(-12) u(40) k maxChars", P240.u(8), P240.u(-12), P240.u(40), P240.k, 240 // (8 * P240.k))
+print("  240 u(8) u(-12) u(40) k maxChars", P240.u(8), P240.u(-12), P240.u(40), P240.k,
+      240 // (8 * P240.k))
 print("  240 marginEw(2) (3)", P240.margin_ew(2), P240.margin_ew(3),
       "marginNs(16,2) (176,2) (208,2) (16,4) (16,3)",
       *(P240.margin_ns(tw, f) for tw, f in ((16, 2), (176, 2), (208, 2), (16, 4), (16, 3))))
@@ -350,55 +362,64 @@ print("  128 (20,20) (9,15) (64,64)", P128.chord(20, 20), P128.chord(9, 15), P12
 print("  240 (41,41) (1,14)", P240.chord(41, 41), P240.chord(1, 14), "w(37,37) w(63,63)",
       width(P240.chord(37, 37)), width(P240.chord(63, 63)), "(239,241)", P240.chord(239, 241))
 print("ink rows and widths")
-print("  inkRows _ TEXT 0x%02X, 8. VALUE 0x%02X, spaces 0x%02X, TEMP LABEL 0x%02X" % (
-    ink_rows("_", 1, TEXT), ink_rows("8.", 2, VALUE), ink_rows("   ", 3, TEXT), ink_rows("TEMP", 4, LABEL)))
+print(f"  inkRows _ TEXT 0x{ink_rows('_', 1, TEXT):02X}, "
+      f"8. VALUE 0x{ink_rows('8.', 2, VALUE):02X}, "
+      f"spaces 0x{ink_rows('   ', 3, TEXT):02X}, TEMP LABEL 0x{ink_rows('TEMP', 4, LABEL):02X}")
 print("  cellWidth 23.5 TEXT", cell_width("23.5", 4, TEXT, 1), "valueWidth 23.5 f1 f2 12:34:56",
       value_width("23.5", 1), value_width("23.5", 2), value_width("12:34:56", 1),
-      "TEMP LABEL f2", cell_width("TEMP", 4, LABEL, 2), "Température", cell_width("Température", 11, TEXT, 1))
+      "TEMP LABEL f2", cell_width("TEMP", 4, LABEL, 2),
+      "Température", cell_width("Température", 11, TEXT, 1))
 print("fitGlyphs")
 for P, y, f in ((P128, 29, 1), (P240, 63, 2)):
-    print("  %d y %d f %d:" % (P.W, y, f), *(P.fit_glyphs(s, TEXT, f, y, (0, P.W - 1), 0, 0) for s in
-                                              ("ABCDEFGHIJKLMNOPQRST", "_" * 14 + "T", " " * 14)))
+    print(f"  {P.W} y {y} f {f}:",
+          *(P.fit_glyphs(s, TEXT, f, y, (0, P.W - 1), 0, 0)
+            for s in ("ABCDEFGHIJKLMNOPQRST", "_" * 14 + "T", " " * 14)))
 print("  128 TEMP LABEL y 9 shrink 1:", P128.fit_glyphs("TEMP", LABEL, 1, 9, (0, 127), 1, 0),
       "limit (0, 50):", P128.fit_glyphs("TEMP", LABEL, 1, 9, (0, 50), 1, 0))
 print("resolve")
 for P, tw, f in ((P128, 16, 1), (P240, 32, 2)):
-    print("  %d tw %d f %d:" % (P.W, tw, f), *("%s %s" % (at, P.resolve(at, tw, f)) for at in ANCHORS))
+    print(f"  {P.W} tw {tw} f {f}:", *(f"{at} {P.resolve(at, tw, f)}" for at in ANCHORS))
 print("  240 f 4 CENTER", P240.resolve("CENTER", 32, 4))
 print("drawGlyphs VALUE at (10, 10), f 2")
 for s in ("8.8", "8:8"):
     lit = draw_glyphs(s, 3, VALUE, 10, 10, 2)
     narrow = {p for p in lit if 26 <= p[0] < 34}
     second = {p for p in lit if p[0] >= 34}
-    print("  %s box %s, middle glyph box %s, third glyph first column %d" % (
-        s, box(lit), box(narrow), min(p[0] for p in second)))
+    print(f"  {s} box {box(lit)}, middle glyph box {box(narrow)}, "
+          f"third glyph first column {min(p[0] for p in second)}")
 
 # ---- Self-check of Task 3: titles, text at a scale, subtitles (spec 5.8 rule 7, 5.9, B7, B8) ----
 assert title_row(128, "Temperature") == (20, 11) and title_row(240, "Temperature") == (41, 11)
-assert all(title_row(W, s) == (row, 7) for s in ("Comfort", "Battery") for W, row in ((128, 20), (240, 37)))
+assert all(title_row(W, s) == (row, 7)
+           for s in ("Comfort", "Battery") for W, row in ((128, 20), (240, 37)))
 for s in ("ABCDEFGHIJKLM", "ABCDEFGHIJKLMNOPQRST"):
     assert title_row(128, s) == (29, 13) and title_row(240, s) == (63, 13), s
 assert title_row(128, "_" * 14) == (29, 14) and title_row(240, "_" * 14) == (63, 13)
 assert title_row(128, "_" * 14 + "T") == (29, 14) and title_row(240, "_" * 14 + "T") == (63, 13)
-assert text_layout(P128, "ABCDEFGH", "N", 2)[1:] == (36, 7) and text_layout(P240, "ABCDEFGH", "N", 2)[1:] == (67, 6)
+assert text_layout(P128, "ABCDEFGH", "N", 2)[1:] == (36, 7)
+assert text_layout(P240, "ABCDEFGH", "N", 2)[1:] == (67, 6)
 CHIPS = ("WSEN-HIDS", "BME280", "APDS-9960")
 ONE_LINE = {("WSEN-HIDS",): (108, 202), ("BME280",): (108, 202), ("BQ27441",): (108, 202),
             ("VL53L1X",): (108, 202), ("SURPRISED",): (108, 202), ("Comfortable",): (104, 188),
-            ("VL53L1X ToF",): (104, 188), ("Uncomfortable",): (95, 166), ("20s window",): (107, 196)}
+            ("VL53L1X ToF",): (104, 188), ("Uncomfortable",): (95, 166),
+            ("20s window",): (107, 196)}
 TWO_LINES = {("3842 mV", "BQ27441"): ((95, 106), (177, 197))}
 for chip in CHIPS:
     TWO_LINES[("Comfortable", chip)] = ((95, 106), (173, 193))
     TWO_LINES[("Uncomfortable", chip)] = ((86, 97), (151, 171))
     TWO_LINES[(chip, "20s window")] = ((95, 106), (176, 196))
 for lines, rows in ONE_LINE.items():
-    for W, row in zip((128, 240), rows):
-        assert [(y, n) for y, n, _ in subtitle_rows(W, lines)] == [(row, count(lines[0]))], (W, lines)
+    for W, row in zip((128, 240), rows, strict=True):
+        got = [(y, n) for y, n, _ in subtitle_rows(W, lines)]
+        assert got == [(row, count(lines[0]))], (W, lines)
 for lines, rows in TWO_LINES.items():
-    for W, pair in zip((128, 240), rows):
+    for W, pair in zip((128, 240), rows, strict=True):
         got = subtitle_rows(W, lines)
         assert tuple(y for y, _, _ in got) == pair, (W, lines, got)
-        assert all(n == count(l) for (_, n, _), l in zip(got, lines)), (W, lines)  # every line whole
-# Review Focus 3: 15 glyphs (20 bytes), 13 kept, cells 12..115, ink 13..114 ('T' column 0, 'e' column 7)
+        # every line whole
+        assert all(n == count(line) for (_, n, _), line in zip(got, lines, strict=True)), (W, lines)
+# Review Focus 3: 15 glyphs (20 bytes), 13 kept, cells 12..115, ink 13..114
+# ('T' column 0, 'e' column 7)
 assert text_layout(P128, "Températureéééé", "N", 1) == (12, 29, 13)
 assert text_box(128, "Températureéééé", "N")[0::2] == (13, 114)
 # the available width of a lowercase-only title comes from the rows it inks
@@ -406,24 +427,27 @@ assert width(P128.ink_chord("acemnorsuvwxz", 13, TEXT, 29, 1)) == 109
 assert width(P128.ink_chord("ABCDEFGHIJKLM", 13, TEXT, 29, 1)) == 107
 assert width(P240.ink_chord("acemnorsuvwxz", 13, TEXT, 63, 2)) == 215
 assert width(P240.ink_chord("ABCDEFGHIJKLM", 13, TEXT, 63, 2)) == 211
-assert title_row(128, "acemnorsuvwxzacemnorsuvwxz")[1] == 13 and title_row(240, "acemnorsuvwxzacem")[1] == 13
+assert title_row(128, "acemnorsuvwxzacemnorsuvwxz")[1] == 13
+assert title_row(240, "acemnorsuvwxzacem")[1] == 13
 
 # ---- Values pinned by test_steami_screen (Task 3) ----
 print("text_box of Hi at the nine anchors (x0 y0 x1 y1)")
 for W in (128, 240):
     for scale in (1, 2):
-        print("  %d scale %d:" % (W, scale), *("%s %s" % (at, text_box(W, "Hi", at, scale)) for at in ANCHORS))
+        print(f"  {W} scale {scale}:",
+              *(f"{at} {text_box(W, 'Hi', at, scale)}" for at in ANCHORS))
 TITLES = ("Temperature", "Comfort", "Battery", "ABCDEFGHIJKLM", "ABCDEFGHIJKLMNOPQRST", "_" * 14,
           "_" * 14 + "T", "Températureéééé")
 print("titles (row, kept, ink box)")
 for s in TITLES:
-    print("  %-22r" % s, *("%d: %s %s" % (W, title_row(W, s), text_box(W, s, "N")) for W in (128, 240)))
-print("  text('ABCDEFGH', N, 2)", *("%d: %s %s" % (W, text_layout(Panel(W), "ABCDEFGH", "N", 2),
-                                                      text_box(W, "ABCDEFGH", "N", 2)) for W in (128, 240)))
+    print(f"  {s!r:<22}", *(f"{W}: {title_row(W, s)} {text_box(W, s, 'N')}" for W in (128, 240)))
+print("  text('ABCDEFGH', N, 2)",
+      *(f"{W}: {text_layout(Panel(W), 'ABCDEFGH', 'N', 2)} {text_box(W, 'ABCDEFGH', 'N', 2)}"
+        for W in (128, 240)))
 print("subtitles (row, kept, ink box) per line")
 for lines in list(ONE_LINE) + list(TWO_LINES):
     for W in (128, 240):
-        print("  %d %r:" % (W, lines), *subtitle_rows(W, lines))
+        print(f"  {W} {lines!r}:", *subtitle_rows(W, lines))
 
 # ---- Widget of Task 4: value() at CENTER, N, S, W and E (spec 5.9, B2, B6, B9) ----
 REFERENCE = "88.8"  # the widest value that keeps the same f at W and E (B6)
@@ -449,7 +473,10 @@ def half_limit(P, at):
 
 
 def half_region(P, at, c):
-    """The W/E half region of a chord: [left edge + k, cx - u(3) - 1], E mirrored; (0, -1) if empty."""
+    """The W/E half region of a chord: [left edge + k, cx - u(3) - 1], E mirrored.
+
+    (0, -1) if empty.
+    """
     if c is None:
         return (0, -1)
     lo, hi = half_limit(P, at)
@@ -545,8 +572,8 @@ def part_place(P, s, ink, y, at, centre):
 
 
 def value_layout(W, t, at="CENTER", unit=None, label=None, scale=2, y_offset=0):
-    """Boxes (value, label, unit) of value(t, unit, at, label, c, scale, yOffset) alone on a W panel,
-    each None without ink, and the placement: f, top, region, kept glyphs of each part."""
+    """Boxes (value, label, unit) of value(t, unit, at, label, c, scale, yOffset) alone on a W
+    panel, each None without ink, and the placement: f, top, region, kept glyphs of each part."""
     P = Panel(W)
     v = value_place(P, t, at, unit, scale, y_offset)
     out = dict(v)
@@ -604,10 +631,12 @@ assert value_layout(240, "8888", "W", DEG_C, scale=1)["f"] == 2
 assert value_layout(128, "12:34:56", "W", DEG_C)["n"] == 8
 for t in ("12345678", "-1234.56", "Uncomfortable"):
     assert value_cut(128, t, "W", DEG_C) and value_cut(128, t, "E", DEG_C), t
-assert not value_cut(240, "Uncomfortable", "W", DEG_C) and value_cut(240, "ABCDEFGHIJKLMNO", "W", DEG_C)
+assert not value_cut(240, "Uncomfortable", "W", DEG_C)
+assert value_cut(240, "ABCDEFGHIJKLMNO", "W", DEG_C)
 FIFTEEN, NUMERIC = "888888888888888", "-999999936.0000"
 assert value_width(FIFTEEN, 1) == 120 and value_width(NUMERIC, 1) == 116
-assert value_cut(128, FIFTEEN, "CENTER", DEG_C, -12) and value_cut(240, FIFTEEN, "CENTER", DEG_C, -50)
+assert value_cut(128, FIFTEEN, "CENTER", DEG_C, -12)
+assert value_cut(240, FIFTEEN, "CENTER", DEG_C, -50)
 assert not value_cut(128, FIFTEEN, "CENTER", DEG_C) and not value_cut(240, FIFTEEN, "CENTER", DEG_C)
 THRESHOLDS = {128: ((-7, 19), (-12, 14), (-14, 26)), 240: ((-48, 59), (-53, 54), (-49, 60))}
 for W, expected in THRESHOLDS.items():
@@ -635,22 +664,22 @@ print("value boxes (f top x; value, label, unit)")
 for name, t, at, unit, label, y_offset in VALUE_CASES:
     for W in (128, 240):
         got = value_layout(W, t, at, unit, label, 2, y_offset)
-        print("  %-6s %d: f %d top %d x %d region %s; %s %s %s" % (
-            name, W, got["f"], got["top"], got["x"], got["region"], got["value"], got["label"], got["unit"]))
+        print(f"  {name:<6} {W}: f {got['f']} top {got['top']} x {got['x']} "
+              f"region {got['region']}; {got['value']} {got['label']} {got['unit']}")
 print("value regions and cuts")
 for W in (128, 240):
     for t in ("1", "8888", "123456", "12:34:56", "Uncomfortable", "ABCDEFGHIJKLMNO"):
         for at in ("W", "E"):
             got = value_layout(W, t, at, DEG_C)
-            print("  %d %-16r %s: f %d region %s kept %d box %s" % (
-                W, t, at, got["f"], got["region"], got["n"], got["value"]))
+            print(f"  {W} {t!r:<16} {at}: f {got['f']} region {got['region']} "
+                  f"kept {got['n']} box {got['value']}")
     for at in ("W", "E"):
         got = value_layout(W, "23.5", at, DEG_C, "TEMPERATURE")
-        print("  %d TEMPERATURE label %s: kept %d room %s box %s" % (
-            W, at, got["label_n"], got["label_room"], got["label"]))
+        print(f"  {W} TEMPERATURE label {at}: kept {got['label_n']} "
+              f"room {got['label_room']} box {got['label']}")
     for y_offset in (0, -12, -50):
         got = value_layout(W, FIFTEEN, "CENTER", DEG_C, None, 2, y_offset)
-        print("  %d %s CENTER yOffset %d: kept %d box %s" % (W, FIFTEEN, y_offset, got["n"], got["value"]))
+        print(f"  {W} {FIFTEEN} CENTER yOffset {y_offset}: kept {got['n']} box {got['value']}")
 
 # ---- Self-check of Task 5: value() at the corners (5.9 "Corner anchors", B9) ----
 CORNER_LABELS = ("TEMP", "TEMPERATURE", "TEMPERATURES12")
@@ -663,11 +692,13 @@ def inside(b, room):
 
 c128 = value_layout(128, "8", "NE", "C", "TEMP", 1)
 assert (c128["f"], c128["x"], c128["top"], c128["n"]) == (1, 102, 20, 1), c128
-assert c128["label"][1::2] == (9, 15) and c128["label_room"] == (33, 95) and c128["label_x"] == 72, c128
+assert c128["label"][1::2] == (9, 15) and c128["label_room"] == (33, 95), c128
+assert c128["label_x"] == 72, c128
 assert c128["label"][2] <= 95 and c128["label_n"] == 4
 assert c128["x"] + 8 // 2 - 24 // 2 == 94  # "moves from x 94 to x 72"
 s128 = value_layout(128, "8", "SE", "C", "TEMP", 1)
-assert s128["unit"][1::2] == (108, 114) and s128["unit_room"] == (26, 102) and s128["unit_x"] == 95, s128
+assert s128["unit"][1::2] == (108, 114) and s128["unit_room"] == (26, 102), s128
+assert s128["unit_x"] == 95, s128
 assert s128["x"] + 8 // 2 - 8 // 2 == 103  # "moves from x 103 to x 95"
 c240 = value_layout(240, "8", "NE", "C", "TEMP", 1)
 assert (c240["f"], c240["x"], c240["top"]) == (1, 180, 22), c240  # f 2 leaves the region
@@ -678,12 +709,15 @@ assert width(P240.chord(1, 14)) == 31 and region_width(c240["label_room"]) == 27
 # the circle; the 15-glyph text is cut on 128 (cap row 29, region 105 px) and whole on 240
 for W in (128, 240):
     for at in CORNERS:
-        for t, unit, label, scale in ([("8", "C", l, sc) for l in CORNER_LABELS for sc in (1, 2)] +
-                                      [(t, DEG_C, "TEMPERATURES12", 2) for t in CORNER_TEXTS]):
+        cases = ([("8", "C", corner_label, sc) for corner_label in CORNER_LABELS for sc in (1, 2)] +
+                 [(t, DEG_C, "TEMPERATURES12", 2) for t in CORNER_TEXTS])
+        for t, unit, label, scale in cases:
             got = value_layout(W, t, at, unit, label, scale)
             assert inside(got["value"], got["region"]), (W, at, t, got)
-            assert inside(got["label"], got["label_room"]) and inside(got["unit"], got["unit_room"]), (W, at, t)
-        assert value_layout(W, "ABCDEFGHIJKLMNO", at, DEG_C)["n"] == (13 if W == 128 else 15), (W, at)
+            assert inside(got["label"], got["label_room"]), (W, at, t)
+            assert inside(got["unit"], got["unit_room"]), (W, at, t)
+        kept = value_layout(W, "ABCDEFGHIJKLMNO", at, DEG_C)["n"]
+        assert kept == (13 if W == 128 else 15), (W, at)
 
 # ---- Values pinned by test_steami_screen (Task 5) ----
 print("value corners: value(8, \"C\", at, label, WHITE, scale) (f top x kept; value, label, unit)")
@@ -692,20 +726,21 @@ for W in (128, 240):
         for scale in (1, 2):
             for label in CORNER_LABELS:
                 got = value_layout(W, "8", at, "C", label, scale)
-                print("  %d %s s%d %-15s f %d top %d x %d n %d; %s %s %s; label n %d x %d room %s; unit x %d room %s" % (
-                    W, at, scale, label, got["f"], got["top"], got["x"], got["n"], got["value"], got["label"],
-                    got["unit"], got["label_n"], got["label_x"], got["label_room"], got["unit_x"], got["unit_room"]))
+                print(f"  {W} {at} s{scale} {label:<15} f {got['f']} top {got['top']} "
+                      f"x {got['x']} n {got['n']}; {got['value']} {got['label']} {got['unit']}; "
+                      f"label n {got['label_n']} x {got['label_x']} room {got['label_room']}; "
+                      f"unit x {got['unit_x']} room {got['unit_room']}")
 print("value corners: value(text, \"°C\", at, \"TEMPERATURES12\", WHITE, 2)")
 for W in (128, 240):
     for at in CORNERS:
         for t in CORNER_TEXTS:
             got = value_layout(W, t, at, DEG_C, "TEMPERATURES12", 2)
-            print("  %d %s %-16r f %d top %d x %d n %d region %s; %s %s %s; label n %d" % (
-                W, at, t, got["f"], got["top"], got["x"], got["n"], got["region"], got["value"], got["label"],
-                got["unit"], got["label_n"]))
+            print(f"  {W} {at} {t!r:<16} f {got['f']} top {got['top']} x {got['x']} "
+                  f"n {got['n']} region {got['region']}; "
+                  f"{got['value']} {got['label']} {got['unit']}; label n {got['label_n']}")
 got = value_layout(128, "8", "NE", None, None, 1)
-print("  128 value(8, nullptr, NE, nullptr, WHITE, 1): f %d top %d x %d region %s; %s" % (
-    got["f"], got["top"], got["x"], got["region"], got["value"]))
+print(f"  128 value(8, nullptr, NE, nullptr, WHITE, 1): f {got['f']} top {got['top']} "
+      f"x {got['x']} region {got['region']}; {got['value']}")
 
 # ---- Widget of Task 6: bar() (spec 5.9 "bar", the decision "bar() geometry") ----
 
@@ -772,7 +807,8 @@ NAN = float("nan")
 for v, max_v, fill in ((-5, 100, 0), (-INF, 100, 0), (150, 100, 88), (INF, 100, 88), (NAN, 100, 0),
                        (50, 0, 0), (50, -10, 0), (50, NAN, 0), (50, INF, 0), (INF, INF, 88)):
     assert bar_rect(128, v, max_v)[4] == fill, (v, max_v)
-assert bar_rect(128, 3e38, 3.4e38)[4] == 77  # 88 * 3e38 overflows a float: the C++ takes the ratio first
+# 88 * 3e38 overflows a float: the C++ takes the ratio first
+assert bar_rect(128, 3e38, 3.4e38)[4] == 77
 # yOffset 0: the whole track is inside the disc (88 / 165 px on every row)
 for W, whole in ((128, 88), (240, 165)):
     spans = bar_spans(W, 50, 100, 0)
@@ -786,9 +822,10 @@ for W in (128, 240):
 print("bar(72, 100, yOffset) (x top w h fill; unfilled track box, fill box)")
 for W in (128, 240):
     for y_offset in (0, -12):
-        print("  %d yOffset %d: %s; %s %s" % (W, y_offset, bar_rect(W, 72, 100, y_offset),
-                                             *bar_boxes(W, 72, 100, y_offset)))
-print("bar(50, 100, 0) (fill box)", *("%d: %s" % (W, bar_boxes(W, 50, 100, 0)[1]) for W in (128, 240)))
+        track, filled = bar_boxes(W, 72, 100, y_offset)
+        print(f"  {W} yOffset {y_offset}: {bar_rect(W, 72, 100, y_offset)}; {track} {filled}")
+print("bar(50, 100, 0) (fill box)",
+      *(f"{W}: {bar_boxes(W, 50, 100, 0)[1]}" for W in (128, 240)))
 
 # ---- Widget of 4b Task 1: face() (spec 5.9 "face", the decision "face") ----
 # const.py's FACES at micropython-steami-lib 927e96b (lines 23-30), in SteamiFace order: rows top to
@@ -804,8 +841,8 @@ FACES = {
 
 
 def face_layout(W, compact):
-    """(cell, ox, oy) of face(f, compact) on a W panel: cells of u(11), or u(8) when compact, the 8x8
-    grid centred, raised by half a cell when compact (device.py)."""
+    """(cell, ox, oy) of face(f, compact) on a W panel: cells of u(11), or u(8) when compact,
+    the 8x8 grid centred, raised by half a cell when compact (device.py)."""
     P = Panel(W)
     cell = P.u(8 if compact else 11)
     return cell, P.cx - 4 * cell, P.cy - 4 * cell - (cell // 2 if compact else 0)
@@ -840,10 +877,11 @@ for W in (128, 240):
                 assert (px - P.cx) ** 2 + (py - P.cy) ** 2 <= (P.r + 1) ** 2, (W, compact, px, py)
 
 # ---- Values pinned by test_steami_screen (4b Task 1) ----
-print("face_layout (cell, ox, oy)", *("%d %s: %s" % (W, "compact" if c else "full", face_layout(W, c))
-                                      for W in (128, 240) for c in (False, True)))
+print("face_layout (cell, ox, oy)",
+      *(f"{W} {'compact' if c else 'full'}: {face_layout(W, c)}"
+        for W in (128, 240) for c in (False, True)))
 for name, bitmap in FACES.items():
-    print("  %s: %d squares" % (name, len(face_cells(128, bitmap, False))))
+    print(f"  {name}: {len(face_cells(128, bitmap, False))} squares")
 
 # ---- Q14 trigonometry of 4b (SteamiTrig.cpp, spec 5.6) ----
 # kSinQ14[91] parsed from SteamiTrig.cpp (decimal values), and the three functions mirrored from it.
@@ -875,7 +913,8 @@ def round_q14(v):
     return (v + 8192) // 16384 if v >= 0 else -((-v + 8192) // 16384)
 
 
-assert [sin_q14(d) for d in (0, 30, 90, 180, 270, -90, 450)] == [0, 8192, 16384, 0, -16384, -16384, 16384]
+assert ([sin_q14(d) for d in (0, 30, 90, 180, 270, -90, 450)]
+        == [0, 8192, 16384, 0, -16384, -16384, 16384])
 assert [cos_q14(d) for d in (0, 60, 90, 180, 360)] == [16384, 8192, 0, -16384, 16384]
 assert [round_q14(v) for v in (8191, 8192, -8191, -8192, 24576, -24576)] == [0, 1, 0, -1, 2, -2]
 # The gauge label points (4b Task 4) and their mirror images
@@ -892,13 +931,14 @@ for P in (P128, P240):
 # ---- Values pinned by test_steami_screen (4b Task 2: polarX, polarY) ----
 print("polar (polarX, polarY)")
 print("  128 (43,233) (43,127) (44,0) (0,77) (44,-90) (44,270)",
-      *(P128.polar(d, a) for d, a in ((43, 233), (43, 127), (44, 0), (0, 77), (44, -90), (44, 270))))
+      *(P128.polar(d, a)
+        for d, a in ((43, 233), (43, 127), (44, 0), (0, 77), (44, -90), (44, 270))))
 print("  240 (82,233) (83,0)", P240.polar(82, 233), P240.polar(83, 0))
 
 # ---- A raster of the primitives the round widgets draw through (SteamiDisplay.cpp) ----
-# Each function adds {(x, y): colour} to a canvas dict, later calls painting over earlier ones, cut to
-# the W x W panel. They mirror span(), walk() (strokeLine), triangle(..., true), arc() for a full
-# turn (strokeCircle), circle(..., true) and text(): the goldens below read their pixels.
+# Each function adds {(x, y): colour} to a canvas dict, later calls painting over earlier ones,
+# cut to the W x W panel. They mirror span(), walk() (strokeLine), triangle(..., true), arc() for
+# a full turn (strokeCircle), circle(..., true) and text(): the goldens below read their pixels.
 
 
 def r_span(cv, W, x, y, w, h, c):
@@ -996,16 +1036,18 @@ def outside_circle(cv, P):
 
 
 # ---- Widget of 4b Task 2: watch() (spec 5.9 "watch", the decision "watch(h, m, s, c)") ----
-# Points use Q14 (spec 5.6), not device.py's int(); fractions of R truncate (R / 2, 3R / 4, R·85/100).
+# Points use Q14 (spec 5.6), not device.py's int(); fractions of R truncate
+# (R / 2, 3R / 4, R·85/100).
 WATCH_NUMBERS = (("12", 0), ("3", 90), ("6", 180), ("9", 270))
 
 
 def watch_radii(W):
-    """(R, major tick start, minor tick start, numbers, hour length, hour half width, minute length,
-    minute half width, second length)."""
+    """(R, major tick start, minor tick start, numbers, hour length, hour half width,
+    minute length, minute half width, second length)."""
     P = Panel(W)
     R = P.r - P.u(8)
-    return R, R - P.u(8), R - P.u(5), R - P.u(15), R // 2, P.u(3), 3 * R // 4, P.u(2), R * 85 // 100
+    return (R, R - P.u(8), R - P.u(5), R - P.u(15), R // 2, P.u(3), 3 * R // 4, P.u(2),
+            R * 85 // 100)
 
 
 def watch_angles(h, m, s):
@@ -1020,7 +1062,8 @@ def number_cell(P, text, deg, d):
 
 
 def pointer_points(P, deg, length, half_width):
-    """pointer(): tip at (length, deg), base from (half_width, deg + 90) to (half_width, deg - 90)."""
+    """pointer(): tip at (length, deg), base from (half_width, deg + 90) to
+    (half_width, deg - 90)."""
     return P.polar(length, deg), P.polar(half_width, deg + 90), P.polar(half_width, deg - 90)
 
 
@@ -1089,7 +1132,8 @@ assert W240_300["cells"] == {"12": (104, 35), "3": (189, 112), "6": (112, 189), 
 assert watch_layout(128, 10, 10, 30)["tips"] == ((41, 48), (101, 45), (64, 111))
 assert watch_layout(240, 10, 10, 30)["tips"] == ((77, 90), (189, 85), (120, 209))
 # watch(3, 0, 0, RED): the hour tip is RED and ends the RED box; the GRAY second hand, at the same
-# 0 degrees and drawn after the minute hand, covers the minute tip; the second tip and the pivot GRAY
+# 0 degrees and drawn after the minute hand, covers the minute tip;
+# the second tip and the pivot GRAY
 for W, layout in ((128, W128_300), (240, W240_300)):
     P = Panel(W)
     cv = watch_render(W, 3, 0, 0, "RED")
@@ -1122,30 +1166,34 @@ for W in (128, 240):
     for text, deg in WATCH_NUMBERS:
         r_text(numbers, W, text, *number_cell(P, text, deg, watch_radii(W)[3]), P.k, "WHITE")
     cv = watch_render(W, 1, 37, 5)
-    assert all(cv[p] == "WHITE" for p in numbers) and watch_layout(W, 1, 37, 5)["white"] == box(list(numbers))
+    assert all(cv[p] == "WHITE" for p in numbers)
+    assert watch_layout(W, 1, 37, 5)["white"] == box(list(numbers))
 # Review Focus 3 and 4: nothing outside radius() + 1, the strokes k px wide on every time tested
 for W in (128, 240):
     P = Panel(W)
-    for t in ((0, 0, 0), (3, 0, 0), (10, 10, 30), (10, 11, 59), (25, 61, 61), (255, 255, 255), (7, 22, 45)):
+    for t in ((0, 0, 0), (3, 0, 0), (10, 10, 30), (10, 11, 59), (25, 61, 61), (255, 255, 255),
+              (7, 22, 45)):
         assert not outside_circle(watch_render(W, *t), P), (W, t)
 
 # ---- Values pinned by test_steami_screen (4b Task 2) ----
 print("watch (R, major, minor, numbers, hour len/half, minute len/half, second len)")
 for W in (128, 240):
-    print("  %d: %s" % (W, watch_radii(W)))
+    print(f"  {W}: {watch_radii(W)}")
 for t in ((3, 0, 0), (3, 0, 30), (10, 10, 30), (10, 11, 59)):
-    print("  watch%s angles %s, tips (hour, minute, second) 128 %s 240 %s" % (
-        t, watch_angles(*t), watch_layout(128, *t)["tips"], watch_layout(240, *t)["tips"]))
+    print(f"  watch{t} angles {watch_angles(*t)}, tips (hour, minute, second) "
+          f"128 {watch_layout(128, *t)['tips']} 240 {watch_layout(240, *t)['tips']}")
 for W in (128, 240):
-    print("  %d number cells %s" % (W, watch_layout(W, 3, 0, 0)["cells"]))
-    print("  %d watch(3, 0, 0, RED) RED box %s; watch(3, 0, 30, RED) RED box %s" % (
-        W, colour_box(watch_render(W, 3, 0, 0, "RED"), "RED"), colour_box(watch_render(W, 3, 0, 30, "RED"), "RED")))
-    print("  %d watch(1, 37, 5) WHITE box %s" % (W, watch_layout(W, 1, 37, 5)["white"]))
+    print(f"  {W} number cells {watch_layout(W, 3, 0, 0)['cells']}")
+    print(f"  {W} watch(3, 0, 0, RED) RED box "
+          f"{colour_box(watch_render(W, 3, 0, 0, 'RED'), 'RED')}; "
+          f"watch(3, 0, 30, RED) RED box {colour_box(watch_render(W, 3, 0, 30, 'RED'), 'RED')}")
+    print(f"  {W} watch(1, 37, 5) WHITE box {watch_layout(W, 1, 37, 5)['white']}")
 
 # ---- Widget of 4b Task 3: compass() (spec 5.9 "compass", decision 2, the decision "compass") ----
-# A real rose: every element at angle a is drawn at a - h. Points use Q14 (spec 5.6), not device.py's
-# int(); fractions of R truncate (R·7/10, R·85/100). Draw order: circles, ticks, letters, north half,
-# south half, pivot (the spec's listing order, so letters paint over ticks at diagonal headings).
+# A real rose: every element at angle a is drawn at a - h. Points use Q14 (spec 5.6), not
+# device.py's int(); fractions of R truncate (R·7/10, R·85/100). Draw order: circles, ticks,
+# letters, north half, south half, pivot (the spec's listing order, so letters paint over ticks at
+# diagonal headings).
 COMPASS_LETTERS = (("N", 0, "WHITE"), ("E", 90, "GRAY"), ("S", 180, "GRAY"), ("W", 270, "GRAY"))
 
 
@@ -1177,7 +1225,8 @@ def compass_render(W, heading, c="LIGHT"):
     r_ring(cv, W, P.cx, P.cy, inner, P.k, "DARK")
     for i in range(8):
         deg = 45 * i - turn
-        r_stroke_line(cv, W, *P.polar(tick, deg), *P.polar(R, deg), P.k, "LIGHT" if i % 2 == 0 else "DARK")
+        colour = "LIGHT" if i % 2 == 0 else "DARK"
+        r_stroke_line(cv, W, *P.polar(tick, deg), *P.polar(R, deg), P.k, colour)
     for text, deg, colour in COMPASS_LETTERS:
         r_text(cv, W, text, *number_cell(P, text, deg - turn, letters), P.k, colour)
     if h is not None:
@@ -1199,7 +1248,8 @@ def compass_layout(W, heading):
         "inner": inner,
         "ticks": [(P.polar(tick, 45 * i - turn), P.polar(R, 45 * i - turn)) for i in range(8)],
         "centres": {text: P.polar(letters, deg - turn) for text, deg, _ in COMPASS_LETTERS},
-        "cells": {text: number_cell(P, text, deg - turn, letters) for text, deg, _ in COMPASS_LETTERS},
+        "cells": {text: number_cell(P, text, deg - turn, letters)
+                  for text, deg, _ in COMPASS_LETTERS},
         "tip": None if h is None else P.polar(needle, -h),
         "base": None if h is None else pointer_points(P, -h, needle, half)[1:],
         "white": colour_box(compass_render(W, heading), "WHITE"),
@@ -1255,7 +1305,8 @@ for W, points in COMPASS_POINTS.items():
         layout = compass_layout(W, heading)
         assert (layout["tip"], layout["centres"]["N"]) == (tip, north), (W, heading)
 # The N cell's top-left is its centre - 4k: (60, 3) on 128 and (112, 5) on 240 at heading 0
-assert compass_layout(128, 0)["cells"]["N"] == (60, 3) and compass_layout(240, 0)["cells"]["N"] == (112, 5)
+assert compass_layout(128, 0)["cells"]["N"] == (60, 3)
+assert compass_layout(240, 0)["cells"]["N"] == (112, 5)
 # Spec 5.9: at 90 the N letter is on the left
 for W in (128, 240):
     assert compass_layout(W, 90)["white"][2] < Panel(W).cx
@@ -1275,7 +1326,8 @@ SVG07_PX = [round(SVG07[key] / SVG07_SCALE) for key in ("R", "inner", "tip", "ha
 assert SVG07_PX == [R7, I7, N7, H7, PV7]
 # roundedHeading (Review Focus 2): NAN and +-INF draw no needle; halves and wraps
 assert [compass_heading(v) for v in (NAN, INF, -INF)] == [None, None, None]
-assert [compass_heading(v) for v in (359.6, 0.4, -90.4, 450, 270, 0.5, -0.5)] == [360, 0, -90, 90, 270, 1, -1]
+assert ([compass_heading(v) for v in (359.6, 0.4, -90.4, 450, 270, 0.5, -0.5)]
+        == [360, 0, -90, 90, 270, 1, -1])
 assert compass_heading(1e30) is not None
 # Drawings that the rounding makes equal (test_compass_heading_rounding)
 for W in (128, 240):
@@ -1302,7 +1354,8 @@ for W in (128, 240):
         assert cv[tip] == "RED" and colour_box(cv, "RED")[SIDE[heading]] == tip[SIDE[heading] % 2]
         n_only = {}
         r_text(n_only, W, "N", *layout["cells"]["N"], P.k, "WHITE")
-        assert all(cv[p] == "WHITE" for p in n_only) and colour_box(cv, "WHITE") == box(list(n_only))
+        assert all(cv[p] == "WHITE" for p in n_only)
+        assert colour_box(cv, "WHITE") == box(list(n_only))
         assert cv[(P.cx, P.cy)] == "GRAY"
 # compass(45): the N tick turned to 315 is LIGHT, the NE diagonal tick turned to 0 DARK, at the
 # tick start R - u(6); the needle (44 / 83) reaches neither
@@ -1320,25 +1373,28 @@ for W in (128, 240):
 # ---- Values pinned by test_steami_screen (4b Task 3) ----
 print("compass (R, inner, tick start, letters, needle, half width, pivot)")
 for W in (128, 240):
-    print("  %d: %s" % (W, compass_radii(W)))
+    print(f"  {W}: {compass_radii(W)}")
 for W in (128, 240):
     P = Panel(W)
     R, _, tick, _, _, _, _ = compass_radii(W)
     for heading in (0, 90, 180, 270):
         layout = compass_layout(W, heading)
-        print("  %d heading %d: tip %s, N centre %s, N cell %s, WHITE box %s, RED box %s" % (
-            W, heading, layout["tip"], layout["centres"]["N"], layout["cells"]["N"], layout["white"],
-            colour_box(compass_render(W, heading, "RED"), "RED")))
-    print("  %d compass(45): N tick start %s, NE tick start %s" % (W, P.polar(tick, 315), P.polar(tick, 0)))
+        print(f"  {W} heading {heading}: tip {layout['tip']}, N centre {layout['centres']['N']}, "
+              f"N cell {layout['cells']['N']}, WHITE box {layout['white']}, "
+              f"RED box {colour_box(compass_render(W, heading, 'RED'), 'RED')}")
+    print(f"  {W} compass(45): N tick start {P.polar(tick, 315)}, "
+          f"NE tick start {P.polar(tick, 0)}")
 
-# ---- Widget of 4b Task 4: gauge() (spec 5.8 table, 5.9 "gauge", the decisions "gauge" and "gaugeLabel") ----
-# Track and fill are arc()s of the same outer radius and width from 225 degrees (noon, clockwise; device.py's
-# 135 in screen-math angles), drawn in device.py's order: track, fill, min label, max label. A label is the
-# integer part of minV or maxV ("--" past 1e9) in 5x7 x k GRAY, its top row on the point at 233 / 127
-# degrees, centred on it by its cell width, then slid into the chord at its inked rows shrunk by k (the 4a
-# corner rule B10, ruling 3). device.py truncates its label points with int(): its min point on 128 is
-# (29, 89) where Q14 rounding gives (30, 90). The cut in drawGaugeLabel (fitGlyphs) is a guard that no label
-# of at most 10 glyphs reaches: the chord at the label rows leaves about 109 / 201 px.
+# ---- Widget of 4b Task 4: gauge() (spec 5.8 table, 5.9 "gauge", the decisions "gauge" and
+# "gaugeLabel") ----
+# Track and fill are arc()s of the same outer radius and width from 225 degrees (noon, clockwise;
+# device.py's 135 in screen-math angles), drawn in device.py's order: track, fill, min label, max
+# label. A label is the integer part of minV or maxV ("--" past 1e9) in 5x7 x k GRAY, its top row
+# on the point at 233 / 127 degrees, centred on it by its cell width, then slid into the chord at
+# its inked rows shrunk by k (the 4a corner rule B10, ruling 3). device.py truncates its label
+# points with int(): its min point on 128 is (29, 89) where Q14 rounding gives (30, 90). The cut in
+# drawGaugeLabel (fitGlyphs) is a guard that no label of at most 10 glyphs reaches: the chord at
+# the label rows leaves about 109 / 201 px.
 GAUGE_START, GAUGE_SWEEP, GAUGE_MIN_ANGLE, GAUGE_MAX_ANGLE = 225, 270, 233, 127
 FLT_MAX = struct.unpack("<f", b"\xff\xff\x7f\x7f")[0]
 
@@ -1352,9 +1408,9 @@ def f32(x):
 
 
 def gauge_sweep(v, min_v, max_v):
-    """gaugeSweep(): lroundf(270.0f * ratio), ratio = (v - minV) / (maxV - minV) in float32, clamped to
-    [0, 1]; 0 when maxV == minV or the ratio is NAN (NAN in any argument, INF - INF). Halves away from zero,
-    never Python's round() (ruling 5: 270 * 0.75 = 202.5 gives 203)."""
+    """gaugeSweep(): lroundf(270.0f * ratio), ratio = (v - minV) / (maxV - minV) in float32,
+    clamped to [0, 1]; 0 when maxV == minV or the ratio is NAN (NAN in any argument, INF - INF).
+    Halves away from zero, never Python's round() (ruling 5: 270 * 0.75 = 202.5 gives 203)."""
     v, min_v, max_v = f32(v), f32(min_v), f32(max_v)
     if max_v == min_v:
         return 0
@@ -1367,15 +1423,15 @@ def gauge_sweep(v, min_v, max_v):
 
 
 def gauge_label_text(v):
-    """gaugeLabel()'s text: the integer part of the float32 v, truncated toward zero as device.py's int(),
-    when |v| < 1e9; otherwise "--" (NAN, +-INF, huge)."""
+    """gaugeLabel()'s text: the integer part of the float32 v, truncated toward zero as
+    device.py's int(), when |v| < 1e9; otherwise "--" (NAN, +-INF, huge)."""
     v = f32(v)
     return str(int(v)) if abs(v) < 1e9 else "--"
 
 
 def gauge_layout(W, min_v, max_v, arc_width=0):
-    """The outer radius, the ring width, the label distance and, per label (min then max), its text, its
-    point, the glyphs kept, its left column, its lit pixels and their box."""
+    """The outer radius, the ring width, the label distance and, per label (min then max), its
+    text, its point, the glyphs kept, its left column, its lit pixels and their box."""
     P = Panel(W)
     outer = P.r - P.u(4)
     w = arc_width if arc_width else min(max(5, P.r // 9), 255)
@@ -1394,8 +1450,9 @@ def gauge_layout(W, min_v, max_v, arc_width=0):
 
 
 def r_arc(cv, W, cx, cy, r, start, sweep, w, c):
-    """arc(cx, cy, r, start, sweep, c, w): the ring [ri - 1/2, r + 1/2] of r_ring, under a full turn cut to
-    the wedges [s, s + 180] and [s + 180, s + sweep] of SteamiDisplay.cpp's Sector (Q14 directions)."""
+    """arc(cx, cy, r, start, sweep, c, w): the ring [ri - 1/2, r + 1/2] of r_ring, under a full
+    turn cut to the wedges [s, s + 180] and [s + 180, s + sweep] of SteamiDisplay.cpp's Sector
+    (Q14 directions)."""
     if sweep <= 0 or w == 0 or r < 0:
         return
     if sweep >= 360:
@@ -1420,13 +1477,14 @@ def r_arc(cv, W, cx, cy, r, start, sweep, w, c):
 
 
 def gauge_render(W, v, min_v=0, max_v=100, fill="LIGHT", arc_width=0):
-    """The canvas of gauge(v, minV, maxV, c, arcWidth) on a cleared W panel; fill names the colour the
-    panel shows for c (lifted on the grey panel)."""
+    """The canvas of gauge(v, minV, maxV, c, arcWidth) on a cleared W panel; fill names the
+    colour the panel shows for c (lifted on the grey panel)."""
     P = Panel(W)
     layout = gauge_layout(W, min_v, max_v, arc_width)
     cv = {}
     r_arc(cv, W, P.cx, P.cy, layout["outer"], GAUGE_START, GAUGE_SWEEP, layout["width"], "DARK")
-    r_arc(cv, W, P.cx, P.cy, layout["outer"], GAUGE_START, gauge_sweep(v, min_v, max_v), layout["width"], fill)
+    r_arc(cv, W, P.cx, P.cy, layout["outer"], GAUGE_START, gauge_sweep(v, min_v, max_v),
+          layout["width"], fill)
     for label in layout["labels"]:
         for p in label["lit"]:
             cv[p] = "GRAY"
@@ -1451,7 +1509,8 @@ def device_gauge_points(W):
     cx = cy = W // 2
     arc_w = max(5, (W // 2) // 9)
     r_label = (W // 2 - arc_w // 2 - 1) - arc_w - 10
-    return tuple((int(cx + r_label * math.cos(math.radians(a))), int(cy + r_label * math.sin(math.radians(a))))
+    return tuple((int(cx + r_label * math.cos(math.radians(a))),
+                  int(cy + r_label * math.sin(math.radians(a))))
                  for a in (143, 37))
 
 
@@ -1460,22 +1519,24 @@ G128, G240 = gauge_layout(128, 0, 100), gauge_layout(240, 0, 100)
 assert (G128["outer"], G128["width"], G128["d"]) == (60, 7, 43)  # ring 54..60, spec 5.8 table
 assert (G240["outer"], G240["width"], G240["d"]) == (113, 13, 82)  # ring 101..113
 assert [G128["outer"] - G128["width"] + 1, G240["outer"] - G240["width"] + 1] == [54, 101]
-assert [l["point"] for l in G128["labels"]] == [(30, 90), (98, 90)]
-assert [l["point"] for l in G240["labels"]] == [(55, 169), (185, 169)]
+assert [label["point"] for label in G128["labels"]] == [(30, 90), (98, 90)]
+assert [label["point"] for label in G240["labels"]] == [(55, 169), (185, 169)]
 assert device_gauge_points(128) == ((29, 89), (98, 89))  # int() against Q14's (30, 90) and (98, 90)
 assert gauge_sweep(342, 0, 500) == 185 and gauge_sweep(50, 0, 100) == 135
 assert gauge_sweep(2.5, 10, 0) == gauge_sweep(7.5, 0, 10) == 203  # ratio 0.75: 202.5 rounds away
 assert round(270 * 0.75) == 202  # why the script never uses round() (ruling 5)
 # Review Focus 2: an empty or a full fill, never a NAN sweep
-for v, lo, hi in ((NAN, 0, 500), (-INF, 0, 500), (-1, 0, 500), (5, 7, 7), (5, NAN, 10), (INF, 0, INF),
-                  (5, 0, NAN), (INF, INF, INF), (-INF, -INF, 10)):
+for v, lo, hi in ((NAN, 0, 500), (-INF, 0, 500), (-1, 0, 500), (5, 7, 7), (5, NAN, 10),
+                  (INF, 0, INF), (5, 0, NAN), (INF, INF, INF), (-INF, -INF, 10)):
     assert gauge_sweep(v, lo, hi) == 0, (v, lo, hi)
 for v, lo, hi in ((INF, 0, 500), (600, 0, 500), (100, 0, 100), (-20, 10, -10)):
     assert gauge_sweep(v, lo, hi) == GAUGE_SWEEP, (v, lo, hi)
-assert [gauge_label_text(v) for v in (-0.5, 99.9, 1e9, -1e9, NAN, INF, -INF, 999999999, -100000000.0)] == \
+assert [gauge_label_text(v)
+        for v in (-0.5, 99.9, 1e9, -1e9, NAN, INF, -INF, 999999999, -100000000.0)] == \
     ["0", "99", "--", "--", "--", "--", "--", "--", "-100000000"]  # f32(999999999) is 1e9
 assert gauge_label_text(999999900) == "999999872"  # the float32 below 1e9 keeps its digits
-# The ring on row centerY(), left of the centre: x 4..10 / 7..19 for the default width, 4..6 / 7..9 for 3
+# The ring on row centerY(), left of the centre: x 4..10 / 7..19 for the default width,
+# 4..6 / 7..9 for 3
 for W, ring, thin in ((128, (4, 10), (4, 6)), (240, (7, 19), (7, 9))):
     P = Panel(W)
     for width_, span in ((0, ring), (3, thin)):
@@ -1496,7 +1557,8 @@ for W in (128, 240):
     for lo, hi in ((0, 100), (0, 500), (0, 1050)):
         for label in gauge_layout(W, lo, hi)["labels"]:
             text, (px, _) = label["text"], label["point"]
-            assert label["kept"] == count(text) and label["x"] == px - cell_width(text, count(text), LABEL, P.k) // 2
+            assert label["kept"] == count(text)
+            assert label["x"] == px - cell_width(text, count(text), LABEL, P.k) // 2
 # A long label slides inward and stays whole (10 glyphs at most): on 128 and 240 the two slid labels
 # of (-1e8, 1e8) overlap (128: min cell 10..69, max cell 65..118; 240: min cell 20..139, max cell
 # 113..220), a known difference of the PR; no example draws such labels
@@ -1505,14 +1567,19 @@ for W in (128, 240):
         for label in gauge_layout(W, lo, hi)["labels"]:
             assert label["kept"] == count(label["text"]), (W, lo, hi, label["text"])
 L128 = gauge_layout(128, -100000000.0, 100000000.0)["labels"]
-assert [(l["x"], l["x"] + cell_width(l["text"], l["kept"], LABEL, 1) - 1) for l in L128] == [(10, 69), (65, 118)]
+assert [(label["x"], label["x"] + cell_width(label["text"], label["kept"], LABEL, 1) - 1)
+        for label in L128] == [(10, 69), (65, 118)]
 L240 = gauge_layout(240, -100000000.0, 100000000.0)["labels"]
-assert [(l["x"], l["x"] + cell_width(l["text"], l["kept"], LABEL, 2) - 1) for l in L240] == [(20, 139), (113, 220)]
-# On 240 a min label of 3 digits such as "100" paints over the ring ends by a few pixels (known difference)
+assert [(label["x"], label["x"] + cell_width(label["text"], label["kept"], LABEL, 2) - 1)
+        for label in L240] == [(20, 139), (113, 220)]
+# On 240 a min label of 3 digits such as "100" paints over the ring ends by a few pixels
+# (known difference)
 P = Panel(240)
-touch = sorted(gauge_layout(240, 100, 500)["labels"][0]["lit"] & colour_set(gauge_render(240, 0, 0, 500), "DARK"))
+touch = sorted(gauge_layout(240, 100, 500)["labels"][0]["lit"]
+               & colour_set(gauge_render(240, 0, 0, 500), "DARK"))
 assert touch == [(39, 181), (39, 182), (40, 181), (40, 182)], touch
-assert not (gauge_layout(240, 0, 500)["labels"][0]["lit"] & colour_set(gauge_render(240, 0, 0, 500), "DARK"))
+assert not (gauge_layout(240, 0, 500)["labels"][0]["lit"]
+            & colour_set(gauge_render(240, 0, 0, 500), "DARK"))
 # Review Focus 3: nothing outside radius() + 1, whatever the fill, the labels or the width
 for W in (128, 240):
     P = Panel(W)
@@ -1525,22 +1592,26 @@ for W in (128, 240):
 # ---- Values pinned by test_steami_screen (4b Task 4) ----
 print("gauge (outer, width, label distance; label points)")
 for W, G in ((128, G128), (240, G240)):
-    print("  %d: %d %d %d; %s %s" % (W, G["outer"], G["width"], G["d"], *(l["point"] for l in G["labels"])))
+    min_point, max_point = (label["point"] for label in G["labels"])
+    print(f"  {W}: {G['outer']} {G['width']} {G['d']}; {min_point} {max_point}")
 print("gauge GRAY labels (box, count): (minV, maxV) -> texts")
 for W in (128, 240):
     for lo, hi in ((0, 100), (0, 500), (-0.5, 99.9), (1e9, -1e9), (-100000000.0, 100000000.0)):
-        texts = [l["text"] for l in gauge_layout(W, lo, hi)["labels"]]
-        print("  %d (%r, %r) %s: %s %d" % (W, lo, hi, texts, *gauge_gray(W, lo, hi)))
+        texts = [label["text"] for label in gauge_layout(W, lo, hi)["labels"]]
+        gray_box, gray_count = gauge_gray(W, lo, hi)
+        print(f"  {W} ({lo!r}, {hi!r}) {texts}: {gray_box} {gray_count}")
 for W in (128, 240):
-    print("  %d gauge(50) LIGHT %d, gauge(100) LIGHT %d, gauge(342, 0, 500) LIGHT %d" % (
-        W, len(colour_set(gauge_render(W, 50), "LIGHT")), len(colour_set(gauge_render(W, 100), "LIGHT")),
-        len(colour_set(gauge_render(W, 342, 0, 500), "LIGHT"))))
+    print(f"  {W} gauge(50) LIGHT {len(colour_set(gauge_render(W, 50), 'LIGHT'))}, "
+          f"gauge(100) LIGHT {len(colour_set(gauge_render(W, 100), 'LIGHT'))}, "
+          f"gauge(342, 0, 500) LIGHT {len(colour_set(gauge_render(W, 342, 0, 500), 'LIGHT'))}")
 
 # ---- Mockups of spec section 6, as SteamiMockups.h draws them (4b Task 5) ----
 # Each mockup is composed from the widget goldens above in its program's drawing order, later calls
-# painting over earlier ones. Colours are names; on the grey panel each name is one grey level and the
-# names used here are distinct levels (GREY_LEVELS), so a box per name is the suite's inkBox per colour.
-GREY_LEVELS = {"GRID_DARK": 3, "DARK": 6, "GRAY": 9, "LIGHT": 11, "GREEN": 12, "YELLOW": 14, "WHITE": 15}
+# painting over earlier ones. Colours are names; on the grey panel each name is one grey level and
+# the names used here are distinct levels (GREY_LEVELS), so a box per name is the suite's inkBox per
+# colour.
+GREY_LEVELS = {"GRID_DARK": 3, "DARK": 6, "GRAY": 9, "LIGHT": 11, "GREEN": 12, "YELLOW": 14,
+               "WHITE": 15}
 MOOD_FACES = ("happy", "sad", "surprised", "sleeping", "angry", "love")  # SteamiFace order
 
 
@@ -1557,7 +1628,7 @@ def m_title(cv, W, s, c="GRAY"):
 
 def m_subtitle(cv, W, lines, c="DARK"):
     P = Panel(W)
-    for line, (x, y, n) in zip(lines, subtitle_layout(P, lines)):
+    for line, (x, y, n) in zip(lines, subtitle_layout(P, lines), strict=False):
         paint(cv, draw_glyphs(line, n, TEXT, x, y, P.k), c)
 
 
@@ -1645,28 +1716,37 @@ PINNED_4A = (
     ("01", 128, "GRAY", None, (21, 20, 106, 27)), ("01", 128, "WHITE", None, (38, 50, 89, 63)),
     ("01", 128, "LIGHT", None, (57, 66, 70, 72)), ("01", 128, "DARK", None, (29, 108, 98, 114)),
     ("01", 240, "GRAY", None, (34, 41, 205, 56)), ("01", 240, "WHITE", None, (68, 91, 171, 118)),
-    ("01", 240, "LIGHT", None, (106, 123, 133, 136)), ("01", 240, "DARK", None, (74, 202, 165, 215)),
+    ("01", 240, "LIGHT", None, (106, 123, 133, 136)),
+    ("01", 240, "DARK", None, (74, 202, 165, 215)),
     ("02", 128, "WHITE", None, (50, 38, 77, 51)), ("02", 128, "LIGHT", None, (61, 54, 66, 60)),
     ("02", 128, "GRID_DARK", None, (83, 72, 107, 79)), ("02", 128, "GREEN", None, (20, 72, 82, 79)),
-    ("02", 128, "DARK", (95, 105), (37, 95, 90, 101)), ("02", 128, "DARK", (106, 127), (37, 106, 90, 112)),
+    ("02", 128, "DARK", (95, 105), (37, 95, 90, 101)),
+    ("02", 128, "DARK", (106, 127), (37, 106, 90, 112)),
     ("02", 240, "WHITE", None, (92, 69, 147, 96)), ("02", 240, "LIGHT", None, (114, 101, 125, 114)),
-    ("02", 240, "GRID_DARK", None, (156, 135, 202, 149)), ("02", 240, "GREEN", None, (38, 135, 155, 149)),
-    ("02", 240, "DARK", (177, 196), (66, 177, 173, 190)), ("02", 240, "DARK", (197, 239), (66, 197, 173, 210)),
+    ("02", 240, "GRID_DARK", None, (156, 135, 202, 149)),
+    ("02", 240, "GREEN", None, (38, 135, 155, 149)),
+    ("02", 240, "DARK", (177, 196), (66, 177, 173, 190)),
+    ("02", 240, "DARK", (197, 239), (66, 197, 173, 210)),
     ("03", 128, "DARK", None, (64, 32, 64, 95)), ("03", 128, "WHITE", None, (6, 50, 122, 63)),
     ("03", 128, "LIGHT", None, (24, 66, 99, 72)), ("03", 128, "GRAY", (0, 30), (37, 20, 90, 26)),
-    ("03", 128, "GRAY", (31, 127), (22, 39, 102, 45)), ("03", 128, "GREEN", (95, 105), (21, 95, 106, 101)),
+    ("03", 128, "GRAY", (31, 127), (22, 39, 102, 45)),
+    ("03", 128, "GREEN", (95, 105), (21, 95, 106, 101)),
     ("03", 128, "GREEN", (106, 127), (29, 106, 98, 112)),
     ("03", 240, "DARK", None, (120, 60, 120, 179)), ("03", 240, "WHITE", None, (21, 96, 219, 116)),
-    ("03", 240, "LIGHT", None, (45, 120, 187, 133)), ("03", 240, "GRAY", (0, 60), (66, 37, 173, 50)),
-    ("03", 240, "GRAY", (61, 239), (39, 75, 193, 88)), ("03", 240, "GREEN", (173, 192), (34, 173, 205, 186)),
+    ("03", 240, "LIGHT", None, (45, 120, 187, 133)),
+    ("03", 240, "GRAY", (0, 60), (66, 37, 173, 50)),
+    ("03", 240, "GRAY", (61, 239), (39, 75, 193, 88)),
+    ("03", 240, "GREEN", (173, 192), (34, 173, 205, 186)),
     ("03", 240, "GREEN", (193, 239), (74, 193, 165, 206)),
     # test_mockups_without_sensors: 02 with no gauge, 03 with no sensor
-    ("02 none", 128, "GRID_DARK", None, (20, 72, 107, 79)), ("02 none", 128, "DARK", (95, 105), (57, 98, 70, 98)),
+    ("02 none", 128, "GRID_DARK", None, (20, 72, 107, 79)),
+    ("02 none", 128, "DARK", (95, 105), (57, 98, 70, 98)),
     ("02 none", 128, "DARK", (106, 127), (37, 106, 90, 112)),
     ("02 none", 240, "GRID_DARK", None, (38, 135, 202, 149)),
     ("02 none", 240, "DARK", (177, 196), (106, 183, 133, 184)),
     ("02 none", 240, "DARK", (197, 239), (66, 197, 173, 210)),
-    ("03 none", 128, "GREEN", None, (13, 86, 114, 92)), ("03 none", 240, "GREEN", None, (18, 151, 221, 164)),
+    ("03 none", 128, "GREEN", None, (13, 86, 114, 92)),
+    ("03 none", 240, "GREEN", None, (18, 151, 221, 164)),
 )
 CHIP_OF = {128: "WSEN-HIDS", 240: "BME280"}
 
@@ -1686,8 +1766,8 @@ for name, W, c, rows, expected in PINNED_4A:
     assert got == expected, (name, W, c, rows, got)
 for W in (128, 240):
     assert not outside_circle(mockup_4a("01", W), Panel(W))
-# 04: the fill ends at 50 degrees (sweep 185 from 225), in the middle of the ring; the text paints over
-# the ring but leaves the two points clear
+# 04: the fill ends at 50 degrees (sweep 185 from 225), in the middle of the ring; the text paints
+# over the ring but leaves the two points clear
 FILL_END = {128: ((104, 24), (111, 31)), 240: ((196, 44), (208, 59))}
 for W in (128, 240):
     P = Panel(W)
@@ -1714,14 +1794,16 @@ for W, tip, near in ((128, (64, 20), 45), (240, (120, 37), 84)):
     P = Panel(W)
     cv, none = compass_render(W, 0.0), compass_render(W, NAN)
     assert cv[tip] == "LIGHT" and colour_set(none, "WHITE") == colour_set(cv, "WHITE")
-    assert all((x - P.cx) ** 2 + (y - P.cy) ** 2 > near * near for (x, y) in colour_set(none, "LIGHT"))
-    assert any((x - P.cx) ** 2 + (y - P.cy) ** 2 <= near * near for (x, y) in colour_set(cv, "LIGHT"))
+    assert all((x - P.cx) ** 2 + (y - P.cy) ** 2 > near * near
+               for (x, y) in colour_set(none, "LIGHT"))
+    assert any((x - P.cx) ** 2 + (y - P.cy) ** 2 <= near * near
+               for (x, y) in colour_set(cv, "LIGHT"))
     assert compass_radii(W)[2] == {128: 46, 240: 87}[W]
-# 08: each face alone is LIGHT only; the reactive mood at 100 mm is HAPPY under "Mood", "HAPPY" in GREEN;
-# at -1 mm SURPRISED in YELLOW
+# 08: each face alone is LIGHT only; the reactive mood at 100 mm is HAPPY under "Mood", "HAPPY" in
+# GREEN; at -1 mm SURPRISED in YELLOW
 for W in (128, 240):
     P = Panel(W)
-    for i, mood in enumerate(MOOD_FACES):
+    for i, _mood in enumerate(MOOD_FACES):
         cv = mockup_08(W, i, 0)
         assert set(cv.values()) == {"LIGHT"} and not outside_circle(cv, P)
     cv = mockup_08(W, 6, 100)
@@ -1729,13 +1811,15 @@ for W in (128, 240):
     assert title_row(W, "Mood")[0] == {128: 20, 240: 37}[W]
     assert colour_box(cv, "GREEN") == subtitle_rows(W, ("HAPPY",))[0][2]
     assert colour_box(cv, "GRAY") == text_box(W, "Mood", "N")
-    assert colour_set(cv, "LIGHT") == colour_set(mockup_08(W, 0, 0), "LIGHT")  # the title is clear of the face
+    # the title is clear of the face
+    assert colour_set(cv, "LIGHT") == colour_set(mockup_08(W, 0, 0), "LIGHT")
     none = mockup_08(W, 6, -1)
     assert colour_box(none, "YELLOW") == subtitle_rows(W, ("SURPRISED",))[0][2]
     assert colour_set(none, "LIGHT") == colour_set(mockup_08(W, 2, 0), "LIGHT")
     assert not outside_circle(cv, P) and not outside_circle(none, P)
-# 09 at 10:10:30: the "12" is the WHITE ink in the rows above the "3" and "9" cells (rows 0..59 / 0..111;
-# the rows above centerY() would also hold the top of the "3" and the "9"); hour and minute tips LIGHT
+# 09 at 10:10:30: the "12" is the WHITE ink in the rows above the "3" and "9" cells (rows 0..59 /
+# 0..111; the rows above centerY() would also hold the top of the "3" and the "9"); hour and
+# minute tips LIGHT
 TWELVE_ROWS = {128: (0, 59), 240: (0, 111)}
 for W in (128, 240):
     P = Panel(W)
@@ -1753,27 +1837,29 @@ for W in (128, 240):
 # ---- Values pinned by test_steami_screen_mockups (4b Task 5) ----
 print("mockups 01 to 03 (suite literals regenerated: name W colour rows box)")
 for name, W, c, rows, _ in PINNED_4A:
-    print("  %-7s %d %-9s %-10s %s" % (name, W, c, rows or "", band_box(mockup_4a(name, W), c, *(rows or ()))))
-print("mockup 04 gauge(342, 0, 500): WHITE box, GRAY labels box (rows), fill end polar(mid, 45) LIGHT, (mid, 55) DARK")
+    print(f"  {name:<7} {W} {c:<9} {rows or ''!s:<10} "
+          f"{band_box(mockup_4a(name, W), c, *(rows or ()))}")
+print("mockup 04 gauge(342, 0, 500): WHITE box, GRAY labels box (rows), "
+      "fill end polar(mid, 45) LIGHT, (mid, 55) DARK")
 for W in (128, 240):
     P = Panel(W)
     cv = mockup_04(W, 342)
     mid = gauge_layout(W, 0, 500)["outer"] - gauge_layout(W, 0, 500)["width"] // 2
     band = (85, 100) if W == 128 else (160, 190)
-    print("  %d: WHITE %s, GRAY %s %s, polar(%d, 45) %s, polar(%d, 55) %s; d -1 WHITE %s" % (
-        W, colour_box(cv, "WHITE"), band, band_box(cv, "GRAY", *band), mid, P.polar(mid, 45), mid,
-        P.polar(mid, 55), colour_box(mockup_04(W, -1), "WHITE")))
+    print(f"  {W}: WHITE {colour_box(cv, 'WHITE')}, GRAY {band} {band_box(cv, 'GRAY', *band)}, "
+          f"polar({mid}, 45) {P.polar(mid, 45)}, polar({mid}, 55) {P.polar(mid, 55)}; "
+          f"d -1 WHITE {colour_box(mockup_04(W, -1), 'WHITE')}")
 print("mockup 07 compass(0): WHITE N box, needle tip")
 for W in (128, 240):
-    print("  %d: WHITE %s, tip %s" % (W, colour_box(compass_render(W, 0.0), "WHITE"), compass_layout(W, 0)["tip"]))
+    print(f"  {W}: WHITE {colour_box(compass_render(W, 0.0), 'WHITE')}, "
+          f"tip {compass_layout(W, 0)['tip']}")
 print("mockup 08 reactive at 100 mm: GRAY Mood, LIGHT face, GREEN HAPPY; at -1 mm YELLOW SURPRISED")
 for W in (128, 240):
     cv = mockup_08(W, 6, 100)
-    print("  %d: GRAY %s, LIGHT %s, GREEN %s; YELLOW %s" % (
-        W, colour_box(cv, "GRAY"), colour_box(cv, "LIGHT"), colour_box(cv, "GREEN"),
-        colour_box(mockup_08(W, 6, -1), "YELLOW")))
+    print(f"  {W}: GRAY {colour_box(cv, 'GRAY')}, LIGHT {colour_box(cv, 'LIGHT')}, "
+          f"GREEN {colour_box(cv, 'GREEN')}; YELLOW {colour_box(mockup_08(W, 6, -1), 'YELLOW')}")
 print("mockup 09 watch at 10:10:30: WHITE 12 (rows above the 3 and 9 cells), hour and minute tips")
 for W in (128, 240):
-    print("  %d: WHITE %s %s, tips %s %s" % (W, TWELVE_ROWS[W], band_box(mockup_09(W, WATCH_START), "WHITE",
-                                                                       *TWELVE_ROWS[W]),
-                                           *watch_layout(W, 10, 10, 30)["tips"][:2]))
+    hour, minute = watch_layout(W, 10, 10, 30)["tips"][:2]
+    print(f"  {W}: WHITE {TWELVE_ROWS[W]} "
+          f"{band_box(mockup_09(W, WATCH_START), 'WHITE', *TWELVE_ROWS[W])}, tips {hour} {minute}")
