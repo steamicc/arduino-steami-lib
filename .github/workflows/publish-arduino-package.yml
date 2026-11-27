@@ -16,10 +16,15 @@ name: Publish Arduino package
 # The organization enforces immutable releases on steamicc/arduino-steami: no
 # asset can be added once a release is published. So the release is created as
 # a draft, examples-archive.yml attaches the compiled examples to it, and the
-# last job publishes it (marked Latest). If the archive job fails, the release
-# stays a draft: re-run the failed jobs, or run
+# last job checks that the archive is fully uploaded, then publishes the draft.
+# The release is marked Latest only when its version is the highest of the
+# published releases: recovering an older tag (e.g. v0.38.0 after v0.39.0)
+# keeps the current Latest release. If the archive job fails, or the archive is
+# not fully uploaded, the release stays a draft: re-run the failed jobs, or run
 #   gh workflow run examples-archive.yml -f tag=<tag>      (from main)
 #   gh release edit <tag> --draft=false --latest -R steamicc/arduino-steami
+# Pass --latest only for the newest version; for an older tag pass
+# --latest=false, so that the newest release stays Latest.
 # A release that already exists and is published is left as it is (no archive).
 
 on:
@@ -204,4 +209,27 @@ jobs:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
           set -euo pipefail
-          gh release edit "$TAG" -R "$DIST_REPO" --draft=false --latest
+
+          # The release is immutable once published: publish it only if the
+          # examples archive is attached and fully uploaded.
+          export ASSET="steami-exemples-${TAG}.zip"
+          state="$(gh release view "$TAG" -R "$DIST_REPO" --json assets \
+            --jq '.assets[] | select(.name == env.ASSET) | .state')"
+          if [ "$state" != "uploaded" ]; then
+            echo "::error::${ASSET} is not fully uploaded to ${TAG} in ${DIST_REPO} (state: '${state:-missing}'): the release stays a draft. Run 'gh workflow run examples-archive.yml -f tag=${TAG}' from main, then publish the draft (see the header of this workflow)."
+            exit 1
+          fi
+
+          # Mark the release Latest only if no published release has a higher
+          # version: a recovery of an older tag keeps the current Latest.
+          releases="$(gh release list -R "$DIST_REPO" --limit 1000 --json tagName,isDraft,isLatest \
+            --jq '.[] | select(.isDraft | not) | "\(.tagName) \(.isLatest)"')"
+          newest="$(awk '{ print $1 }' <<< "$releases" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+          if [ -z "$newest" ] || [ "$(printf '%s\n%s\n' "$newest" "$TAG" | sort -V | tail -n 1)" = "$TAG" ]; then
+            latest_flag="--latest"
+          else
+            latest_flag="--latest=false"
+            current_latest="$(awk '$2 == "true" { print $1 }' <<< "$releases")"
+            echo "::notice::${TAG} is older than the published ${newest}: published without --latest, ${current_latest:-the current Latest release} stays Latest."
+          fi
+          gh release edit "$TAG" -R "$DIST_REPO" --draft=false "$latest_flag"
