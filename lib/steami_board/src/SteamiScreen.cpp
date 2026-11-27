@@ -1015,3 +1015,86 @@ void SteamiScreen::graphCurve(const Series& s, float minV, float maxV, SteamiRgb
         previous = valid;
     }
 }
+
+int SteamiScreen::menu(const char* const* items, size_t n, int selected, SteamiRgb c) {
+    // D7: the index wraps in int32_t (n above INT32_MAX counts as INT32_MAX) before the panel is
+    // asked, so a sketch's navigation never depends on the screen (E30, E31, nullptr).
+    const int32_t count = n > static_cast<size_t>(INT32_MAX) ? INT32_MAX : static_cast<int32_t>(n);
+    int32_t s = count == 0 ? 0 : selected % count;
+    if (s < 0) {
+        s += count;
+    }
+    if (!widgetCanDraw() || items == nullptr || count == 0) {
+        return static_cast<int>(s);
+    }
+    // The window keeps the selection in its middle row, clamped to the list: clamp(s - visible /
+    // 2, 0, n - visible). Row i's top is u(35 + 14 i), never u(35) + i u(14).
+    const int32_t visible = menuRows(n);
+    const int32_t start = larger(0, smaller(s - visible / 2, count - visible));
+    for (int32_t row = 0; row < visible; row++) {
+        const int32_t i = start + row;
+        // The selected line over the DARK bar is lifted on the grey panel (spec 5.10).
+        menuRow(items[static_cast<size_t>(i)], u(STEAMI_MENU_TOP + STEAMI_MENU_PITCH * row), i == s,
+                i == s ? lifted(c, STEAMI_DARK) : STEAMI_GRAY);
+    }
+    return static_cast<int>(s);
+}
+
+int32_t SteamiScreen::menuRows(size_t n) {
+    // B3: the marker plus 10 cells, 12 TEXT cells (96 px on 128 and on 240), at the full cell rows.
+    const int32_t need = STEAMI_MENU_ROW_CELLS * glyphAdvance(Ink::TEXT, k());
+    int32_t rows = 0;
+    for (; static_cast<size_t>(rows) < n; rows++) {
+        const int32_t top = u(STEAMI_MENU_TOP + STEAMI_MENU_PITCH * rows);
+        if (chord(top, top + STEAMI_CELL_HEIGHT * k() - 1).width() < need) {
+            break;  // an empty chord below the circle stops it too
+        }
+    }
+    return rows;
+}
+
+void SteamiScreen::menuRow(const char* item, int32_t top, bool marked, SteamiRgb c) {
+    Run t{item, glyphCount(item), top, Ink::TEXT, k(), 0, faceFor(item, Ink::TEXT, k())};
+    Region room{0, static_cast<int32_t>(width()) - 1};
+    if (marked) {
+        menuBar(top);
+        room.left = menuMarker(t, c);  // the selected item starts after the marker
+    }
+    // D10: the longest prefix whose width plus u(2) fits the room at its inked rows, centred, or
+    // after the marker when centring would overlap it.
+    t.glyphs = fitGlyphs(t, &room, u(STEAMI_MENU_ITEM_PAD));
+    const int32_t w = cellWidth(t, t.glyphs);
+    drawGlyphs(t, larger(centerX() - w / 2, room.left), c);
+}
+
+void SteamiScreen::menuBar(int32_t top) {
+    // D8: u(14) rows from top - u(2), each cut to its own chord shrunk by k at each end (spec 5.9:
+    // "its ends follow the circle"); the chord of the centre row reaches column width().
+    const int32_t first = top - u(STEAMI_MENU_BAR_RISE);
+    const int32_t to = smaller(first + u(STEAMI_MENU_PITCH), height()) - 1;
+    for (int32_t y = larger(first, 0); y <= to; y++) {
+        const Region inside = chord(y, y);
+        const int32_t x0 = inside.left + k();
+        const int32_t x1 = smaller(inside.right - k(), width() - 1);
+        if (x1 >= x0) {
+            rect(static_cast<int16_t>(x0), static_cast<int16_t>(y),
+                 static_cast<int16_t>(x1 - x0 + 1), 1, STEAMI_DARK, true);
+        }
+    }
+}
+
+int32_t SteamiScreen::menuMarker(const Run& item, SteamiRgb c) {
+    // A TEXT run's face does not depend on its text, so the marker takes the item's (D9); "> " is
+    // ASCII, one glyph a byte.
+    const Run m{STEAMI_MENU_MARKER, sizeof(STEAMI_MENU_MARKER) - 1, item.y, Ink::TEXT, item.f, 0,
+                item.face};
+    // u(2) right of the chord's left edge at the item's inked rows, or at the marker's own when
+    // the item inks none (nullptr, "").
+    uint32_t rows = inkRows(item.s, item.glyphs, Ink::TEXT, item.face);
+    if (rows == 0) {
+        rows = inkRows(m.s, m.glyphs, Ink::TEXT, m.face);
+    }
+    const int32_t x = rowsChord(rows, m).left + u(STEAMI_MENU_MARKER_INSET);
+    drawGlyphs(m, x, c);
+    return x + cellWidth(m, m.glyphs);
+}

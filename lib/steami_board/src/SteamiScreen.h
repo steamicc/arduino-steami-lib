@@ -113,6 +113,19 @@ class SteamiScreen : public SteamiDisplay {
     void graph(const float* data, size_t n, float minV = 0, float maxV = 100,
                SteamiRgb c = STEAMI_LIGHT);
 
+    /// A list of items, one per row, centred; the selected one in c with a "> " marker on a DARK
+    /// bar whose ends follow the circle, the others GRAY; an item too wide is cut. 5 rows show on
+    /// the 128 px screen and 6 on the 240 px one, scrolling with the selection. The index wraps
+    /// (-1 is the last item, the number of items is the first) and is returned:
+    /// `selected = screen.menu(ITEMS, selected);`. Keep the index in an int: another integer type
+    /// may call the second form below. An empty list draws nothing and returns 0.
+    template <size_t N>
+    int menu(const char* const (&items)[N], int selected = 0, SteamiRgb c = STEAMI_WHITE) {
+        return menu(items, N, selected, c);
+    }
+    /// The same with the n items of an array; nullptr draws nothing and still returns the index.
+    int menu(const char* const* items, size_t n, int selected = 0, SteamiRgb c = STEAMI_WHITE);
+
    protected:  // the layout kernel of the widgets, not for the student
     /// A run of columns [left, right], inclusive; empty when right < left.
     struct Region {
@@ -359,6 +372,28 @@ class SteamiScreen : public SteamiDisplay {
     /// (box left + width), the values clamped to [minV, maxV]; a NAN point is skipped, leaving a
     /// gap, and fewer than 2 points draw nothing.
     void graphCurve(const Series& s, float minV, float maxV, SteamiRgb c);
+
+    /// The rows menu() shows of n items (D7): rows counted from the first while the chord at the
+    /// row's full TEXT cell (top .. top + 8k - 1) holds STEAMI_MENU_ROW_CELLS TEXT cells, at most
+    /// n. 5 on 128 px, 6 on 240 px, 0 on 96 px.
+    int32_t menuRows(size_t n);
+
+    /// One menu row, its cell top at row top, in TEXT ink at k: when marked, the bar, the marker
+    /// (menuMarker()) and the item cut with a pad of u(2) to the columns after the marker, centred
+    /// unless that overlaps the marker; otherwise only the item, cut with a pad of u(2) to the
+    /// panel and centred. Marker and item in c.
+    void menuRow(const char* item, int32_t top, bool marked, SteamiRgb c);
+
+    /// The DARK bar of the item row top: u(14) rows from top - u(2), each scanline y filled from
+    /// chord(y, y).left + k to min(chord(y, y).right - k, width() - 1), so its ends follow the
+    /// circle; a scanline with nothing left draws nothing.
+    void menuBar(int32_t top);
+
+    /// Draws the marker "> " of the selected row in c, on the item run's row, u(2) right of the
+    /// chord's left edge at the item's inked rows (at the marker's own when the item inks none, so
+    /// that it is always placed), and returns the first column after it. Kept out of menuRow() so
+    /// that each frame stays within 64 B.
+    int32_t menuMarker(const Run& item, SteamiRgb c);
 
     uint8_t _decimals = 1;
 };

@@ -2786,3 +2786,211 @@ for W in (128, 240):
     boxes = [colour_box(graph_render(W, values, 0, 1000), "LIGHT")
              for values in ([50 * i for i in range(20)], GRAPH_05_VALUES, [0, 1000])]
     print(f"  {W}: ramp {boxes[0]} mockup 05 {boxes[1]} two points {boxes[2]}")
+
+# ---- Widget of 4c Task 4: menu() (spec 5.9 "menu", B3; font design 5.3) ----
+# Row i (of the window) has its top at u(35 + 14 i), never u(35) + i u(14) (D7). The visible rows
+# are counted from row 0 while the chord at the row's full TEXT cell (top .. top + 8k - 1) holds 12
+# TEXT cells (the marker plus 10 cells: 96 px on both panels), then capped at n. The index wraps
+# modulo n in int32_t (C++ %, truncated toward zero, plus n when negative), n above INT32_MAX
+# counting as INT32_MAX; the window starts at clamp(s - visible / 2, 0, n - visible). The selected
+# row draws, in this order: the DARK bar on rows [top - u(2), top - u(2) + u(14) - 1], each scanline
+# y filling [chord(y, y) left + k, min(chord(y, y) right - k, W - 1)] (D8); the marker "> " at the
+# chord's left edge at the item's inked rows (the marker's own when the item inks none) plus u(2)
+# (D9); the item, cut with pad u(2) to [marker x + width of "> ", W - 1] and drawn at
+# max(cx - w / 2, the kept room's left). Every other item is cut with pad u(2) to the whole panel
+# and drawn at cx - w / 2 in GRAY (D10). Items and marker are TEXT ink at k.
+MENU_TOP, MENU_PITCH, MENU_BAR_RISE, MENU_ROW_CELLS = 35, 14, 2, 12
+MENU_MARKER_INSET, MENU_ITEM_PAD, MENU_MARKER = 2, 2, "> "
+INT32_MIN, INT32_MAX = -(2 ** 31), 2 ** 31 - 1
+K_SIX = ("Temperature", "Humidity", "Distance", "Light", "Battery", "Proximity")  # program 06
+K_ELEVEN = ("Temperature", "Humidity_RH", "Distance_mm", "Light_level", "Battery_pct",
+            "Proximity_1")  # six items of 11 characters (spec 7)
+
+
+def menu_top(P, row):
+    """The cell top of window row `row`: u(35 + 14 row)."""
+    return P.u(MENU_TOP + MENU_PITCH * row)
+
+
+def menu_cell_chord(P, row):
+    """The chord at the full TEXT cell rows of window row `row` (top .. top + 8k - 1)."""
+    top = menu_top(P, row)
+    return P.chord(top, top + 8 * P.k - 1)
+
+
+def menu_rows(P, n):
+    """menuRows(n) (D7): rows counted from 0 while their full-cell chord holds 12 TEXT cells, at
+    most n."""
+    need, v = MENU_ROW_CELLS * glyph_advance(P, TEXT, P.k), 0
+    while v < n and menu_cell_chord(P, v) is not None and \
+            region_width(menu_cell_chord(P, v)) >= need:
+        v += 1
+    return v
+
+
+def menu_wrap(selected, n):
+    """The wrapped index: selected % n as C++ computes it in int32_t, plus n when negative; 0 for
+    n == 0."""
+    n = min(n, INT32_MAX)
+    if n == 0:
+        return 0
+    r = abs(selected) % n
+    r = -r if selected < 0 else r
+    return r + n if r < 0 else r
+
+
+def menu_bar(P, top):
+    """menuBar(top) (D8): {y: (x0, x1)} of the DARK scanlines of the bar of the item row `top`."""
+    y0 = top - P.u(MENU_BAR_RISE)
+    out = {}
+    for y in range(max(y0, 0), min(y0 + P.u(MENU_PITCH), P.H)):
+        c = P.chord(y, y)
+        if c is None:
+            continue
+        x0, x1 = c[0] + P.k, min(c[1] - P.k, P.W - 1)
+        if x1 >= x0:
+            out[y] = (x0, x1)
+    return out
+
+
+def menu_marker_x(P, item, top):
+    """D9: the chord's left edge at the item's inked rows (the marker's own when the item inks
+    none) plus u(2)."""
+    face = face_for(P, item, TEXT, P.k)
+    s = item if ink_rows(item, count(item), TEXT, face) else MENU_MARKER
+    c = P.ink_chord(s, count(s), TEXT, top, P.k)
+    return (c[0] if c else 0) + P.u(MENU_MARKER_INSET)
+
+
+def menu_item(P, item, top, marker_x):
+    """D10: (x, kept glyphs) of an item; marker_x None for an unselected item."""
+    limit = (0, P.W - 1)
+    if marker_x is not None:
+        limit = (marker_x + cell_width(P, MENU_MARKER, 2, TEXT, P.k), P.W - 1)
+    pad = P.u(MENU_ITEM_PAD)
+    n = P.fit_glyphs(item, TEXT, P.k, top, limit, 0, pad)
+    room = kept_room(P, item, n, TEXT, top, P.k, limit, 0)
+    return max(P.cx - cell_width(P, item, n, TEXT, P.k) // 2, room[0]), n
+
+
+def menu_layout(W, items, selected):
+    """menu(items, n, selected) on a W panel: the wrapped index, the visible rows, the window start,
+    the rows [(index, top, x, kept glyphs)], the marker (x, top) or None, the bar {y: (x0, x1)}."""
+    P = Panel(W)
+    n = len(items)
+    s, v = menu_wrap(selected, n), menu_rows(P, n)
+    start = min(max(s - v // 2, 0), n - v)
+    rows, marker, bar = [], None, {}
+    for row in range(v):
+        i, top = start + row, menu_top(P, row)
+        item = items[i] or ""
+        mx = None
+        if i == s:
+            bar = menu_bar(P, top)
+            mx = menu_marker_x(P, item, top)
+            marker = (mx, top)
+        x, kept = menu_item(P, item, top, mx)
+        rows.append((i, top, x, kept))
+    return {"selected": s, "visible": v, "start": start, "rows": rows, "marker": marker,
+            "bar": bar}
+
+
+def menu_render(W, items, selected, c="WHITE"):
+    """menu(): per row, the bar (DARK), then the marker and the item in c when selected, else the
+    item in GRAY. c is painted as given: the lift of spec 5.10 is the C++ lifted()'s."""
+    P = Panel(W)
+    g = menu_layout(W, items, selected)
+    cv = {}
+    for y, (x0, x1) in g["bar"].items():
+        r_span(cv, W, x0, y, x1 - x0 + 1, 1, "DARK")
+    for i, top, x, kept in g["rows"]:
+        item = items[i] or ""
+        colour = c if i == g["selected"] else "GRAY"
+        if i == g["selected"]:
+            paint(cv, draw_glyphs(P, MENU_MARKER, 2, TEXT, g["marker"][0], top, P.k), colour)
+        paint(cv, draw_glyphs(P, item, kept, TEXT, x, top, P.k), colour)
+    return cv
+
+
+# ---- Self-check of 4c Task 4 ----
+for W, tops in ((128, (35, 49, 63, 77, 91)), (240, (65, 91, 118, 144, 170, 196))):
+    assert tuple(menu_top(Panel(W), i) for i in range(len(tops))) == tops, W  # D7
+# The full-cell chords of rows 1 to 6 (spec 5.9) and the visible rows 5 / 6
+assert [region_width(menu_cell_chord(P128, i)) for i in range(6)] == [115, 125, 127, 121, 109, 85]
+assert [region_width(menu_cell_chord(P240, i)) for i in range(6)] == [213, 233, 239, 227, 201, 157]
+assert menu_rows(P128, 6) == 5 and menu_rows(P240, 6) == 6
+assert menu_rows(P128, 3) == 3 and menu_rows(P240, 0) == 0  # min(n, visible)
+# The bar of row 6 on 240 runs over rows 193..218 (font design 5.3), and every bar row spans
+# exactly [chord left + k, min(chord right - k, W - 1)]
+assert sorted(menu_bar(P240, menu_top(P240, 5))) == list(range(193, 219))
+assert sorted(menu_bar(P128, menu_top(P128, 0))) == list(range(33, 47))
+for P in (P128, P240):
+    for row in range(menu_rows(P, 6)):
+        for y, (x0, x1) in menu_bar(P, menu_top(P, row)).items():
+            c = P.chord(y, y)
+            assert (x0, x1) == (c[0] + P.k, min(c[1] - P.k, P.W - 1)), (P.W, row, y)
+# The wraps of spec 7 and Review Focus 4, for n = 6
+assert [menu_wrap(s, 6) for s in (-1, 6, 13, INT32_MIN, INT32_MAX)] == [5, 0, 1, 4, 1]
+assert [menu_wrap(s, 6) for s in range(6)] == list(range(6)) and menu_wrap(3, 0) == 0
+# The marker x: the chord's left edge at the selected item's inked rows, plus u(2); an item
+# without ink takes the marker's own inked rows
+for W in (128, 240):
+    P = Panel(W)
+    for sel in range(6):
+        g = menu_layout(W, K_ELEVEN, sel)
+        mx, top = g["marker"]
+        c = P.ink_chord(K_ELEVEN[sel], 11, TEXT, top, P.k)
+        assert mx == c[0] + P.u(2), (W, sel)
+    for empty in ("", None):
+        g = menu_layout(W, ["A", empty, "", "B"], 1)
+        mx, top = g["marker"]
+        assert mx == P.ink_chord(MENU_MARKER, 2, TEXT, top, P.k)[0] + P.u(2), (W, empty)
+        assert g["rows"][1][3] == 0  # nothing kept of the empty item
+# kEleven at every selected index on both panels: every item whole, nothing outside the circle
+for W in (128, 240):
+    P = Panel(W)
+    for sel in range(6):
+        g = menu_layout(W, K_ELEVEN, sel)
+        assert all(kept == 11 for _, _, _, kept in g["rows"]), (W, sel, g["rows"])
+        assert not outside_circle(menu_render(W, K_ELEVEN, sel), P), (W, sel)
+        # the selected item starts after the marker; the others are centred on cx
+        for i, _, x, kept in g["rows"]:
+            w = cell_width(P, K_ELEVEN[i], kept, TEXT, P.k)
+            if i == g["selected"]:
+                assert x >= g["marker"][0] + cell_width(P, MENU_MARKER, 2, TEXT, P.k)
+            else:
+                assert x == P.cx - w // 2
+# The window of eight items: start 0 / 2 / 3 on 128 and 0 / 1 / 2 on 240
+EIGHT = tuple(f"Item{i}" for i in range(8))
+assert [menu_layout(128, EIGHT, s)["start"] for s in (0, 4, 7)] == [0, 2, 3]
+assert [menu_layout(240, EIGHT, s)["start"] for s in (0, 4, 7)] == [0, 1, 2]
+# Other widths (D7): 6 rows on 200 px, 0 on 96 px (row 1's full-cell chord is 85 px)
+assert menu_rows(Panel(200), 6) == 6 and menu_rows(P96, 6) == 0
+assert region_width(menu_cell_chord(P96, 0)) == 85
+for W in (96, 200):
+    for sel in range(6):
+        assert not outside_circle(menu_render(W, K_ELEVEN, sel), Panel(W)), (W, sel)
+# The 40-glyph strings and their cut: nothing outside the circle
+LONG40 = ("Été: 23.5°C à 12:30, Ünïçödé ÿ 0.5 Ÿes:9", "-1234.56:78.90 +12:34.5 -0.000:99.9 8.8:")
+assert [count(t) for t in LONG40] == [40, 40]
+for W in (128, 240):
+    for sel in (0, 1):
+        assert not outside_circle(menu_render(W, (*LONG40, None), sel), Panel(W)), (W, sel)
+
+# ---- Values pinned by test_steami_screen (4c Task 4) ----
+print("menu (4c Task 4): selected, visible, start; rows (index, top, x, kept); marker (x, top);")
+print("bar rows and spans of the first and last bar row")
+for W in (128, 240):
+    for name, items, sels in (("kEleven", K_ELEVEN, range(6)), ("kSix", K_SIX, (2, 3)),
+                              ("Item0..Item7", EIGHT, (0, 4, 7)),
+                              ("kLong + nullptr", (*LONG40, None), (0, 1)),
+                              ('{"A", nullptr, "", "B"}', ("A", None, "", "B"), (1, 2))):
+        for sel in sels:
+            g = menu_layout(W, items, sel)
+            ys = sorted(g["bar"])
+            print(f"  {W} {name} sel {sel}: s {g['selected']} v {g['visible']} start "
+                  f"{g['start']} marker {g['marker']}")
+            print(f"    rows {g['rows']}")
+            print(f"    bar {ys[0]}..{ys[-1]} {g['bar'][ys[0]]} .. {g['bar'][ys[-1]]}")
+print("menu visible rows of 6 items on 96 and 200 px:",
+      [menu_rows(Panel(W), 6) for W in (96, 200)])

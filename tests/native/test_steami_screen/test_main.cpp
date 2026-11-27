@@ -2108,6 +2108,12 @@ static void test_bar_offsets_at_int16_limits(void) {
 }
 
 // Review Focus 2: no screen at all (UNKNOWN release, nothing injected).
+// 4c menu(): the six items of program 06, and six items of 11 characters (spec 7).
+static const char* const kSix[6] = {"Temperature", "Humidity", "Distance",
+                                    "Light",       "Battery",  "Proximity"};
+static const char* const kEleven[6] = {"Temperature", "Humidity_RH", "Distance_mm",
+                                       "Light_level", "Battery_pct", "Proximity_1"};
+
 static void test_widgets_without_a_screen(void) {
     TestScreen a(board), b(board);
     TEST_ASSERT_EQUAL_INT16(0, a.width());
@@ -2147,6 +2153,10 @@ static void test_widgets_without_a_screen(void) {
     g.graph(history, 950, 1050);
     TEST_ASSERT_TRUE(g.status() == SteamiStatus::UNKNOWN_BOARD);
     TEST_ASSERT_EQUAL_size_t(1, countLogged("(E30)"));
+    TestScreen m(board);  // 4c: menu() begins the display and still returns the wrapped index
+    TEST_ASSERT_EQUAL_INT(5, m.menu(kSix, -1));
+    TEST_ASSERT_TRUE(m.status() == SteamiStatus::UNKNOWN_BOARD);
+    TEST_ASSERT_EQUAL_size_t(1, countLogged("(E30)"));
 }
 
 static void test_screen_e31_message(void) {
@@ -2170,6 +2180,7 @@ static void test_screen_e31_message(void) {
     const float data[3] = {1000, 1010, 1020};
     s.graph(history);
     s.graph(data, 3);
+    TEST_ASSERT_EQUAL_INT(1, s.menu(kSix, 7));  // 4c: the index still wraps, nothing is drawn
     TEST_ASSERT_EQUAL_UINT32(0, mem.fillRectCalls());
     TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
     TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
@@ -3629,6 +3640,14 @@ static void test_long_strings_stay_inside(void) {
             TEST_ASSERT_TRUE(inkBox(mem, STEAMI_DARK).count > 0);
             TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mem.outsideCircle(), "graph labels");
         }
+        const char* const items[3] = {kLong[0], kLong[1], nullptr};  // 4c: two cut items
+        for (int selected : {0, 1}) {
+            s.clear();
+            TEST_ASSERT_EQUAL_INT(selected, s.menu(items, selected));
+            TEST_ASSERT_TRUE(inkBox(mem, STEAMI_GRAY).count > 0);
+            TEST_ASSERT_TRUE(inkBox(mem, STEAMI_WHITE).count > 0);
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mem.outsideCircle(), "menu items");
+        }
     });
 }
 
@@ -4101,6 +4120,367 @@ static void test_graph_many_points(void) {
     }
 }
 
+// ---- menu (4c) ----
+
+/// One row that menu() draws (values printed by golden_layout.py): the item's index, its cell top
+/// and its left column.
+struct MenuRow {
+    int16_t index, top, x;
+};
+
+/// A menu(items, n, selected) call on a size px panel, the selected index already in range, and
+/// the marker cell (x, top) that golden_layout.py prints for it.
+struct MenuCall {
+    int16_t size;
+    const char* const* items;
+    size_t n;
+    int selected;
+    int16_t markerX, markerTop;
+};
+
+/// A call and the rows it draws, in order (values printed by golden_layout.py); the rows past the
+/// visible ones are zero (top 0).
+struct MenuPins {
+    MenuCall call;
+    MenuRow rows[6];
+};
+
+/// The rows a pinned call draws: 5 on 128, 6 on 240 (or fewer items).
+static size_t visibleRows(const MenuPins& m) {
+    size_t n = 0;
+    while (n < 6 && m.rows[n].top != 0) {
+        n++;
+    }
+    return n;
+}
+
+static const char* const kEight[8] = {"Item0", "Item1", "Item2", "Item3",
+                                      "Item4", "Item5", "Item6", "Item7"};
+static const char* const kHoles[4] = {"A", nullptr, "", "B"};
+
+// Values printed by golden_layout.py (4c Task 4): kEleven selected 0..5, on 128 then 240.
+static const MenuPins kMenuEleven[12] = {
+    {{128, kEleven, 6, 0, 9, 35},
+     {{0, 35, 25}, {1, 49, 20}, {2, 63, 20}, {3, 77, 20}, {4, 91, 20}}},
+    {{128, kEleven, 6, 1, 4, 49},
+     {{0, 35, 20}, {1, 49, 20}, {2, 63, 20}, {3, 77, 20}, {4, 91, 20}}},
+    {{128, kEleven, 6, 2, 3, 63},
+     {{0, 35, 20}, {1, 49, 20}, {2, 63, 20}, {3, 77, 20}, {4, 91, 20}}},
+    {{128, kEleven, 6, 3, 3, 63},
+     {{1, 35, 20}, {2, 49, 20}, {3, 63, 20}, {4, 77, 20}, {5, 91, 20}}},
+    {{128, kEleven, 6, 4, 6, 77},
+     {{1, 35, 20}, {2, 49, 20}, {3, 63, 20}, {4, 77, 22}, {5, 91, 20}}},
+    {{128, kEleven, 6, 5, 12, 91},
+     {{1, 35, 20}, {2, 49, 20}, {3, 63, 20}, {4, 77, 20}, {5, 91, 28}}},
+    {{240, kEleven, 6, 0, 16, 65},
+     {{0, 65, 76}, {1, 91, 76}, {2, 118, 76}, {3, 144, 76}, {4, 170, 76}, {5, 196, 76}}},
+    {{240, kEleven, 6, 1, 7, 91},
+     {{0, 65, 76}, {1, 91, 76}, {2, 118, 76}, {3, 144, 76}, {4, 170, 76}, {5, 196, 76}}},
+    {{240, kEleven, 6, 2, 4, 118},
+     {{0, 65, 76}, {1, 91, 76}, {2, 118, 76}, {3, 144, 76}, {4, 170, 76}, {5, 196, 76}}},
+    {{240, kEleven, 6, 3, 10, 144},
+     {{0, 65, 76}, {1, 91, 76}, {2, 118, 76}, {3, 144, 76}, {4, 170, 76}, {5, 196, 76}}},
+    {{240, kEleven, 6, 4, 22, 170},
+     {{0, 65, 76}, {1, 91, 76}, {2, 118, 76}, {3, 144, 76}, {4, 170, 76}, {5, 196, 76}}},
+    {{240, kEleven, 6, 5, 44, 196},
+     {{0, 65, 76}, {1, 91, 76}, {2, 118, 76}, {3, 144, 76}, {4, 170, 76}, {5, 196, 76}}},
+};
+
+// kSix selected 2 and 3, on 128 then 240: the short item "Light" (index 3) is centred.
+static const MenuPins kMenuSix[4] = {
+    {{128, kSix, 6, 2, 3, 63}, {{0, 35, 20}, {1, 49, 32}, {2, 63, 32}, {3, 77, 44}, {4, 91, 36}}},
+    {{128, kSix, 6, 3, 3, 63}, {{1, 35, 32}, {2, 49, 32}, {3, 63, 44}, {4, 77, 36}, {5, 91, 28}}},
+    {{240, kSix, 6, 2, 4, 118},
+     {{0, 65, 76}, {1, 91, 88}, {2, 118, 88}, {3, 144, 100}, {4, 170, 92}, {5, 196, 84}}},
+    {{240, kSix, 6, 3, 10, 144},
+     {{0, 65, 76}, {1, 91, 88}, {2, 118, 88}, {3, 144, 100}, {4, 170, 92}, {5, 196, 84}}},
+};
+
+// Eight items selected 0, 4 and 7: the window starts at 0 / 2 / 3 on 128, 0 / 1 / 2 on 240.
+static const MenuPins kMenuEight[6] = {
+    {{128, kEight, 8, 0, 9, 35}, {{0, 35, 44}, {1, 49, 44}, {2, 63, 44}, {3, 77, 44}, {4, 91, 44}}},
+    {{128, kEight, 8, 4, 3, 63}, {{2, 35, 44}, {3, 49, 44}, {4, 63, 44}, {5, 77, 44}, {6, 91, 44}}},
+    {{128, kEight, 8, 7, 12, 91},
+     {{3, 35, 44}, {4, 49, 44}, {5, 63, 44}, {6, 77, 44}, {7, 91, 44}}},
+    {{240, kEight, 8, 0, 16, 65},
+     {{0, 65, 100}, {1, 91, 100}, {2, 118, 100}, {3, 144, 100}, {4, 170, 100}, {5, 196, 100}}},
+    {{240, kEight, 8, 4, 9, 144},
+     {{1, 65, 100}, {2, 91, 100}, {3, 118, 100}, {4, 144, 100}, {5, 170, 100}, {6, 196, 100}}},
+    {{240, kEight, 8, 7, 41, 196},
+     {{2, 65, 100}, {3, 91, 100}, {4, 118, 100}, {5, 144, 100}, {6, 170, 100}, {7, 196, 100}}},
+};
+
+// {"A", nullptr, "", "B"} selected 1 and 2: the marker is placed by its own inked rows (D9).
+static const MenuPins kMenuHoles[4] = {
+    {{128, kHoles, 4, 1, 4, 49}, {{0, 35, 60}, {1, 49, 64}, {2, 63, 64}, {3, 77, 60}}},
+    {{128, kHoles, 4, 2, 3, 63}, {{0, 35, 60}, {1, 49, 64}, {2, 63, 64}, {3, 77, 60}}},
+    {{240, kHoles, 4, 1, 7, 91}, {{0, 65, 116}, {1, 91, 120}, {2, 118, 120}, {3, 144, 116}}},
+    {{240, kHoles, 4, 2, 4, 118}, {{0, 65, 116}, {1, 91, 120}, {2, 118, 120}, {3, 144, 116}}},
+};
+
+/// True when s inks nothing because it holds nothing: nullptr or "".
+static bool isBlank(const char* s) {
+    return s == nullptr || s[0] == '\0';
+}
+
+/// The pixels of colour c of the pinned rows drawn alone with text(..., 1) on a fresh panel: the
+/// marker "> " and the selected item when `selected`, else every other item.
+static std::vector<uint16_t> menuTextsAlone(const MenuPins& m, bool color, SteamiRgb c,
+                                            bool selected) {
+    return colourAlone(m.call.size, color, c, [&](TestScreen& s) {
+        if (selected) {
+            s.text("> ", m.call.markerX, m.call.markerTop, c, 1);
+        }
+        for (size_t r = 0; r < visibleRows(m); r++) {
+            const MenuRow& row = m.rows[r];
+            const char* item = m.call.items[row.index];
+            if ((row.index == m.call.selected) == selected && !isBlank(item)) {
+                s.text(item, row.x, row.top, c, 1);
+            }
+        }
+    });
+}
+
+/// The pinned call, in colour c, returns its selected index; its pixels of colour `shown` (c as the
+/// panel shows it) are exactly the marker and the selected item drawn alone at the pinned cells,
+/// and its GRAY pixels exactly the other pinned rows: no other row is drawn.
+static void expectMenu(const MenuPins& m, bool color, SteamiRgb c = STEAMI_WHITE,
+                       SteamiRgb shown = STEAMI_WHITE) {
+    int got = -1;
+    const std::vector<uint16_t> fg = colourAlone(m.call.size, color, shown, [&](TestScreen& s) {
+        got = s.menu(m.call.items, m.call.n, m.call.selected, c);
+    });
+    TEST_ASSERT_EQUAL_INT(m.call.selected, got);
+    TEST_ASSERT_TRUE_MESSAGE(fg == menuTextsAlone(m, color, shown, true), "marker and item");
+    size_t lit = 0;
+    for (uint16_t p : fg) {
+        lit += p != 0 ? 1 : 0;
+    }
+    TEST_ASSERT_TRUE_MESSAGE(lit > 0, "the marker is drawn");
+    const std::vector<uint16_t> others =
+        colourAlone(m.call.size, color, STEAMI_GRAY,
+                    [&](TestScreen& s) { s.menu(m.call.items, m.call.n, m.call.selected, c); });
+    TEST_ASSERT_TRUE_MESSAGE(others == menuTextsAlone(m, color, STEAMI_GRAY, false), "other items");
+}
+
+/// The bar of the item row `top` (D8): on each of its u(14) rows from top - u(2), the DARK pixels
+/// run exactly from chord(y, y).left + k to min(chord(y, y).right - k, W - 1), both ends DARK (the
+/// text never covers them), every pixel between DARK or `fg`; no DARK pixel on the rows just
+/// above and below it.
+static void expectMenuBar(const SteamiMemoryBackend& mem, TestScreen& s, int32_t top,
+                          SteamiRgb fg) {
+    const uint16_t dark = mem.stored(STEAMI_DARK);
+    const uint16_t text = mem.stored(fg);
+    const int32_t first = top - s.u(2);
+    const int32_t last = first + s.u(14) - 1;
+    for (int32_t y = first - 1; y <= last + 1; y++) {
+        const Region c = s.chord(y, y);
+        const int32_t x0 = c.left + s.k();
+        const int32_t x1 = c.right - s.k() < s.width() - 1 ? c.right - s.k() : s.width() - 1;
+        const bool barRow = y >= first && y <= last;
+        for (int32_t x = 0; x < s.width(); x++) {
+            const uint16_t p = mem.at(static_cast<int16_t>(x), static_cast<int16_t>(y));
+            if (barRow && x >= x0 && x <= x1) {
+                TEST_ASSERT_TRUE_MESSAGE(p == dark || p == text, "inside the bar");
+            } else {
+                TEST_ASSERT_TRUE_MESSAGE(p != dark, "outside the bar");
+            }
+        }
+        if (barRow) {
+            TEST_ASSERT_TRUE_MESSAGE(
+                mem.at(static_cast<int16_t>(x0), static_cast<int16_t>(y)) == dark, "left end");
+            TEST_ASSERT_TRUE_MESSAGE(
+                mem.at(static_cast<int16_t>(x1), static_cast<int16_t>(y)) == dark, "right end");
+        }
+    }
+}
+
+// Spec 5.9 and 7, D7, Review Focus 4: the index wraps modulo n in signed arithmetic and is
+// returned; -1 draws what n - 1 draws; n == 0 draws nothing and returns 0.
+static void test_menu_wraps(void) {
+    for (const PanelMode p : {PanelMode{128, false}, PanelMode{240, true}}) {
+        onPanel(p.size, p.color, [](SteamiMemoryBackend&, TestScreen& s) {
+            TEST_ASSERT_EQUAL_INT(5, s.menu(kSix, -1));
+            TEST_ASSERT_EQUAL_INT(0, s.menu(kSix, 6));
+            TEST_ASSERT_EQUAL_INT(1, s.menu(kSix, 13));
+            for (int i = 0; i < 6; i++) {
+                TEST_ASSERT_EQUAL_INT(i, s.menu(kSix, i));
+            }
+            TEST_ASSERT_EQUAL_INT(4, s.menu(kSix, INT_MIN));
+            TEST_ASSERT_EQUAL_INT(1, s.menu(kSix, INT_MAX));
+        });
+        TEST_ASSERT_TRUE(rendered(p.size, p.color, [](TestScreen& s) { s.menu(kSix, -1); }) ==
+                         rendered(p.size, p.color, [](TestScreen& s) { s.menu(kSix, 5); }));
+        onPanel(p.size, p.color, [](SteamiMemoryBackend& mem, TestScreen& s) {
+            const char* const* items = kSix;
+            TEST_ASSERT_EQUAL_INT(0, s.menu(items, 0, 3));
+            TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+        });
+    }
+}
+
+// Spec 5.9 "menu" (B3), D7 (values printed by golden_layout.py): eight items selected 0, 4 and 7
+// draw exactly the printed rows, 5 on 128 and 6 on 240, the window following the selection; on
+// 128 nothing is lit from row 105 down (below the 5th row's bar).
+static void test_menu_visible_rows_and_window(void) {
+    for (const MenuPins& m : kMenuEight) {
+        TEST_ASSERT_EQUAL_size_t(m.call.size == 128 ? 5 : 6, visibleRows(m));
+        expectMenu(m, m.call.size == 240);
+    }
+    for (int selected : {0, 4, 7}) {
+        onPanel(128, false, [selected](SteamiMemoryBackend& mem, TestScreen& s) {
+            s.menu(kEight, selected);
+            TEST_ASSERT_TRUE(inkBoxAll(mem).y1 < 105);
+        });
+    }
+}
+
+// Spec 5.9 "menu" (B3), D8, spec 7: the bar of the selected row follows the circle, each scanline
+// cut to its own chord, for kEleven selected at each index on the four panels.
+static void test_menu_bar_follows_the_circle(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        for (const MenuPins& m : kMenuEleven) {
+            if (m.call.size != s.width()) {
+                continue;
+            }
+            s.clear();
+            s.menu(kEleven, m.call.selected);
+            expectMenuBar(mem, s, m.call.markerTop, STEAMI_WHITE);
+        }
+    });
+}
+
+// D9, D10, spec 7 (values printed by golden_layout.py): kEleven at each index on 128 grey and 240
+// colour, and kSix at 3 ("Light", short, centred): the WHITE pixels are text("> ") at the marker
+// cell and the selected item at its cell, the GRAY pixels the other items at centerX() - w / 2;
+// the marker starts u(2) right of the chord's left edge at the item's inked rows.
+static void test_menu_marker_and_items(void) {
+    for (const MenuPins& m : kMenuEleven) {
+        expectMenu(m, m.call.size == 240);
+        onPanel(m.call.size, m.call.size == 240, [&m](SteamiMemoryBackend&, TestScreen& s) {
+            const char* item = kEleven[m.call.selected];
+            const Run t = runOf(s, item, s.glyphCount(item), m.call.markerTop, Ink::TEXT, s.k());
+            TEST_ASSERT_EQUAL_INT32(m.call.markerX - s.u(2), s.inkChord(t).left);
+            for (size_t r = 0; r < visibleRows(m); r++) {
+                const MenuRow& row = m.rows[r];
+                if (row.index != m.call.selected) {  // whole and centred
+                    TEST_ASSERT_EQUAL_INT16(s.centerX() - s.textWidth(kEleven[row.index]) / 2,
+                                            row.x);
+                }
+            }
+        });
+    }
+    // A long selected item starts right after the marker on 128 ("Temperature", 88 px, at 0);
+    // on 240 it is centred, clear of the marker.
+    TEST_ASSERT_EQUAL_INT16(kMenuEleven[0].call.markerX + 16, kMenuEleven[0].rows[0].x);
+    TEST_ASSERT_EQUAL_INT16(120 - 44, kMenuEleven[6].rows[0].x);
+    for (const MenuPins& m : {kMenuSix[1], kMenuSix[3]}) {
+        expectMenu(m, m.call.size == 240);
+        TEST_ASSERT_EQUAL_INT16(m.call.size / 2 - 20,
+                                m.rows[m.call.size == 128 ? 2 : 3].x);  // "Light"
+    }
+}
+
+// Spec 5.10: on the grey panel the selected line over the DARK bar is lifted to DARK + 4 = 10
+// when its colour is darker (BLUE is 6); WHITE stays 15; the colour panel draws BLUE as is.
+static void test_menu_contrast(void) {
+    const MenuPins& grey = kMenuSix[0];  // 128, selected 2
+    expectMenu(grey, false, STEAMI_BLUE, SteamiRgb::gray(10));
+    expectMenu(grey, false, STEAMI_WHITE, SteamiRgb::gray(15));
+    onPanel(128, false, [&grey](SteamiMemoryBackend& mem, TestScreen& s) {
+        s.menu(kSix, 2, STEAMI_BLUE);
+        expectMenuBar(mem, s, grey.call.markerTop, SteamiRgb::gray(10));
+    });
+    expectMenu(kMenuSix[2], true, STEAMI_BLUE, STEAMI_BLUE);  // 240 colour, selected 2
+}
+
+// Spec 5.7 and 7: menu() takes const char* const[] and const char*[] alike.
+static void test_menu_array_kinds(void) {
+    const char* mutableItems[6] = {"Temperature", "Humidity", "Distance",
+                                   "Light",       "Battery",  "Proximity"};
+    for (const PanelMode p : kPanelModes) {
+        for (int i = 0; i < 6; i++) {
+            int a = -1;
+            int b = -1;
+            TEST_ASSERT_TRUE(
+                rendered(p.size, p.color, [&](TestScreen& s) { a = s.menu(kSix, i); }) ==
+                rendered(p.size, p.color, [&](TestScreen& s) { b = s.menu(mutableItems, i); }));
+            TEST_ASSERT_EQUAL_INT(i, a);
+            TEST_ASSERT_EQUAL_INT(i, b);
+        }
+    }
+}
+
+// D11, Review Focus 1: int, uint8_t, int16_t, uint16_t and bool indices pick the template, so all
+// six items are drawn. Keep the index in an int: with a const char* const array, an unsigned, long
+// or size_t index calls menu(items, n) (n = the index, selected 0); with a const char* array a
+// size_t index does too (and unsigned on the STeaMi, where size_t is unsigned int), with GCC's
+// "ISO C++ says that these are ambiguous" warning.
+static void test_menu_index_types(void) {
+    for (const PanelMode p : {PanelMode{128, false}, PanelMode{240, true}}) {
+        const std::vector<uint16_t> two =
+            rendered(p.size, p.color, [](TestScreen& s) { s.menu(kSix, 2); });
+        const std::vector<uint16_t> one =
+            rendered(p.size, p.color, [](TestScreen& s) { s.menu(kSix, 1); });
+        TEST_ASSERT_TRUE(two == rendered(p.size, p.color, [](TestScreen& s) {
+                             TEST_ASSERT_EQUAL_INT(2, s.menu(kSix, static_cast<uint8_t>(2)));
+                         }));
+        TEST_ASSERT_TRUE(two == rendered(p.size, p.color, [](TestScreen& s) {
+                             TEST_ASSERT_EQUAL_INT(2, s.menu(kSix, static_cast<int16_t>(2)));
+                         }));
+        TEST_ASSERT_TRUE(two == rendered(p.size, p.color, [](TestScreen& s) {
+                             TEST_ASSERT_EQUAL_INT(2, s.menu(kSix, static_cast<uint16_t>(2)));
+                         }));
+        TEST_ASSERT_TRUE(one == rendered(p.size, p.color, [](TestScreen& s) {
+                             TEST_ASSERT_EQUAL_INT(1, s.menu(kSix, true));
+                         }));
+    }
+}
+
+// D7, D9, Review Focus 3: a null list draws nothing and still returns the wrapped index; a null
+// or empty item draws nothing, and its marker is still placed, by the marker's own inked rows.
+static void test_menu_null_and_empty_items(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        TEST_ASSERT_EQUAL_INT(1, s.menu(nullptr, 3, 1));
+        TEST_ASSERT_EQUAL_INT(2, s.menu(nullptr, 3, -1));
+        TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+    });
+    for (const MenuPins& m : kMenuHoles) {
+        expectMenu(m, false);
+        expectMenu(m, true);
+    }
+}
+
+// D7, Review Focus 5 (values printed by golden_layout.py): on 96 and 200 px panels, grey and
+// colour, menu() and graph() never crash and draw nothing outside the circle (onPanel); the index
+// wraps; on 96 px no row is visible (0 rows), so menu() lights no pixel; on 200 px 6 rows show.
+static void test_graph_and_menu_other_panels(void) {
+    for (int16_t size : {96, 200}) {
+        for (bool color : {false, true}) {
+            onPanel(size, color, [](SteamiMemoryBackend& mem, TestScreen& s) {
+                for (int i = 0; i < 6; i++) {
+                    s.clear();
+                    TEST_ASSERT_EQUAL_INT(i, s.menu(kEleven, i));
+                    if (s.width() == 96) {
+                        TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
+                    } else {
+                        TEST_ASSERT_TRUE(inkBox(mem, STEAMI_GRAY).count > 0);
+                        TEST_ASSERT_TRUE(inkBox(mem, STEAMI_WHITE).count > 0);
+                    }
+                }
+                TEST_ASSERT_EQUAL_INT(5, s.menu(kEleven, -1));
+                SteamiHistory<20> h;
+                for (int i = 0; i < 20; i++) {
+                    h.add(950.0f + 5.0f * static_cast<float>(i));
+                }
+                s.clear();
+                s.graph(h, 950, 1050);
+                TEST_ASSERT_TRUE(inkBox(mem, STEAMI_LIGHT).count > 0);
+            });
+        }
+    }
+}
+
 int main(int, char**) {
     UNITY_BEGIN();
     RUN_TEST(test_format_integers);
@@ -4200,5 +4580,14 @@ int main(int, char**) {
     RUN_TEST(test_graph_ring_equals_array);
     RUN_TEST(test_graph_extremes);
     RUN_TEST(test_graph_many_points);
+    RUN_TEST(test_menu_wraps);
+    RUN_TEST(test_menu_visible_rows_and_window);
+    RUN_TEST(test_menu_bar_follows_the_circle);
+    RUN_TEST(test_menu_marker_and_items);
+    RUN_TEST(test_menu_contrast);
+    RUN_TEST(test_menu_array_kinds);
+    RUN_TEST(test_menu_index_types);
+    RUN_TEST(test_menu_null_and_empty_items);
+    RUN_TEST(test_graph_and_menu_other_panels);
     return UNITY_END();
 }

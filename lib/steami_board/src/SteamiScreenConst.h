@@ -96,3 +96,18 @@ constexpr int16_t STEAMI_GRAPH_VALUE_Y = 31;
 constexpr int16_t STEAMI_GRAPH_DASH = 3;
 constexpr int16_t STEAMI_GRAPH_GAP = 3;
 constexpr int16_t STEAMI_GRAPH_LABEL_INSET = 2;
+
+// menu() (MicroPython's names): window row i has its top at u(TOP + PITCH * i), never u(TOP) +
+// i * u(PITCH); the bar of a row rises u(BAR_RISE) above it and is u(PITCH) high. A row is shown
+// while the chord at its full TEXT cell holds ROW_CELLS TEXT cells (the marker plus 10 cells; not
+// scaled). The marker starts u(MARKER_INSET) right of the chord's left edge; every item keeps
+// u(ITEM_PAD) free in its available width.
+constexpr int16_t STEAMI_MENU_TOP = 35;
+constexpr int16_t STEAMI_MENU_PITCH = 14;
+constexpr int16_t STEAMI_MENU_BAR_RISE = 2;
+constexpr int16_t STEAMI_MENU_ROW_CELLS = 12;
+constexpr int16_t STEAMI_MENU_MARKER_INSET = 2;
+constexpr int16_t STEAMI_MENU_ITEM_PAD = 2;
+
+// menu(): the marker drawn before the selected item.
+constexpr const char STEAMI_MENU_MARKER[] = "> ";
