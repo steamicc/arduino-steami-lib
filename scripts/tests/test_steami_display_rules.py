@@ -130,17 +130,20 @@ class SteamiDisplayRulesTest(unittest.TestCase):
 
     @classmethod
     def _calls(cls, text: str) -> list[tuple[str, list[str]]]:
-        """Every statement of text that starts with "screen.": (method name, literal tokens)."""
+        """Every statement of text that calls "screen.": (method name, literal tokens).
+
+        The call may follow an if or an assignment ("selected = screen.menu(...)"); the tokens
+        are read from "screen." on, so the condition or the assigned name adds none.
+        """
         code = "\n".join(line.split("//")[0] for line in text.splitlines())
         out: list[tuple[str, list[str]]] = []
         for raw in re.split(r"[;{}]", code):  # no string of the mockups holds ; { or }
             statement = " ".join(raw.split())
-            method = re.match(r"screen\.(\w+)", statement)
+            method = re.search(r"\bscreen\.(\w+)", statement)
             if method is None:
                 continue
-            tokens = [
-                m.group(0) for m in cls._TOKEN.finditer(statement) if m.group("ident") is None
-            ]
+            call = statement[method.start() :]
+            tokens = [m.group(0) for m in cls._TOKEN.finditer(call) if m.group("ident") is None]
             out.append((method.group(1), tokens))
         return out
 
@@ -166,6 +169,14 @@ class SteamiDisplayRulesTest(unittest.TestCase):
                 ("vline", ["2", "STEAMI_DARK"]),
                 ("face", ["SteamiFace::HAPPY"]),
             ],
+        )
+        # A call after an if or an assignment counts, from "screen." on; another object's does not.
+        self.assertEqual(
+            self._calls(
+                "if (c) screen.graph(h, 950, 1050);\nselected = screen.menu(ITEMS, selected);"
+                "\nx = notscreen.foo(1);"
+            ),
+            [("graph", ["950", "1050"]), ("menu", [])],
         )
 
     def test_screen_examples_draw_the_mockups(self) -> None:
