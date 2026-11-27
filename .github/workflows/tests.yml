@@ -70,6 +70,11 @@ jobs:
           path: ${{ runner.temp }}/steami-display-ppm
           if-no-files-found: error
 
+      - name: Check the 128 px renders are unchanged
+        env:
+          STEAMI_PPM_DIR: ${{ runner.temp }}/steami-display-ppm
+        run: cd "$STEAMI_PPM_DIR" && sha256sum -c "$GITHUB_WORKSPACE/tests/native/test_steami_display/ppm-128.sha256"
+
   mockup-review:
     runs-on: ubuntu-latest
 

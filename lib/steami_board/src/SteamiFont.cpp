@@ -253,37 +253,33 @@ const Fold kFolds[] = {
     {0xFB, 'u'}, {0xFC, 'u'}, {0xFF, 'y'},
 };
 
+// Extended codes: 128..158 are the letters of kFolds in its order, 159 is Y
+// with diaeresis.
+constexpr uint8_t kFirstAccented = 128;
+constexpr uint8_t kCapitalYCode = 159;
+constexpr uint8_t kLastExtendedCode = kCapitalYCode;
+static_assert(sizeof(kFolds) / sizeof(kFolds[0]) == kCapitalYCode - kFirstAccented,
+              "codes 128..158 are the letters of kFolds");
+
 constexpr uint32_t kDegreeSign = 0xB0;
 constexpr uint32_t kCapitalYDiaeresis = 0x178;  // not in Latin-1
+constexpr uint32_t kInvalidCodePoint = 0xFFFFFFFF;
 
-uint8_t foldCodePoint(uint32_t cp) {
-    if (cp == kDegreeSign) {
-        return STEAMI_GLYPH_DEGREE;
-    }
-    if (cp == kCapitalYDiaeresis) {
-        return 'Y';
-    }
-    for (const Fold& f : kFolds) {
-        if (cp == f.latin1) {
-            return static_cast<uint8_t>(f.base);
-        }
-    }
-    return '?';
-}
+// The characters of the value sets, in the order of their glyphs.
+constexpr char kValueKey[] = " +-.:0123456789";
+constexpr int8_t kValueGlyphs = sizeof(kValueKey) - 1;  // 15
 
-uint8_t validCode(uint8_t code) {
-    return (code < kFirstCode || code > kLastCode) ? '?' : code;
-}
-
-}  // namespace
-
+// Decodes the next code point of s and moves s past it. Returns 0 at the end
+// of the string, where s does not move, and kInvalidCodePoint for a byte that
+// starts no valid sequence.
+//
 // Lead bytes C2..DF, E0..EF and F0..F4 start 2-, 3- and 4-byte sequences; the
 // allowed range of the second byte depends on the lead (Unicode Table 3-7),
 // which rejects overlong forms, surrogates and values above U+10FFFF. The
 // bytes are checked one at a time, so the terminating NUL stops the check and
-// nothing past it is read. A lead byte whose sequence breaks gives '?' and
-// only that byte is consumed.
-uint8_t steamiNextGlyph(const char*& s) {
+// nothing past it is read. A lead byte whose sequence breaks gives
+// kInvalidCodePoint and only that byte is consumed.
+uint32_t nextCodePoint(const char*& s) {
     if (s == nullptr || *s == '\0') {
         return 0;
     }
@@ -291,7 +287,7 @@ uint8_t steamiNextGlyph(const char*& s) {
     const uint8_t lead = p[0];
     if (lead < 0x80) {
         s++;
-        return (lead < kFirstCode || lead == 0x7F) ? '?' : lead;
+        return lead;
     }
     uint8_t more = 0;
     uint8_t lo = 0x80;
@@ -318,20 +314,66 @@ uint8_t steamiNextGlyph(const char*& s) {
         }
     } else {
         s++;  // 80..C1 or F5..FF cannot start a sequence
-        return '?';
+        return kInvalidCodePoint;
     }
     for (uint8_t i = 1; i <= more; i++) {
         const uint8_t b = p[i];
         if (b < lo || b > hi) {  // the NUL is out of range too
             s++;
-            return '?';
+            return kInvalidCodePoint;
         }
         cp = (cp << 6) | (b & 0x3F);
         lo = 0x80;
         hi = 0xBF;
     }
     s += more + 1;
-    return foldCodePoint(cp);
+    return cp;
+}
+
+// The extended code of a code point, '?' when it has none.
+uint8_t extendedCode(uint32_t cp) {
+    if (cp >= kFirstCode && cp < 0x7F) {
+        return static_cast<uint8_t>(cp);
+    }
+    if (cp == kDegreeSign) {
+        return STEAMI_GLYPH_DEGREE;
+    }
+    if (cp == kCapitalYDiaeresis) {
+        return kCapitalYCode;
+    }
+    uint8_t code = kFirstAccented;
+    for (const Fold& f : kFolds) {
+        if (cp == f.latin1) {
+            return code;
+        }
+        code++;
+    }
+    return '?';
+}
+
+uint8_t validCode(uint8_t code) {
+    return (code < kFirstCode || code > kLastCode) ? '?' : code;
+}
+
+}  // namespace
+
+uint8_t steamiNextCode(const char*& s) {
+    const uint32_t cp = nextCodePoint(s);
+    return cp == 0 ? 0 : extendedCode(cp);
+}
+
+uint8_t steamiFoldCode(uint8_t code) {
+    if (code == kCapitalYCode) {
+        return 'Y';
+    }
+    if (code >= kFirstAccented && code < kCapitalYCode) {
+        return static_cast<uint8_t>(kFolds[code - kFirstAccented].base);
+    }
+    return code;
+}
+
+uint8_t steamiNextGlyph(const char*& s) {
+    return steamiFoldCode(steamiNextCode(s));
 }
 
 size_t steamiGlyphCount(const char* s) {
@@ -348,4 +390,23 @@ const uint8_t* steamiGlyph8x8(uint8_t code) {
 
 const uint8_t* steamiGlyph5x7(uint8_t code) {
     return kFont5x7[validCode(code) - kFirstCode];
+}
+
+int8_t steamiValueIndex(uint8_t code) {
+    for (int8_t i = 0; i < kValueGlyphs; i++) {
+        if (static_cast<uint8_t>(kValueKey[i]) == code) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+const uint8_t* steamiFaceGlyph(const SteamiFontFace& face, uint8_t code) {
+    const size_t bytes = static_cast<size_t>(face.h) * ((face.w + 7U) / 8U);
+    if (face.glyphs == kValueGlyphs) {
+        const int8_t index = steamiValueIndex(code);
+        return index < 0 ? nullptr : face.data + static_cast<size_t>(index) * bytes;
+    }
+    const uint8_t valid = (code < kFirstCode || code > kLastExtendedCode) ? '?' : code;
+    return face.data + static_cast<size_t>(valid - kFirstCode) * bytes;
 }

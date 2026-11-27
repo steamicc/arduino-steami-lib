@@ -31,3 +31,6 @@ __pycache__/
 
 # ruff
 .ruff_cache/
+
+# Spleen release, downloaded by scripts/gen-spleen-fonts.py
+/.spleen-cache/

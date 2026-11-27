@@ -28,7 +28,7 @@ PIO = ROOT / ".venv" / "bin" / "pio"
 BOARD_JSON = ROOT / "boards" / "steami.json"
 ELF = ROOT / ".pio" / "build" / "steami" / "firmware.elf"
 
-SKETCHES: tuple[str, ...] = ("steami_board/Drawing",)
+SKETCHES: tuple[str, ...] = ("steami_board/Drawing", "steami_board/ScreenGauge")
 FLASH_START = 0x08000000
 FLASH_MARGIN = 65536
 MIN_FREE_RAM = 143360

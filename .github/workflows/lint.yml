@@ -34,3 +34,27 @@ jobs:
 
       - name: Run lint checks
         run: make lint
+
+  spleen-fonts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Cache the Spleen release
+        uses: actions/cache@v4
+        with:
+          path: .spleen-cache
+          key: spleen-2.1.0-8b47c56f1a6eb858fbcf9e34530557404b02fbb3455e38e64fb84473fd0c372f
+
+      - name: Regenerate the Spleen tables and spleen.py
+        run: python3 scripts/gen-spleen-fonts.py --micropython "$RUNNER_TEMP/spleen.py"
+
+      - name: Check the committed tables match their generator
+        run: git diff --exit-code -- lib/steami_board/src/SteamiFontSpleen.cpp
