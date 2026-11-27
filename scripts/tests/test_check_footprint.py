@@ -115,8 +115,20 @@ class CheckFootprintTest(unittest.TestCase):
 
     def test_sketches(self) -> None:
         self.assertEqual(
-            self.mod.SKETCHES, ("steami_board/Drawing", "steami_board/ScreenGauge")
+            self.mod.SKETCHES,
+            (
+                "steami_board/Drawing",
+                "steami_board/ScreenGauge",
+                "steami_board/WeatherStation",
+            ),
         )
+        # Each entry names lib/<lib>/examples/<Name>/<Name>.ino, as main() builds it.
+        for sketch in self.mod.SKETCHES:
+            with self.subTest(sketch=sketch):
+                lib, name = sketch.split("/")
+                self.assertTrue(
+                    (ROOT / "lib" / lib / "examples" / name / f"{name}.ino").is_file()
+                )
 
 
 if __name__ == "__main__":
