@@ -584,6 +584,34 @@ static void test_accelerometer_begin_sets_8g_range(void) {
     TEST_ASSERT_EQUAL_UINT8(4, imu.registers[ISM330DL_REG_CTRL1_XL] >> 4);           // 104 Hz
 }
 
+static void test_accelerometer_begin_waits_for_a_sample_at_8g(void) {
+    // The output registers keep the last +-2 g sample until the sensor takes
+    // the next one (about 10 ms at 104 Hz): begin() waits so that the first
+    // read is not converted with the +-8 g scale (4 times too large).
+    steamiFakeBme280(Wire);
+    attachImu();
+    SteamiGyroscope gyroscope(board);  // starts the ISM330DL at +-2 g
+    TEST_ASSERT_TRUE(gyroscope.begin());
+    SteamiAccelerometer accelerometer(board);
+    uint32_t start = millisClock();
+    TEST_ASSERT_TRUE(accelerometer.begin());
+    TEST_ASSERT_UINT32_WITHIN(5, 20, millisClock() - start);
+    start = millisClock();
+    accelerometer.begin();
+    accelerometer.read();
+    TEST_ASSERT_EQUAL_UINT32(0, millisClock() - start);
+}
+
+static void test_accelerometer_absent_does_not_wait(void) {
+    steamiFakeBme280(Wire);
+    Wire.setAbsent(0x6B);
+    board.begin();
+    SteamiAccelerometer accelerometer(board);
+    const uint32_t start = millisClock();
+    TEST_ASSERT_FALSE(accelerometer.begin());
+    TEST_ASSERT_EQUAL_UINT32(0, millisClock() - start);
+}
+
 static void test_accelerometer_is_shaken(void) {
     steamiFakeBme280(Wire);
     attachImu();
@@ -1305,6 +1333,8 @@ int main(void) {
     RUN_TEST(test_battery_absent);
     RUN_TEST(test_accelerometer_reads_g);
     RUN_TEST(test_accelerometer_begin_sets_8g_range);
+    RUN_TEST(test_accelerometer_begin_waits_for_a_sample_at_8g);
+    RUN_TEST(test_accelerometer_absent_does_not_wait);
     RUN_TEST(test_accelerometer_is_shaken);
     RUN_TEST(test_accelerometer_and_gyroscope_share_chip);
     RUN_TEST(test_gyroscope_reads_dps);

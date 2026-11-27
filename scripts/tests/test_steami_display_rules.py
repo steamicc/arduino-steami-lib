@@ -10,7 +10,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -36,6 +35,7 @@ class SteamiDisplayRulesTest(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 cwd=ROOT,
+                check=False,
             )
         return result.returncode == 0
 
@@ -122,8 +122,8 @@ class SteamiDisplayRulesTest(unittest.TestCase):
         """Every statement of text that starts with "screen.": (method name, literal tokens)."""
         code = "\n".join(line.split("//")[0] for line in text.splitlines())
         out: list[tuple[str, list[str]]] = []
-        for statement in re.split(r"[;{}]", code):  # no string of the mockups holds ; { or }
-            statement = " ".join(statement.split())
+        for raw in re.split(r"[;{}]", code):  # no string of the mockups holds ; { or }
+            statement = " ".join(raw.split())
             method = re.match(r"screen\.(\w+)", statement)
             if method is None:
                 continue

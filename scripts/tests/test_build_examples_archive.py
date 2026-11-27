@@ -11,7 +11,6 @@ import unittest
 import zipfile
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).resolve().parent.parent / "build-examples-archive.py"
 
 EXAMPLES = ("VL53L1X/GestureDetection", "APDS9960/ambient_light")

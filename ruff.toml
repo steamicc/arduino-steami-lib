@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# ruff settings for the Python tooling (scripts/, scripts/tests/, the native
+# test generators under tests/). Run with `make ruff`, part of `make lint`.
+# The version is pinned in requirements.txt.
+
+line-length = 100  # the C++ ColumnLimit of .clang-format
+target-version = "py310"
+
+[lint]
+# An explicit list, so a ruff upgrade does not change the rule set silently.
+select = [
+  "F",    # pyflakes
+  "E",    # pycodestyle errors
+  "W",    # pycodestyle warnings
+  "B",    # flake8-bugbear: common bug patterns
+  "I",    # isort
+  "UP",   # pyupgrade
+  "C4",   # flake8-comprehensions
+  "SIM",  # flake8-simplify
+  "PLE",  # pylint errors
+  "PLW",  # pylint warnings
+]

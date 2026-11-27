@@ -28,3 +28,6 @@ CLAUDE.md
 
 # Python bytecode
 __pycache__/
+
+# ruff
+.ruff_cache/

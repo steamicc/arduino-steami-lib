@@ -10,7 +10,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 # A preprocessor use of the board macros: #ifdef / #ifndef / defined(...).
@@ -38,6 +37,7 @@ class SteamiBoardRulesTest(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 cwd=ROOT,
+                check=False,
             )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("Define only one of STEAMI_BOARD_V1A", result.stderr)

@@ -18,7 +18,6 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent.parent
 LIB_ROOT = ROOT / "lib"
 PIO = ROOT / ".venv" / "bin" / "pio"
@@ -74,6 +73,7 @@ def compile_example(name: str) -> ExampleResult:
         env=env,
         capture_output=True,
         text=True,
+        check=False,
     )
 
     output = result.stdout

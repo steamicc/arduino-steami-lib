@@ -11,7 +11,6 @@ import unittest.mock
 from contextlib import redirect_stderr
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPT = ROOT / "scripts" / "check-footprint.py"
 
@@ -88,11 +87,13 @@ class CheckFootprintTest(unittest.TestCase):
     def test_missing_pio_asks_for_make_setup(self) -> None:
         stderr = io.StringIO()
         missing = ROOT / ".venv" / "bin" / "no-such-pio"
-        with unittest.mock.patch.object(self.mod, "PIO", missing):
-            with unittest.mock.patch.object(self.mod.subprocess, "run") as run:
-                with unittest.mock.patch.object(sys, "argv", ["check-footprint.py"]):
-                    with redirect_stderr(stderr):
-                        self.assertEqual(self.mod.main(), 1)
+        with (
+            unittest.mock.patch.object(self.mod, "PIO", missing),
+            unittest.mock.patch.object(self.mod.subprocess, "run") as run,
+            unittest.mock.patch.object(sys, "argv", ["check-footprint.py"]),
+            redirect_stderr(stderr),
+        ):
+            self.assertEqual(self.mod.main(), 1)
         run.assert_not_called()
         self.assertIn("Run 'make setup' first", stderr.getvalue())
 

@@ -22,7 +22,7 @@ Arduino/C++ driver library for the [STeaMi](https://www.steami.cc/) board. Each 
 | WSEN-PADS     | [`wsen-pads`](lib/wsen-pads/)           | `0x5D`      | Pressure + temperature                |
 | ISM330DL      | [`ism330dl`](lib/ism330dl/)             | `0x6B`      | 6-axis IMU (accel + gyro)             |
 | LIS2MDL       | [`lis2mdl`](lib/lis2mdl/)               | `0x1E`      | 3-axis magnetometer                   |
-| IM34DT05      | `im34dt05` *(not yet implemented)*       | — (PDM)     | Digital microphone                    |
+| IMP34DT05     | [`im34dt05`](lib/im34dt05/)             | — (PDM)     | Digital microphone (SAI1 PDM)         |
 | BME280        | [`bme280`](lib/bme280/)                 | `0x76`      | Pressure + humidity + temp. (V1c)     |
 | GC9A01        | [`gc9a01`](lib/gc9a01/)                 | — (SPI)     | 240x240 round colour TFT display (V1c) |
 | STeaMi Config | [`steami_config`](lib/steami_config/)   | —           | Persistent board configuration        |
@@ -232,7 +232,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-This project is licensed under the [GPL v3](LICENSE) License.
+This project is licensed under the [GPL v3](LICENSE) License, except the PDM to PCM filter and the SAI capture of the microphone driver (`lib/im34dt05/src/SteamiPdmFilter.*` and `SteamiPdmSai.*`), adapted from STMicroelectronics' [X-NUCLEO-IKS02A1-Audio](https://github.com/stm32duino/X-NUCLEO-IKS02A1-Audio) library and kept under its BSD-3-Clause licence (notice in each file).
 
 ## Additional Resources
 

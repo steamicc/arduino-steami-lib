@@ -51,6 +51,9 @@
     "*.{h,cpp,ino}": [
       ".venv/bin/clang-format --dry-run --Werror",
       "scripts/check-spdx.sh"
+    ],
+    "*.py": [
+      ".venv/bin/ruff check"
     ]
   }
 }

@@ -1,0 +1,65 @@
+#######################################
+# Syntax Coloring Map For IMP34DT05
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+SteamiIMP34DT05	KEYWORD1
+SteamiPdmFilter	KEYWORD1
+SteamiPdmSai	KEYWORD1
+LevelResult	KEYWORD1
+ConversionStats	KEYWORD1
+ReceiveCallback	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin	KEYWORD2
+end	KEYWORD2
+powerOn	KEYWORD2
+powerOff	KEYWORD2
+isRunning	KEYWORD2
+sampleRate	KEYWORD2
+available	KEYWORD2
+dataReady	KEYWORD2
+read	KEYWORD2
+clear	KEYWORD2
+overruns	KEYWORD2
+onReceive	KEYWORD2
+setVolume	KEYWORD2
+volume	KEYWORD2
+setLevelWindowMs	KEYWORD2
+levelWindowMs	KEYWORD2
+levelReady	KEYWORD2
+rms	KEYWORD2
+peak	KEYWORD2
+levelDbfs	KEYWORD2
+levelDbSpl	KEYWORD2
+level	KEYWORD2
+setLevelOffset	KEYWORD2
+dominantFrequencyHz	KEYWORD2
+setSlot	KEYWORD2
+conversionStats	KEYWORD2
+resetConversionStats	KEYWORD2
+slot	KEYWORD2
+computeRms	KEYWORD2
+rmsToDbfs	KEYWORD2
+computeDominantFrequency	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+IMP34DT05_SAMPLE_RATE_16K	LITERAL1
+IMP34DT05_SAMPLES_PER_BLOCK	LITERAL1
+IMP34DT05_BUFFER_SAMPLES	LITERAL1
+IMP34DT05_VOLUME_MIN	LITERAL1
+IMP34DT05_VOLUME_MAX	LITERAL1
+IMP34DT05_VOLUME_DEFAULT	LITERAL1
+IMP34DT05_LEVEL_WINDOW_DEFAULT_MS	LITERAL1
+IMP34DT05_LEVEL_FLOOR_DBFS	LITERAL1
+IMP34DT05_FFT_SIZE	LITERAL1
+IMP34DT05_SLOT_AUTO	LITERAL1

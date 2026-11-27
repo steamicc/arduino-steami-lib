@@ -18,7 +18,6 @@ import shutil
 import sys
 from pathlib import Path
 
-
 EXCLUDED_DRIVERS = frozenset()
 
 # Directory holding examples but no driver sources.
@@ -32,7 +31,12 @@ version={version}
 author=STeaMi contributors
 maintainer=STeaMi contributors
 sentence=Drivers for the sensors, buttons, battery gauge and display of the STeaMi board.
-paragraph=Accelerometer and gyroscope (ISM330DL), magnetometer (LIS2MDL), distance (VL53L1X), D-PAD (MCP23009E), battery gauge (BQ27441), pressure, humidity and light sensors and OLED display of the V1a/V1b boards, and the BME280 pressure, humidity and temperature sensor and round colour display (GC9A01) of the V1c board. Detects the board release (V1a, V1b or V1c) and shares the sensor drivers (STeaMi Board). Select the "STeaMi Board" in the STM32 MCU based boards package.
+paragraph=Accelerometer and gyroscope (ISM330DL), magnetometer (LIS2MDL), distance (VL53L1X), \
+D-PAD (MCP23009E), battery gauge (BQ27441), pressure, humidity and light sensors and OLED display \
+of the V1a/V1b boards, the PDM microphone (IMP34DT05) of every board, and the BME280 pressure, \
+humidity and temperature sensor and round colour display (GC9A01) of the V1c board. Detects the \
+board release (V1a, V1b or V1c) and shares the sensor drivers (STeaMi Board). Select the "STeaMi \
+Board" in the STM32 MCU based boards package.
 category=Sensors
 url=https://github.com/steamicc/arduino-steami-lib
 architectures=stm32

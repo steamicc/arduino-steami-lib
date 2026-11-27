@@ -15,6 +15,7 @@
 #include <SteamiBME280.h>
 #include <SteamiBoard.h>
 #include <SteamiDaplinkBridge.h>
+#include <SteamiIMP34DT05.h>
 #include <SteamiWsenHids.h>
 #include <SteamiWsenPads.h>
 
@@ -24,6 +25,9 @@ SteamiBME280 bme280(Steami.wire());
 SteamiWsenHids wsen_hids(Steami.wire());
 SteamiWsenPads wsen_pads(Steami.wire());
 SteamiDaplinkBridge daplink_bridge(Steami.wire());
+
+// The microphone is not on I2C: SAI1 clocks it on MIC_CLK and reads MIC_IN.
+SteamiIMP34DT05 microphone;
 
 void setup() {
     Serial.begin(115200);
@@ -94,6 +98,20 @@ void setup() {
         Serial.println(daplink_bridge.deviceId(), HEX);
     } else {
         Serial.println("DAPLink bridge not detected");
+    }
+
+    // --- IMP34DT05 (PDM microphone on SAI1) ---
+    if (microphone.begin()) {
+        Serial.print("IMP34DT05 detected on SAI slot ");
+        Serial.println(microphone.slot());
+
+        delay(150);  // one 100 ms level window
+        Serial.print("IMP34DT05 first level: ");
+        Serial.print(microphone.levelDbfs(), 1);
+        Serial.println(" dBFS");
+        microphone.end();
+    } else {
+        Serial.println("IMP34DT05 not detected");
     }
 }
 

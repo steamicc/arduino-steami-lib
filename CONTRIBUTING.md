@@ -12,7 +12,7 @@ almost every rule listed below.
 ## Getting started
 
 ```bash
-make setup   # creates .venv/, installs PlatformIO + clang-format + clang-tidy,
+make setup   # creates .venv/, installs PlatformIO + clang-format + clang-tidy + ruff,
              # runs npm install for the git hooks
 ```
 
@@ -22,7 +22,8 @@ Run `make help` for the full list of targets. The ones you'll use most:
 |--------|--------------|
 | `make format-check` | Run `clang-format --dry-run` on `lib/ src/ tests/`. |
 | `make format-fix` | Apply `clang-format -i` in place. |
-| `make lint` | Meta-target: `format-check` + `check-spdx` + `clang-tidy`. |
+| `make lint` | Meta-target: `format-check` + `check-spdx` + `clang-tidy` + `ruff`. |
+| `make ruff` | Lint the Python tooling with `ruff check` (settings in `ruff.toml`, version pinned in `requirements.txt`). |
 | `make tidy` | Run `clang-tidy` on every driver source under `lib/*/src/`. Regenerates `compile_commands.json` as needed. |
 | `make check-spdx` | Verify every `.h`/`.cpp`/`.ino` carries the SPDX-License-Identifier header. |
 | `make build` | Build the STeaMi firmware (`pio run`; `steami` is the default env). |
@@ -365,7 +366,7 @@ Every PR runs four GitHub Actions workflows in parallel:
 |----------|------|
 | `build.yml` | `make setup` + `make build` — firmware compile check. |
 | `tests.yml` | `make test-native` — host-side test suite. |
-| `lint.yml` | `make lint` — clang-format + SPDX header check + clang-tidy. |
+| `lint.yml` | `make lint` — clang-format + SPDX header check + clang-tidy + ruff. |
 | `check-commits.yml` | `commitlint` on every commit in the PR range. |
 
 All four need to go green before a merge.

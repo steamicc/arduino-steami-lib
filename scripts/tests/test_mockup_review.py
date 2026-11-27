@@ -11,7 +11,6 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent.parent.parent
 SCRIPT = ROOT / "scripts" / "mockup-review.py"
 
