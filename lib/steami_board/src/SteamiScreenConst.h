@@ -84,3 +84,15 @@ constexpr int16_t STEAMI_GAUGE_MAX_ANGLE = 127;
 // gauge(), in physical pixels: the default ring width is max(5, radius() / 9), 7 on 128, 13 on 240.
 constexpr int16_t STEAMI_GAUGE_MIN_WIDTH = 5;
 constexpr int16_t STEAMI_GAUGE_WIDTH_DIVISOR = 9;
+
+// graph() (MicroPython's names): the box from x u(MARGIN + X_OFFSET) = u(21) and y u(38), w W -
+// u(MARGIN) - u(21), h u(52); the current value's top row u(31); the dashed middle line, dashes of
+// u(3) every u(3) + u(3); the axis labels u(2) inside the box.
+constexpr int16_t STEAMI_GRAPH_MARGIN = 15;
+constexpr int16_t STEAMI_GRAPH_X_OFFSET = 6;
+constexpr int16_t STEAMI_GRAPH_Y = 38;
+constexpr int16_t STEAMI_GRAPH_HEIGHT = 52;
+constexpr int16_t STEAMI_GRAPH_VALUE_Y = 31;
+constexpr int16_t STEAMI_GRAPH_DASH = 3;
+constexpr int16_t STEAMI_GRAPH_GAP = 3;
+constexpr int16_t STEAMI_GRAPH_LABEL_INSET = 2;

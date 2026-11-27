@@ -2139,6 +2139,10 @@ static void test_widgets_without_a_screen(void) {
     TEST_ASSERT_TRUE(e.status() == SteamiStatus::UNKNOWN_BOARD);
     f.face(SteamiFace::HAPPY);
     TEST_ASSERT_TRUE(f.status() == SteamiStatus::UNKNOWN_BOARD);
+    TestScreen g(board);  // 4c: graph() begins the display on its own too
+    SteamiHistory<4> history;
+    g.graph(history, 950, 1050);
+    TEST_ASSERT_TRUE(g.status() == SteamiStatus::UNKNOWN_BOARD);
     TEST_ASSERT_EQUAL_size_t(1, countLogged("(E30)"));
 }
 
@@ -2158,6 +2162,11 @@ static void test_screen_e31_message(void) {
     s.watch(10, 10, 30);
     s.face(SteamiFace::LOVE, true);
     s.face(nullptr);
+    SteamiHistory<4> history;  // 4c: nothing is drawn after E31
+    history.add(1000);
+    const float data[3] = {1000, 1010, 1020};
+    s.graph(history);
+    s.graph(data, 3);
     TEST_ASSERT_EQUAL_UINT32(0, mem.fillRectCalls());
     TEST_ASSERT_EQUAL_UINT32(0, mem.pixelCalls());
     TEST_ASSERT_EQUAL_size_t(0, mem.litCount());
@@ -3610,6 +3619,13 @@ static void test_long_strings_stay_inside(void) {
             TEST_ASSERT_TRUE(inkBox(mem, STEAMI_GRAY).count > 0);
             TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mem.outsideCircle(), "gauge labels");
         }
+        SteamiHistory<20> h;  // 4c: the graph labels of +-1e8 and "--" (1e9)
+        for (float v : {-1e8f, 1e8f, 1e9f}) {
+            s.clear();
+            s.graph(h, v, -v);
+            TEST_ASSERT_TRUE(inkBox(mem, STEAMI_DARK).count > 0);
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, mem.outsideCircle(), "graph labels");
+        }
     });
 }
 
@@ -3682,6 +3698,183 @@ static void test_history_at_65535(void) {
     TEST_ASSERT_EQUAL_FLOAT(65536, h[65534]);
     TEST_ASSERT_EQUAL_FLOAT(65536, h.last());
     TEST_ASSERT_TRUE(isnan(h[65535]));
+}
+
+// ---- graph (4c) ----
+
+/// A panel size and mode: the four panels of forEachPanel(), for the "A == B" renders.
+struct PanelMode {
+    int16_t size;
+    bool color;
+};
+
+static const PanelMode kPanelModes[] = {{128, false}, {128, true}, {240, true}, {240, false}};
+
+/// The frame of graph() on one panel (values printed by golden_layout.py, 4c Task 2): the box (D3),
+/// the dashes from x dashFirst, dashLength long every dashStep, the last one cut at gx + gw - 1, on
+/// rows dashRow0..dashRow1; the boxes of the left and bottom axes; the value row; the label column
+/// and the cell tops of the max and min labels for digits and for "--".
+struct GraphPins {
+    int16_t gx, gy, gw, gh, k;
+    int16_t dashFirst, dashLength, dashStep, dashRow0, dashRow1;
+    int16_t leftAxis[4], bottomAxis[4];
+    int16_t valueRow, valueCellHeight;
+    int16_t labelX, maxTop, minTop, maxTopDashes, minTopDashes;
+};
+
+static const GraphPins kGraph128{
+    21, 38, 92, 52, 1,  22, 3, 6, 64, 64, {21, 38, 21, 90}, {21, 90, 112, 90},
+    31, 8,  24, 40, 81, 37, 84};
+static const GraphPins kGraph240{
+    39, 71, 173, 97, 2,   41, 5,  10, 119, 120, {39, 71, 40, 169}, {39, 168, 212, 169},
+    58, 16, 44,  73, 155, 69, 158};
+
+static const GraphPins& graphPins(int16_t size) {
+    return size == 128 ? kGraph128 : kGraph240;
+}
+
+static bool inBox(const int16_t* b, int32_t x, int32_t y) {
+    return x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
+}
+
+/// The DARK pixels of the box interior (gx + k <= x <= gx + gw - 1, gy <= y < gy + gh), in row
+/// order; every other pixel false.
+static std::vector<bool> interiorDark(const SteamiMemoryBackend& mem, const GraphPins& g) {
+    const uint16_t dark = mem.stored(STEAMI_DARK);
+    std::vector<bool> out;
+    for (int16_t y = 0; y < mem.height(); y++) {
+        for (int16_t x = 0; x < mem.width(); x++) {
+            const bool inside =
+                x >= g.gx + g.k && x <= g.gx + g.gw - 1 && y >= g.gy && y < g.gy + g.gh;
+            out.push_back(inside && mem.at(x, y) == dark);
+        }
+    }
+    return out;
+}
+
+// Spec 5.9 "graph", D3 (values printed by golden_layout.py): the GRID_DARK pixels are exactly the
+// dashes of the middle line; outside the box interior (x < gx + k or y >= gy + gh) the DARK pixels
+// are exactly the two axes; an empty history draws no curve.
+static void test_graph_frame_golden(void) {
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        SteamiHistory<20> h;
+        s.graph(h, 950, 1050);
+        const GraphPins& g = graphPins(s.width());
+        const uint16_t grid = mem.stored(STEAMI_GRID_DARK);
+        const uint16_t dark = mem.stored(STEAMI_DARK);
+        const int32_t right = g.gx + g.gw - 1;
+        size_t dashes = 0;
+        for (int16_t y = 0; y < s.height(); y++) {
+            for (int16_t x = 0; x < s.width(); x++) {
+                const bool dash = y >= g.dashRow0 && y <= g.dashRow1 && x >= g.dashFirst &&
+                                  x <= right && (x - g.dashFirst) % g.dashStep < g.dashLength;
+                TEST_ASSERT_TRUE_MESSAGE(dash == (mem.at(x, y) == grid), "dash");
+                dashes += dash && y == g.dashRow0 && (x - g.dashFirst) % g.dashStep == 0 ? 1 : 0;
+                if (x < g.gx + g.k || y >= g.gy + g.gh) {
+                    const bool axis = inBox(g.leftAxis, x, y) || inBox(g.bottomAxis, x, y);
+                    TEST_ASSERT_TRUE_MESSAGE(axis == (mem.at(x, y) == dark), "axis");
+                }
+            }
+        }
+        TEST_ASSERT_EQUAL_size_t(s.width() == 128 ? 16 : 18, dashes);
+        TEST_ASSERT_EQUAL_size_t(0, inkBox(mem, STEAMI_LIGHT).count);
+    });
+}
+
+/// graph(h, 950, 1050) of a SteamiHistory<20> holding values[0..n).
+static void graphOf(TestScreen& s, const float* values, size_t n) {
+    SteamiHistory<20> h;
+    for (size_t i = 0; i < n; i++) {
+        h.add(values[i]);
+    }
+    s.graph(h, 950, 1050);
+}
+
+// D5: the integer part of the last value, truncated toward zero, "--" for an empty series, NAN or
+// |v| >= 1e9, is text() at scale 1 in WHITE, centred on centerX() at row u(31) (31 / 58).
+static void test_graph_value(void) {
+    struct Case {
+        float values[2];
+        size_t n;
+        const char* text;
+    };
+    static const Case kCases[] = {{{0, 0}, 0, "--"},    {{1013.7f, 0}, 1, "1013"},
+                                  {{-0.5f, 0}, 1, "0"}, {{-12.9f, 0}, 1, "-12"},
+                                  {{1e9f, 0}, 1, "--"}, {{1013.7f, NAN}, 2, "--"}};
+    for (const PanelMode p : kPanelModes) {
+        const int16_t row = graphPins(p.size).valueRow;
+        for (const Case& c : kCases) {
+            const std::vector<uint16_t> widget = colourAlone(
+                p.size, p.color, STEAMI_WHITE, [&c](TestScreen& s) { graphOf(s, c.values, c.n); });
+            const std::vector<uint16_t> text =
+                colourAlone(p.size, p.color, STEAMI_WHITE, [&c, row](TestScreen& s) {
+                    s.text(c.text, static_cast<int16_t>(s.centerX() - s.textWidth(c.text) / 2), row,
+                           STEAMI_WHITE, 1);
+                });
+            TEST_ASSERT_TRUE_MESSAGE(widget == text, c.text);
+        }
+    }
+    forEachPanel([](SteamiMemoryBackend& mem, TestScreen& s) {
+        static const float kOne[] = {1013.7f};
+        graphOf(s, kOne, 1);
+        const GraphPins& g = graphPins(s.width());
+        const InkBox white = inkBox(mem, STEAMI_WHITE);
+        TEST_ASSERT_TRUE(white.count > 0);
+        TEST_ASSERT_TRUE(white.y0 >= g.valueRow && white.y1 <= g.valueRow + g.valueCellHeight - 1);
+        TEST_ASSERT_EQUAL_size_t(0, inkBox(mem, STEAMI_LIGHT).count);  // one point: no curve
+    });
+}
+
+// D6, B1, font design 5.3 and 7 (values printed by golden_layout.py): inside the box the DARK
+// pixels are the max and min labels and nothing else, each textSmall(..., 1) at x 24 / 44, the max
+// cell top 40 / 73 and the min cell top 81 / 155 for digits, 37 / 69 and 84 / 158 for "--".
+static void test_graph_two_labels(void) {
+    struct Case {
+        float minV, maxV;
+        const char* min;
+        const char* max;
+    };
+    static const Case kCases[] = {
+        {950, 1050, "950", "1050"}, {0, 1000, "0", "1000"}, {NAN, INFINITY, "--", "--"}};
+    for (const PanelMode p : kPanelModes) {
+        const GraphPins& g = graphPins(p.size);
+        for (const Case& c : kCases) {
+            const bool dashes = c.min[0] == '-' && c.min[1] == '-';
+            const int16_t maxTop = dashes ? g.maxTopDashes : g.maxTop;
+            const int16_t minTop = dashes ? g.minTopDashes : g.minTop;
+            std::vector<bool> widget;
+            onPanel(p.size, p.color, [&](SteamiMemoryBackend& mem, TestScreen& s) {
+                SteamiHistory<20> h;
+                s.graph(h, c.minV, c.maxV);
+                widget = interiorDark(mem, g);
+            });
+            std::vector<bool> labels;
+            onPanel(p.size, p.color, [&](SteamiMemoryBackend& mem, TestScreen& s) {
+                s.textSmall(c.max, g.labelX, maxTop, STEAMI_DARK, 1);
+                s.textSmall(c.min, g.labelX, minTop, STEAMI_DARK, 1);
+                labels = interiorDark(mem, g);
+                // Both DARK ink boxes lie inside the box interior.
+                TEST_ASSERT_EQUAL_size_t(inkBox(mem, STEAMI_DARK).count, countTrue(labels));
+            });
+            TEST_ASSERT_TRUE_MESSAGE(widget == labels, c.max);
+        }
+    }
+}
+
+// Review Focus 3: a null array draws what an empty history draws (the frame and "--"), and so does
+// an array of 0 values.
+static void test_graph_null_data(void) {
+    static const float kData[3] = {1000, 1010, 1020};
+    for (const PanelMode p : kPanelModes) {
+        const std::vector<uint16_t> empty = rendered(p.size, p.color, [](TestScreen& s) {
+            SteamiHistory<4> h;
+            s.graph(h, 950, 1050);
+        });
+        TEST_ASSERT_TRUE(empty == rendered(p.size, p.color,
+                                           [](TestScreen& s) { s.graph(nullptr, 5, 950, 1050); }));
+        TEST_ASSERT_TRUE(empty == rendered(p.size, p.color,
+                                           [](TestScreen& s) { s.graph(kData, 0, 950, 1050); }));
+    }
 }
 
 int main(int, char**) {
@@ -3773,5 +3966,9 @@ int main(int, char**) {
     RUN_TEST(test_history_keeps_the_last_n);
     RUN_TEST(test_history_counts_nan);
     RUN_TEST(test_history_at_65535);
+    RUN_TEST(test_graph_frame_golden);
+    RUN_TEST(test_graph_value);
+    RUN_TEST(test_graph_two_labels);
+    RUN_TEST(test_graph_null_data);
     return UNITY_END();
 }

@@ -100,6 +100,19 @@ class SteamiScreen : public SteamiDisplay {
     void gauge(float v, float minV = 0, float maxV = 100, SteamiRgb c = STEAMI_LIGHT,
                uint8_t arcWidth = 0);
 
+    /// A box with the curve of the values from the oldest (left) to the newest (right), the
+    /// integer part of the newest above it, minV and maxV written inside the box; a NAN leaves a
+    /// gap; values outside [minV, maxV] stay on the edge. The axes and the labels are DARK, the
+    /// newest value WHITE ("--" when there is none or it is NAN), the curve in c.
+    template <size_t N>
+    void graph(const SteamiHistory<N>& h, float minV = 0, float maxV = 100,
+               SteamiRgb c = STEAMI_LIGHT) {
+        graphSeries(Series{h._data, N, h.first(), h._count}, minV, maxV, c);
+    }
+    /// The same with the n values of an array, data[0] the oldest; nullptr draws no curve.
+    void graph(const float* data, size_t n, float minV = 0, float maxV = 100,
+               SteamiRgb c = STEAMI_LIGHT);
+
    protected:  // the layout kernel of the widgets, not for the student
     /// A run of columns [left, right], inclusive; empty when right < left.
     struct Region {
@@ -243,6 +256,17 @@ class SteamiScreen : public SteamiDisplay {
     int32_t polarX(int32_t d, int32_t deg);
     int32_t polarY(int32_t d, int32_t deg);
 
+    /// The values graph() draws, read in place: `count` values from index `first` of `data`, which
+    /// holds `capacity` slots in a ring (a SteamiHistory) or in order (an array, first 0).
+    struct Series {
+        const float* data;
+        size_t capacity;
+        size_t first;
+        size_t count;
+        /// The i-th value, 0 the oldest: data[(first + i) % capacity]; i < count.
+        float at(size_t i) const;
+    };
+
    private:
     /// The entry of every widget: begins the display on first use; false when it draws nothing.
     bool widgetCanDraw();
@@ -308,6 +332,31 @@ class SteamiScreen : public SteamiDisplay {
     /// Fills columns [left, right] of the u(STEAMI_BAR_HEIGHT) rows from row top in c, each row
     /// cut to the panel and to the chord at that row; a row with nothing left draws nothing.
     void barRows(int32_t left, int32_t right, int32_t top, SteamiRgb c);
+
+    /// The widget behind both graph() overloads: the newest value, the max and min labels, the
+    /// frame, then the curve (the spec's order: the curve paints over the labels).
+    void graphSeries(const Series& s, float minV, float maxV, SteamiRgb c);
+
+    /// The newest value's integer part ("--" for NAN or |v| >= 1e9) in text() at scale 1, WHITE,
+    /// centred on centerX() at row u(31), never cut.
+    void graphValue(float v);
+
+    /// One axis label: v's integer part ("--" for NAN or |v| >= 1e9) in the LABEL face at k, the
+    /// max label when top, else the min label.
+    void graphLabel(float v, bool top);
+
+    /// Draws the label run of graphLabel() in DARK inside the box: the max label's first inked row
+    /// u(2) below the box top, the min label's last inked row k + u(2) above the bottom axis; its
+    /// left column x = max(the chord's left edge at its inked rows, box left + k) + u(2); cut to
+    /// the longest prefix that fits [x, that chord's right edge - k].
+    void drawGraphLabel(Run& t, bool top);
+
+    /// The dashed GRID_DARK middle line, dashes k rows thick, and the left and bottom axes in DARK
+    /// strokes of width k.
+    void graphFrame();
+
+    /// The curve of the series in c across the box.
+    void graphCurve(const Series& s, float minV, float maxV, SteamiRgb c);
 
     uint8_t _decimals = 1;
 };

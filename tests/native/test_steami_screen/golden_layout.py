@@ -2534,3 +2534,161 @@ for name, W, c, rows, got in MOCKUP_BOXES:
     print(f"    {name:<3} {W} {c:<6} {str(rows or ''):<10} {got}")
 print("  mockup points (name W point colour):",
       *(f"{n} {W} {p} {c}" for n, W, p, c in PINNED_POINTS))
+
+# ---- Widget of 4c Task 2: graph() frame, value and labels (spec 5.9 "graph", B1; font design
+# 5.3) ----
+# The box (D3) in 128-px units through u(): x u(21), y u(38), w W - u(15) - u(21), h u(52). The
+# current value (D5) is the integer part of the last value ("--" for NAN, past 1e9 or an empty
+# series), text() at scale 1 in WHITE, centred on centerX() at row u(31), never cut. The two axis
+# labels (D6, B1) are the integer parts of maxV and minV in the LABEL face at k, DARK: the max
+# label's first inked row at y + u(2), the min label's last inked row at y + h - k - u(2), each at
+# x = max(chord left at its inked rows, box left + k) + u(2), cut to [x, chord right - k]. The
+# middle line is GRID_DARK dashes of u(3) every u(3) + u(3) from x + k, k rows thick, the last one
+# cut at x + w - 1; the axes are strokeLine()s of width k, left and bottom. Drawing order: value,
+# labels, dashes, axes (the curve of Task 3 comes last).
+GRAPH_MARGIN, GRAPH_X_OFFSET, GRAPH_Y, GRAPH_HEIGHT, GRAPH_VALUE_Y = 15, 6, 38, 52, 31
+GRAPH_DASH, GRAPH_GAP, GRAPH_LABEL_INSET = 3, 3, 2
+
+
+def graph_box(P):
+    """(gx, gy, gw, gh) of D3: the box x is u(21), never u(15) + u(6)."""
+    gx = P.u(GRAPH_MARGIN + GRAPH_X_OFFSET)
+    return gx, P.u(GRAPH_Y), P.W - P.u(GRAPH_MARGIN) - gx, P.u(GRAPH_HEIGHT)
+
+
+def graph_label(P, v, top):
+    """drawGraphLabel() (D6): (the kept text, its left column x, its cell top row)."""
+    gx, gy, _, gh = graph_box(P)
+    text = gauge_label_text(v)  # integerText(): the formatter gaugeLabel() shares (D5)
+    face = face_for(P, text, LABEL, P.k)
+    m, n, inset = ink_rows(text, count(text), LABEL, face), replication(face, P.k), P.u(2)
+    first, last = lowest_bit(m), highest_bit(m)
+    y = gy + inset - first * n if top else gy + gh - P.k - inset - (last + 1) * n + 1
+    c = P.ink_chord(text, count(text), LABEL, y, P.k)
+    x = max(c[0] if c else 0, gx + P.k) + inset
+    kept = P.fit_glyphs(text, LABEL, P.k, y, (x, P.W - 1), P.k, 0)
+    return text[:kept], x, y  # the labels are ASCII: a glyph is a character
+
+
+def graph_layout(W, min_v, max_v):
+    """The box, the value's centre column and row, the labels (max then min) as (text, x, top),
+    the dash spans [(x0, x1)] and the dash rows (y0, y1)."""
+    P = Panel(W)
+    gx, gy, gw, gh = graph_box(P)
+    dash, step = P.u(GRAPH_DASH), P.u(GRAPH_DASH) + P.u(GRAPH_GAP)
+    dashes = [(x, min(x + dash - 1, gx + gw - 1)) for x in range(gx + P.k, gx + gw, step)] \
+        if dash > 0 else []
+    row = gy + gh // 2
+    return {"box": (gx, gy, gw, gh), "value": (P.cx, P.u(GRAPH_VALUE_Y)),
+            "labels": [graph_label(P, max_v, True), graph_label(P, min_v, False)],
+            "dashes": dashes, "dash_rows": (row, row + P.k - 1)}
+
+
+def graph_axes(W):
+    """The two axes, left then bottom, each on its own canvas: strokeLine(gx, gy, gx, gy + gh)
+    and strokeLine(gx, gy + gh, gx + gw - 1, gy + gh), width k, DARK."""
+    P = Panel(W)
+    gx, gy, gw, gh = graph_box(P)
+    left, bottom = {}, {}
+    r_stroke_line(left, W, gx, gy, gx, gy + gh, P.k, "DARK")
+    r_stroke_line(bottom, W, gx, gy + gh, gx + gw - 1, gy + gh, P.k, "DARK")
+    return left, bottom
+
+
+def graph_frame(cv, W, min_v, max_v, value_text):
+    """Paints graph()'s value, labels, dashes and axes onto cv, in that order (D3)."""
+    P = Panel(W)
+    g = graph_layout(W, min_v, max_v)
+    cx, vy = g["value"]
+    r_text(cv, W, value_text, cx - 8 * count(value_text) // 2, vy, 1, "WHITE")  # textWidth: 8/glyph
+    for text, x, y in g["labels"]:
+        for p in draw_glyphs(P, text, count(text), LABEL, x, y, P.k):
+            cv[p] = "DARK"
+    y0, y1 = g["dash_rows"]
+    for x0, x1 in g["dashes"]:
+        r_span(cv, W, x0, y0, x1 - x0 + 1, y1 - y0 + 1, "GRID_DARK")
+    for axis in graph_axes(W):
+        cv.update(axis)
+    return cv
+
+
+def graph_label_box(W, min_v, max_v, which):
+    """The DARK ink box of label `which` (0 max, 1 min) drawn alone."""
+    P = Panel(W)
+    text, x, y = graph_layout(W, min_v, max_v)["labels"][which]
+    return box(draw_glyphs(P, text, count(text), LABEL, x, y, P.k))
+
+
+# ---- Self-check of 4c Task 2 ----
+GL128, GL240 = graph_layout(128, 950, 1050), graph_layout(240, 950, 1050)
+assert GL128["box"] == (21, 38, 92, 52) and GL240["box"] == (39, 71, 173, 97)  # D3
+assert GL128["value"] == (64, 31) and GL240["value"] == (120, 58)  # D5: value row u(31)
+assert [P.u(GRAPH_DASH) for P in (P128, P240)] == [3, 5]  # dash and gap 3 / 5
+assert [P.u(GRAPH_GAP) for P in (P128, P240)] == [3, 5]
+assert GL128["dash_rows"] == (64, 64) and GL240["dash_rows"] == (119, 120)  # k rows thick
+assert GL128["dashes"][0] == (22, 24) and GL240["dashes"][0] == (41, 45)  # from gx + k
+assert GL128["dashes"][-1] == (112, 112) and GL240["dashes"][-1] == (211, 211)  # cut at gx + gw - 1
+for G in (GL128, GL240):
+    gx, _, gw, _ = G["box"]
+    assert all(x1 <= gx + gw - 1 for _, x1 in G["dashes"])
+# D6 and font design 5.3: max cell top 40 / 73, min cell top 81 / 155, x 24 / 44, for every
+# digit label of the examples
+for lo, hi in ((950, 1050), (0, 1000)):
+    for W, tops, x in ((128, (40, 81), 24), (240, (73, 155), 44)):
+        labels = graph_layout(W, lo, hi)["labels"]
+        assert [lb[0] for lb in labels] == [str(hi), str(lo)], (W, labels)
+        assert [lb[2] for lb in labels] == list(tops), (W, lo, hi, labels)
+        assert [lb[1] for lb in labels] == [x, x], (W, lo, hi, labels)
+# On 240 the 6x12 digits ink rows 1..8: max ink 74..81, min ink 156..163 (font design 5.3); on
+# 128 the 5x7 ink is the whole cell: 40..46 and 81..87, the min label's last inked row at
+# y + h - k - u(2) = 87
+assert [graph_label_box(240, 950, 1050, i)[1::2] for i in (0, 1)] == [(74, 81), (156, 163)]
+assert [graph_label_box(128, 950, 1050, i)[1::2] for i in (0, 1)] == [(40, 46), (81, 87)]
+assert [graph_label_box(240, 0, 1000, i)[1::2] for i in (0, 1)] == [(74, 81), (156, 163)]
+# Label widths on 240: "1050" 24 px and "950" 18 px (6 px a glyph in 6x12)
+assert [cell_width(P240, t, count(t), LABEL, 2) for t in ("1050", "950")] == [24, 18]
+# "--" (NAN, INF bounds): the rule as written gives 37 / 84 on 128 and 69 / 158 on 240
+for W, tops in ((128, (37, 84)), (240, (69, 158))):
+    labels = graph_layout(W, NAN, INF)["labels"]
+    assert [(lb[0], lb[2]) for lb in labels] == [("--", tops[0]), ("--", tops[1])], (W, labels)
+# Every label of at most 10 glyphs is whole (the cut is a guard)
+for W in (128, 240):
+    for lo, hi in ((-100000000.0, 100000000.0), (-999999872, 999999872), (1e9, -1e9)):
+        for text, _, _ in graph_layout(W, lo, hi)["labels"]:
+            assert text == gauge_label_text(lo) or text == gauge_label_text(hi), (W, text)
+# The axes: on 240 device.py's _sline lines ink x 39..40 and rows 168..169 (D3)
+assert [box(a) for a in graph_axes(128)] == [(21, 38, 21, 90), (21, 90, 112, 90)]
+assert [box(a) for a in graph_axes(240)] == [(39, 71, 40, 169), (39, 168, 212, 169)]
+# Labels inside the box interior (gx + k <= x <= gx + gw - 1, gy <= y < gy + gh)
+for W in (128, 240):
+    P = Panel(W)
+    gx, gy, gw, gh = graph_box(P)
+    for lo, hi in ((950, 1050), (0, 1000), (NAN, INF), (-100000000.0, 100000000.0)):
+        for i in (0, 1):
+            x0, y0, x1, y1 = graph_label_box(W, lo, hi, i)
+            assert gx + P.k <= x0 and x1 <= gx + gw - 1 and gy <= y0 and y1 < gy + gh, (W, lo, hi)
+# The value: 10 glyphs at most, inside the chord at rows 31..38 and 58..73 (D5)
+LONGEST_VALUE = gauge_label_text(-999999900)
+assert LONGEST_VALUE == "-999999872" and count(LONGEST_VALUE) == 10
+# Nothing outside radius() + 1, for these bounds and values
+for W in (128, 240):
+    P = Panel(W)
+    for lo, hi in ((950, 1050), (0, 1000), (-100000000.0, 100000000.0), (NAN, INF)):
+        for value in ("--", "1013", LONGEST_VALUE):
+            assert not outside_circle(graph_frame({}, W, lo, hi, value), P), (W, lo, hi, value)
+
+# ---- Values pinned by test_steami_screen (4c Task 2) ----
+print("graph (4c Task 2): box (gx, gy, gw, gh); value centre and row; dash rows; dash spans")
+for W in (128, 240):
+    G = graph_layout(W, 950, 1050)
+    print(f"  {W}: box {G['box']} value {G['value']} dash rows {G['dash_rows']}")
+    print(f"    dashes {G['dashes']}")
+print("graph axes: left box, bottom box")
+for W in (128, 240):
+    print(f"  {W}: {[box(a) for a in graph_axes(W)]}")
+print("graph labels (minV, maxV): max then min, (text, x, cell top) and DARK ink box")
+for W in (128, 240):
+    for lo, hi in ((950, 1050), (0, 1000), (NAN, INF)):
+        labels = graph_layout(W, lo, hi)["labels"]
+        boxes = [graph_label_box(W, lo, hi, i) for i in (0, 1)]
+        print(f"  {W} ({lo!r}, {hi!r}): {labels[0]} {boxes[0]}, {labels[1]} {boxes[1]}")
