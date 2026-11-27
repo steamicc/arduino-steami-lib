@@ -40,11 +40,15 @@ node_modules/.package-lock.json: package.json package-lock.json
 	.venv/bin/pip install -c requirements.txt clang-tidy
 	@test -x $@ && touch $@
 
+.venv/bin/ruff: requirements.txt | .venv
+	.venv/bin/pip install -c requirements.txt ruff
+	@test -x $@ && touch $@
+
 .PHONY: install-pio
 install-pio: .venv/bin/pio ## Install PlatformIO in the local venv
 
 .PHONY: install-lint
-install-lint: .venv/bin/clang-format .venv/bin/clang-tidy ## Install lint tools in the local venv
+install-lint: .venv/bin/clang-format .venv/bin/clang-tidy .venv/bin/ruff ## Install lint tools in the local venv
 
 .PHONY: prepare
 prepare: node_modules/.package-lock.json ## Install git hooks
@@ -114,7 +118,11 @@ check-spdx: ## Verify every C++ source carries the SPDX license header
 	@scripts/check-spdx.sh
 
 .PHONY: lint
-lint: format-check check-spdx tidy ## Run all static checks (format + SPDX + static analysis)
+lint: format-check check-spdx tidy ruff ## Run all static checks (format + SPDX + static analysis + Python)
+
+.PHONY: ruff
+ruff: .venv/bin/ruff ## Lint the Python tooling with ruff (settings in ruff.toml)
+	.venv/bin/ruff check .
 
 # --- Build ---
 

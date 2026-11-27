@@ -8,7 +8,6 @@ import tempfile
 import unittest
 from pathlib import Path
 
-
 SCRIPT = Path(__file__).resolve().parent.parent / "build-arduino-package.py"
 
 
@@ -182,9 +181,8 @@ class BuildPackageTest(unittest.TestCase):
 
     def test_version_must_be_semver(self) -> None:
         for bad in ("v1.2.3", "", "1.2"):
-            with self.subTest(version=bad):
-                with self.assertRaises(self.mod.PackageError):
-                    self.build(bad)
+            with self.subTest(version=bad), self.assertRaises(self.mod.PackageError):
+                self.build(bad)
 
 
 if __name__ == "__main__":

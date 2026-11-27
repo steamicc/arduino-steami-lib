@@ -21,7 +21,6 @@ import re
 import zipfile
 from pathlib import Path
 
-
 FQBN = "STMicroelectronics:stm32:STeaMi"
 CORE_VERSION = "3.1.0"
 
@@ -80,7 +79,8 @@ def ecrire_archive(index: dict, bins_dir: Path, sortie: Path) -> None:
         zf.writestr(info, data)
 
     with zipfile.ZipFile(sortie, "w") as zf:
-        ajouter(zf, "index.json", (json.dumps(index, indent=2, ensure_ascii=False) + "\n").encode("utf-8"))
+        index_json = json.dumps(index, indent=2, ensure_ascii=False) + "\n"
+        ajouter(zf, "index.json", index_json.encode("utf-8"))
         for exemple in sorted(index["exemples"], key=lambda e: e["bin"]):
             ajouter(zf, exemple["bin"], (bins_dir / exemple["bin"]).read_bytes())
 

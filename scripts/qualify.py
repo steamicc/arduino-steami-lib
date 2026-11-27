@@ -26,12 +26,12 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import os
 import re
 import statistics
 import subprocess
 import sys
 import time
-import os
 from pathlib import Path
 
 import serial
@@ -74,7 +74,7 @@ def reset_board() -> None:
         "init; reset; shutdown",
     ]
 
-    result = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT, check=False)
 
     if result.returncode != 0:
         if result.stdout:
@@ -91,10 +91,10 @@ def flash_qualification_sketch(driver: str) -> None:
         raise SystemExit(f"Error: qualification directory not found for '{driver}'.")
 
     pio = ROOT / ".venv" / "bin" / "pio"
-    
+
     if not pio.exists():
         raise SystemExit("Error: .venv/bin/pio not found. Run 'make setup' first.")
-    
+
     cmd = [
         str(pio),
         "run",
@@ -111,6 +111,7 @@ def flash_qualification_sketch(driver: str) -> None:
         cmd,
         env=env,
         cwd=ROOT,
+        check=False,
     )
 
     if result.returncode != 0:
@@ -166,7 +167,7 @@ def capture_phase(
     time.sleep(0.2)
     reset_board()
     deadline = time.monotonic() + seconds
-    
+
     while time.monotonic() < deadline:
         raw = ser.readline()
         if not raw:
@@ -238,7 +239,8 @@ def evaluate_assertions(
             if ref_name not in prior_metrics:
                 print(f"  FAIL: reference phase '{ref_name}' not found")
                 log.write(
-                    f"[{timestamp()}] ASSERT FAIL [{phase_name}] {raw_key} unknown-phase={ref_name}\n"
+                    f"[{timestamp()}] ASSERT FAIL [{phase_name}] {raw_key} "
+                    f"unknown-phase={ref_name}\n"
                 )
                 passed = False
                 continue
@@ -246,7 +248,8 @@ def evaluate_assertions(
             if signal not in prior_metrics[ref_name]:
                 print(f"  FAIL: reference phase '{ref_name}' has no '{signal}' data")
                 log.write(
-                    f"[{timestamp()}] ASSERT FAIL [{phase_name}] {raw_key} missing-signal={signal}\n"
+                    f"[{timestamp()}] ASSERT FAIL [{phase_name}] {raw_key} "
+                    f"missing-signal={signal}\n"
                 )
                 passed = False
                 continue
@@ -256,7 +259,8 @@ def evaluate_assertions(
             verdict = "PASS" if ok else "FAIL"
             print(f"  {verdict}: {signal} delta >= {expected} (actual {delta:.2f})")
             log.write(
-                f"[{timestamp()}] ASSERT {verdict} [{raw_key}] expected={expected} actual={delta:.2f}\n"
+                f"[{timestamp()}] ASSERT {verdict} [{raw_key}] "
+                f"expected={expected} actual={delta:.2f}\n"
             )
             passed &= ok
 
@@ -273,7 +277,8 @@ def evaluate_assertions(
             verdict = "PASS" if ok else "FAIL"
             print(f"  {verdict}: {signal} delta <= {expected} (actual {delta:.2f})")
             log.write(
-                f"[{timestamp()}] ASSERT {verdict} [{raw_key}] expected={expected} actual={delta:.2f}\n"
+                f"[{timestamp()}] ASSERT {verdict} [{raw_key}] "
+                f"expected={expected} actual={delta:.2f}\n"
             )
             passed &= ok
 
@@ -282,7 +287,8 @@ def evaluate_assertions(
             verdict = "PASS" if ok else "FAIL"
             print(f"  {verdict}: {signal} avg >= {expected} (actual {actual:.2f})")
             log.write(
-                f"[{timestamp()}] ASSERT {verdict} [{raw_key}] expected={expected} actual={actual:.2f}\n"
+                f"[{timestamp()}] ASSERT {verdict} [{raw_key}] "
+                f"expected={expected} actual={actual:.2f}\n"
             )
             passed &= ok
 
@@ -291,7 +297,8 @@ def evaluate_assertions(
             verdict = "PASS" if ok else "FAIL"
             print(f"  {verdict}: {signal} avg <= {expected} (actual {actual:.2f})")
             log.write(
-                f"[{timestamp()}] ASSERT {verdict} [{raw_key}] expected={expected} actual={actual:.2f}\n"
+                f"[{timestamp()}] ASSERT {verdict} [{raw_key}] "
+                f"expected={expected} actual={actual:.2f}\n"
             )
             passed &= ok
 
