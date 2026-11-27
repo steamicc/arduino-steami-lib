@@ -2516,8 +2516,12 @@ PINNED_POINTS = (
 
 
 def mockup_render(name, W):
+    # 05 and 06 (4c Task 5) are defined below; their pins are checked there
     return {"04": lambda: mockup_04(W, 342), "07": lambda: compass_render(W, 0.0),
-            "08": lambda: mockup_08(W, 6, 100), "09": lambda: mockup_09(W, WATCH_START)}[name]()
+            "08": lambda: mockup_08(W, 6, 100), "09": lambda: mockup_09(W, WATCH_START),
+            "05": lambda: mockup_05(W, GRAPH_05_VALUES, "APDS-9960"),
+            "05 pressure": lambda: mockup_05(W, PRESSURE_V1C, "BME280", has_light=False),
+            "06": lambda: mockup_06(W, 2)}[name]()
 
 
 MOCKUP_BOXES = [(name, W, c, rows, band_box(mockup_render(name, W), c, *(rows or ())))
@@ -2994,3 +2998,165 @@ for W in (128, 240):
             print(f"    bar {ys[0]}..{ys[-1]} {g['bar'][ys[0]]} .. {g['bar'][ys[-1]]}")
 print("menu visible rows of 6 items on 96 and 200 px:",
       [menu_rows(Panel(W), 6) for W in (96, 200)])
+
+# ---- Mockups 05 and 06 (4c Task 5) ----
+# mockupGraph(history, hasLight, chip) and mockupMenu(selected) of SteamiMockups.h, composed in
+# their programs' drawing order (spec section 6): title, graph, then the two-line subtitle (05);
+# title, then menu (06). 05 is the light branch with D13's 20 values and "APDS-9960" on both
+# panels; 05_pressure_v1c is the pressure branch at 240 (20 x 1013.0, "BME280"), the V1c photo
+# reference; 06 has selected 2 and program 06's six items.
+PRESSURE_V1C = [1013.0] * 20
+WINDOW_05 = "20s window"
+
+
+def mockup_05(W, values, chip, has_light=True):
+    cv = {}
+    m_title(cv, W, "Light" if has_light else "Pressure")
+    cv.update(graph_render(W, values, *((0, 1000) if has_light else (950, 1050))))
+    m_subtitle(cv, W, (chip, WINDOW_05))
+    return cv
+
+
+def mockup_06(W, selected):
+    cv = {}
+    m_title(cv, W, "Menu")
+    cv.update(menu_render(W, K_SIX, selected))
+    return cv
+
+
+def box_from(cv, c, x_from, row_from, row_to):
+    """band_box() of the columns x >= x_from only: the suite's inkBoxFrom()."""
+    lit = [p for p, v in cv.items() if v == c and p[0] >= x_from and row_from <= p[1] <= row_to]
+    return box(lit) if lit else None
+
+
+def label_rows(W, which):
+    """The rows of graph label `which` (0 max, 1 min): its 5x7 / 6x12 cell, k scaled."""
+    P = Panel(W)
+    _, _, top = graph_layout(W, 950, 1050)["labels"][which]
+    return top, top + cell_height(face_for(P, "0", LABEL, P.k), P.k) - 1
+
+
+def label_band(W):
+    """The DARK labels inside the box rows: columns from gx + k (right of the left axis), rows gy
+    to gy + gh - 1 (above the bottom axis)."""
+    gx, gy, _, gh = graph_box(Panel(W))
+    return gx + Panel(W).k, gy, gy + gh - 1
+
+
+SUBTITLE_BAND_05 = {128: (95, 113), 240: (177, 213)}
+TITLE_BAND_06 = {128: (0, 30), 240: (0, 60)}
+PINNED_MOCKUPS_4C = (
+    ("05", 128, "GRAY", None, (45, 20, 82, 27)), ("05", 128, "WHITE", None, (53, 31, 74, 37)),
+    ("05", 128, "LIGHT", None, (21, 45, 113, 71)),
+    ("05", 128, "DARK", (95, 113), (25, 95, 103, 112)),
+    ("05", 240, "GRAY", None, (100, 39, 138, 51)), ("05", 240, "WHITE", None, (108, 60, 130, 69)),
+    ("05", 240, "LIGHT", None, (39, 85, 213, 134)),
+    ("05", 240, "DARK", (177, 213), (80, 179, 158, 208)),
+    ("05 pressure", 240, "GRAY", None, (88, 39, 150, 48)),
+    ("05 pressure", 240, "WHITE", None, (105, 60, 134, 69)),
+    ("05 pressure", 240, "LIGHT", None, (39, 106, 213, 107)),
+    ("06", 128, "GRAY", (0, 30), (49, 20, 78, 26)),
+    ("06", 128, "GRAY", (31, 127), (21, 35, 106, 98)),
+    ("06", 128, "WHITE", None, (4, 63, 94, 69)), ("06", 128, "DARK", None, (1, 61, 127, 74)),
+    ("06", 240, "GRAY", (0, 60), (104, 39, 134, 48)),
+    ("06", 240, "GRAY", (61, 239), (76, 67, 162, 210)),
+    ("06", 240, "WHITE", None, (5, 120, 150, 129)), ("06", 240, "DARK", None, (2, 115, 238, 140)),
+)
+# The DARK labels right of the left axis: (name, W, x_from, rows, box)
+PINNED_LABELS_4C = (
+    ("05", 128, 22, (38, 89), (24, 40, 46, 87)), ("05", 240, 41, (71, 167), (44, 74, 66, 163)),
+    ("05 pressure", 240, 41, (73, 84), (45, 74, 66, 81)),
+    ("05 pressure", 240, 41, (155, 166), (44, 156, 60, 163)),
+)
+PINNED_POINTS_4C = (
+    ("05", 128, (113, 45), "LIGHT"), ("05", 240, (212, 85), "LIGHT"),
+    ("06", 128, (2, 67), "DARK"), ("06", 128, (126, 67), "DARK"),
+    ("06", 240, (3, 127), "DARK"), ("06", 240, (237, 127), "DARK"),
+)
+PINNED_MOCKUPS += PINNED_MOCKUPS_4C
+PINNED_POINTS += PINNED_POINTS_4C
+
+# ---- Self-check of 4c Task 5 ----
+for name, W, c, rows, expected in PINNED_MOCKUPS_4C:
+    got = band_box(mockup_render(name, W), c, *(rows or ()))
+    assert got == expected, (name, W, c, rows, got)
+for name, W, x_from, rows, expected in PINNED_LABELS_4C:
+    got = box_from(mockup_render(name, W), "DARK", x_from, *rows)
+    assert got == expected, (name, W, x_from, rows, got)
+for name, W, p, c in PINNED_POINTS_4C:
+    assert mockup_render(name, W).get(p) == c, (name, W, p, c)
+# 05: the two-line subtitle at 95/106 on 128 and 177/197 on 240 (spec 5.9 "subtitle"), with
+# either chip; its band holds the subtitle's DARK only
+for W, rows in ((128, (95, 106)), (240, (177, 197))):
+    for chip in ("APDS-9960", "BME280"):
+        assert tuple(r[0] for r in subtitle_rows(W, (chip, WINDOW_05))) == rows, (W, chip)
+    lines = subtitle_rows(W, ("APDS-9960", WINDOW_05))
+    assert band_box(mockup_render("05", W), "DARK", *SUBTITLE_BAND_05[W]) == \
+        box([p for _, _, b in lines for p in ((b[0], b[1]), (b[2], b[3]))])
+# 05: the label band is the two labels drawn alone, inside the box; the last curve point is the
+# last of D4's points; the WHITE value is "847"
+for name, W, lo, hi in (("05", 128, 0, 1000), ("05", 240, 0, 1000),
+                        ("05 pressure", 240, 950, 1050)):
+    P = Panel(W)
+    gx, gy, gw, gh = graph_box(P)
+    labels = [graph_label_box(W, lo, hi, i) for i in (0, 1)]
+    got = box_from(mockup_render(name, W), "DARK", *label_band(W))
+    assert got == box([p for b in labels for p in ((b[0], b[1]), (b[2], b[3]))]), (name, W)
+    assert gx + P.k <= got[0] and got[2] <= gx + gw - 1 and gy <= got[1] and got[3] < gy + gh
+for W in (128, 240):
+    pts = graph_points(W, GRAPH_05_VALUES, 0, 1000)
+    assert ("05", W, pts[-1], "LIGHT") in PINNED_POINTS_4C
+    assert pts[-1][0] == graph_box(Panel(W))[0] + graph_box(Panel(W))[2]
+    white = {}
+    r_text(white, W, "847", Panel(W).cx - 12, Panel(W).u(GRAPH_VALUE_Y), 1, "WHITE")
+    assert colour_set(mockup_render("05", W), "WHITE") == set(white), W
+# 05 pressure: "1050" and "950" in 6x12 (font design 6: 24 and 18 px), the flat curve of 1013 on
+# one row pair (k 2), the title "Pressure"
+assert [lb[0] for lb in graph_layout(240, 950, 1050)["labels"]] == ["1050", "950"]
+assert [cell_width(P240, t, count(t), LABEL, 2) for t in ("1050", "950")] == [24, 18]
+assert [label_rows(240, i) for i in (0, 1)] == [(73, 84), (155, 166)]
+assert {p[1] for p in graph_points(240, PRESSURE_V1C, 950, 1050)} == {106}
+# 06: 5 visible rows on 128 and 6 on 240, "Distance" (index 2) selected on row 3 of both; the bar
+# ends at chord + k on its middle row
+for W, visible in ((128, 5), (240, 6)):
+    P = Panel(W)
+    g = menu_layout(W, K_SIX, 2)
+    assert (g["selected"], g["visible"], g["start"]) == (2, visible, 0), (W, g)
+    assert g["rows"][2][0] == 2 and K_SIX[2] == "Distance" and g["marker"][1] == menu_top(P, 2)
+    ys = sorted(g["bar"])
+    mid = (ys[0] + ys[-1]) // 2
+    x0, x1 = g["bar"][mid]
+    assert ("06", W, (x0, mid), "DARK") in PINNED_POINTS_4C
+    assert ("06", W, (x1, mid), "DARK") in PINNED_POINTS_4C
+    # the window shows items 0 to visible - 1
+    assert {i for i, *_ in g["rows"]} == set(range(visible))
+# Nothing outside the circle in any render of 05 and 06
+for name, W in (("05", 128), ("05", 240), ("05 pressure", 240), ("06", 128), ("06", 240)):
+    assert not outside_circle(mockup_render(name, W), Panel(W)), (name, W)
+
+# ---- Values pinned by test_steami_screen_mockups (4c Task 5) ----
+print("mockups 05 and 06 (4c Task 5): name W colour rows box")
+for name, W, c, rows, _ in PINNED_MOCKUPS_4C:
+    print(f"  {name:<11} {W} {c:<5} {str(rows or ''):<10} "
+          f"{band_box(mockup_render(name, W), c, *(rows or ()))}")
+print("  DARK labels right of the left axis (name W x_from rows box):")
+for name, W, x_from, rows, _ in PINNED_LABELS_4C:
+    print(f"    {name:<11} {W} {x_from} {rows} "
+          f"{box_from(mockup_render(name, W), 'DARK', x_from, *rows)}")
+print("  points (name W point colour):", *(f"{n} {W} {p} {c}" for n, W, p, c in PINNED_POINTS_4C))
+print("06 item cell tops, one row past the window (u(35 + 14 i)): rows with GRAY or WHITE ink")
+for W in (128, 240):
+    P = Panel(W)
+    v = menu_layout(W, K_SIX, 2)["visible"]
+    tops = [menu_top(P, i) for i in range(v + 1)]
+    cv = mockup_render("06", W)
+    inked = [t for t in tops if band_box(cv, "GRAY", t, t + 8 * P.k - 1) or
+             band_box(cv, "WHITE", t, t + 8 * P.k - 1)]
+    assert inked == tops[:v], (W, inked)
+    print(f"  {W}: tops {tops}, inked {len(inked)}, cell height {8 * P.k}")
+print("05_pressure_v1c at 240: label rows, texts and boxes ('1050' 24 px, '950' 18 px of cells)")
+for i in (0, 1):
+    text, x, top = graph_layout(240, 950, 1050)["labels"][i]
+    print(f"  {text}: x {x} cell top {top} rows {label_rows(240, i)} "
+          f"box {box_from(mockup_render('05 pressure', 240), 'DARK', 41, *label_rows(240, i))}")

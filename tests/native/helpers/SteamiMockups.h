@@ -8,10 +8,10 @@
 
 #include "SteamiScreen.h"
 
-// The drawing code of mockups 01 to 04 and 07 to 09 (spec section 6), shared by the native mockups
-// suite. Each function is the loop() body of its example up to show(), the sensor readings taken
-// as parameters; a script checks that the examples make the same screen calls with the same
-// literals. The 240 px colour renders are the references for the V1c photos.
+// The drawing code of mockups 01 to 09 (spec section 6), shared by the native mockups suite. Each
+// function is the loop() body of its example up to show(), the sensor readings taken as
+// parameters; a script checks that the examples make the same screen calls with the same literals.
+// The 240 px colour renders are the references for the V1c photos.
 
 /// 01 Temperature (ScreenTemperature): t in degrees Celsius, NAN when the sensor is missing.
 inline void mockupTemperature(SteamiScreen& screen, float t, const char* chip) {
@@ -58,6 +58,33 @@ inline void mockupGauge(SteamiScreen& screen, int d) {
     screen.title("Distance");
     screen.value(d, "mm");
     screen.subtitle("VL53L1X ToF");
+    screen.show();
+}
+
+/// 05 Scrolling graph (ScreenGraph): the last 20 readings, of the light sensor when hasLight, else
+/// of the pressure sensor (V1c); chip is that sensor's chip().
+inline void mockupGraph(SteamiScreen& screen, const SteamiHistory<20>& history, bool hasLight,
+                        const char* chip) {
+    screen.clear();
+    screen.title(hasLight ? "Light" : "Pressure");  // a raw light count, not lux: no "(lux)"
+    if (hasLight) {
+        screen.graph(history, 0, 1000);  // axis labels "1000" and "0"
+    } else {
+        screen.graph(history, 950, 1050);  // axis labels "1050" and "950"
+    }
+    screen.subtitle(chip, "20s window");
+    screen.show();
+}
+
+/// The six items of program 06, which ScreenMenu shows.
+constexpr const char* const MENU_ITEMS[6] = {"Temperature", "Humidity", "Distance",
+                                             "Light",       "Battery",  "Proximity"};
+
+/// 06 D-pad menu (ScreenMenu): selected is the index after the buttons, wrapped in place.
+inline void mockupMenu(SteamiScreen& screen, int& selected) {
+    screen.clear();
+    screen.title("Menu");
+    selected = screen.menu(MENU_ITEMS, selected);  // wraps: -1 becomes 5
     screen.show();
 }
 

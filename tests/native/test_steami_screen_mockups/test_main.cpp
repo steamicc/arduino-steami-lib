@@ -17,10 +17,10 @@
 #include "SteamiScreen.h"
 #include "SteamiScreenCheck.h"
 
-// Suite 4 of the spec's section 7: mockups 01 to 04 and 07 to 09 drawn with the examples' calls, on
-// the 128 px grey panel of V1a/V1b and the 240 px colour panel of V1c. The boxes and points are
-// those that golden_layout.py prints under "Values pinned by test_steami_screen_mockups (4b Task
-// 5)", composed from its widget goldens for the same calls.
+// Suite 4 of the spec's section 7: mockups 01 to 09 drawn with the examples' calls, on the 128 px
+// grey panel of V1a/V1b and the 240 px colour panel of V1c. The boxes and points are those that
+// golden_layout.py prints under "Values pinned by test_steami_screen_mockups (4b Task 5)" and
+// "(4c Task 5)", composed from its widget goldens for the same calls.
 
 static std::vector<std::string> g_lines;
 static void capture(const char* line) {
@@ -113,6 +113,31 @@ static bool any(const std::vector<bool>& mask) {
 /// The pixel (x, y) holds colour c.
 static void expectPixel(const SteamiMemoryBackend& mem, int16_t x, int16_t y, SteamiRgb c) {
     TEST_ASSERT_EQUAL_HEX16(mem.stored(c), mem.at(x, y));
+}
+
+/// The bounds of the pixels holding colour c on the rows rowFrom..rowTo, from column xFrom on:
+/// golden_layout.py's box_from(), the graph labels right of the left axis.
+static InkBox inkBoxFrom(const SteamiMemoryBackend& mem, SteamiRgb c, int16_t xFrom,
+                         int16_t rowFrom, int16_t rowTo) {
+    const uint16_t v = mem.stored(c);
+    InkBox b{32767, 32767, -1, -1, 0};
+    for (int16_t y = rowFrom; y <= rowTo; y++) {
+        for (int16_t x = xFrom; x < mem.width(); x++) {
+            if (mem.at(x, y) != v) {
+                continue;
+            }
+            b.x0 = x < b.x0 ? x : b.x0;
+            b.y0 = y < b.y0 ? y : b.y0;
+            b.x1 = x > b.x1 ? x : b.x1;
+            b.y1 = y > b.y1 ? y : b.y1;
+            b.count++;
+        }
+    }
+    if (b.count == 0) {
+        b.x0 = -1;
+        b.y0 = -1;
+    }
+    return b;
 }
 
 /// How many pixels hold colour c at a distance d from the panel's centre with from <= d <= to.
@@ -256,6 +281,100 @@ static void test_mockup_04_text_clears_the_ring(void) {
     TEST_ASSERT_FALSE_MESSAGE(overlaps(title, track), "title on the ring");
     TEST_ASSERT_FALSE_MESSAGE(overlaps(subtitle, track), "subtitle on the ring");
     TEST_ASSERT_FALSE_MESSAGE(overlaps(labels, track), "gauge labels on the ring");
+}
+
+// D13: the SVG polyline of mockup 05 as 1000 (141 - y) / 82, rounded, the last set to its "847".
+static const float kValues05[20] = {354, 378, 415, 390, 451, 524, 561, 537, 573, 610,
+                                    585, 622, 598, 634, 610, 622, 585, 610, 646, 847};
+
+static void test_mockup_05_graph(void) {
+    SteamiHistory<20> history;
+    for (float v : kValues05) {
+        history.add(v);
+    }
+    render("05_scrolling_graph", 128, false, [&](SteamiMemoryBackend& mem, SteamiScreen& s) {
+        mockupGraph(s, history, true, "APDS-9960");
+        expectBox(inkBox(mem, STEAMI_GRAY), 45, 20, 82, 27);    // "Light", row 20
+        expectBox(inkBox(mem, STEAMI_WHITE), 53, 31, 74, 37);   // "847" at row 31
+        expectBox(inkBox(mem, STEAMI_LIGHT), 21, 45, 113, 71);  // the curve
+        // "1000" and "0", DARK inside the box rows 38..89, right of the axis (x 21)
+        expectBox(inkBoxFrom(mem, STEAMI_DARK, 22, 38, 89), 24, 40, 46, 87);
+        expectBox(inkBox(mem, STEAMI_DARK, 95, 113), 25, 95, 103, 112);  // lines at 95 and 106
+        expectPixel(mem, 113, 45, STEAMI_LIGHT);  // the last point, at gx + gw
+    });
+    render("05_scrolling_graph", 240, true, [&](SteamiMemoryBackend& mem, SteamiScreen& s) {
+        mockupGraph(s, history, true, "APDS-9960");
+        expectBox(inkBox(mem, STEAMI_GRAY), 100, 39, 138, 51);   // "Light", row 37
+        expectBox(inkBox(mem, STEAMI_WHITE), 108, 60, 130, 69);  // "847" in 8x16 at row 58
+        expectBox(inkBox(mem, STEAMI_LIGHT), 39, 85, 213, 134);
+        // "1000" and "0" in 6x12, inside the box rows 71..167, right of the axis (x 39..40)
+        expectBox(inkBoxFrom(mem, STEAMI_DARK, 41, 71, 167), 44, 74, 66, 163);
+        expectBox(inkBox(mem, STEAMI_DARK, 177, 213), 80, 179, 158, 208);  // lines at 177, 197
+        expectPixel(mem, 212, 85, STEAMI_LIGHT);
+    });
+}
+
+// The pressure branch of program 05 on the V1c, the reference of its photo: the axis labels
+// "1050" and "950" (24 and 18 px of 6x12 cells, font design 6) lie inside the box (x 41..211,
+// rows 71..167) and, by onPanel, inside the circle.
+static void test_mockup_05_pressure_v1c(void) {
+    SteamiHistory<20> history;
+    for (int i = 0; i < 20; i++) {
+        history.add(1013.0f);
+    }
+    render("05_pressure_v1c", 240, true, [&](SteamiMemoryBackend& mem, SteamiScreen& s) {
+        mockupGraph(s, history, false, "BME280");
+        expectBox(inkBox(mem, STEAMI_GRAY), 88, 39, 150, 48);                 // "Pressure"
+        expectBox(inkBox(mem, STEAMI_WHITE), 105, 60, 134, 69);               // "1013"
+        expectBox(inkBox(mem, STEAMI_LIGHT), 39, 106, 213, 107);              // flat, k rows thick
+        expectBox(inkBoxFrom(mem, STEAMI_DARK, 41, 73, 84), 45, 74, 66, 81);  // "1050"
+        expectBox(inkBoxFrom(mem, STEAMI_DARK, 41, 155, 166), 44, 156, 60, 163);  // "950"
+    });
+}
+
+/// How many of the item cells at tops[0..n) hold GRAY or WHITE ink, each `cell` rows high.
+static size_t inkedItemRows(const SteamiMemoryBackend& mem, const int16_t* tops, size_t n,
+                            int16_t cell) {
+    size_t rows = 0;
+    for (size_t i = 0; i < n; i++) {
+        const int16_t last = static_cast<int16_t>(tops[i] + cell - 1);
+        if (inkBox(mem, STEAMI_GRAY, tops[i], last).count > 0 ||
+            inkBox(mem, STEAMI_WHITE, tops[i], last).count > 0) {
+            rows++;
+        }
+    }
+    return rows;
+}
+
+static void test_mockup_06_menu(void) {
+    // "Distance" (index 2) is selected on row 3 of both panels; the cell tops run one row past
+    // the window, whose cell stays empty.
+    render("06_dpad_menu", 128, false, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
+        int selected = 2;
+        mockupMenu(s, selected);
+        TEST_ASSERT_EQUAL_INT(2, selected);
+        expectBox(inkBox(mem, STEAMI_GRAY, 0, 30), 49, 20, 78, 26);     // "Menu"
+        expectBox(inkBox(mem, STEAMI_GRAY, 31, 127), 21, 35, 106, 98);  // items 0, 1, 3 and 4
+        expectBox(inkBox(mem, STEAMI_WHITE), 4, 63, 94, 69);            // "> " and "Distance"
+        expectBox(inkBox(mem, STEAMI_DARK), 1, 61, 127, 74);            // the bar, rows 61..74
+        expectPixel(mem, 2, 67, STEAMI_DARK);  // the bar ends on its middle row
+        expectPixel(mem, 126, 67, STEAMI_DARK);
+        const int16_t tops[6] = {35, 49, 63, 77, 91, 105};
+        TEST_ASSERT_EQUAL_size_t(5, inkedItemRows(mem, tops, 6, 8));
+    });
+    render("06_dpad_menu", 240, true, [](SteamiMemoryBackend& mem, SteamiScreen& s) {
+        int selected = 2;
+        mockupMenu(s, selected);
+        TEST_ASSERT_EQUAL_INT(2, selected);
+        expectBox(inkBox(mem, STEAMI_GRAY, 0, 60), 104, 39, 134, 48);
+        expectBox(inkBox(mem, STEAMI_GRAY, 61, 239), 76, 67, 162, 210);
+        expectBox(inkBox(mem, STEAMI_WHITE), 5, 120, 150, 129);
+        expectBox(inkBox(mem, STEAMI_DARK), 2, 115, 238, 140);  // rows 115..140
+        expectPixel(mem, 3, 127, STEAMI_DARK);
+        expectPixel(mem, 237, 127, STEAMI_DARK);
+        const int16_t tops[7] = {65, 91, 118, 144, 170, 196, 223};
+        TEST_ASSERT_EQUAL_size_t(6, inkedItemRows(mem, tops, 7, 16));
+    });
 }
 
 static void test_mockup_07_compass(void) {
@@ -432,6 +551,32 @@ static void test_mockups_without_sensors(void) {
                 expectBox(inkBox(mem, STEAMI_YELLOW), 84, 204, 154, 213);
             }
         });
+
+        // 05 with the light sensor missing: 20 NAN values draw no curve (no LIGHT pixel), and the
+        // value is the "--" of an empty history.
+        SteamiHistory<20> nans;
+        for (int i = 0; i < 20; i++) {
+            nans.add(NAN);
+        }
+        const SteamiHistory<20> empty;
+        const std::vector<bool> dashes05 =
+            maskAlone(p.size, p.color, STEAMI_WHITE,
+                      [&](SteamiScreen& s) { mockupGraph(s, empty, true, "APDS-9960"); });
+        TEST_ASSERT_TRUE(any(dashes05));
+        onPanel(p.size, p.color, [&](SteamiMemoryBackend& mem, SteamiScreen& s) {
+            mockupGraph(s, nans, true, "APDS-9960");
+            expectShownOnce(mem);
+            TEST_ASSERT_EQUAL_size_t(0, inkBox(mem, STEAMI_LIGHT).count);
+            TEST_ASSERT_TRUE(maskOf(mem, STEAMI_WHITE) == dashes05);
+        });
+
+        // 06 after UP on the first item: selected -1 wraps to 5.
+        onPanel(p.size, p.color, [&](SteamiMemoryBackend& mem, SteamiScreen& s) {
+            int selected = -1;
+            mockupMenu(s, selected);
+            expectShownOnce(mem);
+            TEST_ASSERT_EQUAL_INT(5, selected);
+        });
     }
 }
 
@@ -442,6 +587,9 @@ int main(int, char**) {
     RUN_TEST(test_mockup_03_comfort);
     RUN_TEST(test_mockup_04_gauge);
     RUN_TEST(test_mockup_04_text_clears_the_ring);
+    RUN_TEST(test_mockup_05_graph);
+    RUN_TEST(test_mockup_05_pressure_v1c);
+    RUN_TEST(test_mockup_06_menu);
     RUN_TEST(test_mockup_07_compass);
     RUN_TEST(test_mockup_08_faces);
     RUN_TEST(test_mockup_08_reactive);
