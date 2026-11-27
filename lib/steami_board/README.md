@@ -510,7 +510,7 @@ widget paints over an earlier one), then `show()`.
 | `void text(const char* s, SteamiAt at = SteamiAt::CENTER, SteamiRgb c = STEAMI_WHITE, uint8_t scale = 1)` | `STEAMI_WHITE` | Text at a position; `text(s, x, y, ...)` of `SteamiDisplay` is still there, in pixels. |
 | `uint8_t maxChars()` | | Characters of scale 1 across the panel: 16 on 128, 30 on 240. |
 | `void gauge(float v, float minV = 0, float maxV = 100, SteamiRgb c = STEAMI_LIGHT, uint8_t arcWidth = 0)` | track `STEAMI_DARK`, labels `STEAMI_GRAY`, fill `STEAMI_LIGHT` | A ring of 270 degrees near the edge, gap at the bottom, filled clockwise from the lower left; the integer parts of `minV` and `maxV` sit inside its two ends. No value: draw it with `value()`. |
-| `template <size_t N> void graph(const SteamiHistory<N>& h, float minV = 0, float maxV = 100, SteamiRgb c = STEAMI_LIGHT)` and `void graph(const float* data, size_t n, float minV = 0, float maxV = 100, SteamiRgb c = STEAMI_LIGHT)` | axes and labels `STEAMI_DARK`, curve `STEAMI_LIGHT` | A curve of the last values, oldest on the left, between the min and max labels. |
+| `template <size_t N> void graph(const SteamiHistory<N>& h, float minV = 0, float maxV = 100, SteamiRgb c = STEAMI_LIGHT)` and `void graph(const float* data, size_t n, float minV = 0, float maxV = 100, SteamiRgb c = STEAMI_LIGHT)` | axes and labels `STEAMI_DARK`, dashed middle line `STEAMI_GRID_DARK`, newest value `STEAMI_WHITE`, curve `STEAMI_LIGHT` | A curve of the last values, oldest on the left, between the min and max labels, with a dashed middle line; the integer part of the newest value is written above the box (`--` when there is none or it is `NAN`). |
 | `template <size_t N> int menu(const char* const (&items)[N], int selected = 0, SteamiRgb c = STEAMI_WHITE)` and `int menu(const char* const* items, size_t n, int selected = 0, SteamiRgb c = STEAMI_WHITE)` | bar `STEAMI_DARK`, selected `STEAMI_WHITE`, others `STEAMI_GRAY` | A list of items with the selected one marked; returns the selected index, wrapped into the list. |
 | `void compass(float headingDeg, SteamiRgb c = STEAMI_LIGHT)` | rose `STEAMI_DARK`, N `STEAMI_WHITE`, E S W `STEAMI_GRAY`, needle `c` | A compass rose whose needle points to real north. |
 | `void watch(uint8_t h, uint8_t m, uint8_t s = 0, SteamiRgb c = STEAMI_LIGHT)` | dial `STEAMI_DARK`, 12 3 6 9 `STEAMI_WHITE`, seconds and pivot `STEAMI_GRAY`, hour and minute hands `c` | An analog watch. |
@@ -561,8 +561,9 @@ Layout rules:
   letters stay upright (see [Heading convention](#heading-convention)): at
   heading 90 the N is on the left. `NAN` (no sensor) draws the rose without a
   needle.
-* `graph()` writes only the min and max labels, in full inside the box; a `NAN`
-  leaves a gap in the curve; values outside the range stay on the edge.
+* `graph()` writes the newest value above the box itself: do not add a `value()`
+  over it. It writes only two axis labels (min and max), in full inside the box;
+  a `NAN` leaves a gap in the curve; values outside the range stay on the edge.
 * `menu()` shows 5 rows on 128 px and 6 on 240 px; the bar follows the circle;
   `-1` wraps to the last item, and the index is returned. Keep it in an `int`:
   with a `const char* const` array, a `long`, `unsigned` or `size_t` index calls
