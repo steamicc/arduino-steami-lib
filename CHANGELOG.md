@@ -3,6 +3,15 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.46.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.45.0...v0.46.0) (2026-11-28)
+
+
+### Features
+
+* **board:** Add named constants for the expander pads. ([#319](https://github.com/steamicc/arduino-steami-lib/issues/319)) ([e22a789](https://github.com/steamicc/arduino-steami-lib/commit/e22a789837770539aac4e087a00ae38258f72686)), closes [steamicc/micropython-steami-lib#494](https://github.com/steamicc/micropython-steami-lib/issues/494) [#318](https://github.com/steamicc/arduino-steami-lib/issues/318)
+* **board:** Catch button taps made between two calls. ([#322](https://github.com/steamicc/arduino-steami-lib/issues/322)) ([1ec9f13](https://github.com/steamicc/arduino-steami-lib/commit/1ec9f1363d78fca4ac265b40fbe0ddaf95b0c4e8)), closes [#251](https://github.com/steamicc/arduino-steami-lib/issues/251)
+* Expose the driver methods that only MicroPython offers. ([#317](https://github.com/steamicc/arduino-steami-lib/issues/317)) ([bd37dfa](https://github.com/steamicc/arduino-steami-lib/commit/bd37dfa7ec325be5a633a664ee7534e1c52e4f61)), closes [#316](https://github.com/steamicc/arduino-steami-lib/issues/316)
+
 # [0.45.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.44.0...v0.45.0) (2026-11-28)
 
 
