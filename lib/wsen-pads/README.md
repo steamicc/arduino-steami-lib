@@ -45,6 +45,30 @@ void loop() {
 }
 ```
 
+## Examples
+
+| Example | What it does | Try it |
+|---------|--------------|--------|
+| [`read_pressure_temperature`](examples/read_pressure_temperature/) | Baseline sketch: print pressure (hPa) and temperature (°C) every second. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-pads#read_pressure_temperature) |
+| [`altitude`](examples/altitude/) | Estimate altitude from pressure using the international standard atmosphere model. Tunable sea-level reference for local QNH calibration. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-pads#altitude) |
+| [`floor_detector`](examples/floor_detector/) | Calibrate a reference altitude over 10 samples, then report floor changes as the carrier moves. Hysteresis margin avoids oscillating on a boundary. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-pads#floor_detector) |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-pads).
+
+### Building an example
+
+```bash
+make list-examples DRIVER=wsen-pads
+make flash-wsen-pads/altitude
+```
+
+This builds, uploads, and opens the serial monitor at 115200 baud. Swap
+`flash-` for `capture-` to reliably capture the first lines printed at boot:
+
+```bash
+make capture-wsen-pads/altitude DURATION=30
+```
+
 ## API
 
 All methods follow the library conventions: `camelCase`, units in method
@@ -88,14 +112,15 @@ check with `isnan()`.
 
 ### Calibration
 
-`setTemperatureOffset()` and `calibrateTemperature()` are independent — the
-offset stacks on top of the two-point user slope/intercept, so calling one
-does not reset the other.
+The user correction is `gain * factory + offset`, applied after the factory
+conversion. Each call replaces the previous correction, as in the other
+temperature drivers and in MicroPython: `setTemperatureOffset()` sets the
+gain back to 1.
 
 | Method | Description |
 |--------|-------------|
-| `void setTemperatureOffset(float offset)` | Additive °C offset on the final temperature reading. |
-| `void calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point user calibration. Sets the slope/intercept used after the factory conversion. A degenerate two-point input (`measLow == measHigh`) leaves the calibration at identity. |
+| `void setTemperatureOffset(float offset)` | °C offset (resets the gain to 1). |
+| `bool calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point user calibration, from readings taken without calibration. Returns `false` if `measLow == measHigh` and keeps the previous correction. |
 
 ### Driver-specific tuning
 
@@ -104,22 +129,6 @@ does not reset the other.
 | `void enableLowPass(bool strong = false)` | Enable the LPF2 pressure filter. `strong = true` selects ODR/20 bandwidth, otherwise ODR/9. |
 | `void disableLowPass()` | Disable the LPF2 pressure filter. |
 | `void enableLowNoise()` / `void disableLowNoise()` | Toggle `CTRL2.LOW_NOISE_EN`. Per the datasheet, must only be modified while in power-down (call `powerOff()` first if continuous mode is running). Not allowed at 100 Hz / 200 Hz. |
-
-## Examples
-
-| Example | What it does | Try it |
-|---------|--------------|--------|
-| [`read_pressure_temperature`](examples/read_pressure_temperature/) | Baseline sketch: print pressure (hPa) and temperature (°C) every second. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-pads#read_pressure_temperature) |
-| [`altitude`](examples/altitude/) | Estimate altitude from pressure using the international standard atmosphere model. Tunable sea-level reference for local QNH calibration. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-pads#altitude) |
-| [`floor_detector`](examples/floor_detector/) | Calibrate a reference altitude over 10 samples, then report floor changes as the carrier moves. Hysteresis margin avoids oscillating on a boundary. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-pads#floor_detector) |
-
-Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/wsen-pads).
-
-Flash one with:
-
-```bash
-make flash-wsen-pads/altitude
-```
 
 ## Register constants
 
@@ -140,6 +149,12 @@ without hardware with:
 ```bash
 make test-native/wsen_pads
 ```
+
+## References
+
+* Product page and datasheet: [Würth Elektronik WSEN-PADS 2511020213301](https://www.we-online.com/en/components/products/WSEN-PADS_1).
+* STeaMi wiki: [WSEN-PADS hardware page](https://wiki.steami.cc/docs/hardware/main-components/sensors/wsen-pads).
+* MicroPython driver: [`wsen-pads`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/wsen-pads).
 
 ## License
 

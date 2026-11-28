@@ -106,14 +106,16 @@ class SteamiBME280 {
     static float altitudeFromPressure(float pressureHpa, float seaLevelHpa = BME280_SEA_LEVEL_HPA);
     static float dewPointFrom(float temperatureC, float humidityPct);
 
-    // Additive Celsius offset applied after the factory compensation.
+    // Celsius offset applied after the factory compensation. It replaces any
+    // two-point calibration: the gain goes back to 1.
     void setTemperatureOffset(float offset);
 
     // Two-point user calibration for temperature. refLow/refHigh are the
     // known reference values in Celsius; measLow/measHigh are what the
-    // sensor reported at those references. Pressure and humidity are not
-    // affected.
-    void calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh);
+    // sensor reported at those references, without calibration. Replaces
+    // any earlier offset. False when measLow == measHigh: the calibration
+    // is then left as it was. Pressure and humidity are not affected.
+    bool calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh);
 
    private:
     // Stored as a pointer so the class stays default-assignable.
@@ -152,10 +154,9 @@ class SteamiBME280 {
     uint32_t _oneShotStartMs = 0;
     uint32_t _oneShotDurationMs = 0;
 
-    // User-applied temperature correction (on top of the factory compensation).
+    // User temperature correction, gain * factory + offset.
+    float _tempGain = 1.0f;
     float _tempOffset = 0.0f;
-    float _tempUserSlope = 1.0f;
-    float _tempUserIntercept = 0.0f;
 
     // readReg() returns 0 on a bus error; readRegs() returns false.
     uint8_t readReg(uint8_t reg);

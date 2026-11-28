@@ -201,6 +201,11 @@ run on a STeaMi V1c and print the measured `show()` duration:
 make test-hardware/gc9a01
 ```
 
+## References
+
+* STeaMi wiki: [Display hardware page](https://wiki.steami.cc/docs/hardware/main-components/display).
+* MicroPython driver: [`gc9a01`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/gc9a01).
+
 ## License
 
 GPL-3.0-or-later — see [LICENSE](../../LICENSE).

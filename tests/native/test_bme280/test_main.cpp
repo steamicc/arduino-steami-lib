@@ -603,12 +603,39 @@ void test_calibrate_temperature_applies_two_point_correction(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 24.5714f, sensor.temperature());
 }
 
-void test_calibrate_temperature_with_equal_points_is_identity(void) {
+void test_calibrate_temperature_returns_true(void) {
+    sensor.begin();
+    TEST_ASSERT_TRUE(sensor.calibrateTemperature(0.0f, 1.0f, 100.0f, 99.0f));
+}
+
+void test_calibrate_temperature_with_equal_points_keeps_calibration(void) {
+    // Same contract as ISM330DL, LIS2MDL and MicroPython (ValueError there):
+    // a degenerate input is refused and the previous calibration stays.
     sensor.begin();
     sensor.powerOn();
-    sensor.calibrateTemperature(0.0f, 5.0f, 100.0f, 5.0f);
+    sensor.setTemperatureOffset(1.5f);
+    TEST_ASSERT_FALSE(sensor.calibrateTemperature(0.0f, 5.0f, 100.0f, 5.0f));
     preloadMeasurement();
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.08f, sensor.temperature());
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 26.58f, sensor.temperature());
+}
+
+void test_set_temperature_offset_replaces_two_point_calibration(void) {
+    // The offset resets the gain to 1, as in MicroPython set_temp_offset().
+    sensor.begin();
+    sensor.powerOn();
+    sensor.calibrateTemperature(0.0f, 1.0f, 100.0f, 99.0f);
+    sensor.setTemperatureOffset(1.5f);
+    preloadMeasurement();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 26.58f, sensor.temperature());
+}
+
+void test_calibrate_temperature_replaces_offset(void) {
+    sensor.begin();
+    sensor.powerOn();
+    sensor.setTemperatureOffset(1.5f);
+    sensor.calibrateTemperature(0.0f, 1.0f, 100.0f, 99.0f);
+    preloadMeasurement();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 24.5714f, sensor.temperature());
 }
 
 int main(void) {
@@ -669,6 +696,9 @@ int main(void) {
     RUN_TEST(test_dew_point_reads_sensor);
     RUN_TEST(test_set_temperature_offset_shifts_reading);
     RUN_TEST(test_calibrate_temperature_applies_two_point_correction);
-    RUN_TEST(test_calibrate_temperature_with_equal_points_is_identity);
+    RUN_TEST(test_calibrate_temperature_returns_true);
+    RUN_TEST(test_calibrate_temperature_with_equal_points_keeps_calibration);
+    RUN_TEST(test_set_temperature_offset_replaces_two_point_calibration);
+    RUN_TEST(test_calibrate_temperature_replaces_offset);
     return UNITY_END();
 }

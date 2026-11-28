@@ -42,6 +42,41 @@ void loop() {
 }
 ```
 
+## Examples
+
+| Example | What it does | Try it |
+|---------|--------------|--------|
+| [`dpad_reader`](examples/dpad_reader/) | Print which D-PAD button is currently pressed on the serial monitor. A good first sketch to check the expander and its pull-ups. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e#dpad_reader) |
+| [`SimonGame`](examples/SimonGame/) | Memory game inspired by *Simon Says*. The board flashes an increasingly long sequence using the on-board LEDs and the player must reproduce it using the D-PAD. Score is printed to the serial monitor. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e#simongame) |
+| [`ReactionTimer`](examples/ReactionTimer/) | Reaction-time trainer. After a random delay, the red LED lights up and the player must press the UP button as quickly as possible. The measured reaction time is printed in milliseconds. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e#reactiontimer) |
+| [`MusicPlayer`](examples/MusicPlayer/) | Turn the D-PAD into a mini jukebox. Each direction plays a different 8-bit melody on the on-board speaker (Tetris, Mario, Zelda, or Pokémon). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e#musicplayer) |
+| [`MorseCode`](examples/MorseCode/) | Enter Morse code using the D-PAD. Short and long presses on the UP button generate dots and dashes, while the DOWN button decodes the current sequence and prints the matching letter. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e#morsecode) |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e).
+
+### Building an example
+
+List available examples (each line is a runnable Make target):
+
+```bash
+make list-examples
+```
+
+Then flash one — copy a line from the listing:
+
+```bash
+make flash-mcp23009e/MorseCode
+```
+
+This builds, uploads, and opens the serial monitor at 115200 baud.
+
+To reliably capture the first lines printed at boot (which the interactive monitor often misses), swap `flash-` for `capture-`:
+
+```bash
+make capture-mcp23009e/MorseCode             # 10 seconds, OpenOCD reset, stdout
+make capture-mcp23009e/MorseCode DURATION=30 # longer window
+```
+
 ## API
 
 All methods follow the collection conventions: `camelCase`, units included
@@ -73,6 +108,9 @@ Direct read/write access to every register in the MCP23009E register map.
 |--------|-------------|
 | `void setIodir(uint8_t value)` / `uint8_t getIodir()` | I/O direction register. |
 | `void setIpol(uint8_t value)` / `uint8_t getIpol()` | Input polarity register. |
+| `void setGpinten(uint8_t value)` / `uint8_t getGpinten()` | Interrupt-on-change enable register. |
+| `void setDefval(uint8_t value)` / `uint8_t getDefval()` | Default compare value for interrupt-on-change. |
+| `void setIntcon(uint8_t value)` / `uint8_t getIntcon()` | Interrupt control register (compare with `DEFVAL` or with the previous value). |
 | `void setGppu(uint8_t value)` / `uint8_t getGppu()` | Pull-up register. |
 | `void setGpio(uint8_t value)` / `uint8_t getGpio()` | GPIO register. |
 | `bool gpio(uint8_t& value)` | Read the GPIO register in one transaction. Returns `false` on a bus error and leaves `value` unchanged. |
@@ -192,6 +230,7 @@ led.off();   // GPIO HIGH → LED off
 
 Both classes share the same interface: `on()`, `off()`, `toggle()`,
 `value(x)`, `init(mode, pull, value)`, `mode()`, `pull()`, `irq()`, `irqLevel()`.
+`MCP23009ActiveLowPin` also has `pinNumber()`, the expander GPIO it drives.
 
 ## Register constants
 
@@ -208,43 +247,14 @@ exercise the driver against the `TwoWire` mock from
 `tests/native/helpers/Wire.h`. Run them without hardware with:
 
 ```bash
-make test-native
+make test-native/mcp23009e
 ```
 
-## Examples
+## References
 
-| Example | What it does | Try it |
-|---------|--------------|--------|
-| [`dpad_reader`](examples/dpad_reader/) | Print which D-PAD button is currently pressed on the serial monitor. A good first sketch to check the expander and its pull-ups. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e#dpad_reader) |
-| [`SimonGame`](examples/SimonGame/) | Memory game inspired by *Simon Says*. The board flashes an increasingly long sequence using the on-board LEDs and the player must reproduce it using the D-PAD. Score is printed to the serial monitor. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e#simongame) |
-| [`ReactionTimer`](examples/ReactionTimer/) | Reaction-time trainer. After a random delay, the red LED lights up and the player must press the UP button as quickly as possible. The measured reaction time is printed in milliseconds. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e#reactiontimer) |
-| [`MusicPlayer`](examples/MusicPlayer/) | Turn the D-PAD into a mini jukebox. Each direction plays a different 8-bit melody on the on-board speaker (Tetris, Mario, Zelda, or Pokémon). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e#musicplayer) |
-| [`MorseCode`](examples/MorseCode/) | Enter Morse code using the D-PAD. Short and long presses on the UP button generate dots and dashes, while the DOWN button decodes the current sequence and prints the matching letter. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e#morsecode) |
-
-Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/mcp23009e).
-
-### Building an example
-
-List available examples (each line is a runnable Make target):
-
-```bash
-make list-examples
-```
-
-Then flash one — copy a line from the listing:
-
-```bash
-make flash-mcp23009e/morse_code
-```
-
-This builds, uploads, and opens the serial monitor at 115200 baud.
-
-To reliably capture the first lines printed at boot (which the interactive monitor often misses), swap `flash-` for `capture-`:
-
-```bash
-make capture-mcp23009e/morse_code             # 10 seconds, OpenOCD reset, stdout
-make capture-mcp23009e/morse_code DURATION=30 # longer window
-```
+* Datasheet: [Microchip MCP23009](https://ww1.microchip.com/downloads/en/DeviceDoc/20002121C.pdf).
+* STeaMi wiki: [Buttons and audio hardware page](https://wiki.steami.cc/docs/hardware/main-components/buttons-audio).
+* MicroPython driver: [`mcp23009e`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/mcp23009e).
 
 ## License
 

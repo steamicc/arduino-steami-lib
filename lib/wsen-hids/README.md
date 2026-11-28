@@ -129,10 +129,15 @@ one-shot trigger reliably (see also the matching MicroPython issue in
 
 ### Calibration
 
+The user correction is `gain * factory + offset`, applied after the factory
+curve. Each call replaces the previous correction, as in the other
+temperature drivers and in MicroPython: `setTemperatureOffset()` sets the
+gain back to 1.
+
 | Method | Description |
 |--------|-------------|
-| `void setTemperatureOffset(float offset)` | Additive Celsius offset on top of the factory calibration. |
-| `void calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point user calibration. Applied after the factory curve. |
+| `void setTemperatureOffset(float offset)` | Celsius offset (resets the gain to 1). |
+| `bool calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point user calibration, from readings taken without calibration. Returns `false` if `measLow == measHigh` and keeps the previous correction. |
 
 ## Register constants
 
@@ -142,6 +147,14 @@ masks (`WSEN_HIDS_CTRL1_*`, `WSEN_HIDS_STATUS_*`), and ODR values
 need something outside the driver's API surface.
 
 ## Testing
+
+Host-side unit tests under
+[`tests/native/test_wsen_hids/`](../../tests/native/test_wsen_hids/) exercise
+the driver against the `TwoWire` mock. Run them without hardware with:
+
+```bash
+make test-native/wsen_hids
+```
 
 Build-only verification:
 
@@ -163,6 +176,12 @@ example to confirm:
 * plausible temperature values
 * plausible humidity values
 * continuous acquisition readiness
+
+## References
+
+* Product page and datasheet: [Würth Elektronik WSEN-HIDS 2525020210001](https://www.we-online.com/en/components/products/WSEN-HIDS_1).
+* STeaMi wiki: [WSEN-HIDS hardware page](https://wiki.steami.cc/docs/hardware/main-components/sensors/wsen-hids).
+* MicroPython driver: [`wsen-hids`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/wsen-hids).
 
 ## License
 
