@@ -3,6 +3,18 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.47.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.8...v0.47.0) (2026-11-28)
+
+
+### Bug Fixes
+
+* **board:** Keep the Buttons D-PAD working beside the sketch callbacks. ([#348](https://github.com/steamicc/arduino-steami-lib/issues/348)) ([7d90bc0](https://github.com/steamicc/arduino-steami-lib/commit/7d90bc066c9e117fb89c34ce4221610f4ab1cc3d)), closes [#347](https://github.com/steamicc/arduino-steami-lib/issues/347)
+
+
+### Features
+
+* **im34dt05:** Add dbfsToDbSpl, levelOffset and isAlive helpers. ([#352](https://github.com/steamicc/arduino-steami-lib/issues/352)) ([609b574](https://github.com/steamicc/arduino-steami-lib/commit/609b574ed9a4eaf0d134160d74808dc2619ff720)), closes [#351](https://github.com/steamicc/arduino-steami-lib/issues/351)
+
 ## [0.46.8](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.7...v0.46.8) (2026-11-28)
 
 
