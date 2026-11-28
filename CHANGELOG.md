@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.46.3](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.2...v0.46.3) (2026-11-28)
+
+
+### Bug Fixes
+
+* **bq27441:** Open the config session only once enterConfig succeeds. ([#336](https://github.com/steamicc/arduino-steami-lib/issues/336)) ([ecdc2f8](https://github.com/steamicc/arduino-steami-lib/commit/ecdc2f8af6d799cd8c0228402c59852c287f255f)), closes [#335](https://github.com/steamicc/arduino-steami-lib/issues/335)
+
 ## [0.46.2](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.1...v0.46.2) (2026-11-28)
 
 
