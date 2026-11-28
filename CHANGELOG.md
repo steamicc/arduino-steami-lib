@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.42.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.42.0...v0.42.1) (2026-11-28)
+
+
+### Bug Fixes
+
+* **bme280:** Avoid left shifts of negative values in the compensation. ([#298](https://github.com/steamicc/arduino-steami-lib/issues/298)) ([93038de](https://github.com/steamicc/arduino-steami-lib/commit/93038ded586d6060e9484fab37cc47af421599e9)), closes [#259](https://github.com/steamicc/arduino-steami-lib/issues/259)
+
 # [0.42.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.41.0...v0.42.0) (2026-11-28)
 
 
