@@ -330,6 +330,20 @@ void test_read_config_returns_zero_on_i2c_error(void) {
     TEST_ASSERT_EQUAL_INT(0, bridge.readConfig(buf, sizeof(buf)));
 }
 
+void test_read_config_returns_blocks_read_before_an_i2c_error(void) {
+    // A failure on a later block keeps the blocks already read (255 bytes
+    // each), as the bridge_info example says: the caller cannot tell it from
+    // data that ends there.
+    FakeDaplinkBridge& firmware = attachFirmware();
+    bridge.begin();
+    fillPattern(firmware.zone.data(), 600);
+    firmware.nackReadConfigFrom = 1;  // the second block fails
+
+    uint8_t buf[DAPLINK_BRIDGE_CONFIG_SIZE] = {0};
+    TEST_ASSERT_EQUAL_INT(DAPLINK_BRIDGE_MAX_READ_LEN, bridge.readConfig(buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(firmware.zone.data(), buf, DAPLINK_BRIDGE_MAX_READ_LEN);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_begin_detects_device);
@@ -361,5 +375,6 @@ int main(void) {
     RUN_TEST(test_legacy_firmware_detected_when_bridge_nacks_after_probe);
     RUN_TEST(test_silent_bridge_never_reads_as_config_zone);
     RUN_TEST(test_read_config_returns_zero_on_i2c_error);
+    RUN_TEST(test_read_config_returns_blocks_read_before_an_i2c_error);
     return UNITY_END();
 }

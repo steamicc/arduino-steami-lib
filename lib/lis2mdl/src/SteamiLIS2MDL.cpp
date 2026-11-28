@@ -471,34 +471,16 @@ void SteamiLIS2MDL::setCalibrateStep(float xoff, float yoff, float zoff, float x
     zScale = zscale;
 }
 
-void SteamiLIS2MDL::calibrateMinmax2d(uint16_t samples, uint16_t delayMs) {
+bool SteamiLIS2MDL::calibrateMinmax2d(uint16_t samples, uint16_t delayMs) {
     /*MIN/MAX calibration while flat (XY only).
         Slowly rotate the board FLAT during acquisition.
-        Updates x_off, y_off, x_scale, y_scale (leaves Z unchanged).*/
+        Updates x_off, y_off, x_scale, y_scale (leaves Z unchanged).
+        All or nothing: false, with the calibration unchanged, when samples is 0 or a read
+        fails (MicroPython raises OSError out of the loop at the same point).*/
 
-    float xmin = 1e9f, ymin = 1e9f;
-    float xmax = -1e9f, ymax = -1e9f;
-    bool any = false;
-
-    for (uint16_t i = 0; i < samples; i++) {
-        MagneticField f;
-        if (!magneticField(f)) {
-            delay(delayMs);
-            continue;  // a failed read is not a sample
-        }
-        any = true;
-        if (f.x < xmin)
-            xmin = f.x;
-        if (f.x > xmax)
-            xmax = f.x;
-        if (f.y < ymin)
-            ymin = f.y;
-        if (f.y > ymax)
-            ymax = f.y;
-        delay(delayMs);
-    }
-    if (!any) {
-        return;  // no sample: keep the current calibration
+    float xmin, xmax, ymin, ymax, zmin, zmax;
+    if (!sampleMinmax(samples, delayMs, xmin, xmax, ymin, ymax, zmin, zmax)) {
+        return false;
     }
 
     xOff = (xmin + xmax) / 2.0f;
@@ -509,39 +491,18 @@ void SteamiLIS2MDL::calibrateMinmax2d(uint16_t samples, uint16_t delayMs) {
     float avg = (xScale + yScale) / 2.0f;
     xScale = (xScale != 0.0f) ? avg : 1.0f;
     yScale = (yScale != 0.0f) ? avg : 1.0f;
+    return true;
 }
 
-void SteamiLIS2MDL::calibrateMinmax3d(uint16_t samples, uint16_t delayMs) {
+bool SteamiLIS2MDL::calibrateMinmax3d(uint16_t samples, uint16_t delayMs) {
     /*MIN/MAX calibration on 3 axes (rotate the board in ALL directions).
-        Updates offsets + scales for X, Y, Z.*/
+        Updates offsets + scales for X, Y, Z.
+        All or nothing: false, with the calibration unchanged, when samples is 0 or a read
+        fails (MicroPython raises OSError out of the loop at the same point).*/
 
-    float xmin = 1e9f, ymin = 1e9f, zmin = 1e9f;
-    float xmax = -1e9f, ymax = -1e9f, zmax = -1e9f;
-    bool any = false;
-
-    for (uint16_t i = 0; i < samples; i++) {
-        MagneticField f;
-        if (!magneticField(f)) {
-            delay(delayMs);
-            continue;  // a failed read is not a sample
-        }
-        any = true;
-        if (f.x < xmin)
-            xmin = f.x;
-        if (f.x > xmax)
-            xmax = f.x;
-        if (f.y < ymin)
-            ymin = f.y;
-        if (f.y > ymax)
-            ymax = f.y;
-        if (f.z < zmin)
-            zmin = f.z;
-        if (f.z > zmax)
-            zmax = f.z;
-        delay(delayMs);
-    }
-    if (!any) {
-        return;  // no sample: keep the current calibration
+    float xmin, xmax, ymin, ymax, zmin, zmax;
+    if (!sampleMinmax(samples, delayMs, xmin, xmax, ymin, ymax, zmin, zmax)) {
+        return false;
     }
 
     xOff = (xmin + xmax) / 2.0f;
@@ -550,6 +511,32 @@ void SteamiLIS2MDL::calibrateMinmax3d(uint16_t samples, uint16_t delayMs) {
     xScale = (xmax - xmin) / 2.0f != 0.0f ? (xmax - xmin) / 2.0f : 1.0f;
     yScale = (ymax - ymin) / 2.0f != 0.0f ? (ymax - ymin) / 2.0f : 1.0f;
     zScale = (zmax - zmin) / 2.0f != 0.0f ? (zmax - zmin) / 2.0f : 1.0f;
+    return true;
+}
+
+bool SteamiLIS2MDL::sampleMinmax(uint16_t samples, uint16_t delayMs, float& xmin, float& xmax,
+                                 float& ymin, float& ymax, float& zmin, float& zmax) {
+    // Min/max of `samples` raw readings. Stops at the first failed read: a calibration
+    // computed from the samples that happened to succeed could rest on a single one.
+    if (samples == 0) {
+        return false;
+    }
+    xmin = ymin = zmin = 1e9f;
+    xmax = ymax = zmax = -1e9f;
+    for (uint16_t i = 0; i < samples; i++) {
+        MagneticField f;
+        if (!magneticField(f)) {
+            return false;
+        }
+        xmin = f.x < xmin ? f.x : xmin;
+        xmax = f.x > xmax ? f.x : xmax;
+        ymin = f.y < ymin ? f.y : ymin;
+        ymax = f.y > ymax ? f.y : ymax;
+        zmin = f.z < zmin ? f.z : zmin;
+        zmax = f.z > zmax ? f.z : zmax;
+        delay(delayMs);
+    }
+    return true;
 }
 
 CalibratedField SteamiLIS2MDL::calibrateApply(float x, float y, float z) {
@@ -646,8 +633,8 @@ MagCalibration SteamiLIS2MDL::readCalibration() const {
     return {xOff, yOff, zOff, xScale, yScale, zScale};
 }
 
-void SteamiLIS2MDL::calibrateStep() {
-    calibrateMinmax3d();
+bool SteamiLIS2MDL::calibrateStep() {
+    return calibrateMinmax3d();
 }
 
 //--------------------------------------------------------

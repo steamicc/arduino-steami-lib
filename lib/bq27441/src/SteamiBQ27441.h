@@ -120,23 +120,24 @@ class SteamiBQ27441 {
     // 0..100 and return false when the gauge refuses the write.
     uint16_t soc1SetThreshold();
     uint16_t soc1ClearThreshold();
-    bool setSoc1Thresholds(uint16_t set_soc, uint16_t clear_soc);
+    bool setSoc1Thresholds(int set_soc, int clear_soc);
     uint16_t socfSetThreshold();
     uint16_t socfClearThreshold();
-    bool setSocfThresholds(uint16_t set_socf, uint16_t clear_socf);
+    bool setSocfThresholds(int set_socf, int clear_socf);
     bool socFlag();
     bool socfFlag();
     // SOC_INT step, in percent, between two GPOUT pulses.
     uint16_t sociDelta();
-    bool setSociDelta(uint16_t delta);
+    bool setSociDelta(int delta);
     bool pulseGpout();
     // true selects BAT_LOW on GPOUT, false SOC_INT.
     bool setGpoutFunction(bool gpout_function);
 
     // --- Configuration and control ---
-    // enterConfig(true) opens a user session: the setters then write
-    // without entering or leaving the configuration mode themselves, until
-    // exitConfig() ends the session.
+    // enterConfig(true) opens a user session when it returns true: the
+    // setters then write without entering or leaving the configuration
+    // mode themselves, until exitConfig() ends the session. A failed
+    // enterConfig(true) opens no session.
     bool enterConfig(bool user_control);
     bool exitConfig(bool resim = true);
     bool seal();

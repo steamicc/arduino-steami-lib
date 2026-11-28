@@ -3,6 +3,34 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.46.5](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.4...v0.46.5) (2026-11-28)
+
+
+### Bug Fixes
+
+* **mcp23009e:** Handle bus errors at interrupt registration and in poll(). ([#332](https://github.com/steamicc/arduino-steami-lib/issues/332)) ([df1dc5c](https://github.com/steamicc/arduino-steami-lib/commit/df1dc5c12d221dac4a1d738ef04e7c90051f6406)), closes [#330](https://github.com/steamicc/arduino-steami-lib/issues/330)
+
+## [0.46.4](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.3...v0.46.4) (2026-11-28)
+
+
+### Bug Fixes
+
+* **mcp23009e:** Leave EXTI line 0 to MENU in the examples and README. ([#345](https://github.com/steamicc/arduino-steami-lib/issues/345)) ([908bcc2](https://github.com/steamicc/arduino-steami-lib/commit/908bcc28c570de3a1f4ca37d685836fc3e6b5fa8)), closes [#344](https://github.com/steamicc/arduino-steami-lib/issues/344)
+
+## [0.46.3](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.2...v0.46.3) (2026-11-28)
+
+
+### Bug Fixes
+
+* **bq27441:** Open the config session only once enterConfig succeeds. ([#336](https://github.com/steamicc/arduino-steami-lib/issues/336)) ([ecdc2f8](https://github.com/steamicc/arduino-steami-lib/commit/ecdc2f8af6d799cd8c0228402c59852c287f255f)), closes [#335](https://github.com/steamicc/arduino-steami-lib/issues/335)
+
+## [0.46.2](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.1...v0.46.2) (2026-11-28)
+
+
+### Bug Fixes
+
+* **lis2mdl:** Keep the previous calibration when a min/max sample fails. ([#331](https://github.com/steamicc/arduino-steami-lib/issues/331)) ([150818f](https://github.com/steamicc/arduino-steami-lib/commit/150818fee4a5ac4e9eddda3d7febb25c93838f12)), closes [#329](https://github.com/steamicc/arduino-steami-lib/issues/329)
+
 ## [0.46.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.0...v0.46.1) (2026-11-28)
 
 

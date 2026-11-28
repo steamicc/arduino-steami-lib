@@ -3,6 +3,10 @@
 #include <math.h>
 #include <unity.h>
 
+#include <array>
+#include <map>
+#include <vector>
+
 #include "SteamiLIS2MDL.h"
 #include "Wire.h"
 #include "driver_checks.h"
@@ -299,18 +303,119 @@ void test_heading_flat_only_is_nan_on_bus_error(void) {
     TEST_ASSERT_EQUAL_STRING("", sensor.directionLabel(NAN));
 }
 
+static void assertCalibration(float xo, float yo, float zo, float xs, float ys, float zs) {
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, xo, sensor.xOff);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, yo, sensor.yOff);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, zo, sensor.zOff);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, xs, sensor.xScale);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, ys, sensor.yScale);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, zs, sensor.zScale);
+}
+
 void test_calibrate_minmax_keeps_calibration_on_bus_error(void) {
     sensor.begin();
     sensor.setCalibrateStep(10.0f, 20.0f, 30.0f, 2.0f, 3.0f, 4.0f);
     Wire.setAbsent(ADDR);
-    sensor.calibrateMinmax3d(5, 0);
-    sensor.calibrateMinmax2d(5, 0);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 10.0f, sensor.xOff);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 20.0f, sensor.yOff);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 30.0f, sensor.zOff);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 2.0f, sensor.xScale);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 3.0f, sensor.yScale);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 4.0f, sensor.zScale);
+    TEST_ASSERT_FALSE(sensor.calibrateMinmax3d(5, 0));
+    TEST_ASSERT_FALSE(sensor.calibrateMinmax2d(5, 0));
+    TEST_ASSERT_FALSE(sensor.calibrateStep());
+    assertCalibration(10.0f, 20.0f, 30.0f, 2.0f, 3.0f, 4.0f);
+}
+
+// LIS2MDL register map that serves one field per burst read from OUTX_L, in
+// order, and fails every burst once the list is used up: a bus error in the
+// middle of a calibration.
+class ScriptedMagnetometer : public I2CDevice {
+   public:
+    std::vector<std::array<int16_t, 3>> fields;
+
+    ScriptedMagnetometer() { regs_[LIS2MDL_WHO_AM_I] = LIS2MDL_WHO_AM_I_VAL; }
+
+    uint8_t onWrite(const std::vector<uint8_t>& frame) override {
+        if (frame.empty()) {
+            return 0;
+        }
+        reg_ = frame[0];
+        for (size_t i = 1; i < frame.size(); i++) {
+            regs_[static_cast<uint8_t>(reg_ + i - 1)] = frame[i];
+        }
+        return 0;
+    }
+
+    std::vector<uint8_t> onRead(size_t quantity) override {
+        std::vector<uint8_t> out;
+        if (reg_ == LIS2MDL_OUTX_L_REG && quantity == 6) {
+            if (next_ >= fields.size()) {
+                return out;  // the chip stops answering
+            }
+            for (int16_t v : fields[next_++]) {
+                const uint16_t u = static_cast<uint16_t>(v);
+                out.push_back(u & 0xFF);
+                out.push_back(u >> 8);
+            }
+            return out;
+        }
+        for (size_t i = 0; i < quantity; i++) {
+            out.push_back(regs_[static_cast<uint8_t>(reg_ + i)]);
+        }
+        return out;
+    }
+
+   private:
+    std::map<uint8_t, uint8_t> regs_;
+    uint8_t reg_ = 0;
+    size_t next_ = 0;
+};
+
+void test_calibrate_minmax_3d_uses_every_sample(void) {
+    ScriptedMagnetometer chip;
+    chip.fields = {{100, -50, 10}, {300, 150, -30}, {200, 50, 90}};
+    Wire.attachDevice(ADDR, &chip);
+    TEST_ASSERT_TRUE(sensor.begin());
+    TEST_ASSERT_TRUE(sensor.calibrateMinmax3d(3, 0));
+    assertCalibration(200.0f, 50.0f, 30.0f, 100.0f, 100.0f, 60.0f);
+}
+
+void test_calibrate_minmax_2d_uses_every_sample_and_keeps_z(void) {
+    ScriptedMagnetometer chip;
+    chip.fields = {{100, -50, 10}, {300, 250, 20}};
+    Wire.attachDevice(ADDR, &chip);
+    TEST_ASSERT_TRUE(sensor.begin());
+    sensor.setCalibrateStep(0.0f, 0.0f, 30.0f, 1.0f, 1.0f, 4.0f);
+    TEST_ASSERT_TRUE(sensor.calibrateMinmax2d(2, 0));
+    // X range 200, Y range 300: both scales take the mean half-range, 125.
+    assertCalibration(200.0f, 100.0f, 30.0f, 125.0f, 125.0f, 4.0f);
+}
+
+void test_calibrate_minmax_3d_keeps_calibration_when_a_sample_fails(void) {
+    // One good sample, then the bus fails: the old code built a degenerate
+    // calibration (offsets = that sample, scales = 1) from it.
+    ScriptedMagnetometer chip;
+    chip.fields = {{400, -300, 200}};
+    Wire.attachDevice(ADDR, &chip);
+    TEST_ASSERT_TRUE(sensor.begin());
+    sensor.setCalibrateStep(10.0f, 20.0f, 30.0f, 2.0f, 3.0f, 4.0f);
+    TEST_ASSERT_FALSE(sensor.calibrateMinmax3d(5, 0));
+    assertCalibration(10.0f, 20.0f, 30.0f, 2.0f, 3.0f, 4.0f);
+}
+
+void test_calibrate_minmax_2d_keeps_calibration_when_a_sample_fails(void) {
+    ScriptedMagnetometer chip;
+    chip.fields = {{400, -300, 200}, {100, 100, 0}};
+    Wire.attachDevice(ADDR, &chip);
+    TEST_ASSERT_TRUE(sensor.begin());
+    sensor.setCalibrateStep(10.0f, 20.0f, 30.0f, 2.0f, 3.0f, 4.0f);
+    TEST_ASSERT_FALSE(sensor.calibrateMinmax2d(5, 0));
+    assertCalibration(10.0f, 20.0f, 30.0f, 2.0f, 3.0f, 4.0f);
+}
+
+void test_calibrate_minmax_with_zero_samples_keeps_calibration(void) {
+    sensor.begin();
+    setField(400, -300, 200);
+    sensor.setCalibrateStep(10.0f, 20.0f, 30.0f, 2.0f, 3.0f, 4.0f);
+    TEST_ASSERT_FALSE(sensor.calibrateMinmax3d(0, 0));
+    TEST_ASSERT_FALSE(sensor.calibrateMinmax2d(0, 0));
+    assertCalibration(10.0f, 20.0f, 30.0f, 2.0f, 3.0f, 4.0f);
 }
 
 void test_temperature_raw_is_signed(void) {
@@ -386,6 +491,34 @@ void test_calibrate_temperature_applies_two_point_correction(void) {
 
     sensor.calibrateTemperature(21.0f, 20.0f, 27.0f, 25.0f);
 
+    float tempC = sensor.temperature();
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 27.0f, tempC);
+}
+
+void test_calibrate_temperature_with_equal_points_keeps_calibration(void) {
+    // Same contract as the other drivers and MicroPython (ValueError there):
+    // the refused call keeps the previous gain and offset.
+    sensor.begin();
+    Wire.setRegister(ADDR, LIS2MDL_TEMP_OUT_L_REG, 0x00);
+    Wire.setRegister(ADDR, LIS2MDL_TEMP_OUT_H_REG, 0x00);
+
+    sensor.calibrateTemperature(21.0f, 20.0f, 27.0f, 25.0f);  // gain 1.2, offset -3.0
+    TEST_ASSERT_FALSE(sensor.calibrateTemperature(0.0f, 5.0f, 100.0f, 5.0f));
+
+    // 1.2 * 25 - 3.0 = 27.0 (gain reset to 1: 22.0, identity: 25.0)
+    float tempC = sensor.temperature();
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 27.0f, tempC);
+}
+
+void test_calibrate_temperature_replaces_offset(void) {
+    sensor.begin();
+    Wire.setRegister(ADDR, LIS2MDL_TEMP_OUT_L_REG, 0x00);
+    Wire.setRegister(ADDR, LIS2MDL_TEMP_OUT_H_REG, 0x00);
+
+    sensor.setTemperatureOffset(2.0f);
+    TEST_ASSERT_TRUE(sensor.calibrateTemperature(21.0f, 20.0f, 27.0f, 25.0f));
+
+    // 1.2 * 25 - 3.0 = 27.0 (offset added on top: 29.0)
     float tempC = sensor.temperature();
     TEST_ASSERT_FLOAT_WITHIN(0.05f, 27.0f, tempC);
 }
@@ -618,12 +751,19 @@ int main(void) {
     RUN_TEST(test_float_readings_are_nan_on_bus_error);
     RUN_TEST(test_heading_flat_only_is_nan_on_bus_error);
     RUN_TEST(test_calibrate_minmax_keeps_calibration_on_bus_error);
+    RUN_TEST(test_calibrate_minmax_3d_uses_every_sample);
+    RUN_TEST(test_calibrate_minmax_2d_uses_every_sample_and_keeps_z);
+    RUN_TEST(test_calibrate_minmax_3d_keeps_calibration_when_a_sample_fails);
+    RUN_TEST(test_calibrate_minmax_2d_keeps_calibration_when_a_sample_fails);
+    RUN_TEST(test_calibrate_minmax_with_zero_samples_keeps_calibration);
     RUN_TEST(test_temperature_raw_is_signed);
     RUN_TEST(test_set_temp_offset_shifts_reading);
     RUN_TEST(test_set_temperature_offset_shifts_reading);
     RUN_TEST(test_set_temperature_offset_resets_two_point_gain);
     RUN_TEST(test_set_temp_offset_is_alias_of_set_temperature_offset);
     RUN_TEST(test_calibrate_temperature_applies_two_point_correction);
+    RUN_TEST(test_calibrate_temperature_with_equal_points_keeps_calibration);
+    RUN_TEST(test_calibrate_temperature_replaces_offset);
     RUN_TEST(test_set_low_power_sets_bit4_cfg_reg_a);
     RUN_TEST(test_set_low_pass_sets_bit0_cfg_reg_b);
     RUN_TEST(test_set_offset_cancellation_sets_bits_cfg_reg_b);

@@ -191,8 +191,9 @@ Every `lib/<component>/README.md` uses the same sections, in this order
 6. `## Register constants` (or `## Constants`): what `*_const.h` exports.
    Sections specific to the driver (limitations, firmware notes, JSON
    format, ...) go after it.
-7. `## Testing`: the `make test-native/<suite>` (and `test-hardware/<suite>`)
-   commands.
+7. `## Testing`: the `make test-native/<suite>` command, and
+   `make test-hardware/<suite>` with the board it needs when
+   `tests/hardware/test_<suite>/` exists.
 8. `## References`: the datasheet, the hardware page of the STeaMi wiki and
    the MicroPython counterpart in `steamicc/micropython-steami-lib`.
 9. `## License`: `GPL-3.0-or-later — see [LICENSE](../../LICENSE).`
@@ -290,14 +291,32 @@ data. Callers can detect with `isnan()`.
 Any driver that exposes a physical quantity (temperature, pressure,
 humidity, …) provides:
 
-- `void setXxxOffset(float offset)` — additive offset on top of the
-  factory calibration (e.g. `setTemperatureOffset`).
-- `void calibrateXxx(float refLow, float measLow, float refHigh, float measHigh)`
-  — two-point linear correction applied after the factory curve.
+- `void setXxxOffset(float offset)` — single-point correction: gain 1
+  and this offset, applied after the factory curve (e.g.
+  `setTemperatureOffset`).
+- `bool calibrateXxx(float refLow, float measLow, float refHigh, float measHigh)`
+  — two-point linear correction applied after the factory curve:
+  `gain = (refHigh - refLow) / (measHigh - measLow)`,
+  `offset = refLow - gain * measLow`. `measLow` and `measHigh` are
+  readings taken without any user correction.
+
+The driver keeps one user correction per channel, a gain and an offset,
+and each call **replaces** the previous one: `setXxxOffset()` after
+`calibrateXxx()` resets the gain to 1, and `calibrateXxx()` after
+`setXxxOffset()` replaces the offset. Nothing stacks, so
+`setXxxOffset(0)` always gives back the factory reading.
+
+When `measLow == measHigh`, `calibrateXxx()` returns `false` and keeps
+the previous correction, gain and offset unchanged. The MicroPython
+drivers raise `ValueError` in that case, with the same effect.
 
 Temperature-capable parts always implement `setTemperatureOffset` and
-`calibrateTemperature`. Extend the same pattern to other channels when
-it makes physical sense.
+`calibrateTemperature`, with this contract (it matches
+`set_temp_offset()` and `calibrate_temperature()` in MicroPython).
+Extend the same pattern to other channels when it makes physical sense.
+The native suite of each driver pins the contract: the offset replaces a
+two-point calibration, a two-point calibration replaces the offset, and
+equal points, starting from a gain different from 1, change nothing.
 
 ## Driver design patterns
 
@@ -602,14 +621,16 @@ dispatches the downstream bots. Its header documents the recovery: run
 it by hand on the tag, `gh workflow run publish-arduino-package.yml
 --ref vX.Y.Z`.
 
-Start such a recovery only once no publication is pending, that is when
-`gh run list --workflow publish-arduino-package.yml --status pending`
-lists nothing. The workflow's concurrency group keeps a single pending
-run, and a newer run cancels it: a recovery started while the newest
-tag's publication waits would cancel it, so the newest release would
-never reach the Library Manager nor the downstream repositories. During
-a burst of releases, the intermediate tags are skipped the same way,
-which is harmless since the downstream bots follow the latest release.
+A recovery can start at any time. The workflow has one concurrency
+group per tag: a run never cancels the publication of another tag, and a
+recovery only replaces a pending run of the same tag (a dry run has its
+own group). Publications of different tags run in parallel: the push to
+the distribution is atomic and retried when another publication pushed
+first, `main` only moves for the highest version (an older tag is pushed
+alone), and Latest is given back to the highest published version.
+The tags released before this change (v0.46.1 and earlier when it was
+written) carry the previous workflow, with a fixed group: recover one
+of them when no other publication runs.
 
 ## Notes
 

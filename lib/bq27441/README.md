@@ -118,21 +118,21 @@ included in method names only where they carry ambiguity.
 | `bool setGpoutFunction(bool gpout_function)` | `true` drives GPOUT as BAT_LOW, `false` as SOC_INT. |
 | `bool sealed()` | Returns `true` if the IC is in sealed access mode. |
 | `bool seal()` / `bool unseal()` | Seal or unseal the data flash. |
-| `bool enterConfig(bool user_control)` / `bool exitConfig(bool resim = true)` | Enter or leave the configuration mode. With `user_control = true`, the setters below write without entering or leaving it themselves until `exitConfig()`, so several writes share one session. |
+| `bool enterConfig(bool user_control)` / `bool exitConfig(bool resim = true)` | Enter or leave the configuration mode. With `user_control = true` and a `true` return, the setters below write without entering or leaving it themselves until `exitConfig()`, so several writes share one session. A failed `enterConfig(true)` opens no session; `exitConfig()` always ends it. |
 | `bool reset()` / `bool softReset()` | Full reset, or soft reset (resimulation). |
 
 ### State-of-charge alerts
 
-The thresholds are percentages; the setters clamp them to 0–100 and return `false` when the gauge refuses the write.
+The thresholds are percentages; the setters clamp them to 0–100 (a negative value writes 0 %) and return `false` when the gauge refuses the write.
 
 | Method | Description |
 |--------|-------------|
 | `uint16_t soc1SetThreshold()` / `uint16_t soc1ClearThreshold()` | SOC1 thresholds that set and clear the SOC1 flag. |
-| `bool setSoc1Thresholds(uint16_t set, uint16_t clear)` | Write both SOC1 thresholds. |
+| `bool setSoc1Thresholds(int set, int clear)` | Write both SOC1 thresholds. |
 | `uint16_t socfSetThreshold()` / `uint16_t socfClearThreshold()` | SOCF (final) thresholds. |
-| `bool setSocfThresholds(uint16_t set, uint16_t clear)` | Write both SOCF thresholds. |
+| `bool setSocfThresholds(int set, int clear)` | Write both SOCF thresholds. |
 | `bool socFlag()` / `bool socfFlag()` | `true` while the SOC1 / SOCF flag is set. |
-| `uint16_t sociDelta()` / `bool setSociDelta(uint16_t delta)` | SOC_INT step in % between two GPOUT pulses. |
+| `uint16_t sociDelta()` / `bool setSociDelta(int delta)` | SOC_INT step in % between two GPOUT pulses. |
 | `bool pulseGpout()` | Pulse GPOUT (SOC_INT mode). |
 
 ## Enumerations

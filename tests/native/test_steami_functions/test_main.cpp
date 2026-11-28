@@ -1582,6 +1582,70 @@ static void test_dpad_bus_error_gives_no_false_press(void) {
     TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::LEFT));
 }
 
+// A bus error while begin() registers the D-PAD leaves the directions unregistered in the driver:
+// the next calls register them again once the bus answers, and read their level then.
+static void test_dpad_registration_bus_error_is_retried(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    expanderChip.failReadRegs = 1u << MCP23009_INTCON;  // every registration fails
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::UP));
+    delay(50);
+    expanderChip.press(MCP23009_BTN_UP);  // held while the bus fails
+    delay(30);
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::UP));
+    expanderChip.failReadRegs = 0;
+    delay(30);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::UP));  // level read at the registration
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::UP));
+    expanderChip.release(MCP23009_BTN_UP);
+    buttons.isPressed(SteamiButton::UP);
+    delay(30);
+    TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::UP));
+    expanderChip.press(MCP23009_BTN_LEFT);  // a tap between two calls, through the latch
+    delay(50);
+    expanderChip.release(MCP23009_BTN_LEFT);
+    delay(50);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::LEFT));
+}
+
+// The GPINTEN read of the third registration (LEFT) fails once: the other directions stay
+// registered and LEFT is registered again at the next call.
+static void test_dpad_one_failed_registration_is_retried(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    int intconWrites = 0;  // one per registration, before its GPINTEN read
+    expanderChip.onWriteHook = [&intconWrites](uint8_t reg, uint8_t) {
+        if (reg == MCP23009_INTCON) {
+            intconWrites++;
+            expanderChip.failReadRegs = intconWrites == 3 ? 1u << MCP23009_GPINTEN : 0;
+        }
+    };
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_EQUAL_INT(4, intconWrites);
+    expanderChip.failReadRegs = 0;
+    expanderChip.onWriteHook = nullptr;
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::LEFT));
+    delay(50);
+    const uint8_t bits[] = {MCP23009_BTN_UP, MCP23009_BTN_DOWN, MCP23009_BTN_LEFT,
+                            MCP23009_BTN_RIGHT};
+    const SteamiButton names[] = {SteamiButton::UP, SteamiButton::DOWN, SteamiButton::LEFT,
+                                  SteamiButton::RIGHT};
+    for (int k = 0; k < 4; k++) {
+        expanderChip.press(bits[k]);
+        delay(30);
+        TEST_ASSERT_TRUE(buttons.wasPressed(names[k]));
+        expanderChip.release(bits[k]);
+        buttons.isPressed(names[k]);
+        delay(30);
+        TEST_ASSERT_TRUE(buttons.wasReleased(names[k]));
+    }
+}
+
 static void test_dpad_held_at_start_is_not_a_press(void) {
     steamiFakeBme280(Wire);
     attachExpander();
@@ -2080,6 +2144,74 @@ static void test_dpad_read_during_a_press_bounce_gives_one_press(void) {
     TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::RIGHT));
 }
 
+// --- Buttons: a bus error at the D-PAD registration (#332), then the taps of #341 ---
+
+// startTimeline() with every D-PAD registration of begin() failing (INTCON read), so that the
+// calls register the D-PAD again once the bus answers.
+static uint32_t startTimelineWithFailedRegistration(SteamiButtons& buttons) {
+    attachExpander();
+    releaseMcuButtons();
+    expanderChip.failReadRegs = 1u << MCP23009_INTCON;
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    expanderChip.readUs = 400;
+    delay(50);
+    return millis();
+}
+
+// The bus answers again while the loop of the integration test runs: the call that registers the
+// D-PAD again starts the latch, and every quick tap made after it is counted, as without the
+// error.
+static void test_dpad_quick_taps_after_a_registration_bus_error_are_all_counted(void) {
+    steamiFakeBme280(Wire);
+    const uint8_t bits[4] = {MCP23009_BTN_UP, MCP23009_BTN_DOWN, MCP23009_BTN_LEFT,
+                             MCP23009_BTN_RIGHT};
+    for (int d = 0; d < 4; d++) {
+        SteamiButtons buttons(board);
+        const uint32_t t0 = startTimelineWithFailedRegistration(buttons);
+        Timeline timeline;
+        timeline.at(t0 + 150, []() { expanderChip.failReadRegs = 0; });
+        for (uint32_t k = 0; k < 10; k++) {
+            timeline.dpadTap(t0 + 700 + k * 450 + 40 * (k % 3), bits[d], 80);
+        }
+        TapCounts counts;
+        slowLoop(buttons, timeline, t0 + 700 + 10 * 450 + 1500, 300, counts);
+        assertOnlyOn(counts, 3 + d, 10);
+        TEST_ASSERT_FALSE(buttons.isPressed(kAllButtons[3 + d]));
+    }
+}
+
+// LEFT is held while the bus fails: the registration made when it answers again reads it, which
+// gives one press; its release and the quick taps after it are all counted, and the taps on A made
+// while the D-PAD was unregistered too.
+static void test_dpad_held_through_a_registration_bus_error_then_quick_taps(void) {
+    steamiFakeBme280(Wire);
+    SteamiButtons buttons(board);
+    const uint32_t t0 = startTimelineWithFailedRegistration(buttons);
+    Timeline timeline;
+    timeline.at(t0 + 50, []() { expanderChip.press(MCP23009_BTN_LEFT); });
+    timeline.mcuTap(t0 + 100, A_BUTTON, 60);
+    timeline.mcuTap(t0 + 250, A_BUTTON, 60);
+    timeline.at(t0 + 500, []() { expanderChip.failReadRegs = 0; });
+    timeline.at(t0 + 1100, []() { expanderChip.release(MCP23009_BTN_LEFT); });
+    for (uint32_t k = 0; k < 10; k++) {
+        timeline.dpadTap(t0 + 1500 + k * 450 + 40 * (k % 3), MCP23009_BTN_LEFT, 80);
+    }
+    TapCounts counts;
+    slowLoop(buttons, timeline, t0 + 1500 + 10 * 450 + 1500, 300, counts);
+    for (int k = 0; k < 7; k++) {
+        char text[64];
+        const uint32_t expected = k == 5 ? 11 : (k == 0 ? 2 : 0);
+        snprintf(text, sizeof(text), "presses of button %d", k);
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, counts.presses[k], text);
+        if (k != 0) {  // the two taps on A fall in one turn of the loop: one release flag
+            snprintf(text, sizeof(text), "releases of button %d", k);
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, counts.releases[k], text);
+        }
+    }
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::LEFT));
+}
+
 // --- Every class together ---
 
 static void test_all_classes_on_v1c_print_only_e20(void) {
@@ -2209,6 +2341,8 @@ int main(void) {
     RUN_TEST(test_dpad_tap_between_two_calls_is_caught);
     RUN_TEST(test_dpad_read_during_a_release_bounce_gives_no_false_press);
     RUN_TEST(test_dpad_bus_error_gives_no_false_press);
+    RUN_TEST(test_dpad_registration_bus_error_is_retried);
+    RUN_TEST(test_dpad_one_failed_registration_is_retried);
     RUN_TEST(test_dpad_held_at_start_is_not_a_press);
     RUN_TEST(test_wait_for_press_drops_taps_made_before_the_call);
     RUN_TEST(test_wait_for_press_returns_a_dpad_press_made_during_the_wait);
@@ -2227,6 +2361,8 @@ int main(void) {
     RUN_TEST(test_long_presses_stay_pressed_at_every_call);
     RUN_TEST(test_second_dpad_tap_just_after_a_read_is_not_merged);
     RUN_TEST(test_dpad_read_during_a_press_bounce_gives_one_press);
+    RUN_TEST(test_dpad_quick_taps_after_a_registration_bus_error_are_all_counted);
+    RUN_TEST(test_dpad_held_through_a_registration_bus_error_then_quick_taps);
     RUN_TEST(test_all_classes_on_v1c_print_only_e20);
     return UNITY_END();
 }

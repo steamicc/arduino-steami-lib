@@ -13,7 +13,8 @@
 #include <SteamiBoard.h>
 #include <SteamiMCP23009E.h>
 
-SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+// No interrupt pin: INT_EXPANDER (PB0) shares EXTI line 0 with MENU_BUTTON (PA0).
+SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR);
 
 static const uint8_t kButtons[] = {MCP23009_BTN_UP, MCP23009_BTN_DOWN, MCP23009_BTN_LEFT,
                                    MCP23009_BTN_RIGHT};

@@ -12,7 +12,8 @@
 #include <SteamiBoard.h>
 #include <SteamiMCP23009E.h>
 
-SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+// No interrupt pin: INT_EXPANDER (PB0) shares EXTI line 0 with MENU_BUTTON (PA0).
+SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR);
 
 void setup() {
     Serial.begin(115200);

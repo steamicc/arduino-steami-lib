@@ -415,6 +415,44 @@ void test_user_config_session_batches_writes_then_hands_back_control(void) {
     TEST_ASSERT_TRUE(controlSent(BQ27441_CONTROL_SET_CFGUPDATE));
 }
 
+void test_failed_enter_config_does_not_open_a_user_session(void) {
+    // CFGUPMODE never rises: enterConfig(true) fails and must not leave
+    // a user session behind, otherwise the next setter would write the
+    // data block without entering the configuration mode.
+    preloadWord(BQ27441_COMMAND_FLAGS, 0x0000);
+    TEST_ASSERT_FALSE(sensor->enterConfig(true));
+
+    preloadWord(BQ27441_COMMAND_FLAGS, BQ27441_FLAG_CFGUPMODE);
+    Wire.clearWrites();
+    TEST_ASSERT_TRUE(sensor->setSoc1Thresholds(10, 15));
+    TEST_ASSERT_TRUE(controlSent(BQ27441_CONTROL_SET_CFGUPDATE));
+    TEST_ASSERT_TRUE(controlSent(BQ27441_CONTROL_SOFT_RESET));
+}
+
+void test_exit_config_ends_the_user_session_even_after_resim(void) {
+    TEST_ASSERT_TRUE(sensor->enterConfig(true));
+    sensor->exitConfig();  // SOFT_RESET path
+
+    Wire.clearWrites();
+    TEST_ASSERT_TRUE(sensor->setSociDelta(5));
+    TEST_ASSERT_TRUE(controlSent(BQ27441_CONTROL_SET_CFGUPDATE));
+}
+
+void test_percentage_setters_clamp_negative_values_to_zero(void) {
+    // Same as constrain(x, 0, 100) in MicroPython: -5 % is 0 %, not a
+    // uint16_t wrap to 65531 then clamped to 100 %.
+    TEST_ASSERT_TRUE(sensor->setSoc1Thresholds(-1, -20));
+    TEST_ASSERT_EQUAL(0, Wire.getRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 0));
+    TEST_ASSERT_EQUAL(0, Wire.getRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 1));
+
+    TEST_ASSERT_TRUE(sensor->setSocfThresholds(-3, 150));
+    TEST_ASSERT_EQUAL(0, Wire.getRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 2));
+    TEST_ASSERT_EQUAL(100, Wire.getRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 3));
+
+    TEST_ASSERT_TRUE(sensor->setSociDelta(-5));
+    TEST_ASSERT_EQUAL(0, Wire.getRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 26));
+}
+
 void test_soci_delta_and_pulse_gpout(void) {
     TEST_ASSERT_TRUE(sensor->setSociDelta(250));
     TEST_ASSERT_EQUAL(BQ27441_ID_STATE, Wire.getRegister(ADDR, BQ27441_EXTENDED_DATACLASS));
@@ -475,5 +513,8 @@ int main(void) {
     RUN_TEST(test_control_commands_return_false_on_i2c_error);
     RUN_TEST(test_user_config_session_batches_writes_then_hands_back_control);
     RUN_TEST(test_soci_delta_and_pulse_gpout);
+    RUN_TEST(test_failed_enter_config_does_not_open_a_user_session);
+    RUN_TEST(test_exit_config_ends_the_user_session_even_after_resim);
+    RUN_TEST(test_percentage_setters_clamp_negative_values_to_zero);
     return UNITY_END();
 }
