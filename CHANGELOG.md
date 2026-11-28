@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.42.4](https://github.com/steamicc/arduino-steami-lib/compare/v0.42.3...v0.42.4) (2026-11-28)
+
+
+### Bug Fixes
+
+* **mcp23009e:** Report every interrupt edge in order, with its level. ([#314](https://github.com/steamicc/arduino-steami-lib/issues/314)) ([ba81db4](https://github.com/steamicc/arduino-steami-lib/commit/ba81db40b36f49dd1f5062c1a8f2b6ff1061ef0f)), closes [steamicc/micropython-steami-lib#466](https://github.com/steamicc/micropython-steami-lib/issues/466) [#183](https://github.com/steamicc/arduino-steami-lib/issues/183) [#303](https://github.com/steamicc/arduino-steami-lib/issues/303)
+
 ## [0.42.3](https://github.com/steamicc/arduino-steami-lib/compare/v0.42.2...v0.42.3) (2026-11-28)
 
 
