@@ -38,10 +38,12 @@ class SteamiWsenPads {
     ReadResult readOneShot();
 
     // --- Calibration ---
-    // setTemperatureOffset() and calibrateTemperature() are independent:
-    // the offset stacks on top of the two-point user slope/intercept.
+    // One calibration at a time, gain * factory + offset:
+    // setTemperatureOffset() sets the gain back to 1, calibrateTemperature()
+    // replaces both. It returns false when measLow == measHigh and then
+    // leaves the calibration as it was.
     void setTemperatureOffset(float offset);
-    void calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh);
+    bool calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh);
 
     // --- Driver-specific tuning ---
     // Both LOW_NOISE_EN and the LPF bits are layered on the running CTRL
@@ -56,9 +58,8 @@ class SteamiWsenPads {
    private:
     TwoWire* _wire;
     uint8_t _address;
-    float _tempUserSlope = 1.0f;   // two-point user calibration slope
-    float _tempUserOffset = 0.0f;  // two-point user calibration intercept
-    float _tempOffset = 0.0f;      // additive offset on top of user calibration
+    float _tempGain = 1.0f;    // user calibration gain
+    float _tempOffset = 0.0f;  // user calibration offset, °C
 
     // I2C helpers
     bool isPresent();

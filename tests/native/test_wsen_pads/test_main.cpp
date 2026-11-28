@@ -149,18 +149,53 @@ void test_calibrate_temperature_applies_correction(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 22.0f, sensor.temperature());
 }
 
-void test_offset_stacks_on_top_of_calibration(void) {
-    // Two-point calibration and the additive offset are independent —
-    // setTemperatureOffset doesn't reset slope/intercept set by
-    // calibrateTemperature, and vice versa. Same contract as SteamiWsenHids.
+void test_calibrate_temperature_returns_true(void) {
+    sensor.begin();
+    TEST_ASSERT_TRUE(sensor.calibrateTemperature(1.0f, 0.0f, 22.0f, 20.0f));
+}
+
+void test_calibrate_temperature_with_equal_points_keeps_calibration(void) {
+    // Same contract as ISM330DL, LIS2MDL and MicroPython (ValueError there).
     sensor.begin();
     sensor.setContinuous(ODR_1_HZ);
-    sensor.calibrateTemperature(1.0f, 0.0f, 22.0f, 20.0f);  // slope = 1.05, offset = 1.0
+    sensor.setTemperatureOffset(1.5f);
+    TEST_ASSERT_FALSE(sensor.calibrateTemperature(0.0f, 5.0f, 100.0f, 5.0f));
+    preloadMeasurement(23.0f, 1013.0f);
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 24.5f, sensor.temperature());
+}
+
+void test_set_temperature_offset_replaces_two_point_calibration(void) {
+    // One calibration at a time, as in MicroPython: the offset resets the
+    // gain to 1 and calibrateTemperature() replaces the offset.
+    sensor.begin();
+    sensor.setContinuous(ODR_1_HZ);
+    sensor.calibrateTemperature(1.0f, 0.0f, 22.0f, 20.0f);  // gain 1.05, offset 1.0
     sensor.setTemperatureOffset(0.5f);
     preloadMeasurement(20.0f, 1013.0f);
 
-    // 1.05 * 20 + 1.0 + 0.5 = 22.5
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 22.5f, sensor.temperature());
+    // 1.0 * 20 + 0.5 = 20.5 (it was 22.5 when the offset stacked)
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 20.5f, sensor.temperature());
+}
+
+void test_calibrate_temperature_replaces_offset(void) {
+    sensor.begin();
+    sensor.setContinuous(ODR_1_HZ);
+    sensor.setTemperatureOffset(0.5f);
+    sensor.calibrateTemperature(1.0f, 0.0f, 22.0f, 20.0f);
+    preloadMeasurement(20.0f, 1013.0f);
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 22.0f, sensor.temperature());
+}
+
+void test_read_applies_the_same_calibration(void) {
+    sensor.begin();
+    sensor.setContinuous(ODR_1_HZ);
+    sensor.calibrateTemperature(1.0f, 0.0f, 22.0f, 20.0f);
+    sensor.setTemperatureOffset(0.5f);
+    preloadMeasurement(20.0f, 1013.0f);
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 20.5f, sensor.read().temperature);
 }
 
 void test_reboot_writes_ctrl2_boot(void) {
@@ -194,7 +229,11 @@ int main(void) {
     RUN_TEST(test_temperature_returns_nan_on_powered_down_timeout);
     RUN_TEST(test_set_temperature_offset_shifts_reading);
     RUN_TEST(test_calibrate_temperature_applies_correction);
-    RUN_TEST(test_offset_stacks_on_top_of_calibration);
+    RUN_TEST(test_calibrate_temperature_returns_true);
+    RUN_TEST(test_calibrate_temperature_with_equal_points_keeps_calibration);
+    RUN_TEST(test_set_temperature_offset_replaces_two_point_calibration);
+    RUN_TEST(test_calibrate_temperature_replaces_offset);
+    RUN_TEST(test_read_applies_the_same_calibration);
     RUN_TEST(test_reboot_writes_ctrl2_boot);
     return UNITY_END();
 }
