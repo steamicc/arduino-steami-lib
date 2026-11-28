@@ -10,31 +10,40 @@
 /// active low, with a 20 ms lock-out debounce: a change is taken at once, then the bounces of the
 /// next 20 ms are ignored. Every call (isPressed, wasPressed, wasReleased) samples the buttons.
 ///
-/// A tap made between two calls is not missed, whatever the time between them (issue #251):
+/// A tap made between two calls is not missed, whatever the time between them (issues #251, #341):
 /// - A, B and MENU: begin() attaches an interrupt (CHANGE) to each pin, which runs the debounce on
 ///   every edge, at the time of the edge. A tap made between two calls gives, at the next call,
-///   wasPressed() and wasReleased() true and isPressed() false. A release then a new tap between
-///   two calls give the release and the press.
+///   wasPressed() and wasReleased() true and isPressed() false.
 /// - D-PAD: no MCU interrupt (INT_EXPANDER, PB0, shares EXTI line 0 with MENU, PA0). Each call
 ///   reads the latch of the expander (SteamiMCP23009E::interruptEvent()), which keeps the first
-///   change made since the previous read. A press found there is taken if 20 ms passed since the
-///   last accepted change of that button. A release is taken only once the reads found no change
-///   on that button for 20 ms (and 20 ms after the last accepted change): a read made during a
-///   release bounce then gives no false press. A tap made between two calls gives wasPressed()
-///   and isPressed() true at the next call; the release comes at the first call made 20 ms or
-///   more after it, if that button did not change again.
-/// - At most one press per button between two calls: wasPressed() is a flag, not a counter.
+///   change made since the previous read: that change is taken at once. The latch does not keep
+///   the time of the change, so once a read changed the D-PAD, the call reads it again 20 ms
+///   later and only the level then counts: a contact bounce is not a new tap. That call then
+///   takes 20 ms more (40 ms at most, for a tap that ends during the wait). A tap made between two
+///   calls gives the same as on A at the next call, and a release is reported by the call that
+///   reads it. When that read found a whole tap (pressed, then released), a press found 20 ms later
+///   is a second tap if the button was still released 5 ms after the read; pressed again within
+///   those 5 ms, it is taken for a bounce of the first press.
+/// - The D-PAD is one lever: released from one direction, it can touch the opposite one for a
+///   moment. A press found in the read that releases another direction counts only if it is still
+///   there 20 ms later.
+/// - wasPressed() and wasReleased() are flags: several presses (or releases) made between two calls
+///   give one, and a press nobody reads is not reported later more than once. getPresses() counts
+///   every press (micro:bit get_presses()), for a sketch that counts taps with a slow loop.
 ///
-/// Limits: a D-PAD tap made before the release of the previous one is reported merges with it;
-/// a D-PAD press and its release made while another expander interrupt is pending leave no trace
-/// in the chip. The D-PAD is followed with SteamiMCP23009E::watchChanges(): the sketch can register
-/// its own callbacks on the D-PAD pins of Steami.mcp23009e(), or disable them, and both keep
-/// working; after a reset() of the expander, or after powerOn() following a powerOff(), the next
-/// call sets the D-PAD up again (while the expander is off, the D-PAD reads released).
-/// A sketch that attaches its own interrupt to A_BUTTON, B_BUTTON or MENU_BUTTON
-/// (USER_BTN), or to another pin of the same EXTI line (0 for MENU, 7 for A, 8 for B), replaces
-/// the one of SteamiButtons: that button is then only sampled at each call. Only one
-/// SteamiButtons object gets the interrupts: the one started or called last.
+/// Limits: two D-PAD taps made between two reads of the expander give one (as does a second tap
+/// pressed within 5 ms after a read that found the first one whole), and a D-PAD tap made while
+/// another expander interrupt is pending leaves no trace in the chip. A sketch that attaches
+/// its own interrupt to A_BUTTON, B_BUTTON or MENU_BUTTON (USER_BTN), or to another pin of the same
+/// EXTI line (0 for MENU, 7 for A, 8 for B), replaces the one of SteamiButtons: that button is then
+/// only sampled at each call. The D-PAD is followed with SteamiMCP23009E::watchChanges(): the
+/// sketch can register its own callbacks on the D-PAD pins of Steami.mcp23009e(), or disable them,
+/// and both keep working; after a reset() of the expander, or after powerOn() following a
+/// powerOff(), the next call sets the D-PAD up again (while the expander is off, the D-PAD reads
+/// released). On STM32duino 3.1, detachInterrupt() on any pin of EXTI lines 5 to 9
+/// (P1, P2, P7, P10, P12, the Jacdac pins) also turns off the interrupts of A (line 7) and B (line
+/// 8) until the next attachInterrupt(). Only one SteamiButtons object gets the interrupts: the one
+/// started or called last.
 class SteamiButtons {
    public:
     /// Stores the address of the board only; touches no hardware.
@@ -47,7 +56,8 @@ class SteamiButtons {
     /// Sets A, B and MENU as inputs with pull-ups and attaches their interrupts, and sets the D-PAD
     /// pins of the expander with their interrupt callbacks. False, with one message, when the
     /// expander does not answer: A, B and MENU still work, the D-PAD reads as released, as it does
-    /// after a runtime bus error. Idempotent.
+    /// after a runtime bus error. A D-PAD direction whose registration hits a bus error is
+    /// registered again by the next calls, its level read then (held: a press). Idempotent.
     bool begin();
     bool isAvailable() const { return _handle.isAvailable(); }
     SteamiStatus status() const { return _handle.status(); }
@@ -57,9 +67,15 @@ class SteamiButtons {
     /// Debounced state; false for NONE.
     bool isPressed(SteamiButton button);
 
-    /// True once per debounced press (or release) since the last call: the edge is consumed.
+    /// True when the button was pressed (or released) since the last call of that method for that
+    /// button, and clears that flag: several presses made between two calls give one.
     bool wasPressed(SteamiButton button);
     bool wasReleased(SteamiButton button);
+
+    /// The debounced presses of `button` since the last getPresses() for that button (or since
+    /// begin()), and sets that count to zero, like get_presses() on the micro:bit. It stops at 255
+    /// and does not depend on wasPressed() or waitForPress(); 0 for NONE.
+    uint8_t getPresses(SteamiButton button);
 
     /// Waits for a new debounced press and returns that button; NONE after `timeoutMs`, and 0
     /// waits forever. Presses made before the call are dropped, the taps latched by an interrupt
@@ -73,13 +89,16 @@ class SteamiButtons {
     void sample();
     static int index(SteamiButton button);
     bool take(uint8_t& latch, SteamiButton button);
-    // Lock-out debounce of button i with its level `down` at time t. Runs from the interrupt of
-    // the pin and from sample(), with the interrupts masked.
-    void debounce(uint8_t i, bool down, uint32_t t);
+    // Lock-out debounce of button i with its level `down` at time t; true when the change is
+    // taken. Runs from the interrupt of the pin and from sample(), with the interrupts masked.
+    bool debounce(uint8_t i, bool down, uint32_t t);
     void edge(uint8_t i);
     void dpadEvent(uint8_t d, uint8_t level);
     static void dpadChange(uint8_t gpx, uint8_t level);
-    void watchDpad(SteamiMCP23009E& expander, uint8_t mask);
+    uint8_t watchDpad(SteamiMCP23009E& expander, uint8_t mask);
+    bool readDpad(uint8_t& level, uint8_t& down, uint8_t& up);
+    void settleDpad(uint32_t since, uint8_t tapped);
+    static void waitSince(uint32_t since, uint32_t ms);
     static void edgeA();
     static void edgeB();
     static void edgeMenu();
@@ -89,13 +108,16 @@ class SteamiButtons {
     // Shared with the interrupts of A, B and MENU: read and written with the interrupts masked.
     uint32_t _changedAt[COUNT] = {};  // time of the last accepted change
     uint8_t _state = 0;               // debounced, bit i set: button i pressed
-    uint8_t _pressed = 0;             // latched edges
+    uint8_t _pressed = 0;             // bit i set: button i pressed since wasPressed()
     uint8_t _released = 0;
+    uint8_t _presses[COUNT] = {};  // presses since getPresses(), up to 255
     bool _primed = false;
     // D-PAD, bit d for kDpadBits[d], set by the expander callbacks: the level of the last event
-    // (set: pressed), a pressed level seen since the last sample, and the time of the last event.
+    // (set: pressed), and a pressed or a released level seen since the last read.
     uint8_t _dpadLevel = 0;
     uint8_t _dpadDown = 0;
-    uint32_t _dpadEventAt[4] = {};
+    uint8_t _dpadUp = 0;
+    // Directions a bus error left unfollowed or unread, set up again by sample().
+    uint8_t _dpadUnregistered = 0;
     bool _pinsReady = false;
 };

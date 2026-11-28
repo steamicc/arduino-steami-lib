@@ -471,34 +471,16 @@ void SteamiLIS2MDL::setCalibrateStep(float xoff, float yoff, float zoff, float x
     zScale = zscale;
 }
 
-void SteamiLIS2MDL::calibrateMinmax2d(uint16_t samples, uint16_t delayMs) {
+bool SteamiLIS2MDL::calibrateMinmax2d(uint16_t samples, uint16_t delayMs) {
     /*MIN/MAX calibration while flat (XY only).
         Slowly rotate the board FLAT during acquisition.
-        Updates x_off, y_off, x_scale, y_scale (leaves Z unchanged).*/
+        Updates x_off, y_off, x_scale, y_scale (leaves Z unchanged).
+        All or nothing: false, with the calibration unchanged, when samples is 0 or a read
+        fails (MicroPython raises OSError out of the loop at the same point).*/
 
-    float xmin = 1e9f, ymin = 1e9f;
-    float xmax = -1e9f, ymax = -1e9f;
-    bool any = false;
-
-    for (uint16_t i = 0; i < samples; i++) {
-        MagneticField f;
-        if (!magneticField(f)) {
-            delay(delayMs);
-            continue;  // a failed read is not a sample
-        }
-        any = true;
-        if (f.x < xmin)
-            xmin = f.x;
-        if (f.x > xmax)
-            xmax = f.x;
-        if (f.y < ymin)
-            ymin = f.y;
-        if (f.y > ymax)
-            ymax = f.y;
-        delay(delayMs);
-    }
-    if (!any) {
-        return;  // no sample: keep the current calibration
+    float xmin, xmax, ymin, ymax, zmin, zmax;
+    if (!sampleMinmax(samples, delayMs, xmin, xmax, ymin, ymax, zmin, zmax)) {
+        return false;
     }
 
     xOff = (xmin + xmax) / 2.0f;
@@ -509,39 +491,18 @@ void SteamiLIS2MDL::calibrateMinmax2d(uint16_t samples, uint16_t delayMs) {
     float avg = (xScale + yScale) / 2.0f;
     xScale = (xScale != 0.0f) ? avg : 1.0f;
     yScale = (yScale != 0.0f) ? avg : 1.0f;
+    return true;
 }
 
-void SteamiLIS2MDL::calibrateMinmax3d(uint16_t samples, uint16_t delayMs) {
+bool SteamiLIS2MDL::calibrateMinmax3d(uint16_t samples, uint16_t delayMs) {
     /*MIN/MAX calibration on 3 axes (rotate the board in ALL directions).
-        Updates offsets + scales for X, Y, Z.*/
+        Updates offsets + scales for X, Y, Z.
+        All or nothing: false, with the calibration unchanged, when samples is 0 or a read
+        fails (MicroPython raises OSError out of the loop at the same point).*/
 
-    float xmin = 1e9f, ymin = 1e9f, zmin = 1e9f;
-    float xmax = -1e9f, ymax = -1e9f, zmax = -1e9f;
-    bool any = false;
-
-    for (uint16_t i = 0; i < samples; i++) {
-        MagneticField f;
-        if (!magneticField(f)) {
-            delay(delayMs);
-            continue;  // a failed read is not a sample
-        }
-        any = true;
-        if (f.x < xmin)
-            xmin = f.x;
-        if (f.x > xmax)
-            xmax = f.x;
-        if (f.y < ymin)
-            ymin = f.y;
-        if (f.y > ymax)
-            ymax = f.y;
-        if (f.z < zmin)
-            zmin = f.z;
-        if (f.z > zmax)
-            zmax = f.z;
-        delay(delayMs);
-    }
-    if (!any) {
-        return;  // no sample: keep the current calibration
+    float xmin, xmax, ymin, ymax, zmin, zmax;
+    if (!sampleMinmax(samples, delayMs, xmin, xmax, ymin, ymax, zmin, zmax)) {
+        return false;
     }
 
     xOff = (xmin + xmax) / 2.0f;
@@ -550,6 +511,32 @@ void SteamiLIS2MDL::calibrateMinmax3d(uint16_t samples, uint16_t delayMs) {
     xScale = (xmax - xmin) / 2.0f != 0.0f ? (xmax - xmin) / 2.0f : 1.0f;
     yScale = (ymax - ymin) / 2.0f != 0.0f ? (ymax - ymin) / 2.0f : 1.0f;
     zScale = (zmax - zmin) / 2.0f != 0.0f ? (zmax - zmin) / 2.0f : 1.0f;
+    return true;
+}
+
+bool SteamiLIS2MDL::sampleMinmax(uint16_t samples, uint16_t delayMs, float& xmin, float& xmax,
+                                 float& ymin, float& ymax, float& zmin, float& zmax) {
+    // Min/max of `samples` raw readings. Stops at the first failed read: a calibration
+    // computed from the samples that happened to succeed could rest on a single one.
+    if (samples == 0) {
+        return false;
+    }
+    xmin = ymin = zmin = 1e9f;
+    xmax = ymax = zmax = -1e9f;
+    for (uint16_t i = 0; i < samples; i++) {
+        MagneticField f;
+        if (!magneticField(f)) {
+            return false;
+        }
+        xmin = f.x < xmin ? f.x : xmin;
+        xmax = f.x > xmax ? f.x : xmax;
+        ymin = f.y < ymin ? f.y : ymin;
+        ymax = f.y > ymax ? f.y : ymax;
+        zmin = f.z < zmin ? f.z : zmin;
+        zmax = f.z > zmax ? f.z : zmax;
+        delay(delayMs);
+    }
+    return true;
 }
 
 CalibratedField SteamiLIS2MDL::calibrateApply(float x, float y, float z) {
@@ -646,8 +633,8 @@ MagCalibration SteamiLIS2MDL::readCalibration() const {
     return {xOff, yOff, zOff, xScale, yScale, zScale};
 }
 
-void SteamiLIS2MDL::calibrateStep() {
-    calibrateMinmax3d();
+bool SteamiLIS2MDL::calibrateStep() {
+    return calibrateMinmax3d();
 }
 
 //--------------------------------------------------------
@@ -725,23 +712,49 @@ float SteamiLIS2MDL::headingFlatOnly() {
     return headingFromVectors(f.x, f.y, f.z, true);
 }
 
-float SteamiLIS2MDL::headingWithTiltCompensation(Vec3f (*readAccel)()) {
-    /*Tilt-compensated compass (if an accelerometer is available).
-        readAccel() must return (ax, ay, az) ~g.*/
-    MagneticField raw = magneticField();
-    float x = (raw.x - xOff) / (xScale != 0.0f ? xScale : 1.0f);
-    float y = (raw.y - yOff) / (yScale != 0.0f ? yScale : 1.0f);
-    float z = (raw.z - zOff) / (zScale != 0.0f ? zScale : 1.0f);
-
-    Vec3f accel = readAccel();
-    float roll = atan2(accel.y, accel.z);
-    float pitch = atan2(-accel.x, sqrt(accel.y * accel.y + accel.z * accel.z));
-
-    float xh = x * cos(pitch) + z * sin(pitch);
-    float yh = x * sin(roll) * sin(pitch) + y * cos(roll) - z * sin(roll) * cos(pitch);
-    float angle = degrees(atan2(yh, xh));
+float SteamiLIS2MDL::headingFromVectorsTilt(float x, float y, float z, float ax, float ay, float az,
+                                            bool calibrated) {
+    /*Tilt-compensated angle (0..360°) from a field triplet and an ISM330DL acceleration in g.
+        Board frame and axes: see LIS2MDL_MAG_Z_SIGN. The field is projected on the horizontal
+        plane: east = b x up, north = up x east, heading = atan2(T . east, T . north).*/
+    const float g = sqrt(ax * ax + ay * ay + az * az);
+    if (!(g > 0.0f)) {
+        return NAN;  // no gravity (failed accelerometer read): no horizontal plane
+    }
+    if (calibrated) {
+        x = (x - xOff) / (xScale != 0.0f ? xScale : 1.0f);
+        y = (y - yOff) / (yScale != 0.0f ? yScale : 1.0f);
+        z = (z - zOff) / (zScale != 0.0f ? zScale : 1.0f);
+    }
+    const float ur = -ay / g;  // up vector in the board frame
+    const float ut = -ax / g;
+    const float uu = -az / g;
+    const float bu = LIS2MDL_MAG_Z_SIGN * z;
+    const float dot = x * ur + y * ut + bu * uu;
+    const float east = bu * ur - x * uu;
+    const float north = y - ut * dot;
+    // Flat (ur = ut = 0, uu = 1): east = -x and north = y, as in headingFromVectors().
+    float angle = degrees(atan2(east, north));
     angle = applyHeadingOffsets(angle);
     return filterHeading(angle);
+}
+
+float SteamiLIS2MDL::headingWithTiltCompensation(const Vec3f& accel) {
+    MagneticField f;
+    if (!magneticField(f)) {
+        return NAN;
+    }
+    return headingFromVectorsTilt(f.x, f.y, f.z, accel.x, accel.y, accel.z, true);
+}
+
+float SteamiLIS2MDL::headingWithTiltCompensation(Vec3f (*readAccel)()) {
+    /*Tilt-compensated compass. readAccel() returns the ISM330DL acceleration (ax, ay, az) in g.*/
+    MagneticField f;
+    if (!magneticField(f)) {
+        return NAN;
+    }
+    const Vec3f accel = readAccel();
+    return headingFromVectorsTilt(f.x, f.y, f.z, accel.x, accel.y, accel.z, true);
 }
 
 const char* SteamiLIS2MDL::directionLabel(float angle) {

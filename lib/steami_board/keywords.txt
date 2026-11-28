@@ -107,6 +107,7 @@ z	KEYWORD2
 strength	KEYWORD2
 isShaken	KEYWORD2
 heading	KEYWORD2
+headingTiltCompensated	KEYWORD2
 direction	KEYWORD2
 setDeclination	KEYWORD2
 red	KEYWORD2
@@ -116,6 +117,7 @@ name	KEYWORD2
 isPressed	KEYWORD2
 wasPressed	KEYWORD2
 wasReleased	KEYWORD2
+getPresses	KEYWORD2
 waitForPress	KEYWORD2
 rgb	KEYWORD2
 gray	KEYWORD2

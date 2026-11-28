@@ -94,12 +94,22 @@ void setup() {
     Serial.print(DAPLINK_BRIDGE_CONFIG_SIZE);
     Serial.println(" bytes");
 
-    // The stored data ends at the first 0xFF byte (erased flash). A failed
-    // read also returns 0 bytes: the driver cannot tell it from an empty zone.
+    // The stored data ends at the first 0xFF byte (erased flash).
+    // readConfig() reads the zone in blocks of 255 bytes and, when a block
+    // fails (DAPLink busy, I2C error), returns the bytes read before it. A
+    // failure on the first block returns 0 bytes, like an empty zone; a
+    // failure on a later block returns 255, 510, 765 or 1020 bytes, like
+    // data that ends there. The driver cannot tell these cases apart.
     const size_t length = bridge.readConfig(zone, sizeof(zone));
     Serial.print("Stored:      ");
     Serial.print(length);
-    Serial.println(length == 0 ? " bytes (empty zone, or the read failed)" : " bytes");
+    if (length == 0) {
+        Serial.println(" bytes (empty zone, or the first read failed)");
+    } else if (length % DAPLINK_BRIDGE_MAX_READ_LEN == 0) {
+        Serial.println(" bytes (or the read stopped at the end of a block)");
+    } else {
+        Serial.println(" bytes");
+    }
     if (length > 0) {
         printZone(zone, length);
     }

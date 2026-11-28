@@ -6,7 +6,9 @@
 #include <string.h>
 #include <unity.h>
 
+#include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "FakeDaplinkBridge.h"
@@ -39,6 +41,7 @@ static SteamiBoard board(Wire, SteamiBoardPins::steami());
 
 void setUp(void) {
     Wire = TwoWire();
+    clockHook() = nullptr;
     attachedInterrupts().clear();
     g_lines.clear();
     board.end();
@@ -795,6 +798,74 @@ static void test_magnetometer_and_compass_nan_on_bus_error(void) {
     TEST_ASSERT_EQUAL_STRING("", compass.direction());
 }
 
+// Right edge raised by 20 degrees, top of the screen to magnetic north, field dipping 60 degrees
+// (1000 LSB). ISM330DL at +-8 g: (0, -sin 20, -cos 20) g. LIS2MDL: x = R, y = T,
+// z = LIS2MDL_MAG_Z_SIGN * U.
+static void setRollNorth(void) {
+    imu.setAccelRaw(0, static_cast<int16_t>(lroundf(-0.34202f * kOneG)),
+                    static_cast<int16_t>(lroundf(-0.93969f * kOneG)));
+    steamiFakeLis2mdl(Wire, -296, 500, static_cast<int16_t>(lroundf(LIS2MDL_MAG_Z_SIGN * -814.0f)));
+}
+
+static void test_compass_tilt_heading_removes_roll_error(void) {
+    steamiFakeBme280(Wire);
+    attachImu();
+    setRollNorth();
+    SteamiCompass compass(board);
+    TEST_ASSERT_TRUE(compass.begin());
+    const float tilt = compass.headingTiltCompensated();
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, tilt > 180.0f ? tilt - 360.0f : tilt);
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 30.6f, compass.heading());  // flat heading, about 30.6
+}
+
+static void test_compass_tilt_heading_equals_heading_when_flat(void) {
+    steamiFakeBme280(Wire);
+    attachImu();
+    imu.setAccelRaw(0, 0, static_cast<int16_t>(-kOneG));
+    steamiFakeLis2mdl(Wire, 300, -150, 450);
+    SteamiCompass compass(board);
+    compass.setDeclination(10.0f);
+    const float flat = compass.heading();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 253.43f, flat);
+    TEST_ASSERT_TRUE(flat == compass.headingTiltCompensated());
+}
+
+static void test_compass_tilt_heading_nan_without_accelerometer(void) {
+    steamiFakeBme280(Wire);
+    Wire.setAbsent(0x6B);
+    steamiFakeLis2mdl(Wire, 0, 300, 0);
+    SteamiCompass compass(board);
+    TEST_ASSERT_TRUE(compass.begin());
+    TEST_ASSERT_TRUE(isnan(compass.headingTiltCompensated()));
+    TEST_ASSERT_TRUE(isnan(compass.headingTiltCompensated()));
+    TEST_ASSERT_EQUAL_UINT32(1, countContaining("SteamiAccelerometer"));
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 0.0f, compass.heading());  // the flat heading still works
+}
+
+static void test_compass_tilt_heading_nan_when_compass_absent(void) {
+    steamiFakeBme280(Wire);
+    attachImu();
+    imu.setAccelRaw(0, 0, static_cast<int16_t>(-kOneG));
+    Wire.setAbsent(0x1E);
+    SteamiCompass compass(board);
+    TEST_ASSERT_TRUE(isnan(compass.headingTiltCompensated()));
+}
+
+static void test_compass_tilt_heading_nan_on_bus_error(void) {
+    steamiFakeBme280(Wire);
+    attachImu();
+    setRollNorth();
+    SteamiCompass compass(board);
+    TEST_ASSERT_FALSE(isnan(compass.headingTiltCompensated()));
+    // The accelerometer stops answering: no heading from a zero gravity vector.
+    Wire.setAbsent(0x6B);
+    TEST_ASSERT_TRUE(isnan(compass.headingTiltCompensated()));
+    TEST_ASSERT_FALSE(isnan(compass.heading()));
+    // Then the compass too.
+    Wire.setAbsent(0x1E);
+    TEST_ASSERT_TRUE(isnan(compass.headingTiltCompensated()));
+}
+
 static const char* const kCmConfig =
     "{\"rev\":131,\"cm\":{\"hx\":100,\"hy\":0,\"hz\":0,\"sx\":1,\"sy\":1,\"sz\":1}}";
 
@@ -1389,8 +1460,9 @@ static void test_mcu_bounce_after_a_release_is_not_a_press(void) {
     TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::B));
 }
 
-// At most one press per button between two calls: wasPressed() is a flag, not a counter.
-static void test_two_mcu_taps_between_two_calls_give_one_press(void) {
+// wasPressed() and wasReleased() stay flags: two taps between two calls give one press and one
+// release. getPresses() counts them (issue #341).
+static void test_two_mcu_taps_between_two_calls_give_one_press_and_count_two(void) {
     steamiFakeBme280(Wire);
     attachExpander();
     releaseMcuButtons();
@@ -1408,6 +1480,34 @@ static void test_two_mcu_taps_between_two_calls_give_one_press(void) {
     TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::MENU));
     TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::MENU));
     TEST_ASSERT_FALSE(buttons.wasReleased(SteamiButton::MENU));
+    TEST_ASSERT_EQUAL_UINT8(2, buttons.getPresses(SteamiButton::MENU));
+    TEST_ASSERT_EQUAL_UINT8(0, buttons.getPresses(SteamiButton::MENU));
+    TEST_ASSERT_EQUAL_UINT8(0, buttons.getPresses(SteamiButton::NONE));
+}
+
+// Presses a sketch does not read are not replayed later by wasPressed(): a sketch whose mode 1
+// ignores B and whose mode 2 runs an action on wasPressed(B) runs it once, not 30 times.
+// getPresses() still has them all, and counts on its own, whatever wasPressed() took.
+static void test_unread_presses_are_not_replayed_by_was_pressed(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    delay(50);
+    for (int k = 0; k < 30; k++) {
+        setButtonPin(B_BUTTON, LOW);
+        delay(80);
+        setButtonPin(B_BUTTON, HIGH);
+        delay(120);
+        TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::A));
+    }
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::B));
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::B));
+    TEST_ASSERT_EQUAL_UINT8(30, buttons.getPresses(SteamiButton::B));
+    TEST_ASSERT_EQUAL_UINT8(0, buttons.getPresses(SteamiButton::B));
+    TEST_ASSERT_EQUAL_UINT8(0, buttons.getPresses(SteamiButton::A));
 }
 
 // Held at one call, then released and tapped again before the next one: the release and the new
@@ -1453,8 +1553,8 @@ static void test_mcu_tap_shorter_than_the_lock_out(void) {
     TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::A));
 }
 
-// The expander latch keeps the tap: the next call finds the press, the release comes one call
-// later and isPressed() stays true until then.
+// The expander latch keeps the tap: the next call finds the press, reads the expander again
+// 20 ms later and finds the release, as for A.
 static void test_dpad_tap_between_two_calls_is_caught(void) {
     steamiFakeBme280(Wire);
     attachExpander();
@@ -1473,17 +1573,18 @@ static void test_dpad_tap_between_two_calls_is_caught(void) {
         expanderChip.release(bits[k]);
         delay(50);
         TEST_ASSERT_TRUE(buttons.wasPressed(names[k]));
-        TEST_ASSERT_TRUE(buttons.isPressed(names[k]));
-        TEST_ASSERT_FALSE(buttons.wasReleased(names[k]));
-        delay(300);
         TEST_ASSERT_FALSE(buttons.isPressed(names[k]));
         TEST_ASSERT_TRUE(buttons.wasReleased(names[k]));
+        delay(300);
+        TEST_ASSERT_FALSE(buttons.isPressed(names[k]));
+        TEST_ASSERT_FALSE(buttons.wasReleased(names[k]));
         TEST_ASSERT_FALSE(buttons.wasPressed(names[k]));
     }
 }
 
-// A call reads the D-PAD in the middle of a release bounce and the next one finds the tail of the
-// bounce: without a quiet read, that would be a release then a false press.
+// A call reads the D-PAD in the middle of a release bounce, and the tail of the bounce comes
+// just after that read: the expander latches it, the read made 20 ms later finds it and takes it
+// for a bounce, not for a release then a press.
 static void test_dpad_read_during_a_release_bounce_gives_no_false_press(void) {
     steamiFakeBme280(Wire);
     attachExpander();
@@ -1499,10 +1600,18 @@ static void test_dpad_read_during_a_release_bounce_gives_no_false_press(void) {
     presses += buttons.wasPressed(SteamiButton::DOWN) ? 1 : 0;
     delay(100);
     expanderChip.release(MCP23009_BTN_DOWN);
+    bool tail = false;
+    expanderChip.onReadHook = [&tail](uint8_t reg) {
+        if (reg == MCP23009_GPIO && !tail) {
+            tail = true;  // tail of the bounce, just after the read that found the release
+            expanderChip.press(MCP23009_BTN_DOWN);
+            expanderChip.release(MCP23009_BTN_DOWN);
+        }
+    };
     presses += buttons.wasPressed(SteamiButton::DOWN) ? 1 : 0;  // read in the bounce
+    expanderChip.onReadHook = nullptr;
+    TEST_ASSERT_TRUE(tail);
     releases += buttons.wasReleased(SteamiButton::DOWN) ? 1 : 0;
-    expanderChip.press(MCP23009_BTN_DOWN);  // tail of the bounce
-    expanderChip.release(MCP23009_BTN_DOWN);
     delay(30);
     for (int t = 0; t < 4; t++) {
         presses += buttons.wasPressed(SteamiButton::DOWN) ? 1 : 0;
@@ -1539,6 +1648,70 @@ static void test_dpad_bus_error_gives_no_false_press(void) {
     expanderChip.press(MCP23009_BTN_LEFT);
     delay(30);
     TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::LEFT));
+}
+
+// A bus error while begin() registers the D-PAD leaves the directions unregistered in the driver:
+// the next calls register them again once the bus answers, and read their level then.
+static void test_dpad_registration_bus_error_is_retried(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    expanderChip.failReadRegs = 1u << MCP23009_INTCON;  // every registration fails
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::UP));
+    delay(50);
+    expanderChip.press(MCP23009_BTN_UP);  // held while the bus fails
+    delay(30);
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::UP));
+    expanderChip.failReadRegs = 0;
+    delay(30);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::UP));  // level read at the registration
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::UP));
+    expanderChip.release(MCP23009_BTN_UP);
+    buttons.isPressed(SteamiButton::UP);
+    delay(30);
+    TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::UP));
+    expanderChip.press(MCP23009_BTN_LEFT);  // a tap between two calls, through the latch
+    delay(50);
+    expanderChip.release(MCP23009_BTN_LEFT);
+    delay(50);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::LEFT));
+}
+
+// The GPINTEN read of the third registration (LEFT) fails once: the other directions stay
+// registered and LEFT is registered again at the next call.
+static void test_dpad_one_failed_registration_is_retried(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    int intconWrites = 0;  // one per registration, before its GPINTEN read
+    expanderChip.onWriteHook = [&intconWrites](uint8_t reg, uint8_t) {
+        if (reg == MCP23009_INTCON) {
+            intconWrites++;
+            expanderChip.failReadRegs = intconWrites == 3 ? 1u << MCP23009_GPINTEN : 0;
+        }
+    };
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_EQUAL_INT(4, intconWrites);
+    expanderChip.failReadRegs = 0;
+    expanderChip.onWriteHook = nullptr;
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::LEFT));
+    delay(50);
+    const uint8_t bits[] = {MCP23009_BTN_UP, MCP23009_BTN_DOWN, MCP23009_BTN_LEFT,
+                            MCP23009_BTN_RIGHT};
+    const SteamiButton names[] = {SteamiButton::UP, SteamiButton::DOWN, SteamiButton::LEFT,
+                                  SteamiButton::RIGHT};
+    for (int k = 0; k < 4; k++) {
+        expanderChip.press(bits[k]);
+        delay(30);
+        TEST_ASSERT_TRUE(buttons.wasPressed(names[k]));
+        expanderChip.release(bits[k]);
+        buttons.isPressed(names[k]);
+        delay(30);
+        TEST_ASSERT_TRUE(buttons.wasReleased(names[k]));
+    }
 }
 
 static void test_dpad_held_at_start_is_not_a_press(void) {
@@ -1760,6 +1933,531 @@ static void test_interrupts_after_the_buttons_are_gone_do_nothing(void) {
     TEST_ASSERT_TRUE(again.wasPressed(SteamiButton::A));
 }
 
+// --- Buttons on the board's timeline (issue #341) ---
+//
+// The finger moves at given times, run as the clock reaches them: while the sketch waits
+// (delay()) and while it reads the expander (FakeMCP23009::readUs: about 400 us per register read
+// at 100 kHz, so 1.2 ms per call and 17 ms for the 14 calls of a turn). The loop is the one of the
+// integration test: getPresses() and wasReleased() for the seven buttons, then the wait (300 ms;
+// about 520 ms in the second hardware run, which redrew the screen at each turn). getPresses()
+// counts every press; wasReleased() is a flag, so the releases count only when at most one tap
+// falls in a turn of the loop.
+
+struct Timeline {
+    std::vector<std::pair<uint32_t, std::function<void()>>> actions;  // sorted by time
+    size_t next = 0;
+
+    void at(uint32_t t, std::function<void()> fn) {
+        auto it = actions.begin() + static_cast<long>(next);
+        while (it != actions.end() && it->first <= t) {
+            ++it;
+        }
+        actions.insert(it, {t, std::move(fn)});
+    }
+    void runDue() {
+        while (next < actions.size() && actions[next].first <= millis()) {
+            std::function<void()> fn = actions[next].second;
+            next++;
+            fn();
+        }
+    }
+    // A tap of `ms` on A, B or MENU, from `t`: each edge runs the interrupt.
+    void mcuTap(uint32_t t, int pin, uint32_t ms) {
+        at(t, [pin]() { setButtonPin(pin, LOW); });
+        at(t + ms, [pin]() { setButtonPin(pin, HIGH); });
+    }
+    // A tap of `ms` on a D-PAD button, from `t`.
+    void dpadTap(uint32_t t, uint8_t bit, uint32_t ms) {
+        at(t, [bit]() { expanderChip.press(bit); });
+        at(t + ms, [bit]() { expanderChip.release(bit); });
+    }
+    // The same, with a 2 ms bounce at the press and at the release.
+    void bouncyDpadTap(uint32_t t, uint8_t bit, uint32_t ms) {
+        dpadTap(t, bit, 1);
+        dpadTap(t + 2, bit, ms - 2);
+        at(t + ms + 1, [bit]() { expanderChip.press(bit); });
+        at(t + ms + 2, [bit]() { expanderChip.release(bit); });
+    }
+};
+
+struct TapCounts {
+    uint32_t presses[7] = {};
+    uint32_t releases[7] = {};
+};
+
+static const SteamiButton kAllButtons[7] = {
+    SteamiButton::A,    SteamiButton::B,    SteamiButton::MENU, SteamiButton::UP,
+    SteamiButton::DOWN, SteamiButton::LEFT, SteamiButton::RIGHT};
+
+// The loop of the integration test, until `until`, with the timeline running.
+static void slowLoop(SteamiButtons& buttons, Timeline& timeline, uint32_t until, uint32_t periodMs,
+                     TapCounts& counts) {
+    clockHook() = [&timeline]() { timeline.runDue(); };
+    while (static_cast<int32_t>(millis() - until) < 0) {
+        timeline.runDue();
+        for (int k = 0; k < 7; k++) {
+            counts.presses[k] += buttons.getPresses(kAllButtons[k]);
+            counts.releases[k] += buttons.wasReleased(kAllButtons[k]) ? 1 : 0;
+        }
+        delay(periodMs);
+    }
+    clockHook() = nullptr;
+}
+
+// A board started again for each object: attachExpander() resets the chip, as a power-on would,
+// while the driver of the earlier object still takes the D-PAD pins as enabled, and watchChanges()
+// enables only the pins not enabled yet.
+static void attachFreshExpander(void) {
+    board.end();
+    attachExpander();
+}
+
+static uint32_t startTimeline(SteamiButtons& buttons) {
+    attachFreshExpander();
+    releaseMcuButtons();
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    expanderChip.readUs = 400;
+    delay(50);
+    return millis();
+}
+
+// `releases`: the taps are slower than the loop, so the release flags count them too.
+static void assertOnlyOn(const TapCounts& counts, int target, uint32_t taps, bool releases = true) {
+    char text[64];
+    for (int k = 0; k < 7; k++) {
+        const uint32_t expected = k == target ? taps : 0;
+        snprintf(text, sizeof(text), "presses of button %d", k);
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, counts.presses[k], text);
+        if (releases || k != target) {
+            snprintf(text, sizeof(text), "releases of button %d", k);
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, counts.releases[k], text);
+        }
+    }
+}
+
+// Hardware run 2: about 30 quick taps on A for the counter to reach 10. Four taps a second with a
+// loop of 300 ms: some turns of the loop see two taps, and every tap must still be reported.
+static void test_quick_taps_on_a_faster_than_the_loop_are_all_reported(void) {
+    steamiFakeBme280(Wire);
+    SteamiButtons buttons(board);
+    const uint32_t t0 = startTimeline(buttons);
+    Timeline timeline;
+    for (uint32_t k = 0; k < 10; k++) {
+        timeline.mcuTap(t0 + 100 + k * 250, A_BUTTON, 80);
+    }
+    TapCounts counts;
+    slowLoop(buttons, timeline, t0 + 100 + 10 * 250 + 3000, 300, counts);
+    assertOnlyOn(counts, 0, 10, false);
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+}
+
+// The same with the loop of hardware run 2 (about 520 ms) and three taps a second, on B and MENU.
+static void test_quick_taps_on_b_and_menu_with_a_520_ms_loop_are_all_reported(void) {
+    steamiFakeBme280(Wire);
+    const int pins[2] = {B_BUTTON, MENU_BUTTON};
+    for (int n = 0; n < 2; n++) {
+        SteamiButtons buttons(board);
+        const uint32_t t0 = startTimeline(buttons);
+        Timeline timeline;
+        for (uint32_t k = 0; k < 10; k++) {
+            timeline.mcuTap(t0 + 100 + k * 337, pins[n], 60 + 10 * (k % 5));
+        }
+        TapCounts counts;
+        slowLoop(buttons, timeline, t0 + 100 + 10 * 337 + 3000, 520, counts);
+        assertOnlyOn(counts, 1 + n, 10, false);
+    }
+}
+
+// Hardware run 1: UP 2 presses, DOWN, LEFT and RIGHT 1 press each, for 10 quick taps each with
+// the 300 ms loop. A tap made before the next call is reported, whatever came before it.
+static void test_quick_taps_on_the_dpad_are_all_reported(void) {
+    steamiFakeBme280(Wire);
+    const uint8_t bits[4] = {MCP23009_BTN_UP, MCP23009_BTN_DOWN, MCP23009_BTN_LEFT,
+                             MCP23009_BTN_RIGHT};
+    for (int d = 0; d < 4; d++) {
+        SteamiButtons buttons(board);
+        const uint32_t t0 = startTimeline(buttons);
+        Timeline timeline;
+        for (uint32_t k = 0; k < 10; k++) {
+            timeline.dpadTap(t0 + 100 + k * 450 + 40 * (k % 3), bits[d], 80);
+        }
+        TapCounts counts;
+        slowLoop(buttons, timeline, t0 + 100 + 10 * 450 + 1500, 300, counts);
+        assertOnlyOn(counts, 3 + d, 10);
+        TEST_ASSERT_FALSE(buttons.isPressed(kAllButtons[3 + d]));
+    }
+}
+
+// Hardware run 2: 4 UP for 10 taps, about once a second, with the 520 ms loop.
+static void test_dpad_taps_once_a_second_with_a_520_ms_loop_are_all_reported(void) {
+    steamiFakeBme280(Wire);
+    SteamiButtons buttons(board);
+    const uint32_t t0 = startTimeline(buttons);
+    Timeline timeline;
+    uint32_t at = t0 + 300;
+    for (uint32_t k = 0; k < 10; k++) {
+        timeline.dpadTap(at, MCP23009_BTN_UP, 80);
+        at += 620 + 140 * (k % 3);  // more than one turn of the loop between two taps
+    }
+    TapCounts counts;
+    slowLoop(buttons, timeline, at + 1500, 520, counts);
+    assertOnlyOn(counts, 3, 10);
+}
+
+// Contact bounces at the press and at the release, read or not by a call: one press each.
+static void test_bouncy_dpad_taps_give_one_press_each(void) {
+    steamiFakeBme280(Wire);
+    SteamiButtons buttons(board);
+    const uint32_t t0 = startTimeline(buttons);
+    Timeline timeline;
+    for (uint32_t k = 0; k < 20; k++) {
+        timeline.bouncyDpadTap(t0 + 100 + k * 377, MCP23009_BTN_LEFT, 70 + 7 * (k % 4));
+    }
+    TapCounts counts;
+    slowLoop(buttons, timeline, t0 + 100 + 20 * 377 + 1500, 300, counts);
+    assertOnlyOn(counts, 5, 20);
+}
+
+// The release of a D-PAD button is reported by the call that reads it, as for A: isPressed()
+// does not stay true one more turn of the loop (the long presses on UP looked longer than on A).
+static void test_dpad_release_is_reported_by_the_call_that_reads_it(void) {
+    steamiFakeBme280(Wire);
+    SteamiButtons buttons(board);
+    startTimeline(buttons);
+    expanderChip.press(MCP23009_BTN_UP);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::UP));
+    delay(1000);
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::UP));
+    expanderChip.release(MCP23009_BTN_UP);
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::UP));
+    TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::UP));
+}
+
+// Hardware run 2: 3 DOWN during taps on UP. The D-PAD is one lever: released from UP, it can
+// touch DOWN for a moment on its way back. A call that reads the release of UP just before that
+// contact clears the interrupt of UP, and the expander latches the contact.
+static void test_dpad_lever_rebound_after_a_release_is_not_a_press(void) {
+    steamiFakeBme280(Wire);
+    SteamiButtons buttons(board);
+    startTimeline(buttons);
+    expanderChip.press(MCP23009_BTN_UP);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::UP));
+    delay(200);
+    Timeline timeline;
+    expanderChip.release(MCP23009_BTN_UP);
+    // The call reads the release, then the lever touches DOWN 3 ms later, for 2 ms.
+    timeline.dpadTap(millis() + 3, MCP23009_BTN_DOWN, 2);
+    TapCounts counts;
+    slowLoop(buttons, timeline, millis() + 1500, 300, counts);
+    TEST_ASSERT_EQUAL_UINT32(0, counts.presses[4]);
+    TEST_ASSERT_EQUAL_UINT32(1, counts.releases[3]);
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::DOWN));
+}
+
+// The same contact, still there when the call reads the release of UP.
+static void test_dpad_lever_rebound_read_with_the_release_is_not_a_press(void) {
+    steamiFakeBme280(Wire);
+    SteamiButtons buttons(board);
+    startTimeline(buttons);
+    expanderChip.press(MCP23009_BTN_UP);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::UP));
+    delay(200);
+    Timeline timeline;
+    expanderChip.release(MCP23009_BTN_UP);
+    expanderChip.press(MCP23009_BTN_DOWN);
+    timeline.at(millis() + 3, []() { expanderChip.release(MCP23009_BTN_DOWN); });
+    TapCounts counts;
+    slowLoop(buttons, timeline, millis() + 1500, 300, counts);
+    TEST_ASSERT_EQUAL_UINT32(0, counts.presses[4]);
+    TEST_ASSERT_EQUAL_UINT32(1, counts.releases[3]);
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::DOWN));
+}
+
+// A real press on another direction right after a release is reported.
+static void test_dpad_other_direction_held_after_a_release_is_a_press(void) {
+    steamiFakeBme280(Wire);
+    SteamiButtons buttons(board);
+    startTimeline(buttons);
+    expanderChip.press(MCP23009_BTN_UP);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::UP));
+    delay(200);
+    Timeline timeline;
+    expanderChip.release(MCP23009_BTN_UP);
+    expanderChip.press(MCP23009_BTN_DOWN);
+    timeline.at(millis() + 200, []() { expanderChip.release(MCP23009_BTN_DOWN); });
+    TapCounts counts;
+    slowLoop(buttons, timeline, millis() + 1500, 300, counts);
+    TEST_ASSERT_EQUAL_UINT32(1, counts.releases[3]);
+    TEST_ASSERT_EQUAL_UINT32(1, counts.presses[4]);
+    TEST_ASSERT_EQUAL_UINT32(1, counts.releases[4]);
+}
+
+// Long presses with the 300 ms loop: isPressed() is true at every call between the press and the
+// release, on A and on UP (the hardware run reported 1 to 4 out of 10 on A: the test, not the
+// buttons, see the integration test).
+static void test_long_presses_stay_pressed_at_every_call(void) {
+    steamiFakeBme280(Wire);
+    SteamiButtons buttons(board);
+    const uint32_t t0 = startTimeline(buttons);
+    Timeline timeline;
+    for (uint32_t k = 0; k < 4; k++) {
+        timeline.mcuTap(t0 + 100 + k * 2000, A_BUTTON, 1250);
+        timeline.dpadTap(t0 + 1100 + k * 2000, MCP23009_BTN_UP, 1250);
+    }
+    clockHook() = [&timeline]() { timeline.runDue(); };
+    const SteamiButton names[2] = {SteamiButton::A, SteamiButton::UP};
+    uint32_t presses[2] = {};
+    uint32_t releases[2] = {};
+    bool held[2] = {};
+    uint32_t drops = 0;
+    while (millis() - t0 < 4 * 2000 + 1500) {
+        for (int n = 0; n < 2; n++) {
+            if (buttons.wasPressed(names[n])) {
+                presses[n]++;
+                held[n] = true;
+            }
+            const bool down = buttons.isPressed(names[n]);
+            if (buttons.wasReleased(names[n])) {
+                releases[n]++;
+                held[n] = false;
+            } else if (held[n] && !down) {
+                drops++;
+            }
+        }
+        delay(300);
+    }
+    clockHook() = nullptr;
+    TEST_ASSERT_EQUAL_UINT32(0, drops);
+    TEST_ASSERT_EQUAL_UINT32(4, presses[0]);
+    TEST_ASSERT_EQUAL_UINT32(4, releases[0]);
+    TEST_ASSERT_EQUAL_UINT32(4, presses[1]);
+    TEST_ASSERT_EQUAL_UINT32(4, releases[1]);
+}
+
+// Review of #346: a call finds a whole UP tap in the latch (pressed, then released before the
+// read), and the second tap is pressed `offMs` after the start of the call, while the call waits
+// to confirm the first one. Gives the presses and releases of UP over the next turns.
+static void secondTapAfterARead(uint32_t offMs, uint32_t& presses, uint32_t& releases) {
+    setUp();
+    steamiFakeBme280(Wire);
+    SteamiButtons buttons(board);
+    const uint32_t t0 = startTimeline(buttons);
+    Timeline timeline;
+    timeline.dpadTap(t0 + 100, MCP23009_BTN_UP, 80);
+    clockHook() = [&timeline]() { timeline.runDue(); };
+    delay(300);  // the first tap is over, no call yet
+    timeline.dpadTap(millis() + offMs, MCP23009_BTN_UP, 80);
+    TapCounts counts;
+    slowLoop(buttons, timeline, millis() + 1500, 300, counts);
+    presses = counts.presses[3];
+    releases = counts.releases[3];
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::UP));
+}
+
+// The confirmation read 20 ms after a whole tap finds UP pressed again: that is the release of the
+// first tap and the press of a second one, not a bounce. Only a press made before the read
+// (offset 0: the chip latches the first change only) or within the 5 ms that follow it (taken for
+// a bounce of the first press) merges.
+static void test_second_dpad_tap_just_after_a_read_is_not_merged(void) {
+    std::string scan;
+    bool merged = false;
+    for (uint32_t off = 0; off <= 40; off++) {
+        uint32_t presses = 0;
+        uint32_t releases = 0;
+        secondTapAfterARead(off, presses, releases);
+        scan += std::to_string(off) + ":" + std::to_string(presses) + "/" +
+                std::to_string(releases) + " ";
+        TEST_ASSERT_EQUAL_UINT32(presses, releases);
+        TEST_ASSERT_TRUE(presses == 1 || presses == 2);
+        if (off >= 8 && presses != 2) {
+            merged = true;
+        }
+    }
+    TEST_MESSAGE(scan.c_str());
+    TEST_ASSERT_FALSE_MESSAGE(merged, "a second tap pressed 8 ms or more after the read merged");
+}
+
+// A call reads the D-PAD in the middle of a press bounce: the latch has the press, the port reads
+// open, and the contact closes again just after the read. One press, still held: not a tap and a
+// second press.
+static void test_dpad_read_during_a_press_bounce_gives_one_press(void) {
+    steamiFakeBme280(Wire);
+    SteamiButtons buttons(board);
+    startTimeline(buttons);
+    expanderChip.press(MCP23009_BTN_RIGHT);
+    expanderChip.release(MCP23009_BTN_RIGHT);
+    bool closed = false;
+    expanderChip.onReadHook = [&closed](uint8_t reg) {
+        if (reg == MCP23009_GPIO && !closed) {
+            closed = true;
+            expanderChip.press(MCP23009_BTN_RIGHT);
+        }
+    };
+    TEST_ASSERT_EQUAL_UINT8(1, buttons.getPresses(SteamiButton::RIGHT));
+    expanderChip.onReadHook = nullptr;
+    TEST_ASSERT_TRUE(closed);
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::RIGHT));
+    TEST_ASSERT_FALSE(buttons.wasReleased(SteamiButton::RIGHT));
+    delay(200);
+    expanderChip.release(MCP23009_BTN_RIGHT);
+    delay(50);
+    TEST_ASSERT_EQUAL_UINT8(0, buttons.getPresses(SteamiButton::RIGHT));
+    TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::RIGHT));
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::RIGHT));
+}
+
+// --- Buttons: a bus error at the D-PAD registration (#332), then the taps of #341 ---
+
+// startTimeline() with every D-PAD registration of begin() failing (INTCON read), so that the
+// calls register the D-PAD again once the bus answers.
+static uint32_t startTimelineWithFailedRegistration(SteamiButtons& buttons) {
+    attachFreshExpander();
+    releaseMcuButtons();
+    expanderChip.failReadRegs = 1u << MCP23009_INTCON;
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    expanderChip.readUs = 400;
+    delay(50);
+    return millis();
+}
+
+// The bus answers again while the loop of the integration test runs: the call that registers the
+// D-PAD again starts the latch, and every quick tap made after it is counted, as without the
+// error.
+static void test_dpad_quick_taps_after_a_registration_bus_error_are_all_counted(void) {
+    steamiFakeBme280(Wire);
+    const uint8_t bits[4] = {MCP23009_BTN_UP, MCP23009_BTN_DOWN, MCP23009_BTN_LEFT,
+                             MCP23009_BTN_RIGHT};
+    for (int d = 0; d < 4; d++) {
+        SteamiButtons buttons(board);
+        const uint32_t t0 = startTimelineWithFailedRegistration(buttons);
+        Timeline timeline;
+        timeline.at(t0 + 150, []() { expanderChip.failReadRegs = 0; });
+        for (uint32_t k = 0; k < 10; k++) {
+            timeline.dpadTap(t0 + 700 + k * 450 + 40 * (k % 3), bits[d], 80);
+        }
+        TapCounts counts;
+        slowLoop(buttons, timeline, t0 + 700 + 10 * 450 + 1500, 300, counts);
+        assertOnlyOn(counts, 3 + d, 10);
+        TEST_ASSERT_FALSE(buttons.isPressed(kAllButtons[3 + d]));
+    }
+}
+
+// LEFT is held while the bus fails: the registration made when it answers again reads it, which
+// gives one press; its release and the quick taps after it are all counted, and the taps on A made
+// while the D-PAD was unregistered too.
+static void test_dpad_held_through_a_registration_bus_error_then_quick_taps(void) {
+    steamiFakeBme280(Wire);
+    SteamiButtons buttons(board);
+    const uint32_t t0 = startTimelineWithFailedRegistration(buttons);
+    Timeline timeline;
+    timeline.at(t0 + 50, []() { expanderChip.press(MCP23009_BTN_LEFT); });
+    timeline.mcuTap(t0 + 100, A_BUTTON, 60);
+    timeline.mcuTap(t0 + 250, A_BUTTON, 60);
+    timeline.at(t0 + 500, []() { expanderChip.failReadRegs = 0; });
+    timeline.at(t0 + 1100, []() { expanderChip.release(MCP23009_BTN_LEFT); });
+    for (uint32_t k = 0; k < 10; k++) {
+        timeline.dpadTap(t0 + 1500 + k * 450 + 40 * (k % 3), MCP23009_BTN_LEFT, 80);
+    }
+    TapCounts counts;
+    slowLoop(buttons, timeline, t0 + 1500 + 10 * 450 + 1500, 300, counts);
+    for (int k = 0; k < 7; k++) {
+        char text[64];
+        const uint32_t expected = k == 5 ? 11 : (k == 0 ? 2 : 0);
+        snprintf(text, sizeof(text), "presses of button %d", k);
+        TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, counts.presses[k], text);
+        if (k != 0) {  // the two taps on A fall in one turn of the loop: one release flag
+            snprintf(text, sizeof(text), "releases of button %d", k);
+            TEST_ASSERT_EQUAL_UINT32_MESSAGE(expected, counts.releases[k], text);
+        }
+    }
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::LEFT));
+}
+
+// #341 meets #348: the quick taps of the slow loop are all counted while the sketch has its own
+// callback on UP, and after it resets the expander halfway and registers that callback again.
+static void test_dpad_quick_taps_all_counted_beside_a_sketch_callback_and_a_reset(void) {
+    steamiFakeBme280(Wire);
+    SteamiButtons buttons(board);
+    const uint32_t t0 = startTimeline(buttons);
+    SteamiMCP23009E* expander = board.mcp23009e();
+    TEST_ASSERT_NOT_NULL(expander);
+    std::vector<int> levels;
+    auto record = [&levels](uint8_t level) { levels.push_back(level); };
+    TEST_ASSERT_TRUE(expander->interruptOnChange(MCP23009_BTN_UP, record));
+    Timeline timeline;
+    for (uint32_t k = 0; k < 10; k++) {
+        timeline.dpadTap(t0 + 100 + k * 450 + 40 * (k % 3), MCP23009_BTN_UP, 80);
+    }
+    TapCounts first;
+    slowLoop(buttons, timeline, t0 + 2000, 300, first);      // ends between the 5th and the 6th tap
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::UP));  // the 5th one read
+    expander->reset();
+    TEST_ASSERT_TRUE(expander->interruptOnChange(MCP23009_BTN_UP, record));
+    TapCounts second;
+    slowLoop(buttons, timeline, t0 + 100 + 10 * 450 + 1500, 300, second);
+    TapCounts counts;
+    for (int k = 0; k < 7; k++) {
+        counts.presses[k] = first.presses[k] + second.presses[k];
+        counts.releases[k] = first.releases[k] + second.releases[k];
+    }
+    assertOnlyOn(counts, 3, 10);
+    TEST_ASSERT_EQUAL_INT(20, static_cast<int>(levels.size()));  // the press, then the release
+    for (size_t k = 0; k < levels.size(); k++) {
+        TEST_ASSERT_EQUAL_INT(k % 2 == 0 ? MCP23009_LOGIC_LOW : MCP23009_LOGIC_HIGH, levels[k]);
+    }
+    TEST_ASSERT_EQUAL_HEX8(0xF0, expander->watched());
+}
+
+// #332 meets #348: the four D-PAD pins are enabled, but the GPIO read that gives their level fails
+// in begin(). The next call reads it again: UP, held from the start, reads pressed (held at start:
+// not a press), and the quick taps on LEFT that follow are all counted, beside a sketch callback
+// on LEFT.
+static void test_dpad_level_read_error_in_begin_is_retried_then_quick_taps(void) {
+    steamiFakeBme280(Wire);
+    attachFreshExpander();
+    releaseMcuButtons();
+    expanderChip.press(MCP23009_BTN_UP);
+    int gpintenWrites = 0;  // one per enabled pin; the level read comes after the fourth
+    expanderChip.onWriteHook = [&gpintenWrites](uint8_t reg, uint8_t) {
+        if (reg == MCP23009_GPINTEN && ++gpintenWrites == 4) {
+            expanderChip.failReadRegs = 1u << MCP23009_GPIO;
+        }
+    };
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_EQUAL_INT(4, gpintenWrites);
+    expanderChip.onWriteHook = nullptr;
+    expanderChip.failReadRegs = 0;
+    SteamiMCP23009E* expander = board.mcp23009e();
+    TEST_ASSERT_NOT_NULL(expander);
+    TEST_ASSERT_EQUAL_HEX8(0xF0, expander->watched());
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::UP));
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::UP));
+    std::vector<int> levels;
+    TEST_ASSERT_TRUE(expander->interruptOnChange(
+        MCP23009_BTN_LEFT, [&levels](uint8_t level) { levels.push_back(level); }));
+    expanderChip.readUs = 400;
+    delay(50);
+    const uint32_t t0 = millis();
+    Timeline timeline;
+    timeline.at(t0 + 50, []() { expanderChip.release(MCP23009_BTN_UP); });
+    for (uint32_t k = 0; k < 10; k++) {
+        timeline.dpadTap(t0 + 500 + k * 450 + 40 * (k % 3), MCP23009_BTN_LEFT, 80);
+    }
+    TapCounts counts;
+    slowLoop(buttons, timeline, t0 + 500 + 10 * 450 + 1500, 300, counts);
+    TEST_ASSERT_EQUAL_UINT32(0, counts.presses[3]);
+    TEST_ASSERT_EQUAL_UINT32(1, counts.releases[3]);  // UP, held from the start
+    TEST_ASSERT_EQUAL_UINT32(10, counts.presses[5]);
+    TEST_ASSERT_EQUAL_UINT32(10, counts.releases[5]);
+    TEST_ASSERT_EQUAL_INT(20, static_cast<int>(levels.size()));
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::UP));
+    expander->disableInterrupt(MCP23009_BTN_LEFT);
+    TEST_ASSERT_EQUAL_HEX8(0xF0, expander->watched());
+}
+
 // --- Every class together ---
 
 static void test_all_classes_on_v1c_print_only_e20(void) {
@@ -1856,6 +2554,11 @@ int main(void) {
     RUN_TEST(test_compass_absent);
     RUN_TEST(test_magnetometer_and_compass_nan_on_bus_error);
     RUN_TEST(test_compass_heading_uses_cm);
+    RUN_TEST(test_compass_tilt_heading_removes_roll_error);
+    RUN_TEST(test_compass_tilt_heading_equals_heading_when_flat);
+    RUN_TEST(test_compass_tilt_heading_nan_without_accelerometer);
+    RUN_TEST(test_compass_tilt_heading_nan_when_compass_absent);
+    RUN_TEST(test_compass_tilt_heading_nan_on_bus_error);
     RUN_TEST(test_motion_calibrations_when_forced);
     RUN_TEST(test_calibrate_zero_changes_nothing);
     RUN_TEST(test_calibrate_updates_offsets);
@@ -1882,12 +2585,15 @@ int main(void) {
     RUN_TEST(test_mcu_tap_between_two_calls_is_caught);
     RUN_TEST(test_mcu_bounces_between_two_calls_give_one_press);
     RUN_TEST(test_mcu_bounce_after_a_release_is_not_a_press);
-    RUN_TEST(test_two_mcu_taps_between_two_calls_give_one_press);
+    RUN_TEST(test_two_mcu_taps_between_two_calls_give_one_press_and_count_two);
+    RUN_TEST(test_unread_presses_are_not_replayed_by_was_pressed);
     RUN_TEST(test_mcu_release_then_tap_between_two_calls);
     RUN_TEST(test_mcu_tap_shorter_than_the_lock_out);
     RUN_TEST(test_dpad_tap_between_two_calls_is_caught);
     RUN_TEST(test_dpad_read_during_a_release_bounce_gives_no_false_press);
     RUN_TEST(test_dpad_bus_error_gives_no_false_press);
+    RUN_TEST(test_dpad_registration_bus_error_is_retried);
+    RUN_TEST(test_dpad_one_failed_registration_is_retried);
     RUN_TEST(test_dpad_held_at_start_is_not_a_press);
     RUN_TEST(test_wait_for_press_drops_taps_made_before_the_call);
     RUN_TEST(test_wait_for_press_returns_a_dpad_press_made_during_the_wait);
@@ -1897,6 +2603,22 @@ int main(void) {
     RUN_TEST(test_dpad_follows_again_after_calls_during_a_power_off);
     RUN_TEST(test_buttons_called_last_get_the_interrupts);
     RUN_TEST(test_interrupts_after_the_buttons_are_gone_do_nothing);
+    RUN_TEST(test_quick_taps_on_a_faster_than_the_loop_are_all_reported);
+    RUN_TEST(test_quick_taps_on_b_and_menu_with_a_520_ms_loop_are_all_reported);
+    RUN_TEST(test_quick_taps_on_the_dpad_are_all_reported);
+    RUN_TEST(test_dpad_taps_once_a_second_with_a_520_ms_loop_are_all_reported);
+    RUN_TEST(test_bouncy_dpad_taps_give_one_press_each);
+    RUN_TEST(test_dpad_release_is_reported_by_the_call_that_reads_it);
+    RUN_TEST(test_dpad_lever_rebound_after_a_release_is_not_a_press);
+    RUN_TEST(test_dpad_lever_rebound_read_with_the_release_is_not_a_press);
+    RUN_TEST(test_dpad_other_direction_held_after_a_release_is_a_press);
+    RUN_TEST(test_long_presses_stay_pressed_at_every_call);
+    RUN_TEST(test_second_dpad_tap_just_after_a_read_is_not_merged);
+    RUN_TEST(test_dpad_read_during_a_press_bounce_gives_one_press);
+    RUN_TEST(test_dpad_quick_taps_after_a_registration_bus_error_are_all_counted);
+    RUN_TEST(test_dpad_held_through_a_registration_bus_error_then_quick_taps);
+    RUN_TEST(test_dpad_quick_taps_all_counted_beside_a_sketch_callback_and_a_reset);
+    RUN_TEST(test_dpad_level_read_error_in_begin_is_retried_then_quick_taps);
     RUN_TEST(test_all_classes_on_v1c_print_only_e20);
     return UNITY_END();
 }

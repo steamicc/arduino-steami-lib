@@ -673,6 +673,26 @@ void testHandlerSeesPressReleasedBeforeItRuns(void) {
     ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 1}, {"UP", 1, 1}}), events);
 }
 
+// Datasheet 1.7.4, note: the release made while INTF was set is still pending once the read
+// clears the interrupt, which sets again with a new INTCAP. The next read finds the level it
+// already reported: no second event.
+void testInterruptSetAgainAfterATapGivesNoSecondEvent(void) {
+    attachChip();
+    DpadPin up(UP);
+    std::vector<int> levels;
+    mcp->interruptOnChange(UP, [&](uint8_t level) { levels.push_back(level); });
+    chip.press(UP);
+    chip.release(UP);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL_HEX8(1 << UP, chip.regs[MCP23009_INTF]);
+    TEST_ASSERT_EQUAL_HEX8(RELEASED, chip.regs[MCP23009_INTCAP]);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL_HEX8(0, chip.regs[MCP23009_INTF]);
+    TEST_ASSERT_EQUAL(2, levels.size());
+    TEST_ASSERT_EQUAL(0, levels[0]);
+    TEST_ASSERT_EQUAL(1, levels[1]);
+}
+
 void testPressThenReleaseEachReported(void) {
     attachChip();
     std::vector<Event> events;
@@ -1240,6 +1260,133 @@ void testBusErrorGivesNoEventAndReturnsFalse(void) {
     ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 0}}), events);
 }
 
+// Registration reads INTCON, the pending interrupt and GPINTEN. A failed
+// read must not enable the pin, nor write a register it could not read
+// (readReg(uint8_t) returns 0 on a bus error: GPINTEN = 0 | bit would turn
+// off every pin registered earlier), and interruptOn*() report it (#330).
+
+std::function<void(uint8_t)> changeRecorder(std::vector<Event>& events, const char* name) {
+    return [&events, name](uint8_t level) { events.push_back({name, level, -1}); };
+}
+
+void testRegistrationGpintenReadErrorKeepsOtherPins(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP), down(DOWN);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    chip.failReadRegs = 1u << MCP23009_GPINTEN;
+    TEST_ASSERT_FALSE(mcp->interruptOnChange(DOWN, changeRecorder(events, "DOWN")));
+    chip.failReadRegs = 0;
+    // UP is still enabled in the chip, DOWN is not.
+    TEST_ASSERT_EQUAL_HEX8(1 << UP, chip.regs[MCP23009_GPINTEN]);
+    chip.press(DOWN);
+    mcp->interruptEvent();
+    chip.press(UP);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 0}}), events);
+}
+
+void testRegistrationInterruptReadErrorGivesNoFalseEvent(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP);
+    // The level of UP (released) cannot be read: the pin must not be
+    // enabled with a stale level, which the next read would report as a
+    // release.
+    chip.failReadRegs = 1u << MCP23009_INTF;
+    TEST_ASSERT_FALSE(mcp->interruptOnChange(UP, changeRecorder(events, "UP")));
+    chip.failReadRegs = 0;
+    TEST_ASSERT_EQUAL_HEX8(0, chip.regs[MCP23009_GPINTEN]);
+    TEST_ASSERT_TRUE(mcp->interruptEvent());
+    TEST_ASSERT_EQUAL(0, events.size());
+    // Registering again works and takes the current level, without event.
+    TEST_ASSERT_TRUE(mcp->interruptOnChange(UP, changeRecorder(events, "UP")));
+    TEST_ASSERT_EQUAL_HEX8(1 << UP, chip.regs[MCP23009_GPINTEN]);
+    TEST_ASSERT_TRUE(mcp->interruptEvent());
+    TEST_ASSERT_EQUAL(0, events.size());
+    chip.press(UP);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 0, -1}}), events);
+}
+
+void testRegistrationIntconReadErrorWritesNothing(void) {
+    attachChip();
+    DpadPin up(UP);
+    chip.failReadRegs = 1u << MCP23009_INTCON;
+    chip.log.clear();
+    TEST_ASSERT_FALSE(mcp->interruptOnFalling(UP, []() {}));
+    chip.failReadRegs = 0;
+    for (const auto& entry : chip.log) {
+        TEST_ASSERT_NOT_EQUAL('w', entry.first);
+    }
+}
+
+void testFailedReregistrationDisablesPin(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    chip.failReadRegs = 1u << MCP23009_INTCAP;
+    TEST_ASSERT_FALSE(
+        mcp->interruptOnRising(UP, [&events]() { events.push_back({"RISE", 1, -1}); }));
+    chip.failReadRegs = 0;
+    chip.press(UP);
+    mcp->interruptEvent();
+    chip.release(UP);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL(0, events.size());
+}
+
+void testRegistrationOfInvalidPinReturnsFalse(void) {
+    attachChip();
+    TEST_ASSERT_FALSE(mcp->interruptOnChange(8, [](uint8_t) {}));
+    TEST_ASSERT_FALSE(mcp->interruptOnFalling(8, []() {}));
+    TEST_ASSERT_FALSE(mcp->interruptOnRising(8, []() {}));
+}
+
+void testDisableReadErrorKeepsOtherPins(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP), down(DOWN);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    down.pin.irq(recorder(events, "DOWN", down.pin), BOTH);
+    chip.failReadRegs = 1u << MCP23009_GPINTEN;
+    mcp->disableInterrupt(DOWN);
+    chip.failReadRegs = 0;
+    TEST_ASSERT_BITS_HIGH(1 << UP, chip.regs[MCP23009_GPINTEN]);
+    chip.press(DOWN);
+    chip.press(UP);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 0}}), events);
+}
+
+// With an interrupt pin, a failed read leaves the chip interrupt set: INT
+// stays asserted and gives no new edge. poll() must keep the pending flag
+// and read again at the next call, or the expander goes silent (#330).
+void testPollRetriesAfterBusErrorWithInterruptPin(void) {
+    delete mcp;
+    mcp = new SteamiMCP23009E(Wire, RESET_PIN, ADDR, /*interruptPin=*/7);
+    attachChip();
+    mcp->begin();
+    std::vector<Event> events;
+    DpadPin up(UP);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    chip.press(UP);
+    fireInterrupt(7);
+    chip.failReads = true;
+    mcp->poll();
+    TEST_ASSERT_EQUAL(0, events.size());
+    chip.failReads = false;
+    // No new edge: the retry comes from poll() alone.
+    mcp->poll();
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 0}}), events);
+    TEST_ASSERT_EQUAL_HEX8(0, chip.regs[MCP23009_INTF]);
+    // The read succeeded: no read until the next interrupt.
+    chip.log.clear();
+    mcp->poll();
+    TEST_ASSERT_TRUE(chip.log.empty());
+}
+
 // ----- Re-registration and reset -----
 
 void testSwitchFromBothEdgesToFallingOnly(void) {
@@ -1510,6 +1657,7 @@ int main(void) {
     RUN_TEST(testPinDestructorClearsExpanderCallbackSlot);
     RUN_TEST(testIrqLevelIsNoneBeforeAnyInterrupt);
     RUN_TEST(testHandlerSeesPressReleasedBeforeItRuns);
+    RUN_TEST(testInterruptSetAgainAfterATapGivesNoSecondEvent);
     RUN_TEST(testPressThenReleaseEachReported);
     RUN_TEST(testChangeCallbackGetsLevelFromIntcap);
     RUN_TEST(testIntccSetClearsOnIntcapRead);
@@ -1541,6 +1689,13 @@ int main(void) {
     RUN_TEST(testReregistrationInHandlerDropsQueuedEvents);
     RUN_TEST(testManyNestedReadsDuringASlowHandlerLoseNoLevel);
     RUN_TEST(testBusErrorGivesNoEventAndReturnsFalse);
+    RUN_TEST(testRegistrationGpintenReadErrorKeepsOtherPins);
+    RUN_TEST(testRegistrationInterruptReadErrorGivesNoFalseEvent);
+    RUN_TEST(testRegistrationIntconReadErrorWritesNothing);
+    RUN_TEST(testFailedReregistrationDisablesPin);
+    RUN_TEST(testRegistrationOfInvalidPinReturnsFalse);
+    RUN_TEST(testDisableReadErrorKeepsOtherPins);
+    RUN_TEST(testPollRetriesAfterBusErrorWithInterruptPin);
     RUN_TEST(testSwitchFromBothEdgesToFallingOnly);
     RUN_TEST(testHardwareResetForgetsEnabledPins);
     RUN_TEST(testPowerOffForgetsEnabledPins);

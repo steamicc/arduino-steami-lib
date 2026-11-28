@@ -19,7 +19,7 @@ The board owns that bus: build the driver on `Steami.wire()`, which starts it on
 #include <SteamiBoard.h>
 #include <SteamiMCP23009E.h>
 
-SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR);
 
 void setup() {
     Serial.begin(115200);
@@ -41,6 +41,18 @@ void loop() {
     delay(500);
 }
 ```
+
+`Steami.mcp23009e()` gives the expander the board builds the same way,
+already started (`nullptr` when it does not answer).
+
+> [!NOTE]
+> **EXTI line 0 is shared.** On the STM32WB55, an EXTI line serves one pin
+> number on all ports: `INT_EXPANDER` (PB0) and `MENU_BUTTON` (PA0,
+> `USER_BTN`) are both on line 0, and the last `attachInterrupt()` wins.
+> `SteamiButtons` takes that line for MENU, so build the expander without its
+> interrupt pin, as above: `poll()` and `interruptEvent()` then read the chip
+> latch (INTF, INTCAP, GPIO) at each call. Passing `INT_EXPANDER` as the
+> fourth argument silently disables the MENU interrupt.
 
 ## Examples
 
@@ -86,7 +98,7 @@ in method names only where they carry ambiguity.
 
 | Method | Description |
 |--------|-------------|
-| `SteamiMCP23009E(TwoWire& wire, uint8_t resetPin, uint8_t address = 0x20, int interruptPin = -1)` | Construct. Pass the reset pin number; interrupt pin is optional. |
+| `SteamiMCP23009E(TwoWire& wire, uint8_t resetPin, uint8_t address = 0x20, int interruptPin = -1)` | Construct. Pass the reset pin number; the interrupt pin is optional. On the STeaMi board, leave it at `-1` (EXTI line 0, see the note in Quick start). |
 | `bool begin()` | Configure the reset pin, attach the interrupt handler if provided, perform a hardware reset, then probe the I2C bus. Returns `false` if the expander doesn't ACK. |
 | `void reset()` | Toggle the reset pin LOW then HIGH to perform a hardware reset. |
 | `void powerOn()` | Drive the reset pin HIGH. |
@@ -123,14 +135,14 @@ Direct read/write access to every register in the MCP23009E register map.
 
 | Method | Description |
 |--------|-------------|
-| `void interruptOnChange(uint8_t gpx, std::function<void(uint8_t)> callback)` | Call `callback(level)` on any level change of `gpx`. |
-| `void interruptOnFalling(uint8_t gpx, std::function<void()> callback)` | Call `callback()` on falling edge of `gpx`. |
-| `void interruptOnRising(uint8_t gpx, std::function<void()> callback)` | Call `callback()` on rising edge of `gpx`. |
-| `void interruptOnRaising(uint8_t gpx, std::function<void()> callback)` | Deprecated former name of `interruptOnRising()`, kept for the whole 1.x series and removed in 2.0.0. |
+| `bool interruptOnChange(uint8_t gpx, std::function<void(uint8_t)> callback)` | Call `callback(level)` on any level change of `gpx`. Returns `false` if `gpx > 7` or on a bus error (see below). |
+| `bool interruptOnFalling(uint8_t gpx, std::function<void()> callback)` | Call `callback()` on falling edge of `gpx`. Returns `false` if `gpx > 7` or on a bus error. |
+| `bool interruptOnRising(uint8_t gpx, std::function<void()> callback)` | Call `callback()` on rising edge of `gpx`. Returns `false` if `gpx > 7` or on a bus error. |
+| `bool interruptOnRaising(uint8_t gpx, std::function<void()> callback)` | Deprecated former name of `interruptOnRising()`, kept for the whole 1.x series and removed in 2.0.0. |
 | `void disableInterrupt(uint8_t gpx)` | Disable and clear all callbacks for `gpx`. A pin followed by `watchChanges()` stays enabled for it. |
 | `void watchChanges(uint8_t mask, void (*callback)(uint8_t gpx, uint8_t level))` | Follow the pins of `mask` with a callback the sketch does not replace, for a library that shares the expander (`SteamiButtons` follows the D-PAD with it). See below. |
 | `uint8_t watched()` | The pins the watch follows (one bit per pin); `0` without a watch. |
-| `void poll()` | Dispatch the registered callbacks in normal (non-interrupt) context. Call this from `loop()`. With an interrupt pin, it reads the chip only once the ISR has flagged an interrupt — the ISR itself only sets the flag, because running callbacks (and the I²C reads they involve) from interrupt context is unsafe on STM32duino. Without an interrupt pin, it reads the chip at each call while at least one pin is enabled. |
+| `void poll()` | Dispatch the registered callbacks in normal (non-interrupt) context. Call this from `loop()`. With an interrupt pin, it reads the chip only once the ISR has flagged an interrupt — the ISR itself only sets the flag, because running callbacks (and the I²C reads they involve) from interrupt context is unsafe on STM32duino. Without an interrupt pin, it reads the chip at each call while at least one pin is enabled. After a failed read the interrupt stays flagged and the next call reads again. |
 | `bool interruptEvent()` | Read the chip and dispatch now, regardless of the pending flag. Returns `false` on a bus error (no event is reported then). Usually you'll call `poll()` instead. |
 
 How events are reported:
@@ -151,6 +163,11 @@ How events are reported:
   registration) is delivered after the events already queued. Past 8 queued
   reads, the changes are read again from GPIO once the queue is empty.
   Events read before a pin is registered again are dropped for that pin.
+- **Bus errors.** A registration that hits a bus error returns `false` and
+  leaves the pin disabled: no callback of the pin runs, and the other pins
+  keep their state (a register that could not be read is never written).
+  Register again once the bus is back. A failed read in `poll()` gives no
+  event and is retried at the next call.
 - **Watch.** `watchChanges(mask, callback)` calls `callback(gpx, level)` for
   the events of the pins of `mask`, as `interruptOnChange()` does, after the
   callbacks of the sketch. A registration of the sketch on one of these pins
@@ -158,12 +175,14 @@ How events are reported:
   `disableInterrupt()` leaves the pin enabled for it: both keep working. The
   pins of `mask` not enabled yet are enabled, with no event at registration.
   There is one watch per expander: a call replaces the earlier one, and
-  `nullptr` removes it (its pins stay enabled).
+  `nullptr` removes it (its pins stay enabled). A pin is enabled only when
+  the chip answers: on a bus error (chip missing, or held in reset by
+  `powerOff()`) `watched()` leaves it out, so the owner of the watch sees it
+  must call again. A pin the watch enables again also runs the callbacks the
+  sketch stored on it.
 - **Reset.** `reset()`, `powerOff()` and the soft reset disable every pin and
-  remove the watch: register the callbacks again afterwards. A pin is enabled
-  only when the chip answers: on a bus error (chip missing, or held in reset
-  by `powerOff()`) the callback is stored but the pin is not enabled, and
-  `watched()` leaves it out. Register again after `powerOn()`.
+  remove the watch: register the callbacks again afterwards (after
+  `powerOn()` for `powerOff()`).
 - **Limit.** A press and its release that both happen while an interrupt is
   pending cancel out: the chip keeps no trace of them.
 
@@ -175,7 +194,7 @@ returns it inverted. Both return `IRQ_LEVEL_NONE` (`0xFF`) before any
 interrupt.
 
 ```cpp
-SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR);
 MCP23009Pin up(expander, MCP23009_BTN_UP);
 
 void setup() {

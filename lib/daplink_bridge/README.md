@@ -99,7 +99,7 @@ matching the erased-flash state.
 | `bool clearConfig()` | Erase the entire 1 KB config zone. Waits for the busy bit to clear and returns `false` if the device reports an error. |
 | `bool writeConfig(const uint8_t* data, size_t length, uint16_t offset = 0)` | Write raw bytes to the zone starting at `offset`. The driver chunks the payload into fixed 32-byte frames carrying at most `DAPLINK_BRIDGE_MAX_WRITE_CHUNK` (28) bytes each, and waits for the busy bit between chunks. Returns `false` if the range overflows the zone or the device reports an error. |
 | `bool writeConfig(const char* str, uint16_t offset = 0)` | Convenience overload for null-terminated strings. |
-| `size_t readConfig(uint8_t* result, size_t maxLen)` | Read up to `maxLen` bytes from the start of the zone, stopping at the first `0xFF` (end-of-data sentinel) or when the buffer is full. Returns the number of bytes copied. Reads the whole zone but its last byte (1023 bytes at most). |
+| `size_t readConfig(uint8_t* result, size_t maxLen)` | Read up to `maxLen` bytes from the start of the zone, stopping at the first `0xFF` (end-of-data sentinel) or when the buffer is full. Returns the number of bytes copied. Reads the whole zone but its last byte (1023 bytes at most), in blocks of 255 bytes: an I2C error or a busy timeout stops the read and returns the bytes of the blocks already read (0 when the first block fails, as for an empty zone). |
 
 ### Raw protocol
 

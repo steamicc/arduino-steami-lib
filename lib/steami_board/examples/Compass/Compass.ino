@@ -5,7 +5,7 @@
 //
 // Works on every release (V1a, V1b and V1c). Hold the board flat, screen up.
 // heading() is in degrees clockwise from north, 0 when the top of the screen
-// (the side opposite the USB connector) points north, 90 for east. direction()
+// (the USB connector side) points north, 90 for east. direction()
 // gives the nearest of eight sectors ("N", "NE", "E", ...).
 //
 // Press MENU to calibrate for 12 seconds: turn the board slowly in every

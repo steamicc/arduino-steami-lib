@@ -15,7 +15,8 @@
 #include <map>
 #include <vector>
 
-SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+// No interrupt pin: INT_EXPANDER (PB0) shares EXTI line 0 with MENU_BUTTON (PA0).
+SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR);
 
 static const std::map<uint8_t, String> kButtons = {
     {MCP23009_BTN_UP, "UP"},

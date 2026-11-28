@@ -12,7 +12,7 @@ constexpr SteamiFunctionInfo kInfo = {SteamiFunction::COMPASS, "SteamiCompass", 
 
 }  // namespace
 
-SteamiCompass::SteamiCompass(SteamiBoard& board) : _handle(board, kInfo) {}
+SteamiCompass::SteamiCompass(SteamiBoard& board) : _handle(board, kInfo), _accel(board) {}
 
 bool SteamiCompass::begin() {
     if (!_handle.begin()) {
@@ -43,6 +43,20 @@ float SteamiCompass::heading() {
     }
     SteamiLIS2MDL* mag = driver();
     return mag == nullptr ? NAN : mag->headingFlatOnly();
+}
+
+float SteamiCompass::headingTiltCompensated() {
+    if (_handle.status() == SteamiStatus::NOT_STARTED) {
+        begin();
+    }
+    SteamiLIS2MDL* mag = _handle.isAvailable() ? driver() : nullptr;
+    if (mag == nullptr) {
+        return NAN;
+    }
+    // NAN on every axis when the accelerometer is unavailable or its read fails: the driver
+    // then returns NAN too.
+    const SteamiVector a = _accel.read();
+    return mag->headingWithTiltCompensation(Vec3f{a.x, a.y, a.z});
 }
 
 const char* SteamiCompass::direction() {

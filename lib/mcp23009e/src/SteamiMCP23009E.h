@@ -75,21 +75,25 @@ class SteamiMCP23009E {
     // last known level of the pin. A registration replaces the earlier
     // callback of the same kind. reset(), powerOff() and the soft reset
     // disable every pin and remove the watch (watchChanges()): register
-    // the callbacks again afterwards. On a bus error (chip missing, or held
-    // in reset by powerOff()) the callback is stored but the pin is not
-    // enabled: register it again once the chip answers.
+    // the callbacks again afterwards.
     //
     // interruptOnChange() passes the level of the event: the one captured
     // in INTCAP, or the one read in GPIO for a change the chip did not
     // signal (see interruptEvent()).
-    void interruptOnChange(uint8_t gpx, std::function<void(uint8_t)> callback);
-    void interruptOnFalling(uint8_t gpx, std::function<void()> callback);
-    void interruptOnRising(uint8_t gpx, std::function<void()> callback);
+    //
+    // Returns false if gpx > 7 or on a bus error (chip missing, or held in
+    // reset by powerOff()). After a bus error the pin is disabled (no
+    // callback of the pin runs, GPINTEN is left as it was, watched() leaves
+    // it out) and the other pins keep their state: register again once the
+    // bus is back.
+    bool interruptOnChange(uint8_t gpx, std::function<void(uint8_t)> callback);
+    bool interruptOnFalling(uint8_t gpx, std::function<void()> callback);
+    bool interruptOnRising(uint8_t gpx, std::function<void()> callback);
     // Former name of interruptOnRising() (issue #183), kept for the whole
     // 1.x series and removed in 2.0.0.
     [[deprecated("use interruptOnRising(); interruptOnRaising() goes away in 2.0.0")]]
-    void interruptOnRaising(uint8_t gpx, std::function<void()> callback) {
-        interruptOnRising(gpx, std::move(callback));
+    bool interruptOnRaising(uint8_t gpx, std::function<void()> callback) {
+        return interruptOnRising(gpx, std::move(callback));
     }
     // Disables the pin and clears its callbacks; a pin followed by
     // watchChanges() stays enabled for it.
@@ -139,6 +143,8 @@ class SteamiMCP23009E {
     // fast and so callbacks aren't run from ISR context (where Wire and
     // arbitrary user code are unsafe on STM32duino). Without an interrupt
     // pin, it reads the chip at each call while at least one pin is enabled.
+    // A read that fails keeps the interrupt flagged, so the next call reads
+    // again: the chip interrupt is still set and gives no new edge.
     void poll();
 
    private:
@@ -199,7 +205,7 @@ class SteamiMCP23009E {
     void writeReg(uint8_t reg, uint8_t value);
     uint8_t readReg(uint8_t reg);
     bool readReg(uint8_t reg, uint8_t& value);
-    void sendEnableInterrupt(uint8_t gpx);
+    bool sendEnableInterrupt(uint8_t gpx);
     void sendDisableInterrupt(uint8_t gpx);
     void clearCallbacks(uint8_t gpx);
     bool readInterrupt(uint8_t skipMask);

@@ -154,30 +154,45 @@ correction: `setTemperatureOffset()` resets the gain to 1.0.
 
 ### Calibration
 
+The min/max calibrations are all or nothing, as in the MicroPython driver
+where a failed read raises `OSError` before any offset or scale changes: the
+six values are only replaced when every sample was read.
+
 | Method | Description |
 |--------|-------------|
 | `void setCalibrateStep(float xoff, float yoff, float zoff, float xscale, float yscale, float zscale)` | Set offsets and scales manually. |
-| `void calibrateMinmax2d(uint16_t samples = 300, uint16_t delayMs = 20)` | Min/max calibration on XY only — rotate board flat during acquisition. Failed reads are skipped; with no valid sample the calibration is kept. |
-| `void calibrateMinmax3d(uint16_t samples = 600, uint16_t delayMs = 20)` | Min/max calibration on all 3 axes — rotate board in all directions. Failed reads are skipped; with no valid sample the calibration is kept. |
+| `bool calibrateMinmax2d(uint16_t samples = 300, uint16_t delayMs = 20)` | Min/max calibration on XY only — rotate board flat during acquisition. All or nothing: returns `false` and keeps the previous calibration when `samples` is 0 or a read fails (stops at the first failed read). |
+| `bool calibrateMinmax3d(uint16_t samples = 600, uint16_t delayMs = 20)` | Min/max calibration on all 3 axes — rotate board in all directions. All or nothing: returns `false` and keeps the previous calibration when `samples` is 0 or a read fails (stops at the first failed read). |
 | `CalibratedField calibrateApply(float x, float y, float z)` | Apply current offset/scale to a raw triplet. |
 | `CalibrationQuality calibrateQuality(uint16_t samplesCheck = 200, uint16_t delayMs = 10)` | Evaluate calibration quality: center, radius dispersion, anisotropy. |
 | `void calibrateReset()` | Reset offsets to 0 and scales to 1. |
 | `MagCalibration readCalibration() const` | Current offsets and scales, `{xOff, yOff, zOff, xScale, yScale, zScale}` (same order as `setCalibrateStep()`). |
-| `void calibrateStep()` | Alias for `calibrateMinmax3d()`. |
+| `bool calibrateStep()` | Alias for `calibrateMinmax3d()`. |
 | `HwOffsets readHwOffsets()` | Read hardware offset registers (`OFFSET_*`). |
 | `void setHwOffsets(int16_t x, int16_t y, int16_t z)` | Write hardware offset registers. |
 
 ### Heading / Compass
 
-Heading: 0° when the top of the screen (the side opposite the USB connector) points north, increasing clockwise (`atan2(-x, y)`, measured on a V1c). Every heading is in [0, 360): 360 reads as 0.
+Heading: 0° when the top of the screen (the USB connector side) points north, increasing clockwise (`atan2(-x, y)`, measured on a V1c). Every heading is in [0, 360): 360 reads as 0.
 
-> **Note:** `headingWithTiltCompensation()` keeps the old axes, not verified on a board: on a flat board its heading can differ from `headingFlatOnly()`. Prefer `headingFlatOnly()` and hold the board flat.
+Tilt-compensated heading: `headingWithTiltCompensation()` takes the ISM330DL acceleration in g on its own axes (screen up and flat: about `{0, 0, -1}`) and gives the same heading as `headingFlatOnly()` when the board is flat. It needs a 3D calibration (`calibrateMinmax3d()`): after `calibrateMinmax2d()`, `z` stays in raw LSB and the result is meaningless. It holds up to about 60° of tilt; `setHeadingFilter()` smooths the accelerometer noise.
+
+```cpp
+SteamiISM330DL::Vector3 a{};
+if (imu.accelerationG(a)) {
+    float heading = mag.headingWithTiltCompensation(Vec3f{a.x, a.y, a.z});
+}
+```
+
+> **Note:** the sign of the LIS2MDL Z axis, `LIS2MDL_MAG_Z_SIGN` in `SteamiLIS2MDL_const.h`, is -1, measured on a V1c on 2026-11-28 ([micropython-steami-lib#344](https://github.com/steamicc/micropython-steami-lib/issues/344)): with a 15 s min/max calibration the heading stays within 6° in roll and 11° in pitch of the flat heading, where +1 errs by 40 to 55° in roll.
 
 | Method | Description |
 |--------|-------------|
 | `float headingFlatOnly()` | Compass angle (0–360°) assuming the board is flat. Uses XY only. `NAN` on a failed read. |
 | `float headingFromVectors(float x, float y, float z, bool calibrated = true)` | Angle from a raw or calibrated triplet. |
-| `float headingWithTiltCompensation(Vec3f (*readAccel)())` | Tilt-compensated heading using an external accelerometer callback. |
+| `float headingFromVectorsTilt(float x, float y, float z, float ax, float ay, float az, bool calibrated = true)` | Tilt-compensated angle from a field triplet and an ISM330DL acceleration in g. `NAN` when the acceleration is zero or `NAN`. |
+| `float headingWithTiltCompensation(const Vec3f& accel)` | Reads the field, then the tilt-compensated heading for `accel` (ISM330DL axes, in g). `NAN` on a failed read. |
+| `float headingWithTiltCompensation(Vec3f (*readAccel)())` | Same, with an accelerometer callback. |
 | `void setHeadingOffset(float deg)` | Software heading offset (physical 0° alignment). |
 | `void setDeclination(float deg)` | Magnetic declination correction for true north. |
 | `void setHeadingFilter(float alpha)` | Low-pass filter on heading via cos/sin averaging. `0` = off, `0.1–0.3` = light/medium. |
