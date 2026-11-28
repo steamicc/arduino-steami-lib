@@ -48,6 +48,8 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
         run: |
           set -euo pipefail
+          echo "::error::Throwaway: the selection is forced to fail."
+          exit 3
           if [ "$EVENEMENT" = push ]; then
             # The PR already compiled its examples before the merge, and the
             # publication compiles everything again at the tag.
