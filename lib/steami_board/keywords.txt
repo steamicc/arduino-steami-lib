@@ -107,6 +107,7 @@ z	KEYWORD2
 strength	KEYWORD2
 isShaken	KEYWORD2
 heading	KEYWORD2
+headingTiltCompensated	KEYWORD2
 direction	KEYWORD2
 setDeclination	KEYWORD2
 red	KEYWORD2

@@ -290,7 +290,7 @@ their "unavailable" value without any bus traffic and without printing again.
 | `SteamiAccelerometer` | `read()` as a `SteamiVector` in g, `x()`, `y()`, `z()`, `strength()`, `isShaken(g = 2.0f)` | `NAN` (all three axes and `strength()`), `false` |
 | `SteamiGyroscope` | `read()` as a `SteamiVector` in degrees per second, `x()`, `y()`, `z()` | `NAN` |
 | `SteamiMagnetometer` | `read()` as a `SteamiVector` in uT, `x()`, `y()`, `z()`, `strength()`, `calibrate(seconds = 12)` | `NAN` |
-| `SteamiCompass` | `heading()` in degrees, `direction()`, `setDeclination(deg)`, `calibrate(seconds = 12)` | `NAN`, `""` |
+| `SteamiCompass` | `heading()` in degrees, `headingTiltCompensated()`, `direction()`, `setDeclination(deg)`, `calibrate(seconds = 12)` | `NAN`, `""` |
 | `SteamiLight` | `read()`, the raw clear count of the sensor | `0` |
 | `SteamiColor` | `read(r, g, b)` (raw counts, returns whether it worked), `red()`, `green()`, `blue()`, `rgb()` (hue of the object, largest channel 255) | `false`, `0`, `STEAMI_BLACK` |
 | `SteamiGesture` | `read(timeoutMs = 0)` gives `NONE`, `LEFT`, `RIGHT`, `UP`, `DOWN`, `NEAR` or `FAR`; `SteamiGesture::name(d)` | `NONE` |
@@ -364,11 +364,26 @@ their "unavailable" value without any bus traffic and without printing again.
 
 `SteamiCompass::heading()` is in degrees clockwise from north, in [0, 360),
 with the board held flat and the screen up. 0 means that the top of the screen
-(the side opposite the USB connector) points north, 90 east, 180 south and
+(the USB connector side) points north, 90 east, 180 south and
 270 west. It is `atan2(-x, y)` of the corrected X and Y fields, measured on a
 V1c: the convention of the `SteamiLIS2MDL` driver (`headingFlatOnly()`).
 Without tilt compensation, so keep the board flat. With the screen up, the
 accelerometer reads `z` about -1 g.
+
+`SteamiCompass::headingTiltCompensated()` gives the same heading for a tilted
+board, up to about 60 degrees: it reads the ISM330DL accelerometer (started as
+by `SteamiAccelerometer::begin()`, +-8 g at 104 Hz) and calls
+`SteamiLIS2MDL::headingWithTiltCompensation()`. Flat, it equals `heading()`.
+Its first call sets the ISM330DL to +-8 g at 104 Hz, as `SteamiAccelerometer`
+does: it replaces a range that the sketch set on the ISM330DL before.
+It needs a 3D calibration: `calibrate()`, the `cm` calibration of the board
+config, or `calibrateMinmax3d()`. After `calibrateMinmax2d()` the `z` field is
+not calibrated and the result is meaningless. It returns `NAN` when the compass
+or the accelerometer is unavailable or a read fails. A missing accelerometer is
+reported under the `SteamiAccelerometer` name (`E10`), not under
+`SteamiCompass`. The sign of the LIS2MDL Z axis was measured on a V1c on
+2026-11-28
+([micropython-steami-lib#344](https://github.com/steamicc/micropython-steami-lib/issues/344)).
 
 `direction()` returns the nearest of eight sectors, each 45 degrees wide and
 centred on its name: `"N"`, `"NE"`, `"E"`, `"SE"`, `"S"`, `"SW"`, `"W"` or

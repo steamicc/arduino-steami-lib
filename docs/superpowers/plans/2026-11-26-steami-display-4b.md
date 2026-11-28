@@ -732,7 +732,7 @@ git commit -m "docs(board): Document gauge, compass, watch and face."
 - [ ] **Step 3: Needle rendering against the measured heading** (the controller, no user).
   - The scratch sketch is ScreenCompass with `SteamiButtons buttons;` added (`buttons.begin()` in `setup()`) and this `loop()`: `float h = compass.heading();`, then section 6's screen calls with `screen.compass(h)`, then every 500 ms `Serial.println(lroundf(h))` (the value drawn, not a second reading), and `if (buttons.wasPressed(SteamiButton::MENU)) compass.calibrate(12);`. `heading()` is not filtered (`SteamiCompass.cpp` returns the magnetometer's reading), so no settling wait is needed.
   - Capture 20 s with the break-reset serial capture and take one photo after 10 s. H is the median of the headings printed in the 4 s around the photo.
-  - Expected needle direction on the photo: φ = (360 − H) mod 360, clockwise from screen-up. Screen-up is the side opposite the USB connector; the upright letters confirm it.
+  - Expected needle direction on the photo: φ = (360 − H) mod 360, clockwise from screen-up. Screen-up is the USB connector side; the upright letters confirm it.
   - Measure φ from the pivot (screen centre) to the LIGHT north tip; the south half is `#666`, and N is the only WHITE glyph.
   - Pass: |φ_photo − φ| ≤ 5°, and the N letter lies on the same ray, beyond the tip. (No native render at an arbitrary heading is made; the φ measurement is the check.)
 

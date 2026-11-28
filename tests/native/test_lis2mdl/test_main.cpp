@@ -671,6 +671,232 @@ void test_heading_convention_matches_board(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 270.0f, sensor.headingFromVectors(1.0f, 0.0f, 0.0f, false));
 }
 
+// --- Tilt-compensated heading ---
+//
+// Board frame: R right of the screen, T top of the screen (the USB connector side),
+// U out of the screen. LIS2MDL: x = R, y = T, z = LIS2MDL_MAG_Z_SIGN * U. ISM330DL at rest:
+// x = -T, y = -R, z = -U (screen up and flat: about 0, 0, -1 g).
+
+struct TiltReading {
+    float x, y, z;     // LIS2MDL
+    float ax, ay, az;  // ISM330DL, in g
+};
+
+static void rotatePair(double* a, double* b, double angleRad) {
+    const double c = cos(angleRad);
+    const double s = sin(angleRad);
+    for (int i = 0; i < 3; i++) {
+        const double ai = a[i];
+        a[i] = c * ai + s * b[i];
+        b[i] = c * b[i] - s * ai;
+    }
+}
+
+static double dot3(const double* a, const double* b) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+// What the two chips read when the top of the screen points `headingDeg` clockwise from
+// magnetic north, under a field dipping `dipDeg` below the horizon, with the top of the screen
+// raised by `pitchDeg` and then the right edge raised by `rollDeg` (about the tilted top axis,
+// so the top of the screen keeps pointing at `headingDeg`). `zSign` is the LIS2MDL Z sign used
+// to build the reading. World frame: east, north, up.
+static TiltReading tiltReading(double headingDeg, double dipDeg, double pitchDeg, double rollDeg,
+                               float zSign = LIS2MDL_MAG_Z_SIGN) {
+    const double k = M_PI / 180.0;
+    const double h = headingDeg * k;
+    double t[3] = {sin(h), cos(h), 0.0};
+    double r[3] = {cos(h), -sin(h), 0.0};  // T x U
+    double u[3] = {0.0, 0.0, 1.0};
+    rotatePair(t, u, pitchDeg * k);
+    rotatePair(r, u, rollDeg * k);
+    const double field[3] = {0.0, cos(dipDeg * k), -sin(dipDeg * k)};
+    const double up[3] = {0.0, 0.0, 1.0};
+    TiltReading out;
+    out.x = static_cast<float>(dot3(field, r));
+    out.y = static_cast<float>(dot3(field, t));
+    out.z = static_cast<float>(zSign * dot3(field, u));
+    out.ax = static_cast<float>(-dot3(up, t));
+    out.ay = static_cast<float>(-dot3(up, r));
+    out.az = static_cast<float>(-dot3(up, u));
+    return out;
+}
+
+static float angleError(float a, float b) {
+    return fabsf(fmodf(a - b + 540.0f, 360.0f) - 180.0f);
+}
+
+static float tiltHeading(const TiltReading& m) {
+    return sensor.headingFromVectorsTilt(m.x, m.y, m.z, m.ax, m.ay, m.az, false);
+}
+
+void test_tilt_heading_equals_flat_heading_when_flat(void) {
+    // Screen up and flat, the tilt path must give the flat heading atan2(-x, y) bit for bit,
+    // whatever the gravity norm.
+    sensor.begin();
+    const float azs[] = {-1.0f, -0.97f, -1.04f};
+    for (int deg = 0; deg < 360; deg += 5) {
+        const float h = deg * static_cast<float>(M_PI) / 180.0f;
+        const float x = -300.0f * sinf(h);
+        const float y = 300.0f * cosf(h);
+        const float z = -450.0f;
+        for (float az : azs) {
+            const float flat = sensor.headingFromVectors(x, y, z, false);
+            const float tilt = sensor.headingFromVectorsTilt(x, y, z, 0.0f, 0.0f, az, false);
+            TEST_ASSERT_TRUE_MESSAGE(flat == tilt, "tilt path differs from the flat heading");
+        }
+    }
+    sensor.setCalibrateStep(10.0f, -20.0f, 30.0f, 1.5f, 0.8f, 1.2f);
+    const float flat = sensor.headingFromVectors(300.0f, -150.0f, 450.0f);
+    TEST_ASSERT_TRUE(flat == sensor.headingFromVectorsTilt(300.0f, -150.0f, 450.0f, 0, 0, -1));
+}
+
+void test_tilt_heading_recovers_heading_when_tilted(void) {
+    sensor.begin();
+    float worst = 0.0f;
+    for (int heading = 0; heading < 360; heading += 15) {
+        for (int pitch = -45; pitch <= 45; pitch += 15) {
+            for (int roll = -45; roll <= 45; roll += 15) {
+                const float got = tiltHeading(tiltReading(heading, 60.0, pitch, roll));
+                TEST_ASSERT_TRUE(got >= 0.0f && got < 360.0f);
+                const float err = angleError(got, static_cast<float>(heading));
+                worst = err > worst ? err : worst;
+            }
+        }
+    }
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, worst);
+}
+
+void test_tilt_heading_removes_roll_error_pointing_north(void) {
+    sensor.begin();
+    const TiltReading m = tiltReading(0.0, 60.0, 0.0, 20.0);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, angleError(tiltHeading(m), 0.0f));
+    // The flat heading is about 30.6 degrees off with 20 degrees of roll.
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 30.6f, sensor.headingFromVectors(m.x, m.y, m.z, false));
+}
+
+void test_tilt_heading_removes_pitch_error_pointing_east(void) {
+    sensor.begin();
+    const TiltReading m = tiltReading(90.0, 60.0, 20.0, 0.0);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 90.0f, tiltHeading(m));
+    TEST_ASSERT_TRUE(angleError(sensor.headingFromVectors(m.x, m.y, m.z, false), 90.0f) > 20.0f);
+}
+
+void test_tilt_heading_uses_the_z_sign(void) {
+    // A reading built with the other Z sign gives a wrong heading: the constant is used.
+    sensor.begin();
+    const TiltReading m = tiltReading(0.0, 60.0, 0.0, 20.0, -LIS2MDL_MAG_Z_SIGN);
+    TEST_ASSERT_TRUE(angleError(tiltHeading(m), 0.0f) > 40.0f);
+}
+
+void test_tilt_heading_screen_down(void) {
+    sensor.begin();
+    for (int heading = 0; heading < 360; heading += 30) {
+        const float got = tiltHeading(tiltReading(heading, 60.0, 0.0, 180.0));
+        TEST_ASSERT_TRUE(got >= 0.0f && got < 360.0f);
+        TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, angleError(got, static_cast<float>(heading)));
+    }
+}
+
+void test_tilt_heading_is_nan_without_gravity(void) {
+    sensor.begin();
+    sensor.setHeadingFilter(0.5f);
+    TEST_ASSERT_TRUE(isnan(sensor.headingFromVectorsTilt(0, 300, 0, 0, 0, 0, false)));
+    TEST_ASSERT_TRUE(isnan(sensor.headingFromVectorsTilt(0, 300, 0, NAN, NAN, NAN, false)));
+    // The heading filter is left as is.
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f,
+                             sensor.headingFromVectorsTilt(0, 300, 0, 0, 0, -1, false));
+}
+
+static Vec3f flatAccel() {
+    return {0.0f, 0.0f, -1.0f};
+}
+
+void test_tilt_heading_reads_the_sensor(void) {
+    sensor.begin();
+    Wire.setRegister(ADDR, LIS2MDL_STATUS_REG, 0b1000);
+    setField(300, -150, 450);
+    const float flat = sensor.headingFlatOnly();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 243.43f, flat);
+    TEST_ASSERT_TRUE(flat == sensor.headingWithTiltCompensation(Vec3f{0.0f, 0.0f, -1.0f}));
+    TEST_ASSERT_TRUE(flat == sensor.headingWithTiltCompensation(flatAccel));
+}
+
+void test_tilt_heading_is_nan_on_bus_error(void) {
+    sensor.begin();
+    setField(0, 300, 0);
+    Wire.setAbsent(ADDR);
+    TEST_ASSERT_TRUE(isnan(sensor.headingWithTiltCompensation(Vec3f{0.0f, 0.0f, -1.0f})));
+    TEST_ASSERT_TRUE(isnan(sensor.headingWithTiltCompensation(flatAccel)));
+}
+
+// Rows of the V1c measurement of 2026-11-28 (steamicc/micropython-steami-lib#344): the calibrated
+// field (calibratedField() after a 15 s calibrateMinmax3d()), the ISM330DL acceleration in g, the
+// flat heading atan2(-x, y) and the tilt heading the board printed with LIS2MDL_MAG_Z_SIGN = -1.
+// Indoors, the reference direction reads about 187 flat.
+struct V1cRow {
+    float x, y, z;
+    float ax, ay, az;
+    float flat;
+    float heading;
+};
+
+static const V1cRow kV1cFlatRows[] = {
+    {+0.039f, -0.590f, +0.784f, -0.05f, -0.00f, -1.00f, 183.8f, 184.1f},  // t = 166.1 s
+    {+0.021f, -0.609f, +0.767f, -0.05f, -0.00f, -1.00f, 181.9f, 182.1f},  // t = 170.4 s
+};
+
+static const V1cRow kV1cTiltedRows[] = {
+    {+0.589f, -0.631f, +0.457f, -0.09f, +0.68f, -0.72f, 223.0f, 191.5f},  // roll right, 232.5 s
+    {-0.289f, -0.565f, +0.730f, -0.02f, -0.56f, -0.83f, 152.9f, 197.1f},  // roll left, 272.9 s
+    {+0.460f, +0.457f, +0.696f, +0.27f, -0.09f, -0.96f, 314.9f, 296.9f},  // pitch, east, 366.0 s
+};
+
+static void beginWithIdentityCalibration() {
+    sensor.begin();
+    sensor.setCalibrateStep(0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f);
+    sensor.setHeadingOffset(0.0f);
+    sensor.setDeclination(0.0f);
+    sensor.setHeadingFilter(0.0f);
+}
+
+static void checkV1cRow(const V1cRow& row) {
+    const float got = sensor.headingFromVectorsTilt(row.x, row.y, row.z, row.ax, row.ay, row.az);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.5f, 0.0f, angleError(got, row.heading),
+                                     "tilt heading differs from the V1c log");
+    // The same row read from the chip registers (scaled to LSB, the heading does not change).
+    Wire.setRegister(ADDR, LIS2MDL_STATUS_REG, 0b1000);
+    setField(static_cast<int16_t>(lroundf(row.x * 1000.0f)),
+             static_cast<int16_t>(lroundf(row.y * 1000.0f)),
+             static_cast<int16_t>(lroundf(row.z * 1000.0f)));
+    const float read = sensor.headingWithTiltCompensation(Vec3f{row.ax, row.ay, row.az});
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.5f, 0.0f, angleError(read, row.heading),
+                                     "tilt heading read from the chip differs from the V1c log");
+}
+
+void test_tilt_heading_matches_v1c_log_when_flat(void) {
+    beginWithIdentityCalibration();
+    for (const V1cRow& row : kV1cFlatRows) {
+        checkV1cRow(row);
+        const float flat = sensor.headingFromVectors(row.x, row.y, row.z);
+        TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, angleError(flat, row.flat));
+        const float tilt =
+            sensor.headingFromVectorsTilt(row.x, row.y, row.z, row.ax, row.ay, row.az);
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.5f, 0.0f, angleError(tilt, flat),
+                                         "flat V1c row: tilt heading differs from the flat one");
+    }
+}
+
+void test_tilt_heading_matches_v1c_log_when_tilted(void) {
+    beginWithIdentityCalibration();
+    for (const V1cRow& row : kV1cTiltedRows) {
+        checkV1cRow(row);
+        // Tilted, the flat heading is far off: these rows really test the compensation.
+        const float flat = sensor.headingFromVectors(row.x, row.y, row.z);
+        TEST_ASSERT_TRUE(angleError(flat, row.heading) > 15.0f);
+    }
+}
+
 void test_direction_sectors_are_centred(void) {
     sensor.begin();
     TEST_ASSERT_EQUAL_STRING("N", sensor.directionLabel(350.0f));
@@ -778,6 +1004,17 @@ int main(void) {
     RUN_TEST(test_tiny_negative_angle_never_gives_360);
     RUN_TEST(test_direction_label_returns_correct_cardinal);
     RUN_TEST(test_heading_convention_matches_board);
+    RUN_TEST(test_tilt_heading_equals_flat_heading_when_flat);
+    RUN_TEST(test_tilt_heading_recovers_heading_when_tilted);
+    RUN_TEST(test_tilt_heading_removes_roll_error_pointing_north);
+    RUN_TEST(test_tilt_heading_removes_pitch_error_pointing_east);
+    RUN_TEST(test_tilt_heading_uses_the_z_sign);
+    RUN_TEST(test_tilt_heading_screen_down);
+    RUN_TEST(test_tilt_heading_is_nan_without_gravity);
+    RUN_TEST(test_tilt_heading_reads_the_sensor);
+    RUN_TEST(test_tilt_heading_is_nan_on_bus_error);
+    RUN_TEST(test_tilt_heading_matches_v1c_log_when_flat);
+    RUN_TEST(test_tilt_heading_matches_v1c_log_when_tilted);
     RUN_TEST(test_direction_sectors_are_centred);
     RUN_TEST(test_soft_reset_writes_bit5_cfg_reg_a);
     RUN_TEST(test_reboot_writes_bit6_cfg_reg_a);
