@@ -10,6 +10,10 @@ Each sketch is built with PlatformIO for the steami environment, then
 `arm-none-eabi-size -A -d` measures the ELF. Flash counts every
 flash-resident byte (PlatformIO's report is about 360 B lower: it counts
 .text + .rodata + .data only). RAM is .data + .bss + .noinit.
+
+The sketches share PlatformIO's build cache (PLATFORMIO_BUILD_CACHE_DIR,
+default .pio/build-cache), so the objects of the common sources are compiled
+once.
 """
 
 from __future__ import annotations
@@ -154,6 +158,7 @@ def main() -> int:
     for sketch in SKETCHES:
         env = dict(os.environ)
         env["PLATFORMIO_SRC_DIR"] = str(ROOT / "lib" / sketch.replace("/", "/examples/"))
+        env.setdefault("PLATFORMIO_BUILD_CACHE_DIR", str(ROOT / ".pio" / "build-cache"))
         build = subprocess.run(
             [str(PIO), "run", "-e", "steami"],
             cwd=ROOT,
