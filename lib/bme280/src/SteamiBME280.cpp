@@ -409,6 +409,11 @@ SteamiBME280::ReadResult SteamiBME280::readData() {
 
 // Compensation formulas: Bosch BME280 datasheet, section 4.2.3 (integer
 // versions, 64-bit for the pressure), as in the MicroPython driver.
+//
+// The datasheet left-shifts values that can be negative (var1, and the signed
+// calibration words P2, P4, P5, P7 and H4). A left shift of a negative value is
+// undefined behaviour before C++20, so these shifts are written as
+// multiplications by the same power of two: the results are identical.
 
 // Returns the temperature in hundredths of a degree Celsius and updates _tFine.
 int32_t SteamiBME280::compensateTemperature(int32_t rawTemp) {
@@ -424,9 +429,9 @@ int32_t SteamiBME280::compensateTemperature(int32_t rawTemp) {
 uint32_t SteamiBME280::compensatePressure(int32_t rawPress) {
     int64_t var1 = static_cast<int64_t>(_tFine) - 128000;
     int64_t var2 = var1 * var1 * _digP6;
-    var2 = var2 + ((var1 * _digP5) << 17);
-    var2 = var2 + (static_cast<int64_t>(_digP4) << 35);
-    var1 = ((var1 * var1 * _digP3) >> 8) + ((var1 * _digP2) << 12);
+    var2 = var2 + var1 * _digP5 * (int64_t{1} << 17);
+    var2 = var2 + static_cast<int64_t>(_digP4) * (int64_t{1} << 35);
+    var1 = ((var1 * var1 * _digP3) >> 8) + var1 * _digP2 * (int64_t{1} << 12);
     var1 = (((static_cast<int64_t>(1) << 47) + var1) * _digP1) >> 33;
     if (var1 == 0) {
         return 0;  // avoid a division by zero with blank calibration data
@@ -435,14 +440,14 @@ uint32_t SteamiBME280::compensatePressure(int32_t rawPress) {
     p = (((p << 31) - var2) * 3125) / var1;
     var1 = (static_cast<int64_t>(_digP9) * (p >> 13) * (p >> 13)) >> 25;
     var2 = (static_cast<int64_t>(_digP8) * p) >> 19;
-    p = ((p + var1 + var2) >> 8) + (static_cast<int64_t>(_digP7) << 4);
+    p = ((p + var1 + var2) >> 8) + static_cast<int64_t>(_digP7) * (int64_t{1} << 4);
     return static_cast<uint32_t>(p);
 }
 
 // Returns the relative humidity in %RH as an unsigned Q22.10 fixed-point value.
 uint32_t SteamiBME280::compensateHumidity(int32_t rawHum) {
     int32_t v = _tFine - 76800;
-    v = (((((rawHum << 14) - (static_cast<int32_t>(_digH4) << 20) -
+    v = (((((rawHum << 14) - static_cast<int32_t>(_digH4) * (1 << 20) -
             (static_cast<int32_t>(_digH5) * v)) +
            16384) >>
           15) *
