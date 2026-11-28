@@ -188,6 +188,61 @@ void test_humidity_matches_reference_vector(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 55.3535f, sensor.humidity());
 }
 
+// The calibration and raw sample above are the worked example of the Bosch
+// BMP280 datasheet (BST-BMP280-DS001, section 3.12, "Calculation of pressure
+// and temperature for BMP280"); the BME280 uses the same temperature and
+// pressure formulas (BME280 datasheet, section 4.2.3). The example gives
+// T = 2508 (25.08 degC), an int32 pressure of 100653 Pa and an int64 pressure
+// of 25767236 / 256 Pa (100653.27 Pa), with the note that the integer result
+// "may deviate slightly" from it. The exact int64 result of the formulas is
+// 25767233 / 256 Pa (100653.254 Pa), 3 LSB below.
+constexpr float DATASHEET_TEMP_C = 25.08f;
+constexpr float DATASHEET_PRESS_PA = 25767236.0f / 256.0f;
+constexpr int32_t DATASHEET_PRESS_INT32_PA = 100653;
+
+// The driver converts the Q24.8 pressure to hPa with this exact expression, so
+// a pressure known as a Q24.8 integer can be compared without any tolerance.
+static float hpaFromQ24_8(uint32_t q) {
+    return static_cast<float>(q) / 25600.0f;
+}
+
+void test_compensation_matches_bosch_datasheet_example(void) {
+    sensor.begin();
+    sensor.powerOn();
+    preloadMeasurement();
+    auto r = sensor.read();
+    TEST_ASSERT_EQUAL_FLOAT(DATASHEET_TEMP_C, r.temperature);
+    float pa = r.pressure * 100.0f;
+    TEST_ASSERT_EQUAL_INT32(DATASHEET_PRESS_INT32_PA, static_cast<int32_t>(pa));
+    // Within 8 LSB of the Q24.8 example (1 LSB = 1/256 Pa).
+    TEST_ASSERT_FLOAT_WITHIN(8.0f / 256.0f, DATASHEET_PRESS_PA, pa);
+}
+
+// The tests below pin the integer results bit for bit (expected values from
+// an arbitrary-precision Python port of the datasheet formulas) on the inputs
+// that feed a negative value to the datasheet's left shifts: var1 < 0 when
+// t_fine < 128000 (shift by 17), and negative P4 (shift by 35) and P7 (shift
+// by 4). P2 < 0 with var1 > 0 (shift by 12) is the datasheet example above,
+// and H4 < 0 (shift by 20) is test_signed_humidity_calibration_is_decoded.
+
+void test_pressure_exact_below_t_fine_128000(void) {
+    sensor.begin();
+    sensor.powerOn();
+    preloadRaw(RAW_PRESS, 400000, RAW_HUM);  // t_fine = -64736 (-12.64 degC)
+    TEST_ASSERT_FLOAT_WITHIN(0.0f, hpaFromQ24_8(24298573), sensor.pressureHpa());
+}
+
+void test_pressure_exact_with_negative_p4_and_p7(void) {
+    Calibration c = BOSCH_EXAMPLE;
+    c.p4 = -2855;
+    c.p7 = -15500;
+    preloadCalibration(c);
+    sensor.begin();
+    sensor.powerOn();
+    preloadRaw(RAW_PRESS, 400000, RAW_HUM);
+    TEST_ASSERT_FLOAT_WITHIN(0.0f, hpaFromQ24_8(27602040), sensor.pressureHpa());
+}
+
 void test_read_returns_all_channels(void) {
     sensor.begin();
     sensor.powerOn();
@@ -573,6 +628,9 @@ int main(void) {
     RUN_TEST(test_negative_temperature);
     RUN_TEST(test_pressure_matches_reference_vector);
     RUN_TEST(test_humidity_matches_reference_vector);
+    RUN_TEST(test_compensation_matches_bosch_datasheet_example);
+    RUN_TEST(test_pressure_exact_below_t_fine_128000);
+    RUN_TEST(test_pressure_exact_with_negative_p4_and_p7);
     RUN_TEST(test_read_returns_all_channels);
     RUN_TEST(test_signed_humidity_calibration_is_decoded);
     RUN_TEST(test_humidity_is_clamped_to_0_100);
