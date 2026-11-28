@@ -568,7 +568,10 @@ includes, directly or through another driver (`SteamiBoard.h` pulls in
 workflows it calls…) compiles everything. A change to the package
 metadata alone (`keywords.txt`, `scripts/arduino-package/`) builds and
 lints the package without compiling, and a change that cannot affect a
-compile (docs, Markdown, native tests…) compiles nothing. The rules
+compile (docs, Markdown, native tests…) compiles nothing. An example
+folder that still exists without its `<example>.ino` (a folder renamed
+without its sketch) builds the package, which rejects it, so the PR
+fails instead of the publication. The rules
 live in `scripts/exemples-concernes.py`. On a push to `main`, only `lint`,
 `tests` and `caches` run: the PR already compiled its examples, and the
 publication compiles all of them again at the tag.
@@ -589,6 +592,24 @@ requires it, it is the check that gates the merge. If `changements`
 fails, `ci-ok` fails too, so that skipped compiles never count as a
 pass. `check-commits.yml` (`commitlint` on every commit in the PR range,
 and the branch name) and CodeQL run beside `ci.yml`.
+
+## Publication
+
+Each release published by semantic-release runs
+`publish-arduino-package.yml`, which publishes the library to
+`steamicc/arduino-steami` (the Library Manager repository), then
+dispatches the downstream bots. Its header documents the recovery: run
+it by hand on the tag, `gh workflow run publish-arduino-package.yml
+--ref vX.Y.Z`.
+
+Start such a recovery only once no publication is pending, that is when
+`gh run list --workflow publish-arduino-package.yml --status pending`
+lists nothing. The workflow's concurrency group keeps a single pending
+run, and a newer run cancels it: a recovery started while the newest
+tag's publication waits would cancel it, so the newest release would
+never reach the Library Manager nor the downstream repositories. During
+a burst of releases, the intermediate tags are skipped the same way,
+which is harmless since the downstream bots follow the latest release.
 
 ## Notes
 
