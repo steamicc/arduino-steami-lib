@@ -241,6 +241,8 @@ their "unavailable" value without any bus traffic and without printing again.
   be much larger than the Earth's 25 to 65 uT. Hard iron only: the `sx`, `sy`
   and `sz` scales are not applied to these values. `SteamiCompass::heading()`
   uses the `sx`, `sy` and `sz` scales as well as the offsets.
+  A failed I2C read of the field returns `NAN` on every axis, and
+  `SteamiCompass::heading()` returns `NAN` too (`direction()` returns `""`).
   `calibrate(seconds)` is a min/max calibration done in RAM: turn the board in
   every direction meanwhile. It is lost on reset; the `cm` key of the board
   config (see Calibration) is applied automatically. `calibrate(0)` does

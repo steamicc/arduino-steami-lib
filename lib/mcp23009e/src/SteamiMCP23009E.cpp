@@ -124,7 +124,10 @@ uint8_t SteamiMCP23009E::getBit(uint8_t reg, uint8_t bit) {
 }
 
 void SteamiMCP23009E::reset() {
-    // Effectue un reset hardware du MCP23009E
+    // Effectue un reset hardware du MCP23009E. Le reset désactive les
+    // interruptions du composant : les callbacks doivent être enregistrés
+    // à nouveau.
+    _enabled = 0;
     digitalWrite(_resetPin, LOW);
     delay(5);
     digitalWrite(_resetPin, HIGH);
@@ -132,6 +135,9 @@ void SteamiMCP23009E::reset() {
 }
 
 void SteamiMCP23009E::powerOff() {
+    // Maintient le composant en reset : ses interruptions sont désactivées,
+    // les callbacks doivent être enregistrés à nouveau après powerOn().
+    _enabled = 0;
     digitalWrite(_resetPin, LOW);
 }
 
@@ -141,7 +147,10 @@ void SteamiMCP23009E::powerOn() {
 }
 
 void SteamiMCP23009E::softReset() {
-    // Réinitialise le composant avec les valeurs par défaut
+    // Réinitialise le composant avec les valeurs par défaut. Les
+    // interruptions sont désactivées : les callbacks doivent être
+    // enregistrés à nouveau.
+    _enabled = 0;
     writeReg(MCP23009_IODIR, 0xFF);
     writeReg(MCP23009_GPPU, 0x00);
     writeReg(MCP23009_IOCON, 0x00);
@@ -339,8 +348,14 @@ uint8_t SteamiMCP23009E::getGpio() {
 
 bool SteamiMCP23009E::gpio(uint8_t& value) {
     // Lit le registre GPIO en une transaction et signale les erreurs de bus.
+    return readReg(MCP23009_GPIO, value);
+}
+
+bool SteamiMCP23009E::readReg(uint8_t reg, uint8_t& value) {
+    // Lit un registre et signale les erreurs de bus ; value reste inchangée
+    // en cas d'erreur.
     _wire->beginTransmission(_address);
-    _wire->write(MCP23009_GPIO);
+    _wire->write(reg);
     if (_wire->endTransmission(false) != 0) {
         return false;
     }
@@ -364,17 +379,36 @@ uint8_t SteamiMCP23009E::getOlat() {
 void SteamiMCP23009E::sendEnableInterrupt(uint8_t gpx) {
     /* Active l'interruption pour un GPIO spécifique
 
+        Le callback doit déjà être enregistré : une interruption qui arrive
+        dès l'écriture de GPINTEN le trouve. Avant cette écriture,
+        l'interruption en attente est lue et effacée, pour qu'un changement
+        antérieur à l'enregistrement n'appelle pas le nouveau callback. Le
+        niveau lu à ce moment devient le dernier niveau connu du GPIO, sans
+        événement, et les événements de ce GPIO encore en file sont
+        abandonnés. Les événements en attente des autres GPIO sont transmis
+        à leurs callbacks, pas perdus.
+
         Args:
             gpx: Numéro de GPIO (0 à 7)*/
 
-    uint8_t gpinten = readReg(MCP23009_GPINTEN);
-    uint8_t intcon = readReg(MCP23009_INTCON);
+    const uint8_t bit = static_cast<uint8_t>(1 << gpx);
 
-    gpinten = setBit(gpinten, gpx, MCP23009_INTEN_ENABLE);
-    intcon = setBit(intcon, gpx, MCP23009_INTCON_PREVIOUS_STATE);
+    // INTCON d'abord, bit à 0 = comparer avec l'état précédent : en mode
+    // DEFVAL, activer GPINTEN déclencherait une interruption tout de suite.
+    writeReg(MCP23009_INTCON, static_cast<uint8_t>(readReg(MCP23009_INTCON) & ~bit));
 
-    writeReg(MCP23009_GPINTEN, gpinten);
-    writeReg(MCP23009_INTCON, intcon);
+    // Les lectures déjà en file ne transmettent plus d'événement de gpx.
+    _generation++;
+    _registered[gpx] = _generation;
+    _enabled |= bit;
+
+    // Effacer l'interruption en attente, sans événement de gpx, et prendre
+    // le niveau actuel de gpx comme dernier niveau connu.
+    readInterrupt(bit);
+    writeReg(MCP23009_GPINTEN, static_cast<uint8_t>(readReg(MCP23009_GPINTEN) | bit));
+
+    // Puis transmettre les événements des autres GPIO.
+    dispatchQueued();
 }
 
 void SteamiMCP23009E::sendDisableInterrupt(uint8_t gpx) {
@@ -383,17 +417,21 @@ void SteamiMCP23009E::sendDisableInterrupt(uint8_t gpx) {
         Args:
             gpx: Numéro de GPIO (0 à 7)*/
 
-    uint8_t gpinten = readReg(MCP23009_GPINTEN);
-    uint8_t intcon = readReg(MCP23009_INTCON);
-    uint8_t defval = readReg(MCP23009_DEFVAL);
+    const uint8_t mask = static_cast<uint8_t>(~(1 << gpx));
 
-    gpinten = setBit(gpinten, gpx, MCP23009_INTEN_DISABLE);
-    intcon = setBit(intcon, gpx, MCP23009_INTCON_PREVIOUS_STATE);
-    defval = setBit(defval, gpx, MCP23009_LOGIC_LOW);
+    // Plus aucun événement de gpx à partir d'ici, même trouvé dans GPIO.
+    _enabled &= mask;
 
-    writeReg(MCP23009_GPINTEN, gpinten);
-    writeReg(MCP23009_INTCON, intcon);
-    writeReg(MCP23009_DEFVAL, defval);
+    // GPINTEN, INTCON (état précédent) et DEFVAL (bas) à 0 pour gpx.
+    writeReg(MCP23009_GPINTEN, static_cast<uint8_t>(readReg(MCP23009_GPINTEN) & mask));
+    writeReg(MCP23009_INTCON, static_cast<uint8_t>(readReg(MCP23009_INTCON) & mask));
+    writeReg(MCP23009_DEFVAL, static_cast<uint8_t>(readReg(MCP23009_DEFVAL) & mask));
+}
+
+void SteamiMCP23009E::clearCallbacks(uint8_t gpx) {
+    _eventsChange[gpx] = nullptr;
+    _eventsFall[gpx] = nullptr;
+    _eventsRise[gpx] = nullptr;
 }
 
 void SteamiMCP23009E::interruptOnChange(uint8_t gpx, std::function<void(uint8_t)> callback) {
@@ -401,15 +439,16 @@ void SteamiMCP23009E::interruptOnChange(uint8_t gpx, std::function<void(uint8_t)
 
         Args:
             gpx: Numéro de GPIO (0 à 7)
-            callback: Fonction appelée lors d'un changement (reçoit le niveau logique en paramètre)
-       */
+            callback: Fonction appelée lors d'un changement (reçoit le niveau
+                de l'événement : capturé dans INTCAP, ou lu dans GPIO pour un
+                changement que le composant n'a pas signalé)*/
 
     if (gpx > 7) {
         return;
     }
 
-    sendEnableInterrupt(gpx);
     _eventsChange[gpx] = std::move(callback);
+    sendEnableInterrupt(gpx);
 }
 
 void SteamiMCP23009E::interruptOnFalling(uint8_t gpx, std::function<void()> callback) {
@@ -422,11 +461,12 @@ void SteamiMCP23009E::interruptOnFalling(uint8_t gpx, std::function<void()> call
     if (gpx > 7) {
         return;
     }
-    sendEnableInterrupt(gpx);
+
     _eventsFall[gpx] = std::move(callback);
+    sendEnableInterrupt(gpx);
 }
 
-void SteamiMCP23009E::interruptOnRaising(uint8_t gpx, std::function<void()> callback) {
+void SteamiMCP23009E::interruptOnRising(uint8_t gpx, std::function<void()> callback) {
     /*Active et enregistre un callback pour les fronts montants d'un GPIO
 
         Args:
@@ -437,8 +477,8 @@ void SteamiMCP23009E::interruptOnRaising(uint8_t gpx, std::function<void()> call
         return;
     }
 
-    sendEnableInterrupt(gpx);
     _eventsRise[gpx] = std::move(callback);
+    sendEnableInterrupt(gpx);
 }
 
 void SteamiMCP23009E::disableInterrupt(uint8_t gpx) {
@@ -452,10 +492,7 @@ void SteamiMCP23009E::disableInterrupt(uint8_t gpx) {
     }
 
     sendDisableInterrupt(gpx);
-
-    _eventsChange[gpx] = nullptr;
-    _eventsFall[gpx] = nullptr;
-    _eventsRise[gpx] = nullptr;
+    clearCallbacks(gpx);
 }
 
 void SteamiMCP23009E::irqHandler() {
@@ -468,42 +505,126 @@ void SteamiMCP23009E::irqHandler() {
 
 void SteamiMCP23009E::poll() {
     // Non-ISR dispatcher. Call this from loop() (or any non-interrupt
-    // context) — it picks up the pending flag set by irqHandler() and
-    // runs interruptEvent() with the bus + callback rules of normal
-    // user code.
+    // context) — it runs interruptEvent() with the bus + callback rules
+    // of normal user code.
+    if (_interruptPin < 0) {
+        // No MCU interrupt line: the chip keeps its own INTF/INTCAP latch,
+        // so reading it at each call finds what changed since the last one.
+        if (_enabled != 0) {
+            interruptEvent();
+        }
+        return;
+    }
     if (_irqPending) {
         _irqPending = false;
         interruptEvent();
     }
 }
 
-void SteamiMCP23009E::interruptEvent() {
-    // Reads which pins fired (INTF) and which value they had at the
-    // moment of the event (INTCAP — the captured snapshot, not the
-    // current GPIO state, so a bounce or follow-up edge can't
-    // misclassify the callback). INTCAP is the authoritative source
-    // whether INTCC is set or not.
-    uint8_t intf = readReg(MCP23009_INTF);
-    uint8_t state = readReg(MCP23009_INTCAP);
+bool SteamiMCP23009E::interruptEvent() {
+    // See the header for the event order, the queue and the limits.
+    bool ok = readInterrupt(0);
+    dispatchQueued();
+    return ok;
+}
 
-    for (uint8_t i = 0; i < 8; i++) {
-        if (getBit(intf, i)) {
-            uint8_t level = getBit(state, i);
+bool SteamiMCP23009E::readInterrupt(uint8_t skipMask) {
+    // Lit et efface l'interruption en attente, et met ses événements en
+    // file. skipMask : GPIO dont l'événement est ignoré ; leur niveau
+    // actuel devient leur dernier niveau connu.
+    //
+    // INTF, puis INTCAP (niveau des GPIO capturé au moment de
+    // l'interruption), puis GPIO. Selon IOCON.INTCC, la lecture de INTCAP
+    // ou celle de GPIO efface l'interruption : lire les deux l'efface dans
+    // tous les cas. readReg(uint8_t) renvoie 0 sur une erreur de bus, ce
+    // qui ressemblerait à des boutons actifs à l'état bas tous appuyés :
+    // sur erreur, ni événement ni mise à jour des niveaux.
+    uint8_t intf = 0;
+    uint8_t captured = 0;
+    uint8_t gpio = 0;
+    if (!readReg(MCP23009_INTF, intf) || !readReg(MCP23009_INTCAP, captured) ||
+        !readReg(MCP23009_GPIO, gpio)) {
+        return false;
+    }
 
-            if (level == MCP23009_LOGIC_HIGH) {
-                if (_eventsRise[i] != nullptr) {
-                    _eventsRise[i]();
-                }
-            } else {
-                if (_eventsFall[i] != nullptr) {
-                    _eventsFall[i]();
+    const uint8_t enabled = _enabled & static_cast<uint8_t>(~skipMask);
+    const uint8_t last = _levels;
+    // GPIO dans INTF dont le niveau capturé diffère du dernier connu.
+    const uint8_t fromIntcap = intf & enabled & (captured ^ last);
+    // GPIO dont le niveau actuel diffère encore (après fromIntcap) :
+    // changements après la capture, ou que le composant n'a pas signalés.
+    const uint8_t fromGpio = enabled & (gpio ^ last ^ fromIntcap);
+
+    const bool full = ((_tail - _head) & (2 * kQueueLen - 1)) == kQueueLen;
+    // File pleine : les GPIO activés gardent leur dernier niveau connu, et
+    // une nouvelle lecture, une fois la file vidée, retrouve leurs
+    // changements dans GPIO.
+    const uint8_t tracked = full ? skipMask : static_cast<uint8_t>(skipMask | enabled);
+    _levels = static_cast<uint8_t>((last & ~tracked) | (gpio & tracked));
+    if (full) {
+        _overflow = true;
+        return true;
+    }
+
+    _queue[_tail % kQueueLen] = {fromIntcap, captured, fromGpio, gpio, _generation};
+    _tail = static_cast<uint8_t>((_tail + 1) % (2 * kQueueLen));
+    return true;
+}
+
+void SteamiMCP23009E::dispatchQueued() {
+    // Transmet aux callbacks les événements en file, dans l'ordre. Un seul
+    // appel transmet à la fois : un appel fait pendant un callback revient
+    // tout de suite, et ses événements sont transmis par l'appel en cours,
+    // après ceux qui les précèdent.
+    while (!_dispatching && (_head != _tail || _overflow)) {
+        _dispatching = true;
+        if (_head != _tail) {
+            const InterruptRead read = _queue[_head % kQueueLen];
+            _head = static_cast<uint8_t>((_head + 1) % (2 * kQueueLen));
+            // Les niveaux capturés précèdent les niveaux actuels.
+            for (uint8_t i = 0; i < 8; i++) {
+                if (getBit(read.fromIntcap, i)) {
+                    dispatch(i, getBit(read.captured, i), read.generation);
                 }
             }
-
-            if (_eventsChange[i] != nullptr) {
-                _eventsChange[i](level);
+            for (uint8_t i = 0; i < 8; i++) {
+                if (getBit(read.fromGpio, i)) {
+                    dispatch(i, getBit(read.gpio, i), read.generation);
+                }
             }
+        } else {
+            // File vidée après un débordement : relire les changements qui
+            // n'y ont pas trouvé de place.
+            _overflow = false;
+            readInterrupt(0);
         }
+        _dispatching = false;
+    }
+}
+
+void SteamiMCP23009E::dispatch(uint8_t gpx, uint8_t level, uint32_t generation) {
+    // Appelle les callbacks du GPIO gpx, sauf si son interruption a été
+    // désactivée, ou enregistrée à nouveau, après la lecture de
+    // l'événement. Chaque callback est copié avant l'appel : il peut
+    // remplacer ou effacer son propre emplacement (nouvel enregistrement,
+    // disableInterrupt) pendant qu'il s'exécute.
+    if (!getBit(_enabled, gpx) || static_cast<int32_t>(generation - _registered[gpx]) < 0) {
+        return;
+    }
+
+    std::function<void()> edge =
+        (level == MCP23009_LOGIC_HIGH) ? _eventsRise[gpx] : _eventsFall[gpx];
+    if (edge) {
+        edge();
+    }
+
+    // Le callback de front a pu désactiver ou réenregistrer le GPIO.
+    if (!getBit(_enabled, gpx) || static_cast<int32_t>(generation - _registered[gpx]) < 0) {
+        return;
+    }
+    std::function<void(uint8_t)> change = _eventsChange[gpx];
+    if (change) {
+        change(level);
     }
 }
 
@@ -587,40 +708,50 @@ void MCP23009Pin::toggle() {
 void MCP23009Pin::irq(std::function<void()> handler, uint16_t trigger, [[maybe_unused]] bool hard) {
     /*Configure une interruption sur la pin
 
+        Le handler s'exécute depuis poll() / interruptEvent(), après coup :
+        la broche a pu changer depuis l'interruption. Dans le handler,
+        irqLevel() donne le niveau de l'événement, et value() le niveau
+        actuel. L'enregistrement remplace le précédent (callbacks et
+        trigger).
+
         Args:
-            handler: Fonction appelée lors de l'interruption (reçoit la pin en paramètre)
+            handler: Fonction appelée lors de l'interruption
             trigger: Type de déclenchement (IRQ_FALLING, IRQ_RISING, ou les deux)
             hard: Non utilisé (pour compatibilité avec machine.Pin)
 
-        Returns:
-            Un objet callback (cette instance)
-
         Exemple:
-            >>> def callback(pin):
-            ...     print(f"Interruption sur pin {pin._pin_number}")
-            >>> pin.irq(handler=callback, trigger=MCP23009Pin.IRQ_FALLING)*/
+            pin.irq([&]() { Serial.println(pin.irqLevel() == 0 ? "appuyé" : "relâché"); });*/
 
     _irqHandler = std::move(handler);
     _irqTrigger = trigger;
 
+    // Retirer les callbacks d'un enregistrement précédent, qui peut avoir
+    // utilisé un autre trigger.
+    _mcp.clearCallbacks(_pinNumber);
+
     if (trigger & IRQ_FALLING) {
         if (trigger & IRQ_RISING) {
-            _mcp.interruptOnChange(_pinNumber, [this](uint8_t level) {
-                if (_irqHandler)
-                    _irqHandler();
-            });
+            _mcp.interruptOnChange(_pinNumber, [this](uint8_t level) { deliver(level); });
         } else {
-            _mcp.interruptOnFalling(_pinNumber, [this]() {
-                if (_irqHandler)
-                    _irqHandler();
-            });
+            _mcp.interruptOnFalling(_pinNumber, [this]() { deliver(MCP23009_LOGIC_LOW); });
         }
     } else if (trigger & IRQ_RISING) {
-        _mcp.interruptOnRaising(_pinNumber, [this]() {
-            if (_irqHandler)
-                _irqHandler();
-        });
+        _mcp.interruptOnRising(_pinNumber, [this]() { deliver(MCP23009_LOGIC_HIGH); });
     }
+}
+
+void MCP23009Pin::deliver(uint8_t level) {
+    // Note le niveau de l'événement, puis appelle le handler. Copié avant
+    // l'appel : le handler peut appeler irq() à nouveau.
+    _irqLevel = level;
+    std::function<void()> handler = _irqHandler;
+    if (handler) {
+        handler();
+    }
+}
+
+uint8_t MCP23009Pin::irqLevel() const {
+    return _irqLevel;
 }
 
 uint8_t MCP23009Pin::mode(uint8_t mode) {
@@ -750,6 +881,15 @@ void MCP23009ActiveLowPin::irq(std::function<void()> handler, uint16_t trigger, 
         trigger = invertedTrigger;
     }
     _pin.irq(std::move(handler), trigger, hard);
+}
+
+uint8_t MCP23009ActiveLowPin::irqLevel() const {
+    // Niveau logique de l'événement en cours (inversé par rapport au GPIO).
+    uint8_t level = _pin.irqLevel();
+    if (level == IRQ_LEVEL_NONE) {
+        return level;
+    }
+    return static_cast<uint8_t>(1 - level);
 }
 
 uint8_t MCP23009ActiveLowPin::mode(uint8_t mode) {

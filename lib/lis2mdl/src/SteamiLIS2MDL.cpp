@@ -265,8 +265,12 @@ uint8_t SteamiLIS2MDL::readReg(uint8_t reg) {
 }
 
 MagneticFieldUt SteamiLIS2MDL::magneticFieldUt() {
-    // Reads the magnetic field in µT, uncalibrated (simple conversion from LSB).
-    MagneticField raw = magneticField();
+    // Reads the magnetic field in µT, uncalibrated (simple conversion from LSB). NAN on a bus
+    // error.
+    MagneticField raw;
+    if (!magneticField(raw)) {
+        return {NAN, NAN, NAN};
+    }
     MagneticFieldUt f;
     f.x = raw.x * MAG_LSB_TO_UT;
     f.y = raw.y * MAG_LSB_TO_UT;
@@ -276,7 +280,11 @@ MagneticFieldUt SteamiLIS2MDL::magneticFieldUt() {
 
 CalibratedField SteamiLIS2MDL::calibratedField() {
     // Reads the calibrated field (offset/scale per axis), normalized (unitless, ~circle in XY).
-    MagneticField raw = magneticField();
+    // NAN on a bus error.
+    MagneticField raw;
+    if (!magneticField(raw)) {
+        return {NAN, NAN, NAN};
+    }
     CalibratedField f;
     f.x = (raw.x - xOff) / (xScale != 0 ? xScale : 1.0f);
     f.y = (raw.y - yOff) / (yScale != 0 ? yScale : 1.0f);
@@ -285,7 +293,7 @@ CalibratedField SteamiLIS2MDL::calibratedField() {
 }
 
 float SteamiLIS2MDL::magnitudeUt() {
-    // Total magnetic field strength (µT).
+    // Total magnetic field strength (µT). NAN on a bus error.
     MagneticFieldUt f = magneticFieldUt();
     return sqrt(f.x * f.x + f.y * f.y + f.z * f.z);
 }
@@ -296,13 +304,47 @@ int16_t SteamiLIS2MDL::toInt16(uint16_t v) {
 }
 
 MagneticField SteamiLIS2MDL::magneticField() {
-    // Read the raw magnetic field data (X, Y, Z) from the sensor.
-    ensureData();
+    // Read the raw magnetic field data (X, Y, Z) from the sensor; {0, 0, 0} on failure.
     MagneticField f;
-    f.x = toInt16(readReg(LIS2MDL_OUTX_L_REG) | ((uint16_t)readReg(LIS2MDL_OUTX_H_REG) << 8));
-    f.y = toInt16(readReg(LIS2MDL_OUTY_L_REG) | ((uint16_t)readReg(LIS2MDL_OUTY_H_REG) << 8));
-    f.z = toInt16(readReg(LIS2MDL_OUTZ_L_REG) | ((uint16_t)readReg(LIS2MDL_OUTZ_H_REG) << 8));
+    magneticField(f);
     return f;
+}
+
+bool SteamiLIS2MDL::magneticField(MagneticField& value) {
+    // X, Y and Z in one burst from OUTX_L (the address auto-increments), with BDU set by
+    // begin(): one transaction on the shared bus, and a bus error or a data-ready timeout is
+    // reported instead of being read as a plausible field.
+    value = {0, 0, 0};
+    uint8_t buf[6];
+    if (!ensureData() || !readBytes(LIS2MDL_OUTX_L_REG, buf, sizeof(buf))) {
+        return false;
+    }
+    value.x = toInt16(buf[0] | ((uint16_t)buf[1] << 8));
+    value.y = toInt16(buf[2] | ((uint16_t)buf[3] << 8));
+    value.z = toInt16(buf[4] | ((uint16_t)buf[5] << 8));
+    return true;
+}
+
+bool SteamiLIS2MDL::readBytes(uint8_t reg, uint8_t* buffer, uint8_t length) {
+    // Consecutive registers in one transaction; false when the chip does not answer.
+    _wire->beginTransmission(_address);
+    _wire->write(reg);
+    if (_wire->endTransmission(false) != 0) {
+        return false;
+    }
+    if (_wire->requestFrom(_address, length) != length) {
+        while (_wire->available()) {
+            _wire->read();
+        }
+        return false;
+    }
+    for (uint8_t i = 0; i < length; i++) {
+        if (!_wire->available()) {
+            return false;
+        }
+        buffer[i] = static_cast<uint8_t>(_wire->read());
+    }
+    return true;
 }
 
 int16_t SteamiLIS2MDL::readTemperatureRaw() {
@@ -436,9 +478,15 @@ void SteamiLIS2MDL::calibrateMinmax2d(uint16_t samples, uint16_t delayMs) {
 
     float xmin = 1e9f, ymin = 1e9f;
     float xmax = -1e9f, ymax = -1e9f;
+    bool any = false;
 
     for (uint16_t i = 0; i < samples; i++) {
-        MagneticField f = magneticField();
+        MagneticField f;
+        if (!magneticField(f)) {
+            delay(delayMs);
+            continue;  // a failed read is not a sample
+        }
+        any = true;
         if (f.x < xmin)
             xmin = f.x;
         if (f.x > xmax)
@@ -448,6 +496,9 @@ void SteamiLIS2MDL::calibrateMinmax2d(uint16_t samples, uint16_t delayMs) {
         if (f.y > ymax)
             ymax = f.y;
         delay(delayMs);
+    }
+    if (!any) {
+        return;  // no sample: keep the current calibration
     }
 
     xOff = (xmin + xmax) / 2.0f;
@@ -466,9 +517,15 @@ void SteamiLIS2MDL::calibrateMinmax3d(uint16_t samples, uint16_t delayMs) {
 
     float xmin = 1e9f, ymin = 1e9f, zmin = 1e9f;
     float xmax = -1e9f, ymax = -1e9f, zmax = -1e9f;
+    bool any = false;
 
     for (uint16_t i = 0; i < samples; i++) {
-        MagneticField f = magneticField();
+        MagneticField f;
+        if (!magneticField(f)) {
+            delay(delayMs);
+            continue;  // a failed read is not a sample
+        }
+        any = true;
         if (f.x < xmin)
             xmin = f.x;
         if (f.x > xmax)
@@ -482,6 +539,9 @@ void SteamiLIS2MDL::calibrateMinmax3d(uint16_t samples, uint16_t delayMs) {
         if (f.z > zmax)
             zmax = f.z;
         delay(delayMs);
+    }
+    if (!any) {
+        return;  // no sample: keep the current calibration
     }
 
     xOff = (xmin + xmax) / 2.0f;
@@ -657,8 +717,11 @@ float SteamiLIS2MDL::headingFromVectors(float x, float y, float z, bool calibrat
 
 float SteamiLIS2MDL::headingFlatOnly() {
     /*Reads the sensor and returns the angle (0..360°) assuming the board is FLAT.
-        Uses XY (no tilt compensation).*/
-    MagneticField f = magneticField();
+        Uses XY (no tilt compensation). NAN on a bus error; the heading filter is left as is.*/
+    MagneticField f;
+    if (!magneticField(f)) {
+        return NAN;
+    }
     return headingFromVectors(f.x, f.y, f.z, true);
 }
 
@@ -682,9 +745,12 @@ float SteamiLIS2MDL::headingWithTiltCompensation(Vec3f (*readAccel)()) {
 }
 
 const char* SteamiLIS2MDL::directionLabel(float angle) {
-    // Returns N/NE/E/... ; if angle=-1, reads headingFlatOnly().
+    // Returns N/NE/E/... ; if angle=-1, reads headingFlatOnly(). "" for NAN (failed read).
     if (angle < 0.0f) {
         angle = headingFlatOnly();
+    }
+    if (isnan(angle)) {
+        return "";
     }
     const char* dirs[] = {"N", "NE", "E", "SE", "S", "SW", "W", "NW"};
     return dirs[(int)((angle + 22.5f) / 45.0f) % 8];

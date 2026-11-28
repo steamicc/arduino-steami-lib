@@ -87,10 +87,60 @@ Direct read/write access to every register in the MCP23009E register map.
 |--------|-------------|
 | `void interruptOnChange(uint8_t gpx, std::function<void(uint8_t)> callback)` | Call `callback(level)` on any level change of `gpx`. |
 | `void interruptOnFalling(uint8_t gpx, std::function<void()> callback)` | Call `callback()` on falling edge of `gpx`. |
-| `void interruptOnRaising(uint8_t gpx, std::function<void()> callback)` | Call `callback()` on rising edge of `gpx`. |
+| `void interruptOnRising(uint8_t gpx, std::function<void()> callback)` | Call `callback()` on rising edge of `gpx`. |
+| `void interruptOnRaising(uint8_t gpx, std::function<void()> callback)` | Deprecated former name of `interruptOnRising()`, kept for the whole 1.x series and removed in 2.0.0. |
 | `void disableInterrupt(uint8_t gpx)` | Disable and clear all callbacks for `gpx`. |
-| `void poll()` | Drain the ISR-set pending flag and dispatch the registered callbacks. Call this from `loop()`. The ISR itself only sets the flag — running callbacks (and the I²C reads they involve) from interrupt context is unsafe on STM32duino. |
-| `void interruptEvent()` | Force a dispatch pass regardless of the pending flag. Usually you'll call `poll()` instead. |
+| `void poll()` | Dispatch the registered callbacks in normal (non-interrupt) context. Call this from `loop()`. With an interrupt pin, it reads the chip only once the ISR has flagged an interrupt — the ISR itself only sets the flag, because running callbacks (and the I²C reads they involve) from interrupt context is unsafe on STM32duino. Without an interrupt pin, it reads the chip at each call while at least one pin is enabled. |
+| `bool interruptEvent()` | Read the chip and dispatch now, regardless of the pending flag. Returns `false` on a bus error (no event is reported then). Usually you'll call `poll()` instead. |
+
+How events are reported:
+
+- **No event at registration.** Registering a callback stores it, reads and
+  clears the pending interrupt, then enables the pin. A change made before
+  the call fires nothing, and the level read then becomes the last known
+  level of the pin. A registration replaces the earlier callback of the same
+  kind.
+- **Every edge, in order.** Each read takes INTF, INTCAP (the port captured
+  at the interrupt) and GPIO. For each enabled pin, the driver reports the
+  captured level if it differs from the last known one, then the current
+  GPIO level if it still differs. A short tap released before the read gives
+  the press, then the release. While an interrupt is pending, the chip does
+  not signal changes on the other pins: the GPIO read finds them.
+- **Queue.** Reads are queued (8 records) and delivered in FIFO order, so a
+  read made from inside a callback (`interruptEvent()`, `poll()` or a
+  registration) is delivered after the events already queued. Past 8 queued
+  reads, the changes are read again from GPIO once the queue is empty.
+  Events read before a pin is registered again are dropped for that pin.
+- **Reset.** `reset()`, `powerOff()` and the soft reset disable every pin:
+  register the callbacks again afterwards.
+- **Limit.** A press and its release that both happen while an interrupt is
+  pending cancel out: the chip keeps no trace of them.
+
+Pin handlers keep the no-argument signature. In the handler,
+`pin.irqLevel()` gives the level of the event being delivered (captured in
+INTCAP, or read in GPIO for a change the chip did not signal), while
+`pin.value()` reads the current level. `MCP23009ActiveLowPin::irqLevel()`
+returns it inverted. Both return `IRQ_LEVEL_NONE` (`0xFF`) before any
+interrupt.
+
+```cpp
+SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+MCP23009Pin up(expander, MCP23009_BTN_UP);
+
+void setup() {
+    expander.begin();
+    up.init(MCP23009Pin::IN, MCP23009Pin::PULL_UP);
+    up.irq([]() { Serial.println(up.irqLevel() == 0 ? "UP pressed" : "UP released"); });
+}
+
+void loop() {
+    expander.poll();
+}
+```
+
+The same behaviour is implemented in the MicroPython driver
+([steamicc/micropython-steami-lib#466](https://github.com/steamicc/micropython-steami-lib/pull/466)),
+where `irq_level()` is the counterpart of `irqLevel()`.
 
 ### IOCON configuration — `MCP23009Config`
 
@@ -136,7 +186,7 @@ led.off();   // GPIO HIGH → LED off
 ```
 
 Both classes share the same interface: `on()`, `off()`, `toggle()`,
-`value(x)`, `init(mode, pull, value)`, `mode()`, `pull()`, `irq()`.
+`value(x)`, `init(mode, pull, value)`, `mode()`, `pull()`, `irq()`, `irqLevel()`.
 
 ## Register constants
 

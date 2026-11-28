@@ -104,13 +104,22 @@ If the sensor is idle when a read is requested, the driver automatically
 triggers a one-shot conversion, polls `dataReady()` with a bounded timeout,
 and returns the result. The caller does not have to manage modes manually.
 
+The six output bytes are read in one I2C transaction (`begin()` sets BDU, so
+the low and high bytes always belong to the same sample). A bus error or a
+data-ready timeout is reported, as the MicroPython driver does with `OSError`:
+`magneticField()` returns `{0, 0, 0}`, `bool magneticField(MagneticField&)`
+returns `false`, the float readings (`magneticFieldUt()`, `calibratedField()`,
+`magnitudeUt()`, `headingFlatOnly()`) return `NAN` and `directionLabel()`
+returns `""`.
+
 | Method | Return type | Description |
 |--------|-------------|-------------|
-| `magneticField()` | `MagneticField` (`Vec3i`) | Raw X/Y/Z in LSB (int16). |
+| `magneticField()` | `MagneticField` (`Vec3i`) | Raw X/Y/Z in LSB (int16), `{0, 0, 0}` on failure. |
+| `magneticField(MagneticField& value)` | `bool` | Same reading into `value`; `false` on a bus error or a data-ready timeout. |
 | `magneticFieldRaw()` | `MagneticField` | Alias for `magneticField()`. |
-| `magneticFieldUt()` | `MagneticFieldUt` (`Vec3f`) | Field in µT (0.15 µT/LSB). |
-| `calibratedField()` | `CalibratedField` (`Vec3f`) | Offset/scale corrected, unitless. |
-| `magnitudeUt()` | `float` | Total field strength in µT. |
+| `magneticFieldUt()` | `MagneticFieldUt` (`Vec3f`) | Field in µT (0.15 µT/LSB), `NAN` on failure. |
+| `calibratedField()` | `CalibratedField` (`Vec3f`) | Offset/scale corrected, unitless, `NAN` on failure. |
+| `magnitudeUt()` | `float` | Total field strength in µT, `NAN` on failure. |
 | `readAll()` | `ReadAll` | All channels in one call: `raw`, `ut`, `cal`, `tempC`, `status`. |
 | `dataReady()` | `bool` | `true` when a fresh XYZ triplet is available (Zyxda bit). |
 | `status()` | `uint8_t` | Raw `STATUS_REG` value. |
@@ -147,8 +156,8 @@ correction: `setTemperatureOffset()` resets the gain to 1.0.
 | Method | Description |
 |--------|-------------|
 | `void setCalibrateStep(float xoff, float yoff, float zoff, float xscale, float yscale, float zscale)` | Set offsets and scales manually. |
-| `void calibrateMinmax2d(uint16_t samples = 300, uint16_t delayMs = 20)` | Min/max calibration on XY only — rotate board flat during acquisition. |
-| `void calibrateMinmax3d(uint16_t samples = 600, uint16_t delayMs = 20)` | Min/max calibration on all 3 axes — rotate board in all directions. |
+| `void calibrateMinmax2d(uint16_t samples = 300, uint16_t delayMs = 20)` | Min/max calibration on XY only — rotate board flat during acquisition. Failed reads are skipped; with no valid sample the calibration is kept. |
+| `void calibrateMinmax3d(uint16_t samples = 600, uint16_t delayMs = 20)` | Min/max calibration on all 3 axes — rotate board in all directions. Failed reads are skipped; with no valid sample the calibration is kept. |
 | `CalibratedField calibrateApply(float x, float y, float z)` | Apply current offset/scale to a raw triplet. |
 | `CalibrationQuality calibrateQuality(uint16_t samplesCheck = 200, uint16_t delayMs = 10)` | Evaluate calibration quality: center, radius dispersion, anisotropy. |
 | `void calibrateReset()` | Reset offsets to 0 and scales to 1. |
@@ -165,13 +174,13 @@ Heading: 0° when the top of the screen (the side opposite the USB connector) po
 
 | Method | Description |
 |--------|-------------|
-| `float headingFlatOnly()` | Compass angle (0–360°) assuming the board is flat. Uses XY only. |
+| `float headingFlatOnly()` | Compass angle (0–360°) assuming the board is flat. Uses XY only. `NAN` on a failed read. |
 | `float headingFromVectors(float x, float y, float z, bool calibrated = true)` | Angle from a raw or calibrated triplet. |
 | `float headingWithTiltCompensation(Vec3f (*readAccel)())` | Tilt-compensated heading using an external accelerometer callback. |
 | `void setHeadingOffset(float deg)` | Software heading offset (physical 0° alignment). |
 | `void setDeclination(float deg)` | Magnetic declination correction for true north. |
 | `void setHeadingFilter(float alpha)` | Low-pass filter on heading via cos/sin averaging. `0` = off, `0.1–0.3` = light/medium. |
-| `const char* directionLabel(float angle = -1.0f)` | Returns `"N"`, `"NE"`, `"E"`, … . Pass `angle < 0` to read the sensor automatically. |
+| `const char* directionLabel(float angle = -1.0f)` | Returns `"N"`, `"NE"`, `"E"`, … . Pass `angle < 0` to read the sensor automatically. `""` for `NAN` or a failed read. |
 
 ### Configuration
 

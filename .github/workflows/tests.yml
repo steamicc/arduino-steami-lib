@@ -1,17 +1,27 @@
 name: Tests
 
+# Reusable workflow, called by ci.yml on every PR, in the merge queue and on
+# main.
+
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  workflow_call:
 
 permissions:
   contents: read
 
 jobs:
+  # The packaging and CI tooling (scripts/tests), on every PR: the
+  # arduino-package job of ci.yml, which also runs them, is often skipped.
+  tooling:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Test the tooling
+        run: python3 -m unittest discover -s scripts/tests
+
   native:
     runs-on: ubuntu-latest
 
