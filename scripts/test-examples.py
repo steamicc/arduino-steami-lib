@@ -7,6 +7,14 @@ Usage:
     python3 scripts/test-examples.py
     python3 scripts/test-examples.py --driver wsen-hids
     python3 scripts/test-examples.py --example wsen-hids/DewPointMonitor
+    python3 scripts/test-examples.py --only FILE
+
+--only FILE compiles the examples listed in FILE, one
+lib/<driver>/examples/<example> per line (blank lines ignored).
+
+PlatformIO's build cache (PLATFORMIO_BUILD_CACHE_DIR, default
+.pio/build-cache) is shared by every example, so the objects of the common
+sources are compiled once.
 """
 
 from __future__ import annotations
@@ -66,6 +74,7 @@ def compile_example(name: str) -> ExampleResult:
 
     env = dict(os.environ)
     env["PLATFORMIO_SRC_DIR"] = str(src_dir)
+    env.setdefault("PLATFORMIO_BUILD_CACHE_DIR", str(ROOT / ".pio" / "build-cache"))
 
     result = subprocess.run(
         [str(PIO), "run", "-e", "steami"],
@@ -92,7 +101,33 @@ def select_examples(
     examples: list[str],
     driver: str | None,
     example: str | None,
+    only: list[str] | None = None,
 ) -> list[str]:
+    if only is not None:
+        selected: list[str] = []
+
+        for raw in only:
+            line = raw.strip()
+
+            if not line:
+                continue
+
+            parts = line.split("/")
+
+            if len(parts) != 4 or parts[0] != "lib" or parts[2] != "examples":
+                raise ValueError(
+                    f"Invalid line '{line}'. Expected lib/<driver>/examples/<example>."
+                )
+
+            name = f"{parts[1]}/{parts[3]}"
+
+            if name not in examples:
+                raise ValueError(f"Example '{line}' not found.")
+
+            selected.append(name)
+
+        return selected
+
     if example:
         if example not in examples:
             raise ValueError(f"Example '{example}' not found.")
@@ -152,6 +187,11 @@ def main() -> int:
         "--example",
         help="Compile one example as <driver>/<example>",
     )
+    group.add_argument(
+        "--only",
+        metavar="FILE",
+        help="Compile the examples listed in FILE (one lib/<driver>/examples/<example> per line)",
+    )
     parser.add_argument(
         "--verbose",
         action="store_true",
@@ -168,18 +208,31 @@ def main() -> int:
         return 1
 
     examples = discover_examples()
+    only = None
+
+    if args.only:
+        try:
+            only = Path(args.only).read_text(encoding="utf-8").splitlines()
+        except OSError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 1
 
     try:
         selected = select_examples(
             examples,
             args.driver,
             args.example,
+            only,
         )
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
     if not selected:
+        if only is not None:
+            print("Nothing to compile: the list is empty.")
+            return 0
+
         print("Error: no Arduino examples found.", file=sys.stderr)
         return 1
 
