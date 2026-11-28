@@ -12,6 +12,14 @@ name: Publish Arduino package
 # Manual recovery: run the workflow on the tag itself, so the code that is
 # built and tested is the tagged code:
 #   gh workflow run publish-arduino-package.yml --ref v0.25.0 [-f dry_run=true]
+# Start it only once no publication is pending (this lists nothing):
+#   gh run list --workflow publish-arduino-package.yml --status pending
+# The concurrency group below keeps a single pending run: a newer run cancels
+# the pending one. A recovery started while the newest tag's run waits would
+# cancel that publication, and the newest release would never reach the
+# Library Manager nor dispatch the downstream bots. The intermediate tags of
+# a release burst are skipped the same way, which is harmless: the downstream
+# bots follow the latest release.
 #
 # The examples are compiled once: the check job compiles every example and
 # uploads the .bin files (artifact exemples-bin) with the package (artifact

@@ -161,6 +161,23 @@ class ExemplesConcernesTest(unittest.TestCase):
         self.assertEqual(r["pilotes"], ["c"])
         self.assertTrue(r["compiler"])
 
+    def test_dossier_d_exemple_sans_son_ino_construit_le_paquet(self):
+        # Folder renamed without its .ino: the old folder is gone (ignored), the
+        # new one exists at head without Renomme.ino. The package build must run
+        # (and fail in the PR) instead of the selection skipping it.
+        ancien = self.racine / "lib/a/examples/A1"
+        (self.racine / "lib/a/examples/Renomme").mkdir()
+        (ancien / "A1.ino").rename(self.racine / "lib/a/examples/Renomme/A1.ino")
+        ancien.rmdir()
+        paquet = dict(RIEN, compiler=True)
+        self.assertEqual(
+            self.sel(["lib/a/examples/A1/A1.ino", "lib/a/examples/Renomme/A1.ino"]), paquet
+        )
+        # Same when the .ino is deleted but other files keep the folder alive.
+        write(self.racine, "lib/b/examples/B1/aide.h", "")
+        (self.racine / "lib/b/examples/B1/B1.ino").unlink()
+        self.assertEqual(self.sel(["lib/b/examples/B1/B1.ino"]), paquet)
+
     def test_en_tete_inconnu_ou_parapluie(self):
         for inc in ("SteamiZ.h", "STeaMi.h"):
             with self.subTest(inc):
