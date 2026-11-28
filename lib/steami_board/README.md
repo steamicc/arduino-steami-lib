@@ -260,13 +260,32 @@ their "unavailable" value without any bus traffic and without printing again.
 * `SteamiButtons`: A, B and MENU are read on MCU pins and always work. The four
   D-PAD arrows are on the MCP23009E: when it does not answer, `begin()` returns
   `false` with one message but A, B and MENU still work and the arrows read as
-  released. Every call samples the buttons once: a press is seen as soon as
-  one call happens while the button is down, and the bounces of the next
-  20 ms are ignored. Call the buttons at least every 50 ms (a quick tap lasts
-  about 100 ms); a tap shorter than the time between two calls can be missed
-  (see [issue #251](https://github.com/steamicc/arduino-steami-lib/issues/251)).
-  A button held at start is not a press. `waitForPress()` drops
-  the presses latched before the call and returns `NONE` after the timeout.
+  released. A change is taken at once and the bounces of the next 20 ms are
+  ignored. A tap made between two calls is caught whatever the time between
+  them ([issue #251](https://github.com/steamicc/arduino-steami-lib/issues/251)):
+  * A, B and MENU: `begin()` attaches an interrupt (`CHANGE`) to each pin. A tap
+    made between two calls gives, at the next call, `wasPressed()` and
+    `wasReleased()` true and `isPressed()` false.
+  * D-PAD: each call reads the latch of the expander (`interruptEvent()`), which
+    keeps the first change since the previous read. A tap made between two
+    calls gives `wasPressed()` and `isPressed()` true at the next call; the
+    release comes at the first call made 20 ms or more later, once that button
+    has not changed for 20 ms (a read made during a release bounce then gives
+    no false press). The pad callbacks a sketch registers on the expander
+    still run.
+  * At most one press per button between two calls: `wasPressed()` is a flag,
+    not a counter. A D-PAD tap made before the release of the previous one is
+    reported merges with it.
+  * The board leaves EXTI line 0 to MENU: `INT_EXPANDER` (PB0) shares it with
+    `MENU_BUTTON` (PA0, `USER_BTN`), so the expander is used without its
+    interrupt pin. An interrupt the sketch attaches to `A_BUTTON`,
+    `B_BUTTON`, `MENU_BUTTON` or another pin of their EXTI line (0, 7, 8)
+    replaces the one of `SteamiButtons`: that button is then only sampled at
+    each call.
+
+  A button held at start is not a press. `waitForPress()` drops the presses
+  made before the call, the latched taps included, and returns `NONE` after
+  the timeout.
 * A function that failed is not tried again until the board resets (or
   `Steami.end()`). After plugging in a battery, reset the board.
 

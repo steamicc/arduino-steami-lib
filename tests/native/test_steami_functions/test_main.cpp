@@ -28,6 +28,7 @@
 #include "SteamiTypes.h"
 #include "steami_fake_chips.h"
 #include "steami_fake_ism330dl.h"
+#include "steami_fake_mcp23009.h"
 
 static std::vector<std::string> g_lines;
 static void capture(const char* line) {
@@ -38,6 +39,7 @@ static SteamiBoard board(Wire, SteamiBoardPins::steami());
 
 void setUp(void) {
     Wire = TwoWire();
+    attachedInterrupts().clear();
     g_lines.clear();
     board.end();
     board.setLogger(&capture);
@@ -1055,6 +1057,20 @@ static void setDpad(uint8_t gpio) {
     Wire.setRegister(MCP23009_I2C_ADDR, MCP23009_GPIO, gpio);
 }
 
+// Model of the expander with its interrupt latch (INTF, INTCAP), for the D-PAD taps.
+static FakeMCP23009 expanderChip;
+
+static void attachExpander(void) {
+    expanderChip.reset();
+    Wire.attachDevice(MCP23009_I2C_ADDR, &expanderChip);
+}
+
+// Moves an MCU button pin and runs its interrupt, as the edge would on the board.
+static void setButtonPin(int pin, int level) {
+    gpioPinState()[pin] = level;
+    fireInterrupt(pin);
+}
+
 static void test_buttons_read_a_and_dpad(void) {
     steamiFakeBme280(Wire);
     steamiFakeMcp23009e(Wire, 0xF0);
@@ -1226,19 +1242,24 @@ static void test_wait_for_press_timeout(void) {
     TEST_ASSERT_TRUE(elapsed >= 100 && elapsed <= 110);
 }
 
-// The native mock cannot change a pin during the wait, so B goes low before the call, unseen:
-// the first sample of the wait takes it.
+// Every sample of the wait reads the expander: its read hook presses B during the wait.
 static void test_wait_for_press_returns_button(void) {
     steamiFakeBme280(Wire);
-    steamiFakeMcp23009e(Wire, 0xF0);
+    attachExpander();
     releaseMcuButtons();
     SteamiButtons buttons(board);
     TEST_ASSERT_TRUE(buttons.begin());
     buttons.isPressed(SteamiButton::B);
     delay(50);
-    gpioPinState()[B_BUTTON] = LOW;
+    int reads = 0;
+    expanderChip.onReadHook = [&reads](uint8_t reg) {
+        if (reg == MCP23009_GPIO && ++reads == 5) {
+            setButtonPin(B_BUTTON, LOW);
+        }
+    };
     const uint32_t start = millis();
     TEST_ASSERT_TRUE(buttons.waitForPress(500) == SteamiButton::B);
+    expanderChip.onReadHook = nullptr;
     TEST_ASSERT_TRUE(millis() - start < 500);
     TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::B));
 }
@@ -1267,6 +1288,389 @@ static void test_button_held_at_start_is_not_a_press(void) {
     delay(50);
     TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::A));
     TEST_ASSERT_TRUE(buttons.waitForPress(100) == SteamiButton::NONE);
+}
+
+// --- Buttons: taps between two calls (issue #251) ---
+
+static void test_buttons_attach_change_interrupts_on_a_b_menu(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    const int pins[] = {A_BUTTON, B_BUTTON, MENU_BUTTON};
+    for (int pin : pins) {
+        auto it = attachedInterrupts().find(pin);
+        TEST_ASSERT_TRUE(it != attachedInterrupts().end());
+        TEST_ASSERT_EQUAL_INT(CHANGE, it->second.mode);
+    }
+    // MENU (PA0) and INT_EXPANDER (PB0) share EXTI line 0: the line goes to MENU.
+    TEST_ASSERT_TRUE(attachedInterrupts().find(INT_EXPANDER) == attachedInterrupts().end());
+    TEST_ASSERT_EQUAL_UINT32(3, attachedInterrupts().size());
+}
+
+static void test_mcu_tap_between_two_calls_is_caught(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    const int pins[] = {A_BUTTON, B_BUTTON, MENU_BUTTON};
+    const SteamiButton names[] = {SteamiButton::A, SteamiButton::B, SteamiButton::MENU};
+    for (int k = 0; k < 3; k++) {
+        TEST_ASSERT_FALSE(buttons.wasPressed(names[k]));
+        delay(150);
+        setButtonPin(pins[k], LOW);  // a 100 ms tap between two calls 300 ms apart
+        delay(100);
+        setButtonPin(pins[k], HIGH);
+        delay(50);
+        TEST_ASSERT_FALSE(buttons.isPressed(names[k]));
+        TEST_ASSERT_TRUE(buttons.wasPressed(names[k]));
+        TEST_ASSERT_TRUE(buttons.wasReleased(names[k]));
+        TEST_ASSERT_FALSE(buttons.wasPressed(names[k]));
+        TEST_ASSERT_FALSE(buttons.wasReleased(names[k]));
+    }
+}
+
+// Each edge of a bounce runs the interrupt: the lock-out keeps one press and one release.
+static void test_mcu_bounces_between_two_calls_give_one_press(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    delay(50);
+    const int pressBounce[] = {LOW, HIGH, LOW, HIGH, LOW};
+    for (int level : pressBounce) {
+        setButtonPin(A_BUTTON, level);
+        delay(1);
+    }
+    delay(100);
+    const int releaseBounce[] = {HIGH, LOW, HIGH, LOW, HIGH};
+    for (int level : releaseBounce) {
+        setButtonPin(A_BUTTON, level);
+        delay(2);
+    }
+    delay(200);
+    int presses = 0;
+    int releases = 0;
+    for (int t = 0; t < 5; t++) {
+        presses += buttons.wasPressed(SteamiButton::A) ? 1 : 0;
+        releases += buttons.wasReleased(SteamiButton::A) ? 1 : 0;
+        delay(30);
+    }
+    TEST_ASSERT_EQUAL_INT(1, presses);
+    TEST_ASSERT_EQUAL_INT(1, releases);
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+}
+
+// A bounce 2 ms after a release the interrupt took is not a press.
+static void test_mcu_bounce_after_a_release_is_not_a_press(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::B));
+    delay(50);
+    setButtonPin(B_BUTTON, LOW);
+    delay(50);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::B));
+    delay(100);
+    setButtonPin(B_BUTTON, HIGH);
+    delay(2);
+    setButtonPin(B_BUTTON, LOW);
+    delay(1);
+    setButtonPin(B_BUTTON, HIGH);
+    delay(100);
+    TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::B));
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::B));
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::B));
+}
+
+// At most one press per button between two calls: wasPressed() is a flag, not a counter.
+static void test_two_mcu_taps_between_two_calls_give_one_press(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::MENU));
+    delay(50);
+    for (int k = 0; k < 2; k++) {
+        setButtonPin(MENU_BUTTON, LOW);
+        delay(60);
+        setButtonPin(MENU_BUTTON, HIGH);
+        delay(60);
+    }
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::MENU));
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::MENU));
+    TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::MENU));
+    TEST_ASSERT_FALSE(buttons.wasReleased(SteamiButton::MENU));
+}
+
+// Held at one call, then released and tapped again before the next one: the release and the new
+// press are both reported.
+static void test_mcu_release_then_tap_between_two_calls(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    delay(50);
+    setButtonPin(A_BUTTON, LOW);
+    delay(50);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::A));
+    setButtonPin(A_BUTTON, HIGH);
+    delay(80);
+    setButtonPin(A_BUTTON, LOW);
+    delay(80);
+    setButtonPin(A_BUTTON, HIGH);
+    delay(80);
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::A));
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::A));
+}
+
+// A tap shorter than the lock-out: the interrupt takes the press, ignores the release, and the
+// next call reads the pin released.
+static void test_mcu_tap_shorter_than_the_lock_out(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    delay(50);
+    setButtonPin(A_BUTTON, LOW);
+    delay(10);
+    setButtonPin(A_BUTTON, HIGH);
+    delay(200);
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::A));
+    TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::A));
+}
+
+// The expander latch keeps the tap: the next call finds the press, the release comes one call
+// later and isPressed() stays true until then.
+static void test_dpad_tap_between_two_calls_is_caught(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    const uint8_t bits[] = {MCP23009_BTN_UP, MCP23009_BTN_DOWN, MCP23009_BTN_LEFT,
+                            MCP23009_BTN_RIGHT};
+    const SteamiButton names[] = {SteamiButton::UP, SteamiButton::DOWN, SteamiButton::LEFT,
+                                  SteamiButton::RIGHT};
+    for (int k = 0; k < 4; k++) {
+        TEST_ASSERT_FALSE(buttons.wasPressed(names[k]));
+        delay(150);
+        expanderChip.press(bits[k]);
+        delay(100);
+        expanderChip.release(bits[k]);
+        delay(50);
+        TEST_ASSERT_TRUE(buttons.wasPressed(names[k]));
+        TEST_ASSERT_TRUE(buttons.isPressed(names[k]));
+        TEST_ASSERT_FALSE(buttons.wasReleased(names[k]));
+        delay(300);
+        TEST_ASSERT_FALSE(buttons.isPressed(names[k]));
+        TEST_ASSERT_TRUE(buttons.wasReleased(names[k]));
+        TEST_ASSERT_FALSE(buttons.wasPressed(names[k]));
+    }
+}
+
+// A call reads the D-PAD in the middle of a release bounce and the next one finds the tail of the
+// bounce: without a quiet read, that would be a release then a false press.
+static void test_dpad_read_during_a_release_bounce_gives_no_false_press(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::DOWN));
+    delay(50);
+    int presses = 0;
+    int releases = 0;
+    expanderChip.press(MCP23009_BTN_DOWN);
+    delay(30);
+    presses += buttons.wasPressed(SteamiButton::DOWN) ? 1 : 0;
+    delay(100);
+    expanderChip.release(MCP23009_BTN_DOWN);
+    presses += buttons.wasPressed(SteamiButton::DOWN) ? 1 : 0;  // read in the bounce
+    releases += buttons.wasReleased(SteamiButton::DOWN) ? 1 : 0;
+    expanderChip.press(MCP23009_BTN_DOWN);  // tail of the bounce
+    expanderChip.release(MCP23009_BTN_DOWN);
+    delay(30);
+    for (int t = 0; t < 4; t++) {
+        presses += buttons.wasPressed(SteamiButton::DOWN) ? 1 : 0;
+        releases += buttons.wasReleased(SteamiButton::DOWN) ? 1 : 0;
+        delay(30);
+    }
+    TEST_ASSERT_EQUAL_INT(1, presses);
+    TEST_ASSERT_EQUAL_INT(1, releases);
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::DOWN));
+}
+
+// A failed read would give 0, every active-low D-PAD button pressed: it gives no press.
+static void test_dpad_bus_error_gives_no_false_press(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::UP));
+    delay(50);
+    expanderChip.failReads = true;
+    int presses = 0;
+    const SteamiButton dpad[] = {SteamiButton::UP, SteamiButton::DOWN, SteamiButton::LEFT,
+                                 SteamiButton::RIGHT};
+    for (int t = 0; t < 5; t++) {
+        for (SteamiButton b : dpad) {
+            presses += buttons.wasPressed(b) ? 1 : 0;
+            presses += buttons.isPressed(b) ? 1 : 0;
+        }
+        delay(30);
+    }
+    TEST_ASSERT_EQUAL_INT(0, presses);
+    expanderChip.failReads = false;
+    expanderChip.press(MCP23009_BTN_LEFT);
+    delay(30);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::LEFT));
+}
+
+static void test_dpad_held_at_start_is_not_a_press(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    expanderChip.press(MCP23009_BTN_UP);
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::UP));
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::UP));
+    delay(50);
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::UP));
+    expanderChip.release(MCP23009_BTN_UP);
+    buttons.isPressed(SteamiButton::UP);
+    delay(30);
+    TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::UP));
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::UP));
+}
+
+// Taps made before the call, latched by the interrupt or by the expander, are dropped.
+static void test_wait_for_press_drops_taps_made_before_the_call(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    delay(50);
+    setButtonPin(A_BUTTON, LOW);
+    delay(60);
+    setButtonPin(A_BUTTON, HIGH);
+    delay(60);
+    expanderChip.press(MCP23009_BTN_LEFT);
+    delay(60);
+    expanderChip.release(MCP23009_BTN_LEFT);
+    delay(60);
+    TEST_ASSERT_TRUE(buttons.waitForPress(100) == SteamiButton::NONE);
+}
+
+static void test_wait_for_press_returns_a_dpad_press_made_during_the_wait(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::RIGHT));
+    delay(50);
+    int reads = 0;
+    expanderChip.onReadHook = [&reads](uint8_t reg) {
+        if (reg == MCP23009_GPIO && ++reads == 5) {
+            expanderChip.press(MCP23009_BTN_RIGHT);
+        }
+    };
+    const uint32_t start = millis();
+    TEST_ASSERT_TRUE(buttons.waitForPress(500) == SteamiButton::RIGHT);
+    expanderChip.onReadHook = nullptr;
+    TEST_ASSERT_TRUE(millis() - start < 500);
+}
+
+// The calls read the expander through interruptEvent(): the pad callbacks of the sketch still run.
+static void test_buttons_deliver_the_pad_callbacks_of_the_sketch(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    expanderChip.release(0);
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    SteamiMCP23009E* expander = board.mcp23009e();
+    TEST_ASSERT_NOT_NULL(expander);
+    int falls = 0;
+    expander->setup(0, MCP23009_DIR_INPUT, MCP23009_PULLUP);
+    expander->interruptOnFalling(0, [&falls]() { falls++; });
+    expanderChip.press(0);
+    delay(30);
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    TEST_ASSERT_EQUAL_INT(1, falls);
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::UP));
+    expander->disableInterrupt(0);
+}
+
+// Two objects: the interrupts and the D-PAD events go to the one called last.
+static void test_buttons_called_last_get_the_interrupts(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons outer(board);
+    TEST_ASSERT_TRUE(outer.begin());
+    TEST_ASSERT_FALSE(outer.isPressed(SteamiButton::A));
+    {
+        SteamiButtons inner(board);
+        TEST_ASSERT_TRUE(inner.begin());
+        TEST_ASSERT_FALSE(inner.isPressed(SteamiButton::A));
+    }
+    TEST_ASSERT_FALSE(outer.isPressed(SteamiButton::A));
+    delay(50);
+    setButtonPin(A_BUTTON, LOW);
+    delay(60);
+    setButtonPin(A_BUTTON, HIGH);
+    expanderChip.press(MCP23009_BTN_UP);
+    expanderChip.release(MCP23009_BTN_UP);
+    delay(60);
+    TEST_ASSERT_TRUE(outer.wasPressed(SteamiButton::A));
+    TEST_ASSERT_TRUE(outer.wasPressed(SteamiButton::UP));
+}
+
+// The interrupt handlers and the D-PAD callbacks outlive the object: they then do nothing.
+static void test_interrupts_after_the_buttons_are_gone_do_nothing(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    {
+        SteamiButtons buttons(board);
+        TEST_ASSERT_TRUE(buttons.begin());
+        TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::A));
+    }
+    setButtonPin(A_BUTTON, LOW);
+    setButtonPin(A_BUTTON, HIGH);
+    expanderChip.press(MCP23009_BTN_UP);
+    expanderChip.release(MCP23009_BTN_UP);
+    TEST_ASSERT_TRUE(board.mcp23009e()->interruptEvent());
+
+    SteamiButtons again(board);
+    TEST_ASSERT_TRUE(again.begin());
+    TEST_ASSERT_FALSE(again.isPressed(SteamiButton::A));
+    delay(50);
+    setButtonPin(A_BUTTON, LOW);
+    delay(60);
+    setButtonPin(A_BUTTON, HIGH);
+    delay(60);
+    TEST_ASSERT_TRUE(again.wasPressed(SteamiButton::A));
 }
 
 // --- Every class together ---
@@ -1387,6 +1791,22 @@ int main(void) {
     RUN_TEST(test_wait_for_press_returns_button);
     RUN_TEST(test_wait_for_press_drops_a_latched_press);
     RUN_TEST(test_button_held_at_start_is_not_a_press);
+    RUN_TEST(test_buttons_attach_change_interrupts_on_a_b_menu);
+    RUN_TEST(test_mcu_tap_between_two_calls_is_caught);
+    RUN_TEST(test_mcu_bounces_between_two_calls_give_one_press);
+    RUN_TEST(test_mcu_bounce_after_a_release_is_not_a_press);
+    RUN_TEST(test_two_mcu_taps_between_two_calls_give_one_press);
+    RUN_TEST(test_mcu_release_then_tap_between_two_calls);
+    RUN_TEST(test_mcu_tap_shorter_than_the_lock_out);
+    RUN_TEST(test_dpad_tap_between_two_calls_is_caught);
+    RUN_TEST(test_dpad_read_during_a_release_bounce_gives_no_false_press);
+    RUN_TEST(test_dpad_bus_error_gives_no_false_press);
+    RUN_TEST(test_dpad_held_at_start_is_not_a_press);
+    RUN_TEST(test_wait_for_press_drops_taps_made_before_the_call);
+    RUN_TEST(test_wait_for_press_returns_a_dpad_press_made_during_the_wait);
+    RUN_TEST(test_buttons_deliver_the_pad_callbacks_of_the_sketch);
+    RUN_TEST(test_buttons_called_last_get_the_interrupts);
+    RUN_TEST(test_interrupts_after_the_buttons_are_gone_do_nothing);
     RUN_TEST(test_all_classes_on_v1c_print_only_e20);
     return UNITY_END();
 }

@@ -37,7 +37,7 @@ struct SteamiBoardPins {
     uint32_t sda;
     uint32_t scl;
     uint32_t expanderReset;
-    uint32_t expanderIrq;
+    uint32_t expanderIrq;  // not attached: it shares EXTI line 0 with buttonMenu
     uint32_t buttonA;
     uint32_t buttonB;
     uint32_t buttonMenu;
