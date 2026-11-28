@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.42.3](https://github.com/steamicc/arduino-steami-lib/compare/v0.42.2...v0.42.3) (2026-11-28)
+
+
+### Bug Fixes
+
+* **lis2mdl:** Read the field in one burst and report bus errors. ([#310](https://github.com/steamicc/arduino-steami-lib/issues/310)) ([90bbbd5](https://github.com/steamicc/arduino-steami-lib/commit/90bbbd58e22b120821352542a7583fb8aee24f21)), closes [#309](https://github.com/steamicc/arduino-steami-lib/issues/309) [#309](https://github.com/steamicc/arduino-steami-lib/issues/309)
+
 ## [0.42.2](https://github.com/steamicc/arduino-steami-lib/compare/v0.42.1...v0.42.2) (2026-11-28)
 
 
