@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.42.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.41.0...v0.42.0) (2026-11-28)
+
+
+### Features
+
+* **lis2mdl:** Add setTemperatureOffset() and keep setTempOffset() alias. ([#296](https://github.com/steamicc/arduino-steami-lib/issues/296)) ([f682d59](https://github.com/steamicc/arduino-steami-lib/commit/f682d59998e3b071eb7ce662396f10dcdd5f9583))
+
 # [0.41.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.40.0...v0.41.0) (2026-11-27)
 
 
