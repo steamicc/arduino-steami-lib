@@ -574,18 +574,10 @@ uint16_t SteamiBQ27441::readExtendedData(uint16_t class_id, uint16_t offset) {
 
 uint16_t SteamiBQ27441::writeExtendedData(uint16_t class_id, uint16_t offset, const uint8_t* data,
                                           uint16_t length) {
-    if (length > 32) {
-        return false;
-    }
-    // Extended data flash is paginated in 32-byte blocks. blockDataOffset
-    // selects the page once via `offset / 32` and every writeBlockData()
-    // call below indexes inside that page via `(offset % 32) + i`. A
-    // write that crosses the boundary (e.g. offset = 31, length = 2)
-    // would index past the BLOCKDATA window into the checksum / extended
-    // command region and silently corrupt unrelated state. Reject it
-    // here rather than chunking — callers are expected to issue one
-    // writeExtendedData per page.
-    if (static_cast<uint16_t>(offset % 32) + length > 32) {
+    // Reject a write that does not fit in one 32-byte block rather than
+    // chunking it: callers are expected to issue one writeExtendedData
+    // per page. See bq27441_detail::isExtendedDataWriteInRange().
+    if (!bq27441_detail::isExtendedDataWriteInRange(offset, length)) {
         return false;
     }
 

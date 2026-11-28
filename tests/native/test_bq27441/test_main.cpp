@@ -231,6 +231,39 @@ void test_begin_does_not_touch_pins_when_no_gpout(void) {
     TEST_ASSERT_TRUE(gpioPinState().empty());
 }
 
+// Block-boundary guard of writeExtendedData() (#185). Every public setter
+// stays inside one block, so the rule is locked through the pure helper
+// the private method calls.
+void test_extended_write_rejects_crossing_block_boundary(void) {
+    TEST_ASSERT_FALSE(bq27441_detail::isExtendedDataWriteInRange(31, 2));
+    // Same rule on a later page: offset 63 is the last byte of page 1.
+    TEST_ASSERT_FALSE(bq27441_detail::isExtendedDataWriteInRange(63, 2));
+    TEST_ASSERT_FALSE(bq27441_detail::isExtendedDataWriteInRange(42, 23));
+}
+
+void test_extended_write_rejects_length_over_one_block(void) {
+    TEST_ASSERT_FALSE(bq27441_detail::isExtendedDataWriteInRange(0, 33));
+    TEST_ASSERT_FALSE(bq27441_detail::isExtendedDataWriteInRange(32, 33));
+    // No wrap-around on the uint16_t sum.
+    TEST_ASSERT_FALSE(bq27441_detail::isExtendedDataWriteInRange(31, 0xFFFF));
+}
+
+void test_extended_write_accepts_writes_inside_one_block(void) {
+    TEST_ASSERT_TRUE(bq27441_detail::isExtendedDataWriteInRange(31, 1));
+    TEST_ASSERT_TRUE(bq27441_detail::isExtendedDataWriteInRange(0, 32));
+    TEST_ASSERT_TRUE(bq27441_detail::isExtendedDataWriteInRange(32, 32));
+    TEST_ASSERT_TRUE(bq27441_detail::isExtendedDataWriteInRange(42, 22));
+}
+
+void test_extended_write_accepts_every_setter_range(void) {
+    // (offset, length) pairs used by setCapacity, setSoc1Thresholds,
+    // setSocfThresholds, setSociDelta and writeOpConfig.
+    TEST_ASSERT_TRUE(bq27441_detail::isExtendedDataWriteInRange(10, 2));
+    TEST_ASSERT_TRUE(bq27441_detail::isExtendedDataWriteInRange(0, 2));
+    TEST_ASSERT_TRUE(bq27441_detail::isExtendedDataWriteInRange(2, 2));
+    TEST_ASSERT_TRUE(bq27441_detail::isExtendedDataWriteInRange(26, 1));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_begin_returns_true_when_device_id_matches);
@@ -261,5 +294,9 @@ int main(void) {
     RUN_TEST(test_soc_returns_100_when_full);
     RUN_TEST(test_begin_pulses_gpout_low_high_when_pin_wired);
     RUN_TEST(test_begin_does_not_touch_pins_when_no_gpout);
+    RUN_TEST(test_extended_write_rejects_crossing_block_boundary);
+    RUN_TEST(test_extended_write_rejects_length_over_one_block);
+    RUN_TEST(test_extended_write_accepts_writes_inside_one_block);
+    RUN_TEST(test_extended_write_accepts_every_setter_range);
     return UNITY_END();
 }
