@@ -15,6 +15,8 @@ constexpr uint32_t kDebounceMs = 20;
 // Expander bit for UP, DOWN, LEFT, RIGHT, in SteamiButton order.
 constexpr uint8_t kDpadBits[4] = {MCP23009_BTN_UP, MCP23009_BTN_DOWN, MCP23009_BTN_LEFT,
                                   MCP23009_BTN_RIGHT};
+constexpr uint8_t kDpadMask = (1U << MCP23009_BTN_UP) | (1U << MCP23009_BTN_DOWN) |
+                              (1U << MCP23009_BTN_LEFT) | (1U << MCP23009_BTN_RIGHT);
 
 // The object the interrupts of A, B and MENU and the D-PAD callbacks update: the one started or
 // called last, nullptr once it is gone. The handlers hold no pointer of their own, so none can
@@ -55,27 +57,34 @@ bool SteamiButtons::begin() {
     if (ok && !wasStarted) {
         SteamiMCP23009E* expander = _handle.board().mcp23009e();
         if (expander != nullptr) {
-            for (uint8_t d = 0; d < 4; d++) {
-                expander->setup(kDpadBits[d], MCP23009_DIR_INPUT, MCP23009_PULLUP);
-                // No event for the level at registration: it is read below.
-                expander->interruptOnChange(kDpadBits[d], [d](uint8_t level) {
-                    if (gActive != nullptr) {
-                        gActive->dpadEvent(d, level);
-                    }
-                });
-            }
-            uint8_t port = 0xFF;
-            expander->gpio(port);  // on an error the D-PAD reads released
-            _dpadLevel = 0;
-            for (uint8_t d = 0; d < 4; d++) {
-                if ((port & (1U << kDpadBits[d])) == 0) {
-                    _dpadLevel |= 1U << d;
-                }
-                _dpadEventAt[d] = millis() - kDebounceMs;
-            }
+            watchDpad(*expander, 0x0F);
         }
     }
     return ok;
+}
+
+// Sets the D-PAD buttons of `mask` (bit d for kDpadBits[d]) up on the expander and reads their
+// level. watchChanges() follows the four pins: the callbacks of the sketch do not replace it.
+void SteamiButtons::watchDpad(SteamiMCP23009E& expander, uint8_t mask) {
+    for (uint8_t d = 0; d < 4; d++) {
+        if ((mask & (1U << d)) != 0) {
+            expander.setup(kDpadBits[d], MCP23009_DIR_INPUT, MCP23009_PULLUP);
+        }
+    }
+    // No event for the level at registration: it is read below.
+    expander.watchChanges(kDpadMask, dpadChange);
+    uint8_t port = 0xFF;
+    expander.gpio(port);  // on an error the D-PAD reads released
+    for (uint8_t d = 0; d < 4; d++) {
+        const uint8_t bit = 1U << d;
+        if ((mask & bit) != 0) {
+            _dpadLevel = static_cast<uint8_t>(_dpadLevel & ~bit);
+            if ((port & (1U << kDpadBits[d])) == 0) {
+                _dpadLevel |= bit;
+            }
+            _dpadEventAt[d] = millis() - kDebounceMs;
+        }
+    }
 }
 
 int SteamiButtons::index(SteamiButton button) {
@@ -122,8 +131,16 @@ void SteamiButtons::edgeMenu() {
     }
 }
 
-// D-PAD callback, run by SteamiMCP23009E::interruptEvent() (from sample() or from a poll() of the
+// D-PAD watch, run by SteamiMCP23009E::interruptEvent() (from sample() or from a poll() of the
 // sketch), once per event in order: the level captured at the interrupt, then the current one.
+void SteamiButtons::dpadChange(uint8_t gpx, uint8_t level) {
+    for (uint8_t d = 0; d < 4; d++) {
+        if (kDpadBits[d] == gpx && gActive != nullptr) {
+            gActive->dpadEvent(d, level);
+        }
+    }
+}
+
 void SteamiButtons::dpadEvent(uint8_t d, uint8_t level) {
     const uint8_t bit = 1U << d;
     _dpadEventAt[d] = millis();
@@ -146,9 +163,22 @@ void SteamiButtons::sample() {
     uint8_t dpad = 0;  // bit d: pressed
     if (_handle.isAvailable()) {
         SteamiMCP23009E* expander = _handle.board().mcp23009e();
-        if (expander != nullptr && expander->interruptEvent()) {
-            dpad = _dpadLevel;
-        }  // on an error the D-PAD reads released, with no event
+        if (expander != nullptr) {
+            // A reset() or powerOff() of the expander by the sketch removed the watch.
+            const uint8_t watched = expander->watched();
+            uint8_t lost = 0;
+            for (uint8_t d = 0; d < 4; d++) {
+                if ((watched & (1U << kDpadBits[d])) == 0) {
+                    lost |= 1U << d;
+                }
+            }
+            if (lost != 0) {
+                watchDpad(*expander, lost);
+            }
+            if (expander->interruptEvent()) {
+                dpad = _dpadLevel;
+            }  // on an error the D-PAD reads released, with no event
+        }
     }
     const uint8_t down = _dpadDown;
     _dpadDown = 0;

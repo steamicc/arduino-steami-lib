@@ -342,8 +342,12 @@ their "unavailable" value without any bus traffic and without printing again.
     calls gives `wasPressed()` and `isPressed()` true at the next call; the
     release comes at the first call made 20 ms or more later, once that button
     has not changed for 20 ms (a read made during a release bounce then gives
-    no false press). The pad callbacks a sketch registers on the expander
-    still run.
+    no false press). `SteamiButtons` follows the D-PAD pins with
+    `SteamiMCP23009E::watchChanges()`, a callback the sketch does not replace:
+    the pad callbacks a sketch registers on `Steami.mcp23009e()`, on the
+    D-PAD pins too, still run, and `disableInterrupt()` on a D-PAD pin stops
+    only the callbacks of the sketch. After a `reset()` or `powerOff()` of the
+    expander, the next call sets the D-PAD up again.
   * At most one press per button between two calls: `wasPressed()` is a flag,
     not a counter. A D-PAD tap made before the release of the previous one is
     reported merges with it.

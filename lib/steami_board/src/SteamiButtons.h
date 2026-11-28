@@ -27,7 +27,10 @@
 ///
 /// Limits: a D-PAD tap made before the release of the previous one is reported merges with it;
 /// a D-PAD press and its release made while another expander interrupt is pending leave no trace
-/// in the chip. A sketch that attaches its own interrupt to A_BUTTON, B_BUTTON or MENU_BUTTON
+/// in the chip. The D-PAD is followed with SteamiMCP23009E::watchChanges(): the sketch can register
+/// its own callbacks on the D-PAD pins of Steami.mcp23009e(), or disable them, and both keep
+/// working; after a reset() or powerOff() of the expander, the next call sets the D-PAD up again.
+/// A sketch that attaches its own interrupt to A_BUTTON, B_BUTTON or MENU_BUTTON
 /// (USER_BTN), or to another pin of the same EXTI line (0 for MENU, 7 for A, 8 for B), replaces
 /// the one of SteamiButtons: that button is then only sampled at each call. Only one
 /// SteamiButtons object gets the interrupts: the one started or called last.
@@ -74,6 +77,8 @@ class SteamiButtons {
     void debounce(uint8_t i, bool down, uint32_t t);
     void edge(uint8_t i);
     void dpadEvent(uint8_t d, uint8_t level);
+    static void dpadChange(uint8_t gpx, uint8_t level);
+    void watchDpad(SteamiMCP23009E& expander, uint8_t mask);
     static void edgeA();
     static void edgeB();
     static void edgeMenu();

@@ -1621,6 +1621,66 @@ static void test_buttons_deliver_the_pad_callbacks_of_the_sketch(void) {
     expander->disableInterrupt(0);
 }
 
+// A sketch that registers its own callback on a D-PAD bit, or disables its interrupt, does not stop
+// the D-PAD of SteamiButtons: both keep working.
+static void test_dpad_survives_the_pad_callbacks_of_the_sketch(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::UP));
+    SteamiMCP23009E* expander = board.mcp23009e();
+    TEST_ASSERT_NOT_NULL(expander);
+    std::vector<int> levels;
+    expander->interruptOnChange(MCP23009_BTN_UP,
+                                [&levels](uint8_t level) { levels.push_back(level); });
+    expander->disableInterrupt(MCP23009_BTN_DOWN);
+    delay(50);
+    expanderChip.press(MCP23009_BTN_UP);
+    delay(60);
+    expanderChip.release(MCP23009_BTN_UP);
+    delay(60);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::UP));
+    expanderChip.press(MCP23009_BTN_DOWN);
+    delay(60);
+    expanderChip.release(MCP23009_BTN_DOWN);
+    delay(60);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::DOWN));
+    TEST_ASSERT_EQUAL_INT(2, static_cast<int>(levels.size()));  // the press, then the release
+    TEST_ASSERT_EQUAL_INT(MCP23009_LOGIC_LOW, levels[0]);
+    TEST_ASSERT_EQUAL_INT(MCP23009_LOGIC_HIGH, levels[1]);
+    delay(30);
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::UP));
+    TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::UP));
+    TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::DOWN));
+    expander->disableInterrupt(MCP23009_BTN_UP);
+    TEST_ASSERT_TRUE((expander->watched() & (1 << MCP23009_BTN_UP)) != 0);
+}
+
+// A reset of the expander by the sketch removes the watch of SteamiButtons: the next call sets the
+// D-PAD up again.
+static void test_dpad_follows_again_after_a_reset_of_the_expander(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::LEFT));
+    SteamiMCP23009E* expander = board.mcp23009e();
+    TEST_ASSERT_NOT_NULL(expander);
+    expander->reset();
+    TEST_ASSERT_EQUAL_HEX8(0, expander->watched());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::LEFT));
+    TEST_ASSERT_EQUAL_HEX8(0xF0, expander->watched());
+    delay(50);
+    expanderChip.press(MCP23009_BTN_LEFT);
+    delay(60);
+    expanderChip.release(MCP23009_BTN_LEFT);
+    delay(60);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::LEFT));
+}
+
 // Two objects: the interrupts and the D-PAD events go to the one called last.
 static void test_buttons_called_last_get_the_interrupts(void) {
     steamiFakeBme280(Wire);
@@ -1805,6 +1865,8 @@ int main(void) {
     RUN_TEST(test_wait_for_press_drops_taps_made_before_the_call);
     RUN_TEST(test_wait_for_press_returns_a_dpad_press_made_during_the_wait);
     RUN_TEST(test_buttons_deliver_the_pad_callbacks_of_the_sketch);
+    RUN_TEST(test_dpad_survives_the_pad_callbacks_of_the_sketch);
+    RUN_TEST(test_dpad_follows_again_after_a_reset_of_the_expander);
     RUN_TEST(test_buttons_called_last_get_the_interrupts);
     RUN_TEST(test_interrupts_after_the_buttons_are_gone_do_nothing);
     RUN_TEST(test_all_classes_on_v1c_print_only_e20);
