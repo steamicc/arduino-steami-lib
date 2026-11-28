@@ -4,6 +4,9 @@
 #include <unity.h>
 
 #include <cstdio>
+#include <functional>
+#include <string>
+#include <vector>
 
 #include "SteamiMCP23009E.h"
 #include "Wire.h"
@@ -334,8 +337,8 @@ void testInterruptOnFallingEnablesInterruptRegister(void) {
     TEST_ASSERT_TRUE(found);
 }
 
-void testInterruptOnRaisingEnablesInterruptRegister(void) {
-    mcp->interruptOnRaising(2, []() {});
+void testInterruptOnRisingEnablesInterruptRegister(void) {
+    mcp->interruptOnRising(2, []() {});
     bool found = false;
     for (const auto& w : Wire.getWrites()) {
         if (w.reg == MCP23009_GPINTEN && w.value == 0x04) {
@@ -525,12 +528,12 @@ void testSetLevelReadsFromOlatNotGpio(void) {
 // (the chip's snapshot at the moment of the interrupt) regardless of
 // the INTCC bit. Reading GPIO instead would mis-classify rising vs
 // falling when the line bounced or already changed back between the
-// IRQ and the deferred dispatch.
+// IRQ and the deferred dispatch. Since #303, the later change found in
+// GPIO is reported too, after the captured one.
 void testInterruptEventUsesIntcapNotGpio(void) {
-    bool risingFired = false;
-    bool fallingFired = false;
-    mcp->interruptOnRaising(0, [&]() { risingFired = true; });
-    mcp->interruptOnFalling(0, [&]() { fallingFired = true; });
+    std::string edges;
+    mcp->interruptOnRising(0, [&]() { edges += 'r'; });
+    mcp->interruptOnFalling(0, [&]() { edges += 'f'; });
 
     // INTF says pin 0 fired. INTCAP says it was HIGH at the event
     // (-> rising). GPIO says it's currently LOW (bounced back) —
@@ -539,17 +542,21 @@ void testInterruptEventUsesIntcapNotGpio(void) {
     Wire.setRegister(ADDR, MCP23009_INTCAP, 0x01);
     Wire.setRegister(ADDR, MCP23009_GPIO, 0x00);
 
-    mcp->interruptEvent();
+    TEST_ASSERT_TRUE(mcp->interruptEvent());
 
-    TEST_ASSERT_TRUE_MESSAGE(risingFired, "rising callback must fire on INTCAP=HIGH");
-    TEST_ASSERT_FALSE_MESSAGE(fallingFired, "falling callback must not fire when INTCAP=HIGH");
+    // The rising edge from INTCAP first, then the fall found in GPIO.
+    TEST_ASSERT_EQUAL_STRING("rf", edges.c_str());
 }
 
 // Regression: 9ef4737 — poll() drains the _irqPending flag set by
-// irqHandler() and dispatches in non-ISR context. With no pending
-// flag, poll() must be a strict no-op (no I2C, no callbacks); this
-// guarantees the ISR-only path stays the only way to schedule work.
+// irqHandler() and dispatches in non-ISR context. With an interrupt pin
+// and no pending flag, poll() must be a strict no-op (no I2C, no
+// callbacks); this guarantees the ISR-only path stays the only way to
+// schedule work.
 void testPollIsNoOpWhenNoPending(void) {
+    delete mcp;
+    mcp = new SteamiMCP23009E(Wire, RESET_PIN, ADDR, /*interruptPin=*/7);
+    mcp->begin();
     int callCount = 0;
     mcp->interruptOnChange(0, [&](uint8_t) { ++callCount; });
     Wire.setRegister(ADDR, MCP23009_INTF, 0x01);
@@ -590,6 +597,835 @@ void testPinDestructorClearsExpanderCallbackSlot(void) {
     TEST_ASSERT_TRUE_MESSAGE(sawGpintenWrite, "destructor must write GPINTEN to disable the pin");
     TEST_ASSERT_FALSE_MESSAGE(lastGpinten & (1 << 5),
                               "destructor must clear pin 5's bit in GPINTEN");
+}
+
+// ----- Interrupt path against a model of the chip (issue #303) -----
+//
+// Port of FakeMCP23009 from the MicroPython suite
+// (tests/test_mcp23009e_irq_mock.py, steamicc/micropython-steami-lib#466).
+// It keeps the interrupt logic that matters: the first change on an
+// enabled pin sets INTF and copies the port into INTCAP, later changes
+// (on any pin) are ignored until the interrupt is cleared, and reading
+// GPIO (or INTCAP when IOCON.INTCC is set) clears it and makes the
+// current port the new compare reference, so a change ignored while INTF
+// was set never raises an interrupt. The tests call interruptEvent()
+// where poll() would run on the board.
+
+constexpr uint8_t UP = MCP23009_BTN_UP;
+constexpr uint8_t DOWN = MCP23009_BTN_DOWN;
+constexpr uint8_t LEFT = MCP23009_BTN_LEFT;
+constexpr uint8_t RIGHT = MCP23009_BTN_RIGHT;
+constexpr uint8_t RELEASED = 0xF0;  // D-PAD: active low, with pull-ups
+
+class FakeMCP23009 : public I2CDevice {
+   public:
+    uint8_t regs[11] = {};
+    uint8_t pins = RELEASED;
+    // Port value at the last clear: the "previous state" reference.
+    uint8_t reference = RELEASED;
+    bool failReads = false;
+    std::vector<std::pair<char, uint8_t>> log;
+    // Run once a write or a read is applied, where a nested poll() could
+    // run on the board.
+    std::function<void(uint8_t, uint8_t)> onWriteHook;
+    std::function<void(uint8_t)> onReadHook;
+
+    void reset() {
+        for (auto& r : regs) {
+            r = 0;
+        }
+        regs[MCP23009_IODIR] = 0xFF;
+        pins = RELEASED;
+        reference = RELEASED;
+        failReads = false;
+        log.clear();
+        onWriteHook = nullptr;
+        onReadHook = nullptr;
+        pointer_ = 0;
+    }
+
+    void press(uint8_t gp) {
+        pins &= static_cast<uint8_t>(~(1 << gp));
+        update();
+    }
+
+    void release(uint8_t gp) {
+        pins |= static_cast<uint8_t>(1 << gp);
+        update();
+    }
+
+    uint8_t onWrite(const std::vector<uint8_t>& frame) override {
+        if (frame.empty()) {
+            return 0;  // address probe
+        }
+        pointer_ = frame[0];
+        if (frame.size() < 2) {
+            return 0;  // register pointer for a read
+        }
+        uint8_t reg = frame[0];
+        log.push_back({'w', reg});
+        regs[reg == MCP23009_GPIO ? MCP23009_OLAT : reg] = frame[1];
+        update();
+        auto hook = onWriteHook;
+        if (hook) {
+            hook(reg, frame[1]);
+        }
+        return 0;
+    }
+
+    std::vector<uint8_t> onRead(size_t /*quantity*/) override {
+        if (failReads) {
+            return {};
+        }
+        uint8_t reg = pointer_;
+        log.push_back({'r', reg});
+        uint8_t value = (reg == MCP23009_GPIO) ? pins : regs[reg];
+        uint8_t clearing =
+            (regs[MCP23009_IOCON] & MCP23009_IOCON_INTCC) ? MCP23009_INTCAP : MCP23009_GPIO;
+        if (reg == clearing) {
+            clear();
+        }
+        auto hook = onReadHook;
+        if (hook) {
+            hook(reg);
+        }
+        return {value};
+    }
+
+   private:
+    uint8_t pointer_ = 0;
+
+    void update() {
+        if (regs[MCP23009_INTF] != 0) {
+            return;
+        }
+        uint8_t intcon = regs[MCP23009_INTCON];
+        uint8_t changed =
+            ((pins ^ reference) & ~intcon) | ((pins ^ regs[MCP23009_DEFVAL]) & intcon);
+        changed &= regs[MCP23009_GPINTEN];
+        if (changed != 0) {
+            regs[MCP23009_INTF] = changed;
+            regs[MCP23009_INTCAP] = pins;
+        }
+    }
+
+    void clear() {
+        regs[MCP23009_INTF] = 0;
+        reference = pins;
+        update();
+    }
+};
+
+FakeMCP23009 chip;
+
+// One reported event: pin name, irqLevel() in the handler, value() in
+// the handler.
+struct Event {
+    std::string name;
+    int level;
+    int value;
+    bool operator==(const Event& o) const {
+        return name == o.name && level == o.level && value == o.value;
+    }
+};
+
+std::string describe(const std::vector<Event>& events) {
+    std::string out;
+    for (const auto& e : events) {
+        out += "(" + e.name + "," + std::to_string(e.level) + "," + std::to_string(e.value) + ")";
+    }
+    return out;
+}
+
+#define ASSERT_EVENTS(expected, actual) \
+    TEST_ASSERT_EQUAL_STRING(describe(expected).c_str(), describe(actual).c_str())
+
+void attachChip() {
+    chip.reset();
+    Wire.attachDevice(ADDR, &chip);
+}
+
+// D-PAD pin: input with pull-up, as on the STeaMi.
+struct DpadPin {
+    explicit DpadPin(uint8_t gp) : pin(*mcp, gp, MCP23009Pin::IN, MCP23009Pin::PULL_UP) {}
+    MCP23009Pin pin;
+};
+
+std::function<void()> recorder(std::vector<Event>& events, const char* name, MCP23009Pin& pin) {
+    return [&events, name, &pin]() { events.push_back({name, pin.irqLevel(), pin.value()}); };
+}
+
+constexpr uint16_t BOTH = MCP23009Pin::IRQ_FALLING | MCP23009Pin::IRQ_RISING;
+
+// ----- Captured level -----
+
+void testIrqLevelIsNoneBeforeAnyInterrupt(void) {
+    attachChip();
+    DpadPin up(UP);
+    TEST_ASSERT_EQUAL_UINT8(MCP23009Pin::IRQ_LEVEL_NONE, up.pin.irqLevel());
+}
+
+void testHandlerSeesPressReleasedBeforeItRuns(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    chip.press(UP);
+    chip.release(UP);  // released before poll() runs
+    mcp->interruptEvent();
+    // The press, with the captured level, then the release read from GPIO.
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 1}, {"UP", 1, 1}}), events);
+}
+
+void testPressThenReleaseEachReported(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    chip.press(UP);
+    mcp->interruptEvent();
+    chip.release(UP);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 0}, {"UP", 1, 1}}), events);
+}
+
+void testChangeCallbackGetsLevelFromIntcap(void) {
+    attachChip();
+    DpadPin down(DOWN);
+    std::vector<int> levels;
+    mcp->interruptOnChange(DOWN, [&](uint8_t level) { levels.push_back(level); });
+    chip.press(DOWN);
+    chip.release(DOWN);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL(2, levels.size());
+    TEST_ASSERT_EQUAL(0, levels[0]);
+    TEST_ASSERT_EQUAL(1, levels[1]);
+}
+
+void testIntccSetClearsOnIntcapRead(void) {
+    attachChip();
+    mcp->setIocon(MCP23009Config().setIntcc());
+    std::vector<Event> events;
+    DpadPin up(UP);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    chip.press(UP);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL_HEX8(0, chip.regs[MCP23009_INTF]);
+    chip.release(UP);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 0}, {"UP", 1, 1}}), events);
+}
+
+void testActiveLowPinInvertsCapturedLevel(void) {
+    attachChip();
+    MCP23009ActiveLowPin up(*mcp, UP, MCP23009Pin::IN, MCP23009Pin::PULL_UP);
+    std::vector<int> levels;
+    up.irq([&]() { levels.push_back(up.irqLevel()); });  // both edges by default
+    TEST_ASSERT_EQUAL_UINT8(MCP23009Pin::IRQ_LEVEL_NONE, up.irqLevel());
+    chip.press(UP);
+    mcp->interruptEvent();
+    chip.release(UP);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL(2, levels.size());
+    TEST_ASSERT_EQUAL(1, levels[0]);  // pressed = GPIO low = logical 1
+    TEST_ASSERT_EQUAL(0, levels[1]);
+}
+
+// ----- Edge filters -----
+
+void testFallingOnlyHandler(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP);
+    up.pin.irq(recorder(events, "UP", up.pin), MCP23009Pin::IRQ_FALLING);
+    chip.press(UP);
+    chip.release(UP);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 1}}), events);
+}
+
+void testRisingOnlyHandler(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP);
+    up.pin.irq(recorder(events, "UP", up.pin), MCP23009Pin::IRQ_RISING);
+    chip.press(UP);
+    mcp->interruptEvent();
+    chip.release(UP);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 1, 1}}), events);
+}
+
+void testDeviceCallbacksGetChangesFoundInGpio(void) {
+    attachChip();
+    std::vector<std::string> calls;
+    DpadPin up(UP);
+    DpadPin left(LEFT);
+    mcp->interruptOnChange(UP,
+                           [&](uint8_t level) { calls.push_back("UP" + std::to_string(level)); });
+    mcp->interruptOnFalling(LEFT, [&]() { calls.push_back("fall"); });
+    mcp->interruptOnRising(LEFT, [&]() { calls.push_back("rise"); });
+    chip.press(UP);
+    chip.press(LEFT);
+    chip.release(LEFT);
+    chip.press(LEFT);  // pressed at the read, after a missed tap
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL(2, calls.size());
+    TEST_ASSERT_EQUAL_STRING("UP0", calls[0].c_str());
+    TEST_ASSERT_EQUAL_STRING("fall", calls[1].c_str());
+}
+
+// ----- Registration -----
+
+void testRegisteringDpadHandlersFiresNoEvent(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP), down(DOWN), left(LEFT), right(RIGHT);
+    chip.reference = 0x00;  // port value before the pull-ups were set
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    down.pin.irq(recorder(events, "DOWN", down.pin), BOTH);
+    left.pin.irq(recorder(events, "LEFT", left.pin), BOTH);
+    right.pin.irq(recorder(events, "RIGHT", right.pin), BOTH);
+    mcp->interruptEvent();  // the deferred poll(), if INT was raised
+    TEST_ASSERT_EQUAL(0, events.size());
+    TEST_ASSERT_EQUAL_HEX8(0, chip.regs[MCP23009_INTF]);
+}
+
+void reregisterWithPendingPress() {
+    std::vector<Event> first;
+    std::vector<Event> second;
+    DpadPin up(UP);
+    up.pin.irq(recorder(first, "first", up.pin), BOTH);
+    chip.press(UP);  // poll() has not run yet
+    TEST_ASSERT_EQUAL_HEX8(1 << UP, chip.regs[MCP23009_INTF]);
+    up.pin.irq(recorder(second, "second", up.pin), BOTH);
+    TEST_ASSERT_EQUAL_HEX8(0, chip.regs[MCP23009_INTF]);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL(0, first.size());
+    TEST_ASSERT_EQUAL(0, second.size());
+}
+
+void testReregistrationClearsPendingInterrupt(void) {
+    attachChip();
+    reregisterWithPendingPress();
+}
+
+void testReregistrationClearsPendingInterruptWithIntcc(void) {
+    attachChip();
+    mcp->setIocon(MCP23009Config().setIntcc());
+    reregisterWithPendingPress();
+}
+
+void testCallbackStoredAndInterruptClearedBeforeGpinten(void) {
+    // A poll() that runs as GPINTEN is written finds no stale interrupt.
+    attachChip();
+    std::vector<Event> events;
+    std::vector<uint8_t> intfAtEnable;
+    DpadPin up(UP);
+    chip.reference = 0x00;  // a change latched before registration
+    chip.onWriteHook = [&](uint8_t reg, uint8_t value) {
+        if (reg == MCP23009_GPINTEN && (value & (1 << UP))) {
+            intfAtEnable.push_back(chip.regs[MCP23009_INTF]);
+            mcp->interruptEvent();
+        }
+    };
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    chip.onWriteHook = nullptr;
+    TEST_ASSERT_EQUAL(1, intfAtEnable.size());
+    TEST_ASSERT_EQUAL_HEX8(0, intfAtEnable[0]);
+    TEST_ASSERT_EQUAL(0, events.size());
+}
+
+void testPressAtEnableTimeReachesNewHandler(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP);
+    chip.onWriteHook = [&](uint8_t reg, uint8_t value) {
+        if (reg == MCP23009_GPINTEN && (value & (1 << UP))) {
+            chip.onWriteHook = nullptr;
+            chip.press(UP);
+            mcp->interruptEvent();
+        }
+    };
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 0}}), events);
+}
+
+void testIntconWrittenBeforeGpinten(void) {
+    attachChip();
+    DpadPin up(UP);
+    chip.log.clear();
+    mcp->interruptOnChange(UP, [](uint8_t) {});
+    int intconAt = -1;
+    int gpintenAt = -1;
+    int intcapReadAt = -1;
+    for (size_t i = 0; i < chip.log.size(); ++i) {
+        if (chip.log[i].first == 'w' && chip.log[i].second == MCP23009_INTCON && intconAt < 0) {
+            intconAt = static_cast<int>(i);
+        }
+        if (chip.log[i].first == 'w' && chip.log[i].second == MCP23009_GPINTEN && gpintenAt < 0) {
+            gpintenAt = static_cast<int>(i);
+        }
+        if (chip.log[i].first == 'r' && chip.log[i].second == MCP23009_INTCAP && intcapReadAt < 0) {
+            intcapReadAt = static_cast<int>(i);
+        }
+    }
+    TEST_ASSERT_TRUE(intconAt >= 0);
+    TEST_ASSERT_TRUE(intconAt < gpintenAt);
+    // The pending interrupt is read (and cleared) before GPINTEN is written.
+    TEST_ASSERT_TRUE(intcapReadAt >= 0);
+    TEST_ASSERT_TRUE(intcapReadAt < gpintenAt);
+}
+
+void testPendingEventOnOtherPinIsKept(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin down(DOWN), up(UP);
+    down.pin.irq(recorder(events, "DOWN", down.pin), BOTH);
+    chip.press(DOWN);  // poll() has not run yet
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"DOWN", 0, 0}}), events);
+}
+
+void testHandlerRunAtRegistrationCanEnableAnotherPin(void) {
+    // A handler called during a registration enables DOWN: the
+    // registration must not write back an older GPINTEN without DOWN.
+    attachChip();
+    std::vector<Event> events;
+    DpadPin left(LEFT), down(DOWN), right(RIGHT);
+    left.pin.irq(
+        [&]() {
+            events.push_back({"LEFT", left.pin.irqLevel(), -1});
+            down.pin.irq(recorder(events, "DOWN", down.pin), BOTH);
+        },
+        BOTH);
+    chip.press(LEFT);  // pending when RIGHT is registered
+    right.pin.irq(recorder(events, "RIGHT", right.pin), BOTH);
+    ASSERT_EVENTS((std::vector<Event>{{"LEFT", 0, -1}}), events);
+    TEST_ASSERT_EQUAL_HEX8((1 << LEFT) | (1 << DOWN) | (1 << RIGHT), chip.regs[MCP23009_GPINTEN]);
+    chip.press(DOWN);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"LEFT", 0, -1}, {"DOWN", 0, 0}}), events);
+}
+
+void testHandlerRunAtRegistrationCanDisableItsPin(void) {
+    attachChip();
+    std::vector<std::string> events;
+    DpadPin left(LEFT), right(RIGHT);
+    left.pin.irq(
+        [&]() {
+            events.push_back("LEFT");
+            mcp->disableInterrupt(LEFT);
+        },
+        BOTH);
+    chip.press(LEFT);
+    right.pin.irq([&]() { events.push_back("RIGHT"); }, BOTH);
+    TEST_ASSERT_EQUAL(1, events.size());
+    TEST_ASSERT_EQUAL_HEX8(1 << RIGHT, chip.regs[MCP23009_GPINTEN]);
+}
+
+void testDisableInterruptStopsCallbacks(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP), down(DOWN);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    down.pin.irq(recorder(events, "DOWN", down.pin), BOTH);
+    mcp->disableInterrupt(UP);
+    chip.press(DOWN);
+    chip.press(UP);
+    mcp->interruptEvent();
+    chip.release(UP);
+    chip.release(DOWN);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"DOWN", 0, 0}, {"DOWN", 1, 1}}), events);
+}
+
+void testDisableWithPendingInterruptReportsNothing(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    chip.press(UP);  // pending
+    mcp->disableInterrupt(UP);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL(0, events.size());
+}
+
+void testReenabledPinTakesItsLevelAgain(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    mcp->disableInterrupt(UP);
+    chip.press(UP);  // not reported: disabled
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL(0, events.size());
+    chip.release(UP);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 1, 1}}), events);
+}
+
+void testRegistrationTakesHeldLevelWithoutEvent(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin left(LEFT), up(UP);
+    chip.press(LEFT);  // held before the registration
+    left.pin.irq(recorder(events, "LEFT", left.pin), BOTH);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    chip.press(UP);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 0}}), events);
+    chip.release(LEFT);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 0}, {"LEFT", 1, 1}}), events);
+}
+
+// ----- Changes the chip misses while an interrupt is pending -----
+
+void testV1cLostReleaseDuringPendingPress(void) {
+    // V1c measurement (a): LEFT pressed, then UP pressed; LEFT released
+    // while the UP interrupt is pending. The chip never signals the LEFT
+    // release: the driver reports it from GPIO, after the UP press.
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP), down(DOWN), left(LEFT), right(RIGHT);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    down.pin.irq(recorder(events, "DOWN", down.pin), BOTH);
+    left.pin.irq(recorder(events, "LEFT", left.pin), BOTH);
+    right.pin.irq(recorder(events, "RIGHT", right.pin), BOTH);
+    chip.press(LEFT);
+    mcp->interruptEvent();
+    chip.press(UP);
+    chip.release(LEFT);  // INTF is set (UP): no interrupt for LEFT
+    mcp->interruptEvent();
+    chip.release(UP);
+    mcp->interruptEvent();
+    chip.press(LEFT);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{
+                      {"LEFT", 0, 0}, {"UP", 0, 0}, {"LEFT", 1, 1}, {"UP", 1, 1}, {"LEFT", 0, 0}}),
+                  events);
+}
+
+void testV1cLostPressDuringPendingPress(void) {
+    // V1c measurement (b): RIGHT pressed while the UP interrupt is pending.
+    // Without the GPIO comparison, the release came with no press before it.
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP), right(RIGHT);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    right.pin.irq(recorder(events, "RIGHT", right.pin), BOTH);
+    chip.press(RIGHT);
+    mcp->interruptEvent();
+    chip.release(RIGHT);
+    mcp->interruptEvent();
+    chip.press(UP);
+    chip.press(RIGHT);  // INTF is set (UP): no interrupt for RIGHT
+    mcp->interruptEvent();
+    chip.release(RIGHT);
+    mcp->interruptEvent();
+    chip.release(UP);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"RIGHT", 0, 0},
+                                      {"RIGHT", 1, 1},
+                                      {"UP", 0, 0},
+                                      {"RIGHT", 0, 0},
+                                      {"RIGHT", 1, 1},
+                                      {"UP", 1, 1}}),
+                  events);
+}
+
+void testShortTapGivesPressThenRelease(void) {
+    attachChip();
+    DpadPin down(DOWN);
+    std::vector<int> levels;
+    down.pin.irq([&]() { levels.push_back(down.pin.irqLevel()); }, BOTH);
+    chip.press(DOWN);
+    chip.release(DOWN);
+    mcp->interruptEvent();
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL(2, levels.size());
+    TEST_ASSERT_EQUAL(0, levels[0]);
+    TEST_ASSERT_EQUAL(1, levels[1]);
+}
+
+void testCapturedLevelEqualToLastKnownIsNotReportedTwice(void) {
+    // With IOCON.INTCC, reading INTCAP clears the interrupt: a press just
+    // after it raises a new interrupt and is also read in GPIO. The press
+    // is reported once, from GPIO; the next interrupt captures the same
+    // level.
+    attachChip();
+    mcp->setIocon(MCP23009Config().setIntcc());
+    std::vector<Event> events;
+    DpadPin up(UP), down(DOWN);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    down.pin.irq(recorder(events, "DOWN", down.pin), BOTH);
+    chip.press(DOWN);
+    chip.onReadHook = [&](uint8_t reg) {
+        if (reg == MCP23009_INTCAP && (chip.pins & (1 << UP))) {
+            chip.press(UP);
+        }
+    };
+    mcp->interruptEvent();
+    chip.onReadHook = nullptr;
+    TEST_ASSERT_EQUAL_HEX8(1 << UP, chip.regs[MCP23009_INTF]);
+    ASSERT_EVENTS((std::vector<Event>{{"DOWN", 0, 0}, {"UP", 0, 0}}), events);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"DOWN", 0, 0}, {"UP", 0, 0}}), events);
+    chip.release(UP);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"DOWN", 0, 0}, {"UP", 0, 0}, {"UP", 1, 1}}), events);
+}
+
+void testFallingOnlyFiltersChangesFoundInGpio(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP), down(DOWN);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    down.pin.irq(recorder(events, "DOWN", down.pin), MCP23009Pin::IRQ_FALLING);
+    chip.press(UP);
+    chip.press(DOWN);  // missed by the chip, found in GPIO
+    mcp->interruptEvent();
+    chip.release(UP);
+    chip.release(DOWN);  // missed by the chip, found in GPIO
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 0}, {"DOWN", 0, 0}, {"UP", 1, 1}}), events);
+}
+
+void testPinNotInterruptEnabledIsNeverReported(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin down(DOWN), left(LEFT);
+    down.pin.irq(recorder(events, "DOWN", down.pin), BOTH);
+    chip.press(DOWN);
+    chip.press(LEFT);  // LEFT has no interrupt enabled
+    mcp->interruptEvent();
+    chip.release(LEFT);
+    chip.release(DOWN);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"DOWN", 0, 0}, {"DOWN", 1, 1}}), events);
+}
+
+// ----- Reads nested in a dispatch -----
+
+void testNestedReadDuringDispatchReportsEachChangeOnce(void) {
+    // A read made by a handler while the events of an earlier read are
+    // delivered compares with the levels already updated, and its events
+    // come after those still queued: no event twice, none lost.
+    attachChip();
+    std::vector<Event> events;
+    DpadPin down(DOWN), up(UP), left(LEFT);
+    bool nested = false;
+    down.pin.irq(
+        [&]() {
+            events.push_back({"DOWN", down.pin.irqLevel(), -1});
+            if (!nested) {
+                nested = true;
+                chip.release(DOWN);
+                mcp->interruptEvent();
+            }
+        },
+        BOTH);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    chip.press(DOWN);
+    chip.press(UP);                                          // missed by the chip, found in GPIO
+    left.pin.irq(recorder(events, "LEFT", left.pin), BOTH);  // reads the DOWN press
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"DOWN", 0, -1}, {"UP", 0, 0}, {"DOWN", 1, -1}}), events);
+}
+
+void testReleaseDuringDispatchComesAfterQueuedPress(void) {
+    // DOWN is pending and LEFT is pressed but missed. The DOWN handler
+    // releases LEFT, then registers UP: the LEFT press, then its release.
+    attachChip();
+    std::vector<Event> events;
+    DpadPin down(DOWN), left(LEFT), up(UP);
+    down.pin.irq(
+        [&]() {
+            events.push_back({"DOWN", down.pin.irqLevel(), -1});
+            chip.release(LEFT);
+            up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+        },
+        BOTH);
+    left.pin.irq(recorder(events, "LEFT", left.pin), BOTH);
+    chip.press(DOWN);
+    chip.press(LEFT);  // missed by the chip
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"DOWN", 0, -1}, {"LEFT", 0, 1}, {"LEFT", 1, 1}}), events);
+    chip.press(LEFT);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL(4, events.size());
+    TEST_ASSERT_TRUE((events[3] == Event{"LEFT", 0, 0}));
+}
+
+void testReregistrationInHandlerDropsQueuedEvents(void) {
+    // A tap before the new irq() call does not reach the new handler, even
+    // when its release is still queued by the read being delivered.
+    attachChip();
+    std::vector<int> first;
+    std::vector<Event> second;
+    DpadPin up(UP);
+    up.pin.irq(
+        [&]() {
+            first.push_back(up.pin.irqLevel());
+            up.pin.irq(recorder(second, "second", up.pin), BOTH);
+        },
+        BOTH);
+    chip.press(UP);
+    chip.release(UP);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL(1, first.size());
+    TEST_ASSERT_EQUAL(0, first[0]);
+    TEST_ASSERT_EQUAL(0, second.size());
+    chip.press(UP);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL(1, first.size());
+    ASSERT_EVENTS((std::vector<Event>{{"second", 0, 0}}), second);
+}
+
+void testManyNestedReadsDuringASlowHandlerLoseNoLevel(void) {
+    // More nested reads than the queue holds: the changes that found no
+    // room are read again from GPIO once the queue is empty, so the last
+    // reported level is the real one.
+    attachChip();
+    std::vector<int> downs;
+    DpadPin up(UP), down(DOWN);
+    bool tapped = false;
+    up.pin.irq(
+        [&]() {
+            if (tapped) {
+                return;
+            }
+            tapped = true;
+            for (int i = 0; i < 20; ++i) {
+                chip.press(DOWN);
+                mcp->interruptEvent();
+                chip.release(DOWN);
+                mcp->interruptEvent();
+            }
+            chip.press(DOWN);
+            mcp->interruptEvent();
+        },
+        BOTH);
+    down.pin.irq([&]() { downs.push_back(down.pin.irqLevel()); }, BOTH);
+    chip.press(UP);
+    mcp->interruptEvent();
+    TEST_ASSERT_TRUE(downs.size() >= 2);
+    for (size_t i = 1; i < downs.size(); ++i) {
+        TEST_ASSERT_NOT_EQUAL(downs[i - 1], downs[i]);  // levels alternate
+    }
+    TEST_ASSERT_EQUAL(0, downs.front());
+    TEST_ASSERT_EQUAL(0, downs.back());  // the real level: pressed
+    chip.release(DOWN);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL(1, downs.back());
+    TEST_ASSERT_NOT_EQUAL(downs[downs.size() - 2], downs.back());
+}
+
+// ----- Bus errors -----
+
+void testBusErrorGivesNoEventAndReturnsFalse(void) {
+    // readReg() returns 0 on a bus error: for active-low buttons, an INTCAP
+    // or GPIO read as 0 would look like every button pressed.
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP), down(DOWN);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    down.pin.irq(recorder(events, "DOWN", down.pin), BOTH);
+    chip.press(UP);
+    chip.failReads = true;
+    TEST_ASSERT_FALSE(mcp->interruptEvent());
+    TEST_ASSERT_EQUAL(0, events.size());
+    chip.failReads = false;
+    // The levels did not move: the next good read reports the press only.
+    TEST_ASSERT_TRUE(mcp->interruptEvent());
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 0}}), events);
+}
+
+// ----- Re-registration and reset -----
+
+void testSwitchFromBothEdgesToFallingOnly(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    up.pin.irq(recorder(events, "UP", up.pin), MCP23009Pin::IRQ_FALLING);
+    chip.press(UP);
+    mcp->interruptEvent();
+    chip.release(UP);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 0}}), events);
+}
+
+void testHardwareResetForgetsEnabledPins(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP), down(DOWN);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    mcp->reset();
+    chip.regs[MCP23009_GPINTEN] = 0;  // what the reset pulse does to the chip
+    down.pin.irq(recorder(events, "DOWN", down.pin), BOTH);
+    chip.press(DOWN);
+    chip.press(UP);  // no longer watched
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"DOWN", 0, 0}}), events);
+}
+
+void testPowerOffForgetsEnabledPins(void) {
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP), down(DOWN);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    mcp->powerOff();
+    mcp->powerOn();
+    chip.regs[MCP23009_GPINTEN] = 0;
+    down.pin.irq(recorder(events, "DOWN", down.pin), BOTH);
+    chip.press(DOWN);
+    chip.press(UP);  // no longer watched
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"DOWN", 0, 0}}), events);
+}
+
+// ----- poll() -----
+
+void testPollWithoutInterruptPinReadsChip(void) {
+    // Without an MCU interrupt line, poll() reads the chip at each call,
+    // so callbacks still run when the sketch only polls.
+    attachChip();
+    std::vector<Event> events;
+    DpadPin up(UP);
+    up.pin.irq(recorder(events, "UP", up.pin), BOTH);
+    chip.press(UP);
+    chip.release(UP);
+    mcp->poll();
+    ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 1}, {"UP", 1, 1}}), events);
+}
+
+void testPollWithoutInterruptPinAndNoEnabledPinDoesNoI2c(void) {
+    attachChip();
+    size_t before = Wire.totalTransactions();
+    mcp->poll();
+    TEST_ASSERT_EQUAL(before, Wire.totalTransactions());
+}
+
+// ----- interruptOnRaising() alias (#183) -----
+
+void testInterruptOnRaisingAliasCallsInterruptOnRising(void) {
+    attachChip();
+    DpadPin up(UP);
+    int rises = 0;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    mcp->interruptOnRaising(UP, [&]() { ++rises; });
+#pragma GCC diagnostic pop
+    TEST_ASSERT_EQUAL_HEX8(1 << UP, chip.regs[MCP23009_GPINTEN]);
+    chip.press(UP);
+    mcp->interruptEvent();
+    chip.release(UP);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL(1, rises);
 }
 
 int main(void) {
@@ -633,7 +1469,7 @@ int main(void) {
     RUN_TEST(testConfigGetRegisterValueReturnsCorrectByte);
     RUN_TEST(testInterruptOnChangeEnablesInterruptRegister);
     RUN_TEST(testInterruptOnFallingEnablesInterruptRegister);
-    RUN_TEST(testInterruptOnRaisingEnablesInterruptRegister);
+    RUN_TEST(testInterruptOnRisingEnablesInterruptRegister);
     RUN_TEST(testDisableInterruptClearsInterruptRegister);
     RUN_TEST(testPinOnSetsLevelHigh);
     RUN_TEST(testPinOffSetsLevelLow);
@@ -649,5 +1485,44 @@ int main(void) {
     RUN_TEST(testInterruptEventUsesIntcapNotGpio);
     RUN_TEST(testPollIsNoOpWhenNoPending);
     RUN_TEST(testPinDestructorClearsExpanderCallbackSlot);
+    RUN_TEST(testIrqLevelIsNoneBeforeAnyInterrupt);
+    RUN_TEST(testHandlerSeesPressReleasedBeforeItRuns);
+    RUN_TEST(testPressThenReleaseEachReported);
+    RUN_TEST(testChangeCallbackGetsLevelFromIntcap);
+    RUN_TEST(testIntccSetClearsOnIntcapRead);
+    RUN_TEST(testActiveLowPinInvertsCapturedLevel);
+    RUN_TEST(testFallingOnlyHandler);
+    RUN_TEST(testRisingOnlyHandler);
+    RUN_TEST(testDeviceCallbacksGetChangesFoundInGpio);
+    RUN_TEST(testRegisteringDpadHandlersFiresNoEvent);
+    RUN_TEST(testReregistrationClearsPendingInterrupt);
+    RUN_TEST(testReregistrationClearsPendingInterruptWithIntcc);
+    RUN_TEST(testCallbackStoredAndInterruptClearedBeforeGpinten);
+    RUN_TEST(testPressAtEnableTimeReachesNewHandler);
+    RUN_TEST(testIntconWrittenBeforeGpinten);
+    RUN_TEST(testPendingEventOnOtherPinIsKept);
+    RUN_TEST(testHandlerRunAtRegistrationCanEnableAnotherPin);
+    RUN_TEST(testHandlerRunAtRegistrationCanDisableItsPin);
+    RUN_TEST(testDisableInterruptStopsCallbacks);
+    RUN_TEST(testDisableWithPendingInterruptReportsNothing);
+    RUN_TEST(testReenabledPinTakesItsLevelAgain);
+    RUN_TEST(testRegistrationTakesHeldLevelWithoutEvent);
+    RUN_TEST(testV1cLostReleaseDuringPendingPress);
+    RUN_TEST(testV1cLostPressDuringPendingPress);
+    RUN_TEST(testShortTapGivesPressThenRelease);
+    RUN_TEST(testCapturedLevelEqualToLastKnownIsNotReportedTwice);
+    RUN_TEST(testFallingOnlyFiltersChangesFoundInGpio);
+    RUN_TEST(testPinNotInterruptEnabledIsNeverReported);
+    RUN_TEST(testNestedReadDuringDispatchReportsEachChangeOnce);
+    RUN_TEST(testReleaseDuringDispatchComesAfterQueuedPress);
+    RUN_TEST(testReregistrationInHandlerDropsQueuedEvents);
+    RUN_TEST(testManyNestedReadsDuringASlowHandlerLoseNoLevel);
+    RUN_TEST(testBusErrorGivesNoEventAndReturnsFalse);
+    RUN_TEST(testSwitchFromBothEdgesToFallingOnly);
+    RUN_TEST(testHardwareResetForgetsEnabledPins);
+    RUN_TEST(testPowerOffForgetsEnabledPins);
+    RUN_TEST(testPollWithoutInterruptPinReadsChip);
+    RUN_TEST(testPollWithoutInterruptPinAndNoEnabledPinDoesNoI2c);
+    RUN_TEST(testInterruptOnRaisingAliasCallsInterruptOnRising);
     return UNITY_END();
 }

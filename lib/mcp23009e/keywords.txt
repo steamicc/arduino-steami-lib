@@ -45,9 +45,12 @@ setOlat	KEYWORD2
 getOlat	KEYWORD2
 interruptOnChange	KEYWORD2
 interruptOnFalling	KEYWORD2
+interruptOnRising	KEYWORD2
 interruptOnRaising	KEYWORD2
 disableInterrupt	KEYWORD2
 interruptEvent	KEYWORD2
+poll	KEYWORD2
+irqLevel	KEYWORD2
 setSeqop	KEYWORD2
 clearSeqop	KEYWORD2
 hasSeqop	KEYWORD2
