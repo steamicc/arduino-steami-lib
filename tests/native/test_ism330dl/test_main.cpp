@@ -271,6 +271,29 @@ void test_temperature_calibration_rejects_equal_measured_points(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001F, 27.25F, value);
 }
 
+void test_set_temperature_offset_replaces_two_point_calibration(void) {
+    // The offset resets the gain to 1, as in MicroPython set_temp_offset().
+    preloadInt16(ISM330DL_REG_OUT_TEMP_L, 0);  // Factory value = 25 °C.
+    TEST_ASSERT_TRUE(sensor.calibrateTemperature(1.0F, 0.0F, 22.0F, 20.0F));  // gain 1.05
+    sensor.setTemperatureOffset(-1.5F);
+
+    float value = 0.0F;
+    TEST_ASSERT_TRUE(sensor.temperature(value));
+    // 25 - 1.5 = 23.5 (gain 1.05 kept: 24.75)
+    TEST_ASSERT_FLOAT_WITHIN(0.001F, 23.5F, value);
+}
+
+void test_calibrate_temperature_replaces_offset(void) {
+    preloadInt16(ISM330DL_REG_OUT_TEMP_L, 0);  // Factory value = 25 °C.
+    sensor.setTemperatureOffset(-1.5F);
+    TEST_ASSERT_TRUE(sensor.calibrateTemperature(1.0F, 0.0F, 22.0F, 20.0F));
+
+    float value = 0.0F;
+    TEST_ASSERT_TRUE(sensor.temperature(value));
+    // 1.05 * 25 + 1.0 = 27.25 (offset added on top: 25.75)
+    TEST_ASSERT_FLOAT_WITHIN(0.001F, 27.25F, value);
+}
+
 void test_status_helpers_reflect_individual_bits(void) {
     preloadStatus(0);
     TEST_ASSERT_FALSE(sensor.accelReady());
@@ -413,6 +436,8 @@ int main(void) {
     RUN_TEST(test_temperature_offset_shifts_reading);
     RUN_TEST(test_temperature_two_point_calibration);
     RUN_TEST(test_temperature_calibration_rejects_equal_measured_points);
+    RUN_TEST(test_set_temperature_offset_replaces_two_point_calibration);
+    RUN_TEST(test_calibrate_temperature_replaces_offset);
 
     RUN_TEST(test_status_helpers_reflect_individual_bits);
     RUN_TEST(test_power_off_clears_accel_and_gyro_ctrl_registers);

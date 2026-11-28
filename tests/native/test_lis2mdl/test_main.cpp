@@ -405,6 +405,19 @@ void test_calibrate_temperature_with_equal_points_keeps_calibration(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.05f, 27.0f, tempC);
 }
 
+void test_calibrate_temperature_replaces_offset(void) {
+    sensor.begin();
+    Wire.setRegister(ADDR, LIS2MDL_TEMP_OUT_L_REG, 0x00);
+    Wire.setRegister(ADDR, LIS2MDL_TEMP_OUT_H_REG, 0x00);
+
+    sensor.setTemperatureOffset(2.0f);
+    TEST_ASSERT_TRUE(sensor.calibrateTemperature(21.0f, 20.0f, 27.0f, 25.0f));
+
+    // 1.2 * 25 - 3.0 = 27.0 (offset added on top: 29.0)
+    float tempC = sensor.temperature();
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 27.0f, tempC);
+}
+
 void test_set_low_power_sets_bit4_cfg_reg_a(void) {
     sensor.begin();
     sensor.setLowPower(true);
@@ -640,6 +653,7 @@ int main(void) {
     RUN_TEST(test_set_temp_offset_is_alias_of_set_temperature_offset);
     RUN_TEST(test_calibrate_temperature_applies_two_point_correction);
     RUN_TEST(test_calibrate_temperature_with_equal_points_keeps_calibration);
+    RUN_TEST(test_calibrate_temperature_replaces_offset);
     RUN_TEST(test_set_low_power_sets_bit4_cfg_reg_a);
     RUN_TEST(test_set_low_pass_sets_bit0_cfg_reg_b);
     RUN_TEST(test_set_offset_cancellation_sets_bits_cfg_reg_b);
