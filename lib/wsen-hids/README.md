@@ -156,26 +156,23 @@ the driver against the `TwoWire` mock. Run them without hardware with:
 make test-native/wsen_hids
 ```
 
-Build-only verification:
+The hardware suite under
+[`tests/hardware/test_wsen_hids/`](../../tests/hardware/test_wsen_hids/)
+checks the real sensor: `begin()`, `deviceId()`, plausible temperature and
+humidity, the one-shot and power-down paths, `reboot()`, averaging and the
+temperature offset. It needs a STeaMi V1a or V1b (the V1c has a BME280
+instead):
+
+```bash
+make test-hardware/wsen_hids
+```
+
+Build and formatting checks:
 
 ```bash
 make build
-```
-
-Formatting:
-
-```bash
 make lint
 ```
-
-Manual hardware validation can be done with the provided `BasicReader`
-example to confirm:
-
-* successful `begin()`
-* correct `deviceId()`
-* plausible temperature values
-* plausible humidity values
-* continuous acquisition readiness
 
 ## References
 

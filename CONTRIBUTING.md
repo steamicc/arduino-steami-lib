@@ -191,8 +191,9 @@ Every `lib/<component>/README.md` uses the same sections, in this order
 6. `## Register constants` (or `## Constants`): what `*_const.h` exports.
    Sections specific to the driver (limitations, firmware notes, JSON
    format, ...) go after it.
-7. `## Testing`: the `make test-native/<suite>` (and `test-hardware/<suite>`)
-   commands.
+7. `## Testing`: the `make test-native/<suite>` command, and
+   `make test-hardware/<suite>` with the board it needs when
+   `tests/hardware/test_<suite>/` exists.
 8. `## References`: the datasheet, the hardware page of the STeaMi wiki and
    the MicroPython counterpart in `steamicc/micropython-steami-lib`.
 9. `## License`: `GPL-3.0-or-later — see [LICENSE](../../LICENSE).`
