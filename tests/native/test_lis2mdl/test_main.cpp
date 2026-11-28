@@ -194,6 +194,102 @@ void test_ensure_data_returns_false_on_timeout(void) {
     TEST_ASSERT_EQUAL_INT16(0x0000, field.z);
 }
 
+static void setField(int16_t x, int16_t y, int16_t z) {
+    const uint16_t ux = static_cast<uint16_t>(x);
+    const uint16_t uy = static_cast<uint16_t>(y);
+    const uint16_t uz = static_cast<uint16_t>(z);
+    Wire.setRegister(ADDR, LIS2MDL_OUTX_L_REG, ux & 0xFF);
+    Wire.setRegister(ADDR, LIS2MDL_OUTX_H_REG, (ux >> 8) & 0xFF);
+    Wire.setRegister(ADDR, LIS2MDL_OUTY_L_REG, uy & 0xFF);
+    Wire.setRegister(ADDR, LIS2MDL_OUTY_H_REG, (uy >> 8) & 0xFF);
+    Wire.setRegister(ADDR, LIS2MDL_OUTZ_L_REG, uz & 0xFF);
+    Wire.setRegister(ADDR, LIS2MDL_OUTZ_H_REG, (uz >> 8) & 0xFF);
+}
+
+void test_magnetic_field_reads_in_one_burst(void) {
+    sensor.begin();
+    setField(0x1234, -200, 300);
+    const size_t before = Wire.transactions(ADDR);
+    MagneticField field = {0, 0, 0};
+    TEST_ASSERT_TRUE(sensor.magneticField(field));
+    // CFG_REG_A for the idle check, then the six output bytes: one address write and one read
+    // each. Six single-byte reads would take twelve transactions for the field alone.
+    TEST_ASSERT_EQUAL_UINT32(4, Wire.transactions(ADDR) - before);
+    TEST_ASSERT_EQUAL_INT16(0x1234, field.x);
+    TEST_ASSERT_EQUAL_INT16(-200, field.y);
+    TEST_ASSERT_EQUAL_INT16(300, field.z);
+}
+
+void test_magnetic_field_reports_absent_chip(void) {
+    sensor.begin();
+    setField(0x1234, 0x5678, 0x0102);
+    Wire.setAbsent(ADDR);
+    MagneticField field = {1, 2, 3};
+    TEST_ASSERT_FALSE(sensor.magneticField(field));
+    TEST_ASSERT_EQUAL_INT16(0, field.x);
+    TEST_ASSERT_EQUAL_INT16(0, field.y);
+    TEST_ASSERT_EQUAL_INT16(0, field.z);
+    const MagneticField plain = sensor.magneticField();
+    TEST_ASSERT_EQUAL_INT16(0, plain.x);
+    TEST_ASSERT_EQUAL_INT16(0, plain.y);
+    TEST_ASSERT_EQUAL_INT16(0, plain.z);
+}
+
+void test_magnetic_field_reports_failed_address_write(void) {
+    sensor.begin();
+    setField(0x1234, 0x5678, 0x0102);
+    Wire.setEndTransmissionResult(4);
+    MagneticField field = {1, 2, 3};
+    TEST_ASSERT_FALSE(sensor.magneticField(field));
+    TEST_ASSERT_EQUAL_INT16(0, field.x);
+}
+
+void test_magnetic_field_reports_data_ready_timeout(void) {
+    sensor.begin();
+    sensor.setMode("powerdown");
+    Wire.setRegister(ADDR, LIS2MDL_STATUS_REG, 0b0000);
+    setField(0x1234, 0x5678, 0x0102);  // stale values: never returned
+    MagneticField field = {1, 2, 3};
+    TEST_ASSERT_FALSE(sensor.magneticField(field));
+    TEST_ASSERT_EQUAL_INT16(0, field.x);
+    TEST_ASSERT_EQUAL_INT16(0, field.y);
+    TEST_ASSERT_EQUAL_INT16(0, field.z);
+}
+
+void test_float_readings_are_nan_on_bus_error(void) {
+    sensor.begin();
+    setField(0x1234, 0x5678, 0x0102);
+    Wire.setAbsent(ADDR);
+    const MagneticFieldUt ut = sensor.magneticFieldUt();
+    TEST_ASSERT_TRUE(isnan(ut.x) && isnan(ut.y) && isnan(ut.z));
+    const CalibratedField cal = sensor.calibratedField();
+    TEST_ASSERT_TRUE(isnan(cal.x) && isnan(cal.y) && isnan(cal.z));
+    TEST_ASSERT_TRUE(isnan(sensor.magnitudeUt()));
+}
+
+void test_heading_flat_only_is_nan_on_bus_error(void) {
+    sensor.begin();
+    setField(0, 300, 0);
+    Wire.setAbsent(ADDR);
+    TEST_ASSERT_TRUE(isnan(sensor.headingFlatOnly()));
+    TEST_ASSERT_EQUAL_STRING("", sensor.directionLabel());
+    TEST_ASSERT_EQUAL_STRING("", sensor.directionLabel(NAN));
+}
+
+void test_calibrate_minmax_keeps_calibration_on_bus_error(void) {
+    sensor.begin();
+    sensor.setCalibrateStep(10.0f, 20.0f, 30.0f, 2.0f, 3.0f, 4.0f);
+    Wire.setAbsent(ADDR);
+    sensor.calibrateMinmax3d(5, 0);
+    sensor.calibrateMinmax2d(5, 0);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 10.0f, sensor.xOff);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 20.0f, sensor.yOff);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 30.0f, sensor.zOff);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 2.0f, sensor.xScale);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 3.0f, sensor.yScale);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 4.0f, sensor.zScale);
+}
+
 void test_temperature_raw_is_signed(void) {
     sensor.begin();
     Wire.setRegister(ADDR, LIS2MDL_TEMP_OUT_L_REG, 0x34);
@@ -485,6 +581,13 @@ int main(void) {
     RUN_TEST(test_read_one_shot_returns_magnetic_field);
     RUN_TEST(test_read_one_shot_returns_zeros_on_timeout);
     RUN_TEST(test_ensure_data_returns_false_on_timeout);
+    RUN_TEST(test_magnetic_field_reads_in_one_burst);
+    RUN_TEST(test_magnetic_field_reports_absent_chip);
+    RUN_TEST(test_magnetic_field_reports_failed_address_write);
+    RUN_TEST(test_magnetic_field_reports_data_ready_timeout);
+    RUN_TEST(test_float_readings_are_nan_on_bus_error);
+    RUN_TEST(test_heading_flat_only_is_nan_on_bus_error);
+    RUN_TEST(test_calibrate_minmax_keeps_calibration_on_bus_error);
     RUN_TEST(test_temperature_raw_is_signed);
     RUN_TEST(test_set_temp_offset_shifts_reading);
     RUN_TEST(test_set_temperature_offset_shifts_reading);

@@ -88,6 +88,34 @@ void test_mcp23009e_set_level_roundtrip_on_outputs() {
     TEST_ASSERT_EQUAL(MCP23009_LOGIC_HIGH, expander.getLevel(MCP23009_GPIO2));
 }
 
+// Registering interrupt callbacks on the four D-PAD buttons fires no
+// event when nobody touches them (issue #303). Before the fix, the
+// registration enabled GPINTEN before clearing the pending interrupt, and
+// the pull-up change made at setup() raised one spurious event. Five
+// rounds, as in the MicroPython check of steamicc/micropython-steami-lib#466.
+void test_mcp23009e_dpad_registration_fires_no_event() {
+    static const uint8_t dpad[] = {MCP23009_BTN_UP, MCP23009_BTN_DOWN, MCP23009_BTN_LEFT,
+                                   MCP23009_BTN_RIGHT};
+    int events = 0;
+    for (int round = 0; round < 5; ++round) {
+        expander.begin();
+        for (uint8_t gp : dpad) {
+            expander.setup(gp, MCP23009_DIR_INPUT, MCP23009_PULLUP);
+        }
+        for (uint8_t gp : dpad) {
+            expander.interruptOnChange(gp, [&events](uint8_t) { ++events; });
+        }
+        delay(20);
+        expander.poll();
+        TEST_ASSERT_TRUE(expander.interruptEvent());
+        for (uint8_t gp : dpad) {
+            expander.disableInterrupt(gp);
+        }
+    }
+    TEST_ASSERT_EQUAL_MESSAGE(0, events, "no button touched: no interrupt event");
+    TEST_ASSERT_EQUAL_HEX8(0, expander.getIntf());
+}
+
 void setup() {
     delay(2000);
     internalI2C.begin();
@@ -99,6 +127,7 @@ void setup() {
     RUN_TEST(test_mcp23009e_gppu_roundtrip);
     RUN_TEST(test_mcp23009e_dpad_idle_reads_high);
     RUN_TEST(test_mcp23009e_set_level_roundtrip_on_outputs);
+    RUN_TEST(test_mcp23009e_dpad_registration_fires_no_event);
     UNITY_END();
 }
 

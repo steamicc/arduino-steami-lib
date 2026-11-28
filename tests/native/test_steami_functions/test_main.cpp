@@ -777,6 +777,22 @@ static void test_compass_absent(void) {
     TEST_ASSERT_TRUE(isnan(magnetometer.x()));
 }
 
+static void test_magnetometer_and_compass_nan_on_bus_error(void) {
+    steamiFakeBme280(Wire);
+    steamiFakeLis2mdl(Wire, 200, -100, 50);
+    SteamiCompass compass(board);
+    SteamiMagnetometer magnetometer(board);
+    TEST_ASSERT_TRUE(compass.begin());
+    TEST_ASSERT_TRUE(magnetometer.begin());
+    // The chip stops answering after begin(): a plausible zero field must not come back.
+    Wire.setAbsent(0x1E);
+    const SteamiVector v = magnetometer.read();
+    TEST_ASSERT_TRUE(isnan(v.x) && isnan(v.y) && isnan(v.z));
+    TEST_ASSERT_TRUE(isnan(magnetometer.strength()));
+    TEST_ASSERT_TRUE(isnan(compass.heading()));
+    TEST_ASSERT_EQUAL_STRING("", compass.direction());
+}
+
 static const char* const kCmConfig =
     "{\"rev\":131,\"cm\":{\"hx\":100,\"hy\":0,\"hz\":0,\"sx\":1,\"sy\":1,\"sz\":1}}";
 
@@ -1347,6 +1363,7 @@ int main(void) {
     RUN_TEST(test_compass_declination_before_begin);
     RUN_TEST(test_compass_and_magnetometer_share_chip);
     RUN_TEST(test_compass_absent);
+    RUN_TEST(test_magnetometer_and_compass_nan_on_bus_error);
     RUN_TEST(test_compass_heading_uses_cm);
     RUN_TEST(test_motion_calibrations_when_forced);
     RUN_TEST(test_calibrate_zero_changes_nothing);

@@ -63,7 +63,10 @@ class SteamiLIS2MDL {
     void setDeclination(float deg);
     void setHwOffsets(int16_t x, int16_t y, int16_t z);
 
+    // Six output bytes in one I2C burst; {0, 0, 0} on a bus error or a data-ready timeout.
     MagneticField magneticField();
+    // Same reading; false on a bus error or a data-ready timeout (value is then {0, 0, 0}).
+    bool magneticField(MagneticField& value);
     MagneticField magneticFieldRaw();
     MagneticFieldUt magneticFieldUt();
     CalibratedField calibratedField();
@@ -131,6 +134,7 @@ class SteamiLIS2MDL {
     void write16(uint8_t regL, int16_t value);
     uint8_t readReg(uint8_t reg);
     int16_t read16(uint8_t reg);
+    bool readBytes(uint8_t reg, uint8_t* buffer, uint8_t length);
     bool ensureData();
     int16_t toInt16(uint16_t v);
     float normalizeDeg(float a);

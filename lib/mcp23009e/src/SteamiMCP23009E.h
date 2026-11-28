@@ -6,6 +6,7 @@
 #include <Wire.h>
 
 #include <functional>
+#include <utility>
 
 #include "SteamiMCP23009E_const.h"
 
@@ -68,17 +69,54 @@ class SteamiMCP23009E {
     bool gpio(uint8_t& value);
     void setOlat(uint8_t value);
     uint8_t getOlat();
+    // Interrupt callbacks. Registering stores the callback, reads and
+    // clears the pending interrupt, then enables the pin: a change made
+    // before the call fires no event, and the level read then becomes the
+    // last known level of the pin. A registration replaces the earlier
+    // callback of the same kind. reset(), powerOff() and the soft reset
+    // disable every pin: register the callbacks again afterwards.
+    //
+    // interruptOnChange() passes the level of the event: the one captured
+    // in INTCAP, or the one read in GPIO for a change the chip did not
+    // signal (see interruptEvent()).
     void interruptOnChange(uint8_t gpx, std::function<void(uint8_t)> callback);
     void interruptOnFalling(uint8_t gpx, std::function<void()> callback);
-    void interruptOnRaising(uint8_t gpx, std::function<void()> callback);
+    void interruptOnRising(uint8_t gpx, std::function<void()> callback);
+    // Former name of interruptOnRising() (issue #183), kept for the whole
+    // 1.x series and removed in 2.0.0.
+    [[deprecated("use interruptOnRising(); interruptOnRaising() goes away in 2.0.0")]]
+    void interruptOnRaising(uint8_t gpx, std::function<void()> callback) {
+        interruptOnRising(gpx, std::move(callback));
+    }
     void disableInterrupt(uint8_t gpx);
-    void interruptEvent();
 
-    // Drains the pending-interrupt flag set by the ISR and dispatches
-    // the registered callbacks in normal (non-interrupt) context. Call
-    // this from loop() — the ISR itself only flags so it can finish
-    // fast and so callbacks aren't run from ISR context (where Wire
-    // and arbitrary user code are unsafe on STM32duino).
+    // Reads INTF, INTCAP (the port captured at the interrupt), then GPIO,
+    // which clears the interrupt whatever IOCON.INTCC is. For each enabled
+    // pin, the driver keeps the last known level and reports, in order:
+    // - the captured level, if the pin is in INTF and that level differs
+    //   from the last known one;
+    // - the current GPIO level, if it still differs.
+    // A short tap released before the read therefore gives the press then
+    // the release. While an interrupt is pending the chip does not signal
+    // changes on the other pins; the GPIO read finds them.
+    //
+    // Reads are queued (8 records) and delivered in FIFO order: a read made
+    // from inside a callback (interruptEvent(), poll() or a registration)
+    // is delivered after the events already queued. Past 8 queued reads,
+    // the changes are read again from GPIO once the queue is empty. Events
+    // read before a pin is registered again are dropped for that pin.
+    //
+    // Returns false on a bus error, with no event and no level change.
+    // Limit: a press and its release that both happen while an interrupt
+    // is pending cancel out and leave no trace in the chip.
+    bool interruptEvent();
+
+    // Runs interruptEvent() in normal (non-interrupt) context. Call it from
+    // loop(). With an interrupt pin, it reads the chip only once the ISR
+    // has flagged an interrupt — the ISR itself only flags so it can finish
+    // fast and so callbacks aren't run from ISR context (where Wire and
+    // arbitrary user code are unsafe on STM32duino). Without an interrupt
+    // pin, it reads the chip at each call while at least one pin is enabled.
     void poll();
 
    private:
@@ -100,14 +138,49 @@ class SteamiMCP23009E {
     std::function<void()> _eventsFall[8];
     std::function<void()> _eventsRise[8];
 
+    // Pins whose interrupt is enabled (one bit per pin), and the last known
+    // level of each: the one of the last reported event, or the one read
+    // when the pin was enabled.
+    uint8_t _enabled = 0;
+    uint8_t _levels = 0;
+
+    // Interrupt reads whose events are still to be delivered, in order.
+    struct InterruptRead {
+        uint8_t fromIntcap;  // pins to report with their INTCAP level
+        uint8_t captured;    // INTCAP
+        uint8_t fromGpio;    // pins to report with their GPIO level
+        uint8_t gpio;        // GPIO
+        uint32_t generation;
+    };
+    static constexpr uint8_t kQueueLen = 8;
+    InterruptRead _queue[kQueueLen] = {};
+    // Head and tail indices, modulo 2 * kQueueLen.
+    uint8_t _head = 0;
+    uint8_t _tail = 0;
+    bool _dispatching = false;
+    // Set when a read found no room in the queue.
+    bool _overflow = false;
+    // Registration counter, and its value at the last registration of each
+    // pin: a read made before does not call the new callback.
+    uint32_t _generation = 0;
+    uint32_t _registered[8] = {};
+
     static uint8_t setBit(uint8_t reg, uint8_t bit, uint8_t value);
     static uint8_t getBit(uint8_t reg, uint8_t bit);
     void softReset();
     void writeReg(uint8_t reg, uint8_t value);
     uint8_t readReg(uint8_t reg);
+    bool readReg(uint8_t reg, uint8_t& value);
     void sendEnableInterrupt(uint8_t gpx);
     void sendDisableInterrupt(uint8_t gpx);
+    void clearCallbacks(uint8_t gpx);
+    bool readInterrupt(uint8_t skipMask);
+    void dispatchQueued();
+    void dispatch(uint8_t gpx, uint8_t level, uint32_t generation);
     void irqHandler();
+
+    // MCP23009Pin::irq() clears the callbacks of an earlier registration.
+    friend class MCP23009Pin;
 };
 
 class MCP23009Pin {
@@ -117,6 +190,8 @@ class MCP23009Pin {
     static constexpr uint8_t PULL_UP = MCP23009_PULLUP;
     static constexpr uint8_t IRQ_FALLING = 1;
     static constexpr uint8_t IRQ_RISING = 2;
+    // irqLevel() before any interrupt.
+    static constexpr uint8_t IRQ_LEVEL_NONE = 0xFF;
 
     MCP23009Pin(SteamiMCP23009E& mcp, uint8_t pinNumber, uint8_t mode = 0xFF, uint8_t pull = 0xFF,
                 uint8_t value = 0xFF);
@@ -140,8 +215,19 @@ class MCP23009Pin {
     void on();
     void off();
     void toggle();
+    // Calls handler from poll() / interruptEvent() on the chosen edges.
+    // The registration replaces the earlier one (callbacks and trigger),
+    // and a change made before the call does not call the handler, even if
+    // it is still queued. A short tap gives two events: the press, then the
+    // release.
     void irq(std::function<void()> handler = nullptr, uint16_t trigger = IRQ_FALLING | IRQ_RISING,
              bool hard = false);
+    // Level of the event being delivered, to read in the irq() handler: the
+    // one captured in INTCAP at the interrupt, even if the pin changed
+    // before the handler ran, or the one read in GPIO for a change the chip
+    // did not signal. value() reads the current level. IRQ_LEVEL_NONE
+    // before any interrupt.
+    uint8_t irqLevel() const;
     uint8_t mode(uint8_t mode = 0xff);
     uint8_t pull(uint8_t pull = 0xff);
 
@@ -152,7 +238,10 @@ class MCP23009Pin {
     uint8_t _pull;
     uint8_t _value;
     std::function<void()> _irqHandler;
-    uint16_t _irqTrigger;
+    uint16_t _irqTrigger = 0;
+    uint8_t _irqLevel = IRQ_LEVEL_NONE;
+
+    void deliver(uint8_t level);
 };
 
 class MCP23009ActiveLowPin {
@@ -162,6 +251,7 @@ class MCP23009ActiveLowPin {
     static constexpr uint8_t PULL_UP = MCP23009Pin::PULL_UP;
     static constexpr uint8_t IRQ_FALLING = MCP23009Pin::IRQ_FALLING;
     static constexpr uint8_t IRQ_RISING = MCP23009Pin::IRQ_RISING;
+    static constexpr uint8_t IRQ_LEVEL_NONE = MCP23009Pin::IRQ_LEVEL_NONE;
 
     MCP23009ActiveLowPin(SteamiMCP23009E& mcp, uint8_t pinNumber, uint8_t mode = 0xFF,
                          uint8_t pull = 0xFF, uint8_t value = 0xFF);
@@ -172,6 +262,10 @@ class MCP23009ActiveLowPin {
     void off();
     void toggle();
     void irq(std::function<void()> handler = nullptr, uint16_t trigger = 0xFFFF, bool hard = false);
+    // Logical level of the event being delivered (inverted GPIO level): 1
+    // if the GPIO was low for this event. IRQ_LEVEL_NONE before any
+    // interrupt.
+    uint8_t irqLevel() const;
     uint8_t mode(uint8_t mode = 0xFF);
     uint8_t pull(uint8_t pull = 0xFF);
     uint8_t pinNumber();
