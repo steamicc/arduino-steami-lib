@@ -83,7 +83,9 @@ class SteamiLIS2MDL {
     int16_t readTemperatureRaw();
     float temperature();
     void setTemperatureOffset(float offset);
-    // Alias of setTemperatureOffset(), kept for existing sketches.
+    // Former name of setTemperatureOffset() (#56), kept for the whole 1.x
+    // series and removed in 2.0.0.
+    [[deprecated("use setTemperatureOffset(); setTempOffset() goes away in 2.0.0")]]
     void setTempOffset(float offset);
     bool calibrateTemperature(float refLow, float measuredLow, float refHigh, float measuredHigh);
     uint8_t deviceId();

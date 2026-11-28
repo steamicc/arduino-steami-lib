@@ -54,6 +54,16 @@ the other stored settings are lost.
 | Example | What it does | Try it |
 |---------|--------------|--------|
 | [`show_config`](examples/show_config/) | Load and print the stored board information, calibrations and boot count, without writing anything. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config#show_config) |
+| [`calibrate_temperature`](examples/calibrate_temperature/) | Align every temperature sensor on the reference of the release (BME280 on a V1c, WSEN-HIDS on a V1a/V1b) and save the offsets (`tc`). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config#calibrate_temperature) |
+| [`calibrate_accelerometer`](examples/calibrate_accelerometer/) | Measure the ISM330DL bias with the board flat and save it (`ca`). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config#calibrate_accelerometer) |
+| [`calibrate_magnetometer`](examples/calibrate_magnetometer/) | Press MENU, turn the board for 12 s, save the LIS2MDL hard and soft iron (`cm`) and check the heading. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config#calibrate_magnetometer) |
+
+The three `calibrate_*` examples write the config zone. When the zone is read,
+they keep the other stored settings (they `load()` the zone before saving). An
+empty read is tried again, and refused when the board found settings in the
+zone at startup, since a failed read looks like an empty zone. They mirror the
+examples of the same name in the MicroPython `steami_config` library, so a
+board calibrated in one language reads the same in the other.
 
 Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config).
 
@@ -81,9 +91,16 @@ make capture-steami_config/show_config DURATION=30
 | `bool load()` | Load the JSON configuration from the config zone. An empty zone gives an empty configuration. |
 | `bool save()` | Erase the config zone and write the current compact JSON. Returns `false` if it does not fit. |
 | `void clear()` | Clear only the in-memory configuration. |
+| `bool isEmpty() const` | True when no value is set (no board information, calibration or boot count). |
 
 Invalid JSON is discarded: `load()` returns `false` and leaves an empty
 in-memory configuration.
+
+A failed read of the first block of the zone (DAPLink busy, I2C error) also
+gives an empty configuration, with `load()` returning `true`: it looks like an
+empty zone, and a `save()` that follows would erase the stored settings. When
+`isEmpty()` is true after `load()` on a board that should hold a
+configuration, read the zone again before saving.
 
 The serialized JSON must stay under 1 KB (1023 bytes at most, the size of
 the DAPLink config zone minus its last byte).
@@ -136,18 +153,22 @@ Any other value (for example the old example value `3`) is not a valid code.
 
 Supported sensor names match the MicroPython library:
 
-- `hts221`
 - `lis2mdl`
 - `ism330dl`
 - `wsen_hids`
 - `wsen_pads`
 - `bme280`
+- `hts221`: legacy entry. The HTS221 and the WSEN-HIDS are the same chip at
+  0x5F, and older tools stored the WSEN-HIDS calibration under this name.
+  The STeaMi Board library still reads it when `wsen_hids` is missing or is
+  the identity, as MicroPython does. Do not write it: the
+  `calibrate_temperature` example removes it.
 
 ```cpp
-config.setTemperatureCalibration("hts221", 1.0f, -0.5f);
+config.setTemperatureCalibration("wsen_hids", 1.0f, -0.5f);
 
 TemperatureCalibration cal;
-if (config.getTemperatureCalibration("hts221", cal)) {
+if (config.getTemperatureCalibration("wsen_hids", cal)) {
     Serial.println(cal.gain);
     Serial.println(cal.offset);
 }
@@ -157,8 +178,11 @@ For drivers that implement the project-standard
 `calibrateTemperature(refLow, measLow, refHigh, measHigh)` API:
 
 ```cpp
-config.applyTemperatureCalibration("hts221", hts);
+config.applyTemperatureCalibration("wsen_hids", hids);
 ```
+
+This replaces any correction the driver had, `setTemperatureOffset()`
+included.
 
 The stored `gain` and `offset` reproduce:
 
@@ -245,7 +269,7 @@ if (config.bootCount(count)) {
 The format is compatible with the MicroPython sister library:
 
 ```json
-{"rev":131,"name":"STeaMi-01","tc":{"hts":{"g":1.0,"o":-0.5}},"cm":{"hx":12.3,"hy":-5.1,"hz":0.8,"sx":1.01,"sy":0.98,"sz":1.0},"ca":{"ox":0.01,"oy":-0.02,"oz":0.03},"bc":1}
+{"rev":131,"name":"STeaMi-01","tc":{"hid":{"g":1.0,"o":-0.5}},"cm":{"hx":12.3,"hy":-5.1,"hz":0.8,"sx":1.01,"sy":0.98,"sz":1.0},"ca":{"ox":0.01,"oy":-0.02,"oz":0.03},"bc":1}
 ```
 
 | Key | Content |

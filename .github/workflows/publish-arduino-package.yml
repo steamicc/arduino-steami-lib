@@ -13,6 +13,11 @@ name: Publish Arduino package
 # built and tested is the tagged code:
 #   gh workflow run publish-arduino-package.yml --ref v0.25.0 [-f dry_run=true]
 #
+# The examples are compiled once: the check job compiles every example and
+# uploads the .bin files (artifact exemples-bin) with the package (artifact
+# arduino-package), and examples-archive.yml builds the archive from both
+# without installing the toolchain or compiling again.
+#
 # The organization enforces immutable releases on steamicc/arduino-steami: no
 # asset can be added once a release is published. So the release is created as
 # a draft, examples-archive.yml attaches the compiled examples to it, and the
@@ -20,7 +25,9 @@ name: Publish Arduino package
 # The release is marked Latest only when its version is the highest of the
 # published releases: recovering an older tag (e.g. v0.38.0 after v0.39.0)
 # keeps the current Latest release. If the archive job fails, or the archive is
-# not fully uploaded, the release stays a draft: re-run the failed jobs, or run
+# not fully uploaded, the release stays a draft: re-run the failed jobs (they
+# reuse the artifacts of the run), or run the fallback, which compiles every
+# example itself:
 #   gh workflow run examples-archive.yml -f tag=<tag>      (from main)
 #   gh release edit <tag> --draft=false --latest -R steamicc/arduino-steami
 # Pass --latest only for the newest version; for an older tag pass
@@ -78,6 +85,8 @@ jobs:
     uses: ./.github/workflows/arduino-package-check.yml
     with:
       version: ${{ needs.resolve.outputs.version }}
+      # Also upload the .bin files, reused by the examples-archive job.
+      binaires: true
 
   publish:
     name: Publish the package
@@ -180,6 +189,8 @@ jobs:
     with:
       tag: ${{ needs.resolve.outputs.tag }}
       depuis_publication: true
+      # Archive the .bin files of the check job instead of compiling again.
+      artefacts: true
     secrets:
       RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
       RELEASE_APP_SECRET: ${{ secrets.RELEASE_APP_SECRET }}

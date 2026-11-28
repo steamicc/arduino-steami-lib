@@ -432,7 +432,9 @@ same names as in the MicroPython `steami_config`:
 
 The classes share their driver with `Steami.bme280()` and the others: once a
 class has begun, the shared driver returns calibrated temperatures, and a
-`calibrateTemperature()` that your sketch made earlier is overwritten.
+`setTemperatureOffset()` or `calibrateTemperature()` that your sketch made
+earlier is overwritten. Call `setTemperatureOffset(0)` on the shared driver
+to read it without calibration.
 
 ## Colours
 

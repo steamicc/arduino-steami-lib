@@ -140,8 +140,8 @@ correction: `setTemperatureOffset()` resets the gain to 1.0.
 | `float temperature()` | Silicon temperature in °C (empirical, not ambient). |
 | `int16_t readTemperatureRaw()` | Raw temperature LSB (8 LSB/°C). |
 | `void setTemperatureOffset(float offset)` | Additive offset in °C (resets gain to 1.0). |
-| `void setTempOffset(float offset)` | Alias for `setTemperatureOffset()`. |
-| `bool calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point linear correction. Returns `false` if `measLow == measHigh`. |
+| `void setTempOffset(float offset)` | Deprecated former name of `setTemperatureOffset()`, kept for the whole 1.x series and removed in 2.0.0. |
+| `bool calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point linear correction. Returns `false` if `measLow == measHigh` and keeps the previous correction. |
 
 ### Modes
 

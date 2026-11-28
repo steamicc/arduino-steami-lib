@@ -112,14 +112,15 @@ check with `isnan()`.
 
 ### Calibration
 
-`setTemperatureOffset()` and `calibrateTemperature()` are independent — the
-offset stacks on top of the two-point user slope/intercept, so calling one
-does not reset the other.
+The user correction is `gain * factory + offset`, applied after the factory
+conversion. Each call replaces the previous correction, as in the other
+temperature drivers and in MicroPython: `setTemperatureOffset()` sets the
+gain back to 1.
 
 | Method | Description |
 |--------|-------------|
-| `void setTemperatureOffset(float offset)` | Additive °C offset on the final temperature reading. |
-| `void calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point user calibration. Sets the slope/intercept used after the factory conversion. A degenerate two-point input (`measLow == measHigh`) leaves the calibration at identity. |
+| `void setTemperatureOffset(float offset)` | °C offset (resets the gain to 1). |
+| `bool calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point user calibration, from readings taken without calibration. Returns `false` if `measLow == measHigh` and keeps the previous correction. |
 
 ### Driver-specific tuning
 

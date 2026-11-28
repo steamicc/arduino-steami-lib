@@ -155,10 +155,15 @@ safe: the driver drops to sleep mode for the write (the chip may ignore
 
 ### Calibration
 
+The user correction is `gain * factory + offset`, applied after the factory
+compensation. Each call replaces the previous correction, as in the other
+temperature drivers and in MicroPython: `setTemperatureOffset()` sets the
+gain back to 1.
+
 | Method | Description |
 |--------|-------------|
-| `void setTemperatureOffset(float offset)` | Additive Celsius offset on top of the factory compensation. |
-| `void calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point user calibration. Applied after the factory compensation. Pressure and humidity are not affected. |
+| `void setTemperatureOffset(float offset)` | Celsius offset (resets the gain to 1). |
+| `bool calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point user calibration, from readings taken without calibration. Returns `false` if `measLow == measHigh` and keeps the previous correction. Pressure and humidity are not affected. |
 
 ## Register constants
 

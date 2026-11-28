@@ -200,8 +200,8 @@ Supported ranges
 |---------|-------------|
 | `setAccelOffset()` | Apply accelerometer offsets. |
 | `accelOffset()` | Read current offsets. |
-| `setTemperatureOffset()` | Apply temperature offset. |
-| `calibrateTemperature()` | Two-point temperature calibration. |
+| `setTemperatureOffset()` | Apply temperature offset (resets the gain to 1). |
+| `calibrateTemperature()` | Two-point temperature calibration; `false` if the two measured values are equal (previous correction kept). |
 
 ---
 
