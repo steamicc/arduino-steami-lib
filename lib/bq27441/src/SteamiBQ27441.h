@@ -18,6 +18,23 @@ inline T clamp(T x, T a, T b) {
     }
     return x;
 }
+
+// Extended data flash is paginated in 32-byte blocks: writeExtendedData()
+// selects the page once via `offset / 32`, then indexes inside it via
+// `(offset % 32) + i`. A write must therefore fit in the page that holds
+// its first byte. One that crosses the boundary (e.g. offset = 31,
+// length = 2) would index past the BLOCKDATA window into the checksum /
+// extended command region and silently corrupt unrelated state.
+//
+// Kept as a pure function so the native tests can lock the rule without
+// reaching into the private writeExtendedData().
+inline bool isExtendedDataWriteInRange(uint16_t offset, uint16_t length) {
+    constexpr uint16_t kBlockSize = 32;
+    if (length > kBlockSize) {
+        return false;
+    }
+    return static_cast<uint16_t>(offset % kBlockSize) + length <= kBlockSize;
+}
 }  // namespace bq27441_detail
 
 class SteamiBQ27441 {
