@@ -187,19 +187,19 @@ float SteamiBME280::dewPointFrom(float temperatureC, float humidityPct) {
 }
 
 void SteamiBME280::setTemperatureOffset(float offset) {
+    _tempGain = 1.0f;
     _tempOffset = offset;
 }
 
-void SteamiBME280::calibrateTemperature(float refLow, float measLow, float refHigh,
+bool SteamiBME280::calibrateTemperature(float refLow, float measLow, float refHigh,
                                         float measHigh) {
-    float span = measHigh - measLow;
+    const float span = measHigh - measLow;
     if (span == 0.0f) {
-        _tempUserSlope = 1.0f;
-        _tempUserIntercept = 0.0f;
-        return;
+        return false;
     }
-    _tempUserSlope = (refHigh - refLow) / span;
-    _tempUserIntercept = refLow - _tempUserSlope * measLow;
+    _tempGain = (refHigh - refLow) / span;
+    _tempOffset = refLow - _tempGain * measLow;
+    return true;
 }
 
 uint8_t SteamiBME280::readReg(uint8_t reg) {
@@ -397,7 +397,7 @@ SteamiBME280::ReadResult SteamiBME280::readData() {
     }
 
     float tempC = static_cast<float>(compensateTemperature(rawTemp)) / 100.0f;
-    result.temperature = _tempUserSlope * tempC + _tempUserIntercept + _tempOffset;
+    result.temperature = _tempGain * tempC + _tempOffset;
     if (rawPress != BME280_RAW_SKIPPED_20BIT) {
         result.pressure = static_cast<float>(compensatePressure(rawPress)) / 25600.0f;
     }

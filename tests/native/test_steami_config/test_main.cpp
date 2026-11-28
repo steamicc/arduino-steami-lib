@@ -373,6 +373,36 @@ void test_load_rejects_truncated_json(void) {
     TEST_ASSERT_FALSE(config.boardRevision(revision));
 }
 
+void test_is_empty_tracks_every_field(void) {
+    TEST_ASSERT_TRUE(config.isEmpty());
+
+    config.setBoardRevision(3);
+    TEST_ASSERT_FALSE(config.isEmpty());
+    config.clear();
+
+    config.setBoardName("STeaMi");
+    TEST_ASSERT_FALSE(config.isEmpty());
+    config.clear();
+
+    config.setTemperatureCalibration("ism330dl", 1.0f, 0.5f);
+    TEST_ASSERT_FALSE(config.isEmpty());
+    config.clearTemperatureCalibration("ism330dl");
+    TEST_ASSERT_TRUE(config.isEmpty());
+
+    config.setMagnetometerCalibration(1.0f, 2.0f, 3.0f, 1.0f, 1.0f, 1.0f);
+    TEST_ASSERT_FALSE(config.isEmpty());
+    config.clear();
+
+    config.setAccelerometerCalibration(0.1f, 0.2f, 0.3f);
+    TEST_ASSERT_FALSE(config.isEmpty());
+    config.clear();
+
+    config.setBootCount(1);
+    TEST_ASSERT_FALSE(config.isEmpty());
+    config.clear();
+    TEST_ASSERT_TRUE(config.isEmpty());
+}
+
 void test_load_of_empty_zone_gives_empty_config(void) {
     attachFirmware();
     config.setBootCount(5);
@@ -381,6 +411,18 @@ void test_load_of_empty_zone_gives_empty_config(void) {
 
     uint32_t bootCount = 0;
     TEST_ASSERT_FALSE(config.bootCount(bootCount));
+    TEST_ASSERT_TRUE(config.isEmpty());
+}
+
+void test_load_of_stored_zone_is_not_empty(void) {
+    attachFirmware();
+    TEST_ASSERT_TRUE(config.begin());
+    config.setTemperatureCalibration("lis2mdl", 1.0f, -1.5f);
+    TEST_ASSERT_TRUE(config.save());
+
+    SteamiConfig reloaded(bridge);
+    TEST_ASSERT_TRUE(reloaded.load());
+    TEST_ASSERT_FALSE(reloaded.isEmpty());
 }
 
 void test_legacy_firmware_is_refused_without_locking_it_up(void) {
@@ -419,7 +461,9 @@ int main(void) {
     RUN_TEST(test_save_and_load_config_longer_than_256_bytes);
     RUN_TEST(test_save_rejects_config_larger_than_zone);
     RUN_TEST(test_load_rejects_truncated_json);
+    RUN_TEST(test_is_empty_tracks_every_field);
     RUN_TEST(test_load_of_empty_zone_gives_empty_config);
+    RUN_TEST(test_load_of_stored_zone_is_not_empty);
     RUN_TEST(test_legacy_firmware_is_refused_without_locking_it_up);
     return UNITY_END();
 }

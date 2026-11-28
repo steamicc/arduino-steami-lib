@@ -35,6 +35,9 @@ class SteamiConfig {
     bool load();
     bool save();
     void clear();
+    /// True when no value is set: what load() gives for an empty zone, but also when the
+    /// first read of the zone failed. Check it before save() replaces a zone.
+    bool isEmpty() const;
 
     // --- Board info ---
     void setBoardRevision(int32_t revision);

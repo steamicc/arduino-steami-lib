@@ -129,10 +129,15 @@ one-shot trigger reliably (see also the matching MicroPython issue in
 
 ### Calibration
 
+The user correction is `gain * factory + offset`, applied after the factory
+curve. Each call replaces the previous correction, as in the other
+temperature drivers and in MicroPython: `setTemperatureOffset()` sets the
+gain back to 1.
+
 | Method | Description |
 |--------|-------------|
-| `void setTemperatureOffset(float offset)` | Additive Celsius offset on top of the factory calibration. |
-| `void calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point user calibration. Applied after the factory curve. |
+| `void setTemperatureOffset(float offset)` | Celsius offset (resets the gain to 1). |
+| `bool calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point user calibration, from readings taken without calibration. Returns `false` if `measLow == measHigh` and keeps the previous correction. |
 
 ## Register constants
 

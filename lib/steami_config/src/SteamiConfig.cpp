@@ -109,6 +109,19 @@ void SteamiConfig::clear() {
     _bootCount = 0;
 }
 
+bool SteamiConfig::isEmpty() const {
+    if (_hasBoardRevision || _hasBoardName || _hasMagnetometerCalibration ||
+        _hasAccelerometerCalibration || _hasBootCount) {
+        return false;
+    }
+    for (uint8_t i = 0; i < STEAMI_CONFIG_SENSOR_COUNT; ++i) {
+        if (_temperature[i].present) {
+            return false;
+        }
+    }
+    return true;
+}
+
 // ---------------------------------------------------------------------
 // Board info
 // ---------------------------------------------------------------------

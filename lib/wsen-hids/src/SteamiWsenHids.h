@@ -81,14 +81,16 @@ class SteamiWsenHids {
     // WSEN-HIDS datasheet table 18).
     void setAveraging(uint8_t humidityAvg, uint8_t temperatureAvg);
 
-    // Additive Celsius offset applied after the factory calibration.
+    // Celsius offset applied after the factory calibration. It replaces any
+    // two-point calibration: the gain goes back to 1.
     void setTemperatureOffset(float offset);
 
     // Two-point user calibration for temperature. refLow/refHigh are the
     // known reference values in Celsius; measLow/measHigh are what the
-    // sensor reported at those references. Subsequent temperature()
-    // calls apply the correction on top of the factory calibration.
-    void calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh);
+    // sensor reported at those references, without calibration. Replaces
+    // any earlier offset. False when measLow == measHigh: the calibration
+    // is then left as it was.
+    bool calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh);
 
    private:
     // Stored as a pointer (not a reference) so the class is default-assignable
@@ -104,10 +106,9 @@ class SteamiWsenHids {
     float _humSlope = 0.0f;
     float _humIntercept = 0.0f;
 
-    // User-applied correction (on top of the factory calibration).
+    // User temperature correction, gain * factory + offset.
+    float _tempGain = 1.0f;
     float _tempOffset = 0.0f;
-    float _tempUserSlope = 1.0f;
-    float _tempUserIntercept = 0.0f;
 
     // CTRL_REG1.BDU value written by every mode change (enableBdu()).
     uint8_t _bdu = WSEN_HIDS_CTRL1_BDU;
