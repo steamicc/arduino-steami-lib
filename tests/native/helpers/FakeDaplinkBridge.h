@@ -45,6 +45,9 @@
 // `nackAfterReadSector` models the real bridge right after READ_SECTOR:
 // it starts sending the 256-byte sector to whatever read comes next, and
 // NACKs the following transactions until that transfer is over.
+//
+// `nackReadConfigFrom` NACKs every READ_CONFIG from that one on (0 is the
+// first READ_CONFIG received): an I2C error in the middle of a readConfig().
 class FakeDaplinkBridge : public I2CDevice {
    public:
     static constexpr uint8_t WHO_AM_I = 0x01;
@@ -127,6 +130,9 @@ class FakeDaplinkBridge : public I2CDevice {
                     ignoredFrames++;  // firmware keeps waiting for the offset
                     break;
                 }
+                if (readConfigFrames++ >= nackReadConfigFrom) {
+                    return 2;  // NACK on address: models an I2C error
+                }
                 schedule(cmd, args);
                 break;
             case WRITE_CONFIG:
@@ -206,6 +212,8 @@ class FakeDaplinkBridge : public I2CDevice {
     size_t readSectorCommands = 0;
     size_t configCommandsOnLegacy = 0;
     size_t readConfigCommands = 0;
+    size_t readConfigFrames = 0;
+    size_t nackReadConfigFrom = SIZE_MAX;
     size_t largestRead = 0;
     size_t ignoredFrames = 0;
     std::vector<size_t> writeFrameLengths;
