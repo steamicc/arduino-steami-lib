@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.44.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.43.0...v0.44.0) (2026-11-28)
+
+
+### Features
+
+* **daplink_flash:** Add info, read-back and gated erase examples. ([#311](https://github.com/steamicc/arduino-steami-lib/issues/311)) ([804da9f](https://github.com/steamicc/arduino-steami-lib/commit/804da9f16461eaf536ee41f7b201269289c70755)), closes [#78](https://github.com/steamicc/arduino-steami-lib/issues/78)
+
 # [0.43.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.42.4...v0.43.0) (2026-11-28)
 
 
