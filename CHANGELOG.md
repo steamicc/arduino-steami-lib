@@ -3,6 +3,14 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.45.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.44.0...v0.45.0) (2026-11-28)
+
+
+### Features
+
+* **bq27441:** Add battery_logger and charging_monitor examples. ([#313](https://github.com/steamicc/arduino-steami-lib/issues/313)) ([6bd9572](https://github.com/steamicc/arduino-steami-lib/commit/6bd9572b061316be2bd7e6d3c5a71ceabfa1d3ca))
+* **ism330dl:** Add the TiltMaze and DigitalLevel screen examples. ([#315](https://github.com/steamicc/arduino-steami-lib/issues/315)) ([6eb9d0b](https://github.com/steamicc/arduino-steami-lib/commit/6eb9d0b587da15928206a34a0530aaeac4eff370)), closes [#75](https://github.com/steamicc/arduino-steami-lib/issues/75) [#312](https://github.com/steamicc/arduino-steami-lib/issues/312)
+
 # [0.44.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.43.0...v0.44.0) (2026-11-28)
 
 
