@@ -125,9 +125,10 @@ uint8_t SteamiMCP23009E::getBit(uint8_t reg, uint8_t bit) {
 
 void SteamiMCP23009E::reset() {
     // Effectue un reset hardware du MCP23009E. Le reset désactive les
-    // interruptions du composant : les callbacks doivent être enregistrés
-    // à nouveau.
+    // interruptions du composant : les callbacks, celui de watchChanges()
+    // compris, doivent être enregistrés à nouveau.
     _enabled = 0;
+    _watched = 0;
     digitalWrite(_resetPin, LOW);
     delay(5);
     digitalWrite(_resetPin, HIGH);
@@ -138,6 +139,7 @@ void SteamiMCP23009E::powerOff() {
     // Maintient le composant en reset : ses interruptions sont désactivées,
     // les callbacks doivent être enregistrés à nouveau après powerOn().
     _enabled = 0;
+    _watched = 0;
     digitalWrite(_resetPin, LOW);
 }
 
@@ -151,6 +153,7 @@ void SteamiMCP23009E::softReset() {
     // interruptions sont désactivées : les callbacks doivent être
     // enregistrés à nouveau.
     _enabled = 0;
+    _watched = 0;
     writeReg(MCP23009_IODIR, 0xFF);
     writeReg(MCP23009_GPPU, 0x00);
     writeReg(MCP23009_IOCON, 0x00);
@@ -388,9 +391,12 @@ bool SteamiMCP23009E::sendEnableInterrupt(uint8_t gpx) {
         abandonnés. Les événements en attente des autres GPIO sont transmis
         à leurs callbacks, pas perdus.
 
-        Sur une erreur de bus, le GPIO reste désactivé (retiré de _enabled,
-        GPINTEN non écrit) : un niveau non lu deviendrait un faux événement,
-        et un registre lu comme 0 effacerait les bits des autres GPIO.
+        Sur une erreur de bus (composant absent ou maintenu en reset par
+        powerOff()), le GPIO reste désactivé (retiré de _enabled, GPINTEN non
+        écrit) : un niveau non lu deviendrait un faux événement, et un
+        registre lu comme 0 effacerait les bits des autres GPIO. watched()
+        ne le compte plus : le propriétaire du suivi le reconfigure à
+        l'appel suivant.
 
         Args:
             gpx: Numéro de GPIO (0 à 7)
@@ -400,26 +406,32 @@ bool SteamiMCP23009E::sendEnableInterrupt(uint8_t gpx) {
 
     const uint8_t bit = static_cast<uint8_t>(1 << gpx);
 
-    // Les lectures déjà en file ne transmettent plus d'événement de gpx.
-    _generation++;
-    _registered[gpx] = _generation;
-
     // INTCON d'abord, bit à 0 = comparer avec l'état précédent : en mode
     // DEFVAL, activer GPINTEN déclencherait une interruption tout de suite.
     uint8_t intcon = 0;
     if (!readReg(MCP23009_INTCON, intcon)) {
+        // Les lectures déjà en file ne transmettent plus d'événement de gpx.
+        _generation++;
+        _registered[gpx] = _generation;
         _enabled &= static_cast<uint8_t>(~bit);
         return false;
     }
     writeReg(MCP23009_INTCON, static_cast<uint8_t>(intcon & ~bit));
 
-    _enabled |= bit;
-
-    // Effacer l'interruption en attente, sans événement de gpx, et prendre
-    // le niveau actuel de gpx comme dernier niveau connu.
+    // Effacer l'interruption en attente. Pour un GPIO que suit déjà le
+    // callback de watchChanges(), ses événements restent en file pour lui ;
+    // sinon, sans événement de gpx, son niveau actuel devient son dernier
+    // niveau connu.
     uint8_t gpinten = 0;
-    const bool ok = readInterrupt(bit) && readReg(MCP23009_GPINTEN, gpinten);
+    const bool ok =
+        readInterrupt(getBit(watched(), gpx) ? 0 : bit) && readReg(MCP23009_GPINTEN, gpinten);
+
+    // Les lectures déjà en file, celle-ci comprise, ne transmettent plus
+    // d'événement de gpx aux callbacks enregistrés ici.
+    _generation++;
+    _registered[gpx] = _generation;
     if (ok) {
+        _enabled |= bit;
         writeReg(MCP23009_GPINTEN, static_cast<uint8_t>(gpinten | bit));
     } else {
         _enabled &= static_cast<uint8_t>(~bit);
@@ -517,8 +529,41 @@ void SteamiMCP23009E::disableInterrupt(uint8_t gpx) {
         return;
     }
 
-    sendDisableInterrupt(gpx);
+    // Un GPIO suivi par watchChanges() reste activé pour lui.
+    if (!getBit(watched(), gpx)) {
+        sendDisableInterrupt(gpx);
+    }
     clearCallbacks(gpx);
+}
+
+void SteamiMCP23009E::watchChanges(uint8_t mask, void (*callback)(uint8_t gpx, uint8_t level)) {
+    /* Enregistre le callback de suivi des GPIO de mask, à côté de ceux du sketch
+
+        Les enregistrements du sketch ne le remplacent pas et
+        disableInterrupt() laisse ses GPIO activés. Les GPIO de mask pas
+        encore activés le sont comme par interruptOnChange(). Un seul suivi
+        par composant : un appel remplace le précédent.
+
+        Args:
+            mask: GPIO suivis (un bit par GPIO)
+            callback: Fonction appelée à chaque changement, avec le GPIO et
+                le niveau ; nullptr retire le suivi (les GPIO restent
+                activés)*/
+
+    _watch = callback;
+    _watched = (callback != nullptr) ? mask : 0;
+    // Les lectures déjà en file ne lui transmettent rien.
+    _generation++;
+    _watchedSince = _generation;
+    for (uint8_t i = 0; i < 8; i++) {
+        if (getBit(_watched, i) && !getBit(_enabled, i)) {
+            sendEnableInterrupt(i);
+        }
+    }
+}
+
+uint8_t SteamiMCP23009E::watched() const {
+    return static_cast<uint8_t>(_watched & _enabled);
 }
 
 void SteamiMCP23009E::irqHandler() {
@@ -635,26 +680,31 @@ void SteamiMCP23009E::dispatchQueued() {
 void SteamiMCP23009E::dispatch(uint8_t gpx, uint8_t level, uint32_t generation) {
     // Appelle les callbacks du GPIO gpx, sauf si son interruption a été
     // désactivée, ou enregistrée à nouveau, après la lecture de
-    // l'événement. Chaque callback est copié avant l'appel : il peut
-    // remplacer ou effacer son propre emplacement (nouvel enregistrement,
-    // disableInterrupt) pendant qu'il s'exécute.
-    if (!getBit(_enabled, gpx) || static_cast<int32_t>(generation - _registered[gpx]) < 0) {
-        return;
-    }
+    // l'événement ; puis celui de watchChanges(), sauf s'il a été retiré, ou
+    // enregistré à nouveau, après cette lecture. Chaque callback est copié
+    // avant l'appel : il peut remplacer ou effacer son propre emplacement
+    // (nouvel enregistrement, disableInterrupt) pendant qu'il s'exécute, et
+    // l'état est relu après chaque appel.
+    auto current = [this, gpx, generation]() {
+        return getBit(_enabled, gpx) && static_cast<int32_t>(generation - _registered[gpx]) >= 0;
+    };
 
-    std::function<void()> edge =
-        (level == MCP23009_LOGIC_HIGH) ? _eventsRise[gpx] : _eventsFall[gpx];
-    if (edge) {
-        edge();
+    if (current()) {
+        std::function<void()> edge =
+            (level == MCP23009_LOGIC_HIGH) ? _eventsRise[gpx] : _eventsFall[gpx];
+        if (edge) {
+            edge();
+        }
     }
-
-    // Le callback de front a pu désactiver ou réenregistrer le GPIO.
-    if (!getBit(_enabled, gpx) || static_cast<int32_t>(generation - _registered[gpx]) < 0) {
-        return;
+    if (current()) {
+        std::function<void(uint8_t)> change = _eventsChange[gpx];
+        if (change) {
+            change(level);
+        }
     }
-    std::function<void(uint8_t)> change = _eventsChange[gpx];
-    if (change) {
-        change(level);
+    void (*const watch)(uint8_t, uint8_t) = _watch;
+    if (getBit(watched(), gpx) && static_cast<int32_t>(generation - _watchedSince) >= 0) {
+        watch(gpx, level);
     }
 }
 

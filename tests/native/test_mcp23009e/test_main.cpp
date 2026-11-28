@@ -1471,6 +1471,133 @@ void testInterruptOnRaisingAliasCallsInterruptOnRising(void) {
     TEST_ASSERT_EQUAL(1, rises);
 }
 
+// ----- watchChanges(): a callback the sketch does not replace -----
+
+// Events given to the watch: "<pin><level> " each.
+std::string watchedEvents;
+
+std::string ev(uint8_t gpx, uint8_t level) {
+    return std::to_string(gpx) + std::to_string(level) + " ";
+}
+
+void watchRecorder(uint8_t gpx, uint8_t level) {
+    watchedEvents += ev(gpx, level);
+}
+
+std::function<void(uint8_t)> levelRecorder(std::vector<int>& levels) {
+    return [&levels](uint8_t level) { levels.push_back(level); };
+}
+
+void attachWatchedChip(uint8_t mask) {
+    attachChip();
+    watchedEvents.clear();
+    for (uint8_t i = 0; i < 8; i++) {
+        if ((mask & (1 << i)) != 0) {
+            mcp->setup(i, MCP23009_DIR_INPUT, MCP23009_PULLUP);
+        }
+    }
+    mcp->watchChanges(mask, watchRecorder);
+}
+
+void testWatchGetsEventsBesideTheSketchCallbacks(void) {
+    attachWatchedChip((1 << UP) | (1 << DOWN));
+    TEST_ASSERT_EQUAL_HEX8((1 << UP) | (1 << DOWN), mcp->watched());
+    TEST_ASSERT_EQUAL_HEX8((1 << UP) | (1 << DOWN), chip.regs[MCP23009_GPINTEN]);
+    std::vector<int> sketch;
+    mcp->interruptOnChange(UP, levelRecorder(sketch));  // does not replace the watch
+    chip.press(UP);
+    chip.release(UP);
+    mcp->interruptEvent();
+    chip.press(DOWN);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL_STRING((ev(UP, 0) + ev(UP, 1) + ev(DOWN, 0)).c_str(), watchedEvents.c_str());
+    TEST_ASSERT_EQUAL(2, sketch.size());
+    TEST_ASSERT_EQUAL(0, sketch[0]);
+    TEST_ASSERT_EQUAL(1, sketch[1]);
+}
+
+void testSketchRegistrationLeavesThePendingEventToTheWatch(void) {
+    attachWatchedChip(1 << UP);
+    int falls = 0;
+    chip.press(UP);  // pending when the sketch registers
+    mcp->interruptOnFalling(UP, [&falls]() { falls++; });
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL_STRING(ev(UP, 0).c_str(), watchedEvents.c_str());
+    TEST_ASSERT_EQUAL(0, falls);  // a change made before the registration
+    chip.release(UP);
+    mcp->interruptEvent();
+    chip.press(UP);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL_STRING((ev(UP, 0) + ev(UP, 1) + ev(UP, 0)).c_str(), watchedEvents.c_str());
+    TEST_ASSERT_EQUAL(1, falls);
+}
+
+void testDisableKeepsAWatchedPinEnabled(void) {
+    attachWatchedChip(1 << DOWN);
+    std::vector<int> sketch;
+    mcp->interruptOnChange(DOWN, levelRecorder(sketch));
+    mcp->disableInterrupt(DOWN);
+    TEST_ASSERT_EQUAL_HEX8(1 << DOWN, mcp->watched());
+    TEST_ASSERT_EQUAL_HEX8(1 << DOWN, chip.regs[MCP23009_GPINTEN]);
+    chip.press(DOWN);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL_STRING(ev(DOWN, 0).c_str(), watchedEvents.c_str());
+    TEST_ASSERT_EQUAL(0, sketch.size());
+}
+
+void testWatchOnAPinOfTheSketchKeepsItsCallbacks(void) {
+    attachChip();
+    watchedEvents.clear();
+    std::vector<Event> events;
+    DpadPin left(LEFT);
+    left.pin.irq(recorder(events, "LEFT", left.pin), BOTH);
+    chip.press(LEFT);  // pending when the watch starts: for the sketch only
+    mcp->watchChanges(1 << LEFT, watchRecorder);
+    chip.release(LEFT);
+    mcp->interruptEvent();
+    ASSERT_EVENTS((std::vector<Event>{{"LEFT", 0, 1}, {"LEFT", 1, 1}}), events);
+    TEST_ASSERT_EQUAL_STRING((ev(LEFT, 0) + ev(LEFT, 1)).c_str(), watchedEvents.c_str());
+}
+
+void testWatchRemovedByNullptrAndByReset(void) {
+    attachWatchedChip(1 << RIGHT);
+    mcp->watchChanges(1 << RIGHT, nullptr);
+    TEST_ASSERT_EQUAL_HEX8(0, mcp->watched());
+    TEST_ASSERT_EQUAL_HEX8(1 << RIGHT, chip.regs[MCP23009_GPINTEN]);  // stays enabled
+    chip.press(RIGHT);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL_STRING("", watchedEvents.c_str());
+    mcp->watchChanges(1 << RIGHT, watchRecorder);
+    TEST_ASSERT_EQUAL_HEX8(1 << RIGHT, mcp->watched());
+    mcp->reset();
+    TEST_ASSERT_EQUAL_HEX8(0, mcp->watched());
+    mcp->watchChanges(1 << RIGHT, watchRecorder);
+    mcp->powerOff();
+    TEST_ASSERT_EQUAL_HEX8(0, mcp->watched());
+}
+
+// A pin is enabled only when the chip answered: on a chip held in reset by
+// powerOff(), watched() stays 0, so the owner of the watch sees it is lost.
+void testWatchOnAChipHeldInResetEnablesNothing(void) {
+    attachChip();
+    watchedEvents.clear();
+    mcp->powerOff();
+    chip.held = true;
+    mcp->watchChanges(1 << LEFT, watchRecorder);
+    TEST_ASSERT_EQUAL_HEX8(0, mcp->watched());
+    std::vector<int> sketch;
+    mcp->interruptOnChange(UP, levelRecorder(sketch));
+    mcp->powerOn();
+    chip.reset();  // power-on defaults: nothing enabled
+    Wire.attachDevice(ADDR, &chip);
+    chip.press(UP);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL(0, sketch.size());  // UP was not enabled either
+    mcp->watchChanges(1 << LEFT, watchRecorder);
+    TEST_ASSERT_EQUAL_HEX8(1 << LEFT, mcp->watched());
+    TEST_ASSERT_EQUAL_HEX8(1 << LEFT, chip.regs[MCP23009_GPINTEN]);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(testBeginConfiguresResetPinAsOutput);
@@ -1575,5 +1702,11 @@ int main(void) {
     RUN_TEST(testPollWithoutInterruptPinReadsChip);
     RUN_TEST(testPollWithoutInterruptPinAndNoEnabledPinDoesNoI2c);
     RUN_TEST(testInterruptOnRaisingAliasCallsInterruptOnRising);
+    RUN_TEST(testWatchGetsEventsBesideTheSketchCallbacks);
+    RUN_TEST(testSketchRegistrationLeavesThePendingEventToTheWatch);
+    RUN_TEST(testDisableKeepsAWatchedPinEnabled);
+    RUN_TEST(testWatchOnAPinOfTheSketchKeepsItsCallbacks);
+    RUN_TEST(testWatchRemovedByNullptrAndByReset);
+    RUN_TEST(testWatchOnAChipHeldInResetEnablesNothing);
     return UNITY_END();
 }

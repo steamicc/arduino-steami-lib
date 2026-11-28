@@ -36,7 +36,11 @@
 /// another expander interrupt is pending leaves no trace in the chip. A sketch that attaches
 /// its own interrupt to A_BUTTON, B_BUTTON or MENU_BUTTON (USER_BTN), or to another pin of the same
 /// EXTI line (0 for MENU, 7 for A, 8 for B), replaces the one of SteamiButtons: that button is then
-/// only sampled at each call. On STM32duino 3.1, detachInterrupt() on any pin of EXTI lines 5 to 9
+/// only sampled at each call. The D-PAD is followed with SteamiMCP23009E::watchChanges(): the
+/// sketch can register its own callbacks on the D-PAD pins of Steami.mcp23009e(), or disable them,
+/// and both keep working; after a reset() of the expander, or after powerOn() following a
+/// powerOff(), the next call sets the D-PAD up again (while the expander is off, the D-PAD reads
+/// released). On STM32duino 3.1, detachInterrupt() on any pin of EXTI lines 5 to 9
 /// (P1, P2, P7, P10, P12, the Jacdac pins) also turns off the interrupts of A (line 7) and B (line
 /// 8) until the next attachInterrupt(). Only one SteamiButtons object gets the interrupts: the one
 /// started or called last.
@@ -90,7 +94,8 @@ class SteamiButtons {
     bool debounce(uint8_t i, bool down, uint32_t t);
     void edge(uint8_t i);
     void dpadEvent(uint8_t d, uint8_t level);
-    uint8_t registerDpad(SteamiMCP23009E& expander, uint8_t mask);
+    static void dpadChange(uint8_t gpx, uint8_t level);
+    uint8_t watchDpad(SteamiMCP23009E& expander, uint8_t mask);
     bool readDpad(uint8_t& level, uint8_t& down, uint8_t& up);
     void settleDpad(uint32_t since, uint8_t tapped);
     static void waitSince(uint32_t since, uint32_t ms);
@@ -112,6 +117,7 @@ class SteamiButtons {
     uint8_t _dpadLevel = 0;
     uint8_t _dpadDown = 0;
     uint8_t _dpadUp = 0;
-    uint8_t _dpadUnregistered = 0;  // directions a bus error left unregistered, retried by sample()
+    // Directions a bus error left unfollowed or unread, set up again by sample().
+    uint8_t _dpadUnregistered = 0;
     bool _pinsReady = false;
 };

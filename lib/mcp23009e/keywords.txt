@@ -48,6 +48,8 @@ interruptOnFalling	KEYWORD2
 interruptOnRising	KEYWORD2
 interruptOnRaising	KEYWORD2
 disableInterrupt	KEYWORD2
+watchChanges	KEYWORD2
+watched	KEYWORD2
 interruptEvent	KEYWORD2
 poll	KEYWORD2
 irqLevel	KEYWORD2

@@ -42,6 +42,8 @@ class FakeMCP23009 : public I2CDevice {
     // Registers whose reads fail (one bit per register address), on top of
     // failReads.
     uint16_t failReadRegs = 0;
+    // Held in reset (powerOff()): every transaction is NACKed.
+    bool held = false;
     uint32_t readUs = 0;
     std::vector<std::pair<char, uint8_t>> log;
     // Run once a write or a read is applied, where a nested poll() could
@@ -58,6 +60,7 @@ class FakeMCP23009 : public I2CDevice {
         reference = kReleased;
         failReads = false;
         failReadRegs = 0;
+        held = false;
         readUs = 0;
         busUs_ = 0;
         log.clear();
@@ -77,6 +80,9 @@ class FakeMCP23009 : public I2CDevice {
     }
 
     uint8_t onWrite(const std::vector<uint8_t>& frame) override {
+        if (held) {
+            return 2;  // NACK on address
+        }
         if (frame.empty()) {
             return 0;  // address probe
         }
@@ -96,7 +102,7 @@ class FakeMCP23009 : public I2CDevice {
     }
 
     std::vector<uint8_t> onRead(size_t /*quantity*/) override {
-        if (failReads || (failReadRegs & (1u << pointer_)) != 0) {
+        if (failReads || held || (failReadRegs & (1u << pointer_)) != 0) {
             return {};
         }
         busUs_ += readUs;

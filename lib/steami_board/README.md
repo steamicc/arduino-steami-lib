@@ -348,8 +348,14 @@ their "unavailable" value without any bus traffic and without printing again.
     it. When that read found a whole tap (pressed, then released), a press
     found 20 ms later is a second tap if the button was still released 5 ms
     after the read; pressed again within those 5 ms, it is taken for a bounce
-    of the first press. The pad callbacks a sketch registers on the expander
-    still run.
+    of the first press. `SteamiButtons` follows the D-PAD pins with
+    `SteamiMCP23009E::watchChanges()`, a callback the sketch does not replace:
+    the pad callbacks a sketch registers on `Steami.mcp23009e()`, on the
+    D-PAD pins too, still run, and `disableInterrupt()` on a D-PAD pin stops
+    only the callbacks of the sketch. After a `reset()` of the expander, or
+    after `powerOn()` following a `powerOff()`, the next call sets the D-PAD
+    up again, calls made while the expander was off included (the D-PAD then
+    reads released).
   * The D-PAD is one lever: released from one direction, it can touch the
     opposite one for a moment. A press found in the read that releases another
     direction counts only if it is still there 20 ms later.

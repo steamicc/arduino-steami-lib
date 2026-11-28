@@ -74,16 +74,18 @@ class SteamiMCP23009E {
     // before the call fires no event, and the level read then becomes the
     // last known level of the pin. A registration replaces the earlier
     // callback of the same kind. reset(), powerOff() and the soft reset
-    // disable every pin: register the callbacks again afterwards.
+    // disable every pin and remove the watch (watchChanges()): register
+    // the callbacks again afterwards.
     //
     // interruptOnChange() passes the level of the event: the one captured
     // in INTCAP, or the one read in GPIO for a change the chip did not
     // signal (see interruptEvent()).
     //
-    // Returns false if gpx > 7 or on a bus error. After a bus error the pin
-    // is disabled (no callback of the pin runs, GPINTEN is left as it was)
-    // and the other pins keep their state: register again once the bus is
-    // back.
+    // Returns false if gpx > 7 or on a bus error (chip missing, or held in
+    // reset by powerOff()). After a bus error the pin is disabled (no
+    // callback of the pin runs, GPINTEN is left as it was, watched() leaves
+    // it out) and the other pins keep their state: register again once the
+    // bus is back.
     bool interruptOnChange(uint8_t gpx, std::function<void(uint8_t)> callback);
     bool interruptOnFalling(uint8_t gpx, std::function<void()> callback);
     bool interruptOnRising(uint8_t gpx, std::function<void()> callback);
@@ -93,7 +95,26 @@ class SteamiMCP23009E {
     bool interruptOnRaising(uint8_t gpx, std::function<void()> callback) {
         return interruptOnRising(gpx, std::move(callback));
     }
+    // Disables the pin and clears its callbacks; a pin followed by
+    // watchChanges() stays enabled for it.
     void disableInterrupt(uint8_t gpx);
+
+    // A change callback beside those of the sketch, for a library that
+    // shares the expander with it (SteamiButtons follows the D-PAD with
+    // it): callback(gpx, level) gets the events of the pins of mask, as
+    // interruptOnChange() does, after the callbacks of the sketch. A
+    // registration of the sketch (interruptOn*(), MCP23009Pin::irq()) does
+    // not replace it and does not take its pending events, and
+    // disableInterrupt() leaves its pins enabled: both keep working. The
+    // pins of mask not enabled yet are enabled as interruptOnChange() does.
+    // One watch per expander: a call replaces the earlier one, and nullptr
+    // removes it (its pins stay enabled). reset(), powerOff() and the soft
+    // reset remove it. A pin is enabled only when the chip answers: on a
+    // bus error watched() leaves it out, so the owner of the watch sees it
+    // must call again.
+    void watchChanges(uint8_t mask, void (*callback)(uint8_t gpx, uint8_t level));
+    // The pins the watch follows (one bit per pin); 0 without a watch.
+    uint8_t watched() const;
 
     // Reads INTF, INTCAP (the port captured at the interrupt), then GPIO,
     // which clears the interrupt whatever IOCON.INTCC is. For each enabled
@@ -144,6 +165,12 @@ class SteamiMCP23009E {
     std::function<void(uint8_t)> _eventsChange[8];
     std::function<void()> _eventsFall[8];
     std::function<void()> _eventsRise[8];
+    // The watchChanges() callback, the pins it follows, and the
+    // registration counter at its registration: a read made before is not
+    // delivered to it.
+    void (*_watch)(uint8_t, uint8_t) = nullptr;
+    uint8_t _watched = 0;
+    uint32_t _watchedSince = 0;
 
     // Pins whose interrupt is enabled (one bit per pin), and the last known
     // level of each: the one of the last reported event, or the one read

@@ -139,7 +139,9 @@ Direct read/write access to every register in the MCP23009E register map.
 | `bool interruptOnFalling(uint8_t gpx, std::function<void()> callback)` | Call `callback()` on falling edge of `gpx`. Returns `false` if `gpx > 7` or on a bus error. |
 | `bool interruptOnRising(uint8_t gpx, std::function<void()> callback)` | Call `callback()` on rising edge of `gpx`. Returns `false` if `gpx > 7` or on a bus error. |
 | `bool interruptOnRaising(uint8_t gpx, std::function<void()> callback)` | Deprecated former name of `interruptOnRising()`, kept for the whole 1.x series and removed in 2.0.0. |
-| `void disableInterrupt(uint8_t gpx)` | Disable and clear all callbacks for `gpx`. |
+| `void disableInterrupt(uint8_t gpx)` | Disable and clear all callbacks for `gpx`. A pin followed by `watchChanges()` stays enabled for it. |
+| `void watchChanges(uint8_t mask, void (*callback)(uint8_t gpx, uint8_t level))` | Follow the pins of `mask` with a callback the sketch does not replace, for a library that shares the expander (`SteamiButtons` follows the D-PAD with it). See below. |
+| `uint8_t watched()` | The pins the watch follows (one bit per pin); `0` without a watch. |
 | `void poll()` | Dispatch the registered callbacks in normal (non-interrupt) context. Call this from `loop()`. With an interrupt pin, it reads the chip only once the ISR has flagged an interrupt — the ISR itself only sets the flag, because running callbacks (and the I²C reads they involve) from interrupt context is unsafe on STM32duino. Without an interrupt pin, it reads the chip at each call while at least one pin is enabled. After a failed read the interrupt stays flagged and the next call reads again. |
 | `bool interruptEvent()` | Read the chip and dispatch now, regardless of the pending flag. Returns `false` on a bus error (no event is reported then). Usually you'll call `poll()` instead. |
 
@@ -166,8 +168,21 @@ How events are reported:
   keep their state (a register that could not be read is never written).
   Register again once the bus is back. A failed read in `poll()` gives no
   event and is retried at the next call.
-- **Reset.** `reset()`, `powerOff()` and the soft reset disable every pin:
-  register the callbacks again afterwards.
+- **Watch.** `watchChanges(mask, callback)` calls `callback(gpx, level)` for
+  the events of the pins of `mask`, as `interruptOnChange()` does, after the
+  callbacks of the sketch. A registration of the sketch on one of these pins
+  does not replace it and leaves it the pending events, and
+  `disableInterrupt()` leaves the pin enabled for it: both keep working. The
+  pins of `mask` not enabled yet are enabled, with no event at registration.
+  There is one watch per expander: a call replaces the earlier one, and
+  `nullptr` removes it (its pins stay enabled). A pin is enabled only when
+  the chip answers: on a bus error (chip missing, or held in reset by
+  `powerOff()`) `watched()` leaves it out, so the owner of the watch sees it
+  must call again. A pin the watch enables again also runs the callbacks the
+  sketch stored on it.
+- **Reset.** `reset()`, `powerOff()` and the soft reset disable every pin and
+  remove the watch: register the callbacks again afterwards (after
+  `powerOn()` for `powerOff()`).
 - **Limit.** A press and its release that both happen while an interrupt is
   pending cancel out: the chip keeps no trace of them.
 

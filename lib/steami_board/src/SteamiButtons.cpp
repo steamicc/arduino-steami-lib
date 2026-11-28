@@ -18,6 +18,8 @@ constexpr uint32_t kBounceMs = 5;
 // Expander bit for UP, DOWN, LEFT, RIGHT, in SteamiButton order.
 constexpr uint8_t kDpadBits[4] = {MCP23009_BTN_UP, MCP23009_BTN_DOWN, MCP23009_BTN_LEFT,
                                   MCP23009_BTN_RIGHT};
+constexpr uint8_t kDpadMask = (1U << MCP23009_BTN_UP) | (1U << MCP23009_BTN_DOWN) |
+                              (1U << MCP23009_BTN_LEFT) | (1U << MCP23009_BTN_RIGHT);
 
 // The object the interrupts of A, B and MENU and the D-PAD callbacks update: the one started or
 // called last, nullptr once it is gone. The handlers hold no pointer of their own, so none can
@@ -58,31 +60,29 @@ bool SteamiButtons::begin() {
     if (ok && !wasStarted) {
         SteamiMCP23009E* expander = _handle.board().mcp23009e();
         if (expander != nullptr) {
-            for (uint8_t d = 0; d < 4; d++) {
-                expander->setup(kDpadBits[d], MCP23009_DIR_INPUT, MCP23009_PULLUP);
-            }
             _dpadLevel = 0;
-            _dpadUnregistered = registerDpad(*expander, 0x0F);
+            _dpadUnregistered = watchDpad(*expander, 0x0F);
         }
     }
     return ok;
 }
 
-// Registers the D-PAD callbacks of the directions in `mask` (bit d) and reads their level, which
-// the registration takes as the last known one: it gives no event. Returns the directions left
-// unregistered by a bus error (all of `mask` when the level read fails), for the next sample().
-uint8_t SteamiButtons::registerDpad(SteamiMCP23009E& expander, uint8_t mask) {
+// Sets the D-PAD buttons of `mask` (bit d for kDpadBits[d]) up on the expander, follows the four
+// pins with watchChanges() (the callbacks of the sketch do not replace it) and reads the level of
+// the buttons of `mask`, which the registration takes as the last known one: it gives no event.
+// Returns the buttons of `mask` a bus error left unfollowed (all of `mask` when the level read
+// fails), for the next sample().
+uint8_t SteamiButtons::watchDpad(SteamiMCP23009E& expander, uint8_t mask) {
+    for (uint8_t d = 0; d < 4; d++) {
+        if ((mask & (1U << d)) != 0) {
+            expander.setup(kDpadBits[d], MCP23009_DIR_INPUT, MCP23009_PULLUP);
+        }
+    }
+    expander.watchChanges(kDpadMask, dpadChange);
+    const uint8_t watched = expander.watched();  // a pin is followed once the chip answered
     uint8_t done = 0;
     for (uint8_t d = 0; d < 4; d++) {
-        if ((mask & (1U << d)) == 0) {
-            continue;
-        }
-        const bool registered = expander.interruptOnChange(kDpadBits[d], [d](uint8_t level) {
-            if (gActive != nullptr) {
-                gActive->dpadEvent(d, level);
-            }
-        });
-        if (registered) {
+        if ((mask & (1U << d)) != 0 && (watched & (1U << kDpadBits[d])) != 0) {
             done |= 1U << d;
         }
     }
@@ -152,8 +152,16 @@ void SteamiButtons::edgeMenu() {
     }
 }
 
-// D-PAD callback, run by SteamiMCP23009E::interruptEvent() (from sample() or from a poll() of the
+// D-PAD watch, run by SteamiMCP23009E::interruptEvent() (from sample() or from a poll() of the
 // sketch), once per event in order: the level captured at the interrupt, then the current one.
+void SteamiButtons::dpadChange(uint8_t gpx, uint8_t level) {
+    for (uint8_t d = 0; d < 4; d++) {
+        if (kDpadBits[d] == gpx && gActive != nullptr) {
+            gActive->dpadEvent(d, level);
+        }
+    }
+}
+
 void SteamiButtons::dpadEvent(uint8_t d, uint8_t level) {
     const uint8_t bit = 1U << d;
     if (level == MCP23009_LOGIC_LOW) {
@@ -252,11 +260,21 @@ void SteamiButtons::sample() {
     gActive = this;  // the object called last gets the interrupts and the D-PAD events
     interrupts();
     // The D-PAD first, interrupts enabled: the read uses the I2C bus.
-    if (_dpadUnregistered != 0 && _handle.isAvailable()) {
+    if (_handle.isAvailable()) {
         SteamiMCP23009E* expander = _handle.board().mcp23009e();
         if (expander != nullptr) {
-            // A bus error at the registration: a held direction is then a press.
-            _dpadUnregistered = registerDpad(*expander, _dpadUnregistered);
+            // A bus error at the registration, or a reset() or powerOff() of the expander by the
+            // sketch, which removed the watch: a held direction is then a press.
+            uint8_t lost = _dpadUnregistered;
+            const uint8_t watched = expander->watched();
+            for (uint8_t d = 0; d < 4; d++) {
+                if ((watched & (1U << kDpadBits[d])) == 0) {
+                    lost |= 1U << d;
+                }
+            }
+            if (lost != 0) {
+                _dpadUnregistered = watchDpad(*expander, lost);
+            }
         }
     }
     uint8_t level = 0;  // bit d: pressed
