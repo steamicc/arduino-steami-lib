@@ -146,6 +146,15 @@ class BuildPackageTest(unittest.TestCase):
         ):
             self.assertIn(f'#include "{header}"', umbrella)
 
+    def test_real_tree_package_builds(self) -> None:
+        # Fail-closed guard for the CI selection: whatever the PR changes, the
+        # package of the real tree must build (example folders hold <e>.ino,
+        # no duplicate header...), or the release fails after its tag.
+        self.mod.build_package(REAL_ROOT, self.out, "1.2.3")
+        self.assertTrue((self.out / "library.properties").is_file())
+        self.assertTrue((self.out / "src" / "STeaMi.h").is_file())
+        self.assertTrue(any((self.out / "examples").iterdir()))
+
     def test_umbrella_name_is_reserved(self) -> None:
         write(self.lib / "aaa" / "src" / "Steami.h")
         with self.assertRaises(self.mod.PackageError) as ctx:
