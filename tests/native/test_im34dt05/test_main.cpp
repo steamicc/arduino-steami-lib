@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unity.h>
 
 #include <vector>
 
 #include "SteamiIMP34DT05.h"
 #include "SteamiPdmFilter.h"
+#include "SteamiPdmSai.h"
+#include "golden_vectors.h"
 
 // The tests feed the filter and the driver with PDM streams produced by a
 // second-order sigma-delta modulator, the kind of modulator a MEMS
@@ -106,7 +110,10 @@ void setUp(void) {
     callbackSamples = 0;
 }
 
-void tearDown(void) {}
+void tearDown(void) {
+    clockHook() = nullptr;
+    SteamiPdmSai::hostSetPresent(false);
+}
 
 // --- Filter: ST's tables ---------------------------------------------------
 
@@ -669,6 +676,323 @@ void test_end_to_end_frequency_from_pdm(void) {
     }
 }
 
+// --- Cross-language golden vectors (Annex A, shared with MicroPython) -------
+
+namespace {
+
+constexpr uint32_t FNV_OFFSET = 2166136261U;
+constexpr uint32_t FNV_PRIME = 16777619U;
+
+uint32_t fnvAddByte(uint32_t hash, uint8_t value) {
+    return (hash ^ value) * FNV_PRIME;
+}
+
+uint32_t fnvBytes(const std::vector<uint8_t>& bytes) {
+    uint32_t hash = FNV_OFFSET;
+    for (uint8_t value : bytes) {
+        hash = fnvAddByte(hash, value);
+    }
+    return hash;
+}
+
+uint32_t fnvAddLe16(uint32_t hash, uint16_t value) {
+    hash = fnvAddByte(hash, static_cast<uint8_t>(value & 0xFF));
+    return fnvAddByte(hash, static_cast<uint8_t>(value >> 8));
+}
+
+uint32_t fnvAddLe32(uint32_t hash, uint32_t value) {
+    hash = fnvAddLe16(hash, static_cast<uint16_t>(value & 0xFFFF));
+    return fnvAddLe16(hash, static_cast<uint16_t>(value >> 16));
+}
+
+uint32_t fnvSamples(const int16_t* samples, size_t count) {
+    uint32_t hash = FNV_OFFSET;
+    for (size_t i = 0; i < count; i++) {
+        hash = fnvAddLe16(hash, static_cast<uint16_t>(samples[i]));
+    }
+    return hash;
+}
+
+uint32_t floatBits(float value) {
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+// SAI frames of a level input (microphone on slot 0, slot 1 at 0x00),
+// built once: the 54 level lines share three inputs.
+const std::vector<uint8_t>& levelFrames(golden::LevelInput input) {
+    static std::vector<uint8_t> frames[3];
+    size_t index = static_cast<size_t>(input);
+    if (frames[index].empty()) {
+        std::vector<uint8_t> mic;
+        switch (input) {
+            case golden::LevelInput::SINE_1K_A025:
+                mic = pdmSine(1000.0f, 0.25f, golden::LEVEL_BYTES_PER_SLOT);
+                break;
+            case golden::LevelInput::SINE_1K_A010:
+                mic = pdmSine(1000.0f, 0.1f, golden::LEVEL_BYTES_PER_SLOT);
+                break;
+            case golden::LevelInput::RANDOM_11: {
+                mic.resize(golden::LEVEL_BYTES_PER_SLOT);
+                uint32_t seed = 11;
+                for (uint8_t& value : mic) {
+                    value = static_cast<uint8_t>(nextRandom(seed));
+                }
+                break;
+            }
+        }
+        TEST_ASSERT_EQUAL_HEX32_MESSAGE(golden::LEVEL_INPUT_FNV[index], fnvBytes(mic),
+                                        "level input differs: generator (libm), not driver");
+        frames[index] = saiFrames(mic, 0, 0x00);
+    }
+    return frames[index];
+}
+
+// Windows read by a level line: 20 for 1 ms, 10 for 10 ms, 3 for 100 ms.
+unsigned levelWindowsWanted(uint16_t windowMs) {
+    if (windowMs == 1) {
+        return 20;
+    }
+    return windowMs == 10 ? 10 : 3;
+}
+
+struct LevelRun {
+    size_t blocks = 0;
+    unsigned windows = 0;
+    uint32_t hash = FNV_OFFSET;
+    SteamiIMP34DT05::LevelResult first = {};
+    uint8_t slot = 0;
+};
+
+// One level line on a new driver, blocks fed to processBlock() one by one.
+LevelRun runLevelVector(const golden::LevelVector& vector, float offsetDb) {
+    const std::vector<uint8_t>& frames = levelFrames(vector.input);
+    SteamiIMP34DT05 mic;
+    TEST_ASSERT_TRUE(mic.setVolume(vector.volume));
+    mic.setLevelWindowMs(vector.windowMs);
+    mic.setLevelOffset(offsetDb);
+    const unsigned wanted = levelWindowsWanted(vector.windowMs);
+    LevelRun run;
+    size_t position = 0;
+    while (run.windows < wanted && position + IMP34DT05_SAI_BYTES_PER_BLOCK <= frames.size()) {
+        mic.processBlock(frames.data() + position, IMP34DT05_SAI_BYTES_PER_BLOCK);
+        position += IMP34DT05_SAI_BYTES_PER_BLOCK;
+        run.blocks++;
+        if (mic.levelReady()) {
+            SteamiIMP34DT05::LevelResult result = mic.level();
+            if (run.windows == 0) {
+                run.first = result;
+            }
+            run.hash = fnvAddLe32(run.hash, floatBits(result.rms));
+            run.hash = fnvAddLe16(run.hash, result.peak);
+            run.windows++;
+        }
+    }
+    run.slot = mic.slot();
+    return run;
+}
+
+// Host SAI fed by the simulated clock: one block per millisecond, as the
+// DMA interrupt delivers them on the board.
+const std::vector<uint8_t>* hostFrames = nullptr;
+size_t hostPosition = 0;
+bool hostFeeding = false;
+
+void startHostSai(const std::vector<uint8_t>& frames) {
+    hostFrames = &frames;
+    hostPosition = 0;
+    hostFeeding = true;
+    SteamiPdmSai::hostSetPresent(true);
+    clockHook() = [] {
+        if (!hostFeeding) {
+            return;
+        }
+        if (hostPosition + IMP34DT05_SAI_BYTES_PER_BLOCK > hostFrames->size()) {
+            hostPosition = 0;
+        }
+        SteamiPdmSai::hostFeed(hostFrames->data() + hostPosition, IMP34DT05_SAI_BYTES_PER_BLOCK);
+        hostPosition += IMP34DT05_SAI_BYTES_PER_BLOCK;
+    };
+}
+
+}  // namespace
+
+void test_cross_filter_vectors(void) {
+    uint32_t randomSeed = 2024;
+    uint32_t sigmaDeltaSeed = 7;
+    char message[48];
+    for (size_t line = 0; line < golden::FILTER_VECTOR_COUNT; line++) {
+        const golden::FilterVector& vector = golden::FILTER_VECTORS[line];
+        snprintf(message, sizeof(message), "filter line %zu", line);
+        std::vector<uint8_t> stream;
+        switch (vector.input) {
+            case golden::FilterInput::RANDOM:
+                stream.resize(6400 * static_cast<size_t>(vector.stride));
+                for (uint8_t& value : stream) {
+                    value = static_cast<uint8_t>(nextRandom(randomSeed));
+                }
+                break;
+            case golden::FilterInput::SIGMA_DELTA: {
+                float frequency = 50.0f + static_cast<float>(nextRandom(sigmaDeltaSeed) % 7000);
+                float amplitude = static_cast<float>(nextRandom(sigmaDeltaSeed) % 700) / 1000.0f;
+                float offset =
+                    (static_cast<float>(nextRandom(sigmaDeltaSeed) % 200) - 100.0f) / 1000.0f;
+                TEST_ASSERT_EQUAL_FLOAT_MESSAGE(vector.frequencyHz, frequency, message);
+                TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, vector.amplitude, amplitude, message);
+                TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.0005f, vector.offset, offset, message);
+                stream = pdmSine(frequency, amplitude, 8000, offset);
+                break;
+            }
+            case golden::FilterInput::SINE_1K:
+                stream = pdmSine(vector.frequencyHz, vector.amplitude, 16000);
+                break;
+        }
+        TEST_ASSERT_EQUAL_HEX32_MESSAGE(vector.inFnv, fnvBytes(stream), message);
+
+        SteamiPdmFilter filter;
+        TEST_ASSERT_TRUE(filter.setVolume(vector.volume));
+        size_t bytes = stream.size() / vector.stride;
+        std::vector<int16_t> pcm(bytes / IMP34DT05_PDM_BYTES_PER_SAMPLE + 2);
+        size_t count = filter.process(stream.data(), bytes, vector.stride, pcm.data());
+        TEST_ASSERT_EQUAL_UINT_MESSAGE(vector.count, count, message);
+        TEST_ASSERT_EQUAL_HEX32_MESSAGE(vector.outFnv, fnvSamples(pcm.data(), count), message);
+        if (vector.hasEdges) {
+            TEST_ASSERT_EQUAL_INT16_ARRAY_MESSAGE(vector.first, pcm.data(), 6, message);
+            TEST_ASSERT_EQUAL_INT16_MESSAGE(vector.last, pcm[count - 1], message);
+        }
+    }
+}
+
+void test_cross_fft_vectors(void) {
+    for (const golden::FftVector& vector : golden::FFT_VECTORS) {
+        std::vector<int16_t> samples = sine(vector.inputHz, 8000.0f, IMP34DT05_FFT_SIZE);
+        float got =
+            SteamiIMP34DT05::computeDominantFrequency(samples.data(), samples.size(), 16000.0f);
+        TEST_ASSERT_FLOAT_WITHIN(0.01f, vector.expectedHz, got);
+    }
+}
+
+void test_cross_level_vectors(void) {
+    char message[48];
+    for (size_t line = 0; line < golden::LEVEL_VECTOR_COUNT; line++) {
+        const golden::LevelVector& vector = golden::LEVEL_VECTORS[line];
+        snprintf(message, sizeof(message), "level line %zu", line);
+        LevelRun run = runLevelVector(vector, 0.0f);
+        TEST_ASSERT_EQUAL_UINT_MESSAGE(vector.blocks, run.blocks, message);
+        TEST_ASSERT_EQUAL_UINT_MESSAGE(vector.windows, run.windows, message);
+        TEST_ASSERT_EQUAL_HEX32_MESSAGE(vector.lvFnv, run.hash, message);
+        TEST_ASSERT_EQUAL_HEX32_MESSAGE(vector.rms0Bits, floatBits(run.first.rms), message);
+        TEST_ASSERT_EQUAL_UINT16_MESSAGE(vector.peak0, run.first.peak, message);
+        TEST_ASSERT_EQUAL_UINT8_MESSAGE(vector.slot, run.slot, message);
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, vector.dbfs0, run.first.dbfs, message);
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, vector.spl0, run.first.dbSpl, message);
+    }
+}
+
+void test_dbfs_to_db_spl_matches_spl0(void) {
+    char message[48];
+    for (size_t line = 0; line < golden::LEVEL_VECTOR_COUNT; line++) {
+        const golden::LevelVector& vector = golden::LEVEL_VECTORS[line];
+        snprintf(message, sizeof(message), "level line %zu", line);
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(
+            0.01f, vector.spl0, SteamiIMP34DT05::dbfsToDbSpl(vector.dbfs0, vector.volume), message);
+        // The same from the exact rms of the first window.
+        float rms;
+        memcpy(&rms, &vector.rms0Bits, sizeof(rms));
+        float dbfs = SteamiIMP34DT05::rmsToDbfs(rms);
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, vector.dbfs0, dbfs, message);
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(
+            0.01f, vector.spl0, SteamiIMP34DT05::dbfsToDbSpl(dbfs, vector.volume), message);
+    }
+    // At volume 5 (x10, +20 dB): dBFS + 100.
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 94.0f, SteamiIMP34DT05::dbfsToDbSpl(-6.0f, 5));
+    TEST_ASSERT_TRUE(isnan(SteamiIMP34DT05::dbfsToDbSpl(-6.0f, 0)));
+    TEST_ASSERT_TRUE(isnan(SteamiIMP34DT05::dbfsToDbSpl(NAN, 5)));
+}
+
+void test_level_db_spl_uses_level_offset(void) {
+    SteamiIMP34DT05 fresh;
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, fresh.levelOffset());
+
+    // Every level line with a +3 dB driver offset.
+    char message[48];
+    for (size_t line = 0; line < golden::LEVEL_VECTOR_COUNT; line++) {
+        const golden::LevelVector& vector = golden::LEVEL_VECTORS[line];
+        snprintf(message, sizeof(message), "level line %zu", line);
+        LevelRun run = runLevelVector(vector, 3.0f);
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.01f, vector.spl0 + 3.0f, run.first.dbSpl, message);
+    }
+
+    // levelDbSpl() itself, on the first line at volume 5 with a 10 ms window.
+    const golden::LevelVector* vector = nullptr;
+    for (const golden::LevelVector& candidate : golden::LEVEL_VECTORS) {
+        if (candidate.volume == 5 && candidate.windowMs == 10) {
+            vector = &candidate;
+            break;
+        }
+    }
+    TEST_ASSERT_NOT_NULL(vector);
+    const std::vector<uint8_t>& frames = levelFrames(vector->input);
+    SteamiIMP34DT05 mic;
+    TEST_ASSERT_TRUE(mic.setVolume(vector->volume));
+    mic.setLevelWindowMs(vector->windowMs);
+    mic.setLevelOffset(3.0f);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, mic.levelOffset());
+    size_t position = 0;
+    feedBlocks(mic, frames, vector->blocks - (vector->windows - 1) * vector->windowMs, position);
+    TEST_ASSERT_TRUE(mic.levelReady());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, vector->spl0 + 3.0f, mic.levelDbSpl());
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, mic.levelOffset());
+}
+
+void test_is_alive_follows_blocks(void) {
+    SteamiIMP34DT05 mic;
+    TEST_ASSERT_FALSE(mic.isAlive());  // not running
+
+    startHostSai(levelFrames(golden::LevelInput::SINE_1K_A025));
+    TEST_ASSERT_TRUE(mic.begin());
+    TEST_ASSERT_TRUE(mic.isAlive());
+    delay(200);
+    TEST_ASSERT_TRUE(mic.isAlive());
+
+    // The DMA stops delivering: alive for 50 ms after the last block.
+    hostFeeding = false;
+    delay(50);
+    TEST_ASSERT_TRUE(mic.isAlive());
+    delay(1);
+    TEST_ASSERT_FALSE(mic.isAlive());
+    TEST_ASSERT_TRUE(mic.isRunning());
+
+    hostFeeding = true;
+    delay(1);
+    TEST_ASSERT_TRUE(mic.isAlive());
+
+    // A block 0 ms ago, but the driver is stopped.
+    mic.powerOff();
+    TEST_ASSERT_FALSE(mic.isAlive());
+    mic.powerOn();
+    TEST_ASSERT_TRUE(mic.isRunning());
+    TEST_ASSERT_TRUE(mic.isAlive());
+    mic.end();
+    TEST_ASSERT_FALSE(mic.isAlive());
+}
+
+void test_host_seam_begin_succeeds(void) {
+    startHostSai(levelFrames(golden::LevelInput::SINE_1K_A025));
+    TEST_ASSERT_TRUE(SteamiPdmSai::supported());
+    SteamiIMP34DT05 mic;
+    TEST_ASSERT_TRUE(mic.begin());
+    TEST_ASSERT_TRUE(mic.isRunning());
+    TEST_ASSERT_EQUAL_UINT8(0, mic.slot());
+    TEST_ASSERT_FALSE(mic.levelReady());
+    delay(IMP34DT05_LEVEL_WINDOW_DEFAULT_MS);
+    TEST_ASSERT_TRUE(mic.levelReady());
+    TEST_ASSERT_TRUE(mic.levelDbSpl() > 90.0f);
+    mic.end();
+    TEST_ASSERT_FALSE(mic.isRunning());
+}
+
 int main(int /* argc */, char** /* argv */) {
     UNITY_BEGIN();
 
@@ -710,6 +1034,14 @@ int main(int /* argc */, char** /* argv */) {
     RUN_TEST(test_level_window_is_clamped);
     RUN_TEST(test_level_db_spl_is_nan_at_volume_zero);
     RUN_TEST(test_end_to_end_frequency_from_pdm);
+
+    RUN_TEST(test_cross_filter_vectors);
+    RUN_TEST(test_cross_fft_vectors);
+    RUN_TEST(test_cross_level_vectors);
+    RUN_TEST(test_dbfs_to_db_spl_matches_spl0);
+    RUN_TEST(test_level_db_spl_uses_level_offset);
+    RUN_TEST(test_is_alive_follows_blocks);
+    RUN_TEST(test_host_seam_begin_succeeds);
 
     return UNITY_END();
 }

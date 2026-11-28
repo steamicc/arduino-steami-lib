@@ -107,6 +107,7 @@ close to the Arduino `PDM` library (`begin`, `onReceive`, `available`,
 | `void end()` | Stop and release SAI1, the DMA channel and the pins. |
 | `void powerOn()` / `void powerOff()` | Restart / stop the PDM clock. Without clock the microphone sleeps. `powerOn()` waits for it to wake up. |
 | `bool isRunning()` | `true` while the clock runs. |
+| `bool isAlive()` | `true` while running and a block of samples arrived in the last 50 ms. `false` when the DMA interrupt stopped delivering: restart with `end()` and `begin()`. |
 | `uint32_t sampleRate()` | Always 16000. |
 
 The IMP34DT05 has no registers: there is no `deviceId()`, `reset()`,
@@ -155,6 +156,7 @@ first one.
 | `float levelDbSpl()` | Estimate in dB SPL: `levelDbfs() - 20 * log10(2 * volume) + 26 + 94 + offset`. **Uncalibrated** (sensitivity tolerance, no A-weighting): compare with a sound level meter. `NAN` at volume 0. |
 | `LevelResult level()` | `{rms, peak, dbfs, dbSpl}` of the same window, at once. |
 | `void setLevelOffset(float offsetDb)` | Additive correction applied by `levelDbSpl()`. |
+| `float levelOffset()` | Current correction, `0` by default. |
 
 ### Frequency
 
@@ -164,6 +166,7 @@ first one.
 | `static float computeDominantFrequency(const int16_t* samples, size_t count, float sampleRateHz)` | Same on your own samples: Hann window, radix-2 FFT, Gaussian interpolation of the peak. `count` is a power of two from 16 to 512. |
 | `static float computeRms(const int16_t* samples, size_t count)` | RMS of a buffer. |
 | `static float rmsToDbfs(float rms)` | dBFS as `levelDbfs()`. |
+| `static float dbfsToDbSpl(float dbfs, uint8_t volume)` | dB SPL as `levelDbSpl()`, without the offset: `dbfs - 20 * log10(2 * volume) + 26 + 94`. `NAN` at volume 0. |
 
 The frequency is measured against the PDM clock, derived from the internal
 16 MHz oscillator (HSI): expect about 1 % of absolute error.
@@ -257,6 +260,12 @@ filter sample for sample with a straightforward implementation of ST's
 filter (random and sigma-delta streams, every volume, both slots, random
 block sizes), and checks the gain of each volume, DC removal, saturation,
 the slot detection, the level window and the frequency estimate end to end.
+It also replays the golden vectors shared with the MicroPython driver
+(`tests/native/test_im34dt05/golden_vectors.h`: 28 filter lines, 6 FFT
+frequencies, 54 level lines through `processBlock()` and `dbfsToDbSpl()`),
+so a change on either side fails its own CI, and drives `begin()` and
+`isAlive()` through a host stand-in for SAI1 (`SteamiPdmSai::hostSetPresent()`
+and `hostFeed()`, built only for the native tests).
 The hardware suite in `tests/hardware/test_im34dt05/` needs a STeaMi: it
 also prints the CPU share of the conversion (and fails above 30 %) and
 checks that the microphone hears the buzzer from 2 to 4 kHz.
