@@ -215,6 +215,45 @@ void test_set_temp_offset_shifts_reading(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, baseTemp + 10.0f, tempC);
 }
 
+void test_set_temperature_offset_shifts_reading(void) {
+    sensor.begin();
+    Wire.setRegister(ADDR, LIS2MDL_TEMP_OUT_L_REG, 0x00);
+    Wire.setRegister(ADDR, LIS2MDL_TEMP_OUT_H_REG, 0x00);
+    Wire.setRegister(ADDR, LIS2MDL_STATUS_REG, 0b1000);
+    float baseTemp = sensor.temperature();
+
+    sensor.setTemperatureOffset(-3.5f);
+    float tempC = sensor.temperature();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, baseTemp - 3.5f, tempC);
+}
+
+void test_set_temperature_offset_resets_two_point_gain(void) {
+    sensor.begin();
+    Wire.setRegister(ADDR, LIS2MDL_TEMP_OUT_L_REG, 0x00);
+    Wire.setRegister(ADDR, LIS2MDL_TEMP_OUT_H_REG, 0x00);
+    Wire.setRegister(ADDR, LIS2MDL_STATUS_REG, 0b1000);
+    sensor.setTemperatureOffset(0.0f);
+    float baseTemp = sensor.temperature();
+
+    sensor.calibrateTemperature(21.0f, 20.0f, 27.0f, 25.0f);
+    sensor.setTemperatureOffset(2.0f);
+    float tempC = sensor.temperature();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, baseTemp + 2.0f, tempC);
+}
+
+void test_set_temp_offset_is_alias_of_set_temperature_offset(void) {
+    sensor.begin();
+    Wire.setRegister(ADDR, LIS2MDL_TEMP_OUT_L_REG, 0x40);
+    Wire.setRegister(ADDR, LIS2MDL_TEMP_OUT_H_REG, 0x00);
+    Wire.setRegister(ADDR, LIS2MDL_STATUS_REG, 0b1000);
+
+    sensor.setTemperatureOffset(4.25f);
+    float viaCanonical = sensor.temperature();
+    sensor.setTempOffset(4.25f);
+    float viaAlias = sensor.temperature();
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, viaCanonical, viaAlias);
+}
+
 void test_calibrate_temperature_applies_two_point_correction(void) {
     sensor.begin();
     Wire.setRegister(ADDR, LIS2MDL_TEMP_OUT_L_REG, 0x00);
@@ -448,6 +487,9 @@ int main(void) {
     RUN_TEST(test_ensure_data_returns_false_on_timeout);
     RUN_TEST(test_temperature_raw_is_signed);
     RUN_TEST(test_set_temp_offset_shifts_reading);
+    RUN_TEST(test_set_temperature_offset_shifts_reading);
+    RUN_TEST(test_set_temperature_offset_resets_two_point_gain);
+    RUN_TEST(test_set_temp_offset_is_alias_of_set_temperature_offset);
     RUN_TEST(test_calibrate_temperature_applies_two_point_correction);
     RUN_TEST(test_set_low_power_sets_bit4_cfg_reg_a);
     RUN_TEST(test_set_low_pass_sets_bit0_cfg_reg_b);

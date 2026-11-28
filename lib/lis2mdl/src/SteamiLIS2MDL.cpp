@@ -319,7 +319,7 @@ float SteamiLIS2MDL::temperature() {
         The LIS2MDL temperature sensor has no guaranteed absolute zero
         point (see datasheet Table 4).  The offset defaults to 25 °C
         based on empirical observation (confirmed by Zephyr RTOS
-        PR #35912).  Use ``set_temp_offset()`` or ``calibrate_temperature()``
+        PR #35912).  Use ``setTemperatureOffset()`` or ``calibrateTemperature()``
         to calibrate against a reference thermometer.
         */
     float factory =
@@ -327,13 +327,21 @@ float SteamiLIS2MDL::temperature() {
     return _tempGain * factory + _tempOffset;
 }
 
-void SteamiLIS2MDL::setTempOffset(float offset) {
-    /*Set a temperature offset in °C (gain remains 1.0).
+void SteamiLIS2MDL::setTemperatureOffset(float offset) {
+    /*Set a temperature offset in °C (gain is reset to 1.0).
+
+        Replaces any two-point correction set by calibrateTemperature().
 
         Args:
-            offset_c: offset value in degrees Celsius.*/
+            offset: offset value in degrees Celsius.*/
     _tempGain = 1.0f;
     _tempOffset = offset;
+}
+
+void SteamiLIS2MDL::setTempOffset(float offset) {
+    // Alias of setTemperatureOffset(), the name shared by every
+    // temperature-capable driver (see CONTRIBUTING.md).
+    setTemperatureOffset(offset);
 }
 
 bool SteamiLIS2MDL::calibrateTemperature(float refLow, float measuredLow, float refHigh,

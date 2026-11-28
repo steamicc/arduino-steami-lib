@@ -33,6 +33,7 @@ readIntSource	KEYWORD2
 
 temperature	KEYWORD2
 readTemperatureRaw	KEYWORD2
+setTemperatureOffset	KEYWORD2
 setTempOffset	KEYWORD2
 calibrateTemperature	KEYWORD2
 

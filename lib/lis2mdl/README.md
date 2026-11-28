@@ -121,14 +121,16 @@ and returns the result. The caller does not have to manage modes manually.
 The LIS2MDL embeds a temperature sensor intended for internal magnetic
 compensation. It has **no guaranteed absolute offset** (see datasheet
 Table 4) — the driver applies an empirical 25 °C base offset confirmed
-by Zephyr RTOS PR #35912. Use `setTempOffset()` or `calibrateTemperature()`
-to adjust against a reference thermometer.
+by Zephyr RTOS PR #35912. Use `setTemperatureOffset()` or `calibrateTemperature()`
+to adjust against a reference thermometer. Each call replaces the previous
+correction: `setTemperatureOffset()` resets the gain to 1.0.
 
 | Method | Description |
 |--------|-------------|
 | `float temperature()` | Silicon temperature in °C (empirical, not ambient). |
 | `int16_t readTemperatureRaw()` | Raw temperature LSB (8 LSB/°C). |
-| `void setTempOffset(float offset)` | Additive offset in °C (resets gain to 1.0). |
+| `void setTemperatureOffset(float offset)` | Additive offset in °C (resets gain to 1.0). |
+| `void setTempOffset(float offset)` | Alias for `setTemperatureOffset()`. |
 | `bool calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point linear correction. Returns `false` if `measLow == measHigh`. |
 
 ### Modes
