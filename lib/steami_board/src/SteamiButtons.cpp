@@ -57,25 +57,49 @@ bool SteamiButtons::begin() {
         if (expander != nullptr) {
             for (uint8_t d = 0; d < 4; d++) {
                 expander->setup(kDpadBits[d], MCP23009_DIR_INPUT, MCP23009_PULLUP);
-                // No event for the level at registration: it is read below.
-                expander->interruptOnChange(kDpadBits[d], [d](uint8_t level) {
-                    if (gActive != nullptr) {
-                        gActive->dpadEvent(d, level);
-                    }
-                });
             }
-            uint8_t port = 0xFF;
-            expander->gpio(port);  // on an error the D-PAD reads released
             _dpadLevel = 0;
-            for (uint8_t d = 0; d < 4; d++) {
-                if ((port & (1U << kDpadBits[d])) == 0) {
-                    _dpadLevel |= 1U << d;
-                }
-                _dpadEventAt[d] = millis() - kDebounceMs;
-            }
+            _dpadUnregistered = registerDpad(*expander, 0x0F);
         }
     }
     return ok;
+}
+
+// Registers the D-PAD callbacks of the directions in `mask` (bit d) and reads their level, which
+// the registration takes as the last known one: it gives no event. Returns the directions left
+// unregistered by a bus error (all of `mask` when the level read fails), for the next sample().
+uint8_t SteamiButtons::registerDpad(SteamiMCP23009E& expander, uint8_t mask) {
+    uint8_t done = 0;
+    for (uint8_t d = 0; d < 4; d++) {
+        if ((mask & (1U << d)) == 0) {
+            continue;
+        }
+        const bool registered = expander.interruptOnChange(kDpadBits[d], [d](uint8_t level) {
+            if (gActive != nullptr) {
+                gActive->dpadEvent(d, level);
+            }
+        });
+        if (registered) {
+            done |= 1U << d;
+        }
+    }
+    uint8_t port = 0xFF;
+    if (done != 0 && !expander.gpio(port)) {
+        return mask;
+    }
+    for (uint8_t d = 0; d < 4; d++) {
+        const uint8_t bit = 1U << d;
+        if ((done & bit) == 0) {
+            continue;
+        }
+        if ((port & (1U << kDpadBits[d])) == 0) {
+            _dpadLevel |= bit;
+        } else {
+            _dpadLevel = static_cast<uint8_t>(_dpadLevel & ~bit);
+        }
+        _dpadEventAt[d] = millis() - kDebounceMs;
+    }
+    return static_cast<uint8_t>(mask & ~done);
 }
 
 int SteamiButtons::index(SteamiButton button) {
@@ -146,6 +170,10 @@ void SteamiButtons::sample() {
     uint8_t dpad = 0;  // bit d: pressed
     if (_handle.isAvailable()) {
         SteamiMCP23009E* expander = _handle.board().mcp23009e();
+        if (expander != nullptr && _dpadUnregistered != 0) {
+            // A bus error at the registration: a held direction is then a press.
+            _dpadUnregistered = registerDpad(*expander, _dpadUnregistered);
+        }
         if (expander != nullptr && expander->interruptEvent()) {
             dpad = _dpadLevel;
         }  // on an error the D-PAD reads released, with no event

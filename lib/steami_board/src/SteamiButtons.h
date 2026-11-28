@@ -43,7 +43,8 @@ class SteamiButtons {
     /// Sets A, B and MENU as inputs with pull-ups and attaches their interrupts, and sets the D-PAD
     /// pins of the expander with their interrupt callbacks. False, with one message, when the
     /// expander does not answer: A, B and MENU still work, the D-PAD reads as released, as it does
-    /// after a runtime bus error. Idempotent.
+    /// after a runtime bus error. A D-PAD direction whose registration hits a bus error is
+    /// registered again by the next calls, its level read then (held: a press). Idempotent.
     bool begin();
     bool isAvailable() const { return _handle.isAvailable(); }
     SteamiStatus status() const { return _handle.status(); }
@@ -74,6 +75,7 @@ class SteamiButtons {
     void debounce(uint8_t i, bool down, uint32_t t);
     void edge(uint8_t i);
     void dpadEvent(uint8_t d, uint8_t level);
+    uint8_t registerDpad(SteamiMCP23009E& expander, uint8_t mask);
     static void edgeA();
     static void edgeB();
     static void edgeMenu();
@@ -91,5 +93,6 @@ class SteamiButtons {
     uint8_t _dpadLevel = 0;
     uint8_t _dpadDown = 0;
     uint32_t _dpadEventAt[4] = {};
+    uint8_t _dpadUnregistered = 0;  // directions a bus error left unregistered, retried by sample()
     bool _pinsReady = false;
 };

@@ -135,12 +135,12 @@ Direct read/write access to every register in the MCP23009E register map.
 
 | Method | Description |
 |--------|-------------|
-| `void interruptOnChange(uint8_t gpx, std::function<void(uint8_t)> callback)` | Call `callback(level)` on any level change of `gpx`. |
-| `void interruptOnFalling(uint8_t gpx, std::function<void()> callback)` | Call `callback()` on falling edge of `gpx`. |
-| `void interruptOnRising(uint8_t gpx, std::function<void()> callback)` | Call `callback()` on rising edge of `gpx`. |
-| `void interruptOnRaising(uint8_t gpx, std::function<void()> callback)` | Deprecated former name of `interruptOnRising()`, kept for the whole 1.x series and removed in 2.0.0. |
+| `bool interruptOnChange(uint8_t gpx, std::function<void(uint8_t)> callback)` | Call `callback(level)` on any level change of `gpx`. Returns `false` if `gpx > 7` or on a bus error (see below). |
+| `bool interruptOnFalling(uint8_t gpx, std::function<void()> callback)` | Call `callback()` on falling edge of `gpx`. Returns `false` if `gpx > 7` or on a bus error. |
+| `bool interruptOnRising(uint8_t gpx, std::function<void()> callback)` | Call `callback()` on rising edge of `gpx`. Returns `false` if `gpx > 7` or on a bus error. |
+| `bool interruptOnRaising(uint8_t gpx, std::function<void()> callback)` | Deprecated former name of `interruptOnRising()`, kept for the whole 1.x series and removed in 2.0.0. |
 | `void disableInterrupt(uint8_t gpx)` | Disable and clear all callbacks for `gpx`. |
-| `void poll()` | Dispatch the registered callbacks in normal (non-interrupt) context. Call this from `loop()`. With an interrupt pin, it reads the chip only once the ISR has flagged an interrupt — the ISR itself only sets the flag, because running callbacks (and the I²C reads they involve) from interrupt context is unsafe on STM32duino. Without an interrupt pin, it reads the chip at each call while at least one pin is enabled. |
+| `void poll()` | Dispatch the registered callbacks in normal (non-interrupt) context. Call this from `loop()`. With an interrupt pin, it reads the chip only once the ISR has flagged an interrupt — the ISR itself only sets the flag, because running callbacks (and the I²C reads they involve) from interrupt context is unsafe on STM32duino. Without an interrupt pin, it reads the chip at each call while at least one pin is enabled. After a failed read the interrupt stays flagged and the next call reads again. |
 | `bool interruptEvent()` | Read the chip and dispatch now, regardless of the pending flag. Returns `false` on a bus error (no event is reported then). Usually you'll call `poll()` instead. |
 
 How events are reported:
@@ -161,6 +161,11 @@ How events are reported:
   registration) is delivered after the events already queued. Past 8 queued
   reads, the changes are read again from GPIO once the queue is empty.
   Events read before a pin is registered again are dropped for that pin.
+- **Bus errors.** A registration that hits a bus error returns `false` and
+  leaves the pin disabled: no callback of the pin runs, and the other pins
+  keep their state (a register that could not be read is never written).
+  Register again once the bus is back. A failed read in `poll()` gives no
+  event and is retried at the next call.
 - **Reset.** `reset()`, `powerOff()` and the soft reset disable every pin:
   register the callbacks again afterwards.
 - **Limit.** A press and its release that both happen while an interrupt is
