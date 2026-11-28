@@ -7,9 +7,13 @@
 // driven through the shared expander driver, Steami.mcp23009e(), with the
 // STEAMI_PAD_* numbers. Works on every release (V1a, V1b and V1c).
 //
-// Wiring: an LED with a 220 ohm resistor from P28 to GND, and a crocodile wire
-// that touches P24 to GND. The LED lights and the buzzer beeps while P24 is
-// grounded.
+// The expander outputs are open-drain: they sink current to GND but cannot
+// source it, so the LED goes from 3V3 to the pad and lights when the pad is
+// driven LOW.
+//
+// Wiring: an LED with a 220 ohm resistor from 3V3 to P28 (anode on 3V3, cathode
+// on P28), and a crocodile wire that touches P24 to GND. The LED lights and the
+// buzzer beeps while P24 is grounded.
 
 #include <Arduino.h>
 #include <SteamiBoard.h>
@@ -30,7 +34,7 @@ void setup() {
     }
     expander->setup(STEAMI_PAD_P24, MCP23009_DIR_INPUT, MCP23009_PULLUP);
     expander->setup(STEAMI_PAD_P28, MCP23009_DIR_OUTPUT);
-    expander->setLevel(STEAMI_PAD_P28, MCP23009_LOGIC_LOW);
+    expander->setLevel(STEAMI_PAD_P28, MCP23009_LOGIC_HIGH);  // released: LED off
 }
 
 void loop() {
@@ -39,7 +43,7 @@ void loop() {
     }
     int grounded = expander->getLevel(STEAMI_PAD_P24) == MCP23009_LOGIC_LOW ? 1 : 0;
     if (grounded != last) {
-        expander->setLevel(STEAMI_PAD_P28, grounded ? MCP23009_LOGIC_HIGH : MCP23009_LOGIC_LOW);
+        expander->setLevel(STEAMI_PAD_P28, grounded ? MCP23009_LOGIC_LOW : MCP23009_LOGIC_HIGH);
         if (grounded) {
             tone(SPEAKER, 880, 100);
             Serial.println("P24 grounded: LED on");

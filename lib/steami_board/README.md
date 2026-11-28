@@ -159,6 +159,10 @@ expander->setup(STEAMI_PAD_P24, MCP23009_DIR_INPUT, MCP23009_PULLUP);
 expander->getLevel(STEAMI_PAD_P24);  // MCP23009_LOGIC_LOW when grounded
 ```
 
+The expander outputs are open-drain: they sink current (25 mA at most per pin)
+but do not source it. Wire a load such as an LED from 3V3 to the pad and drive
+the pad `MCP23009_LOGIC_LOW` to turn it on.
+
 The MicroPython names are `steami.PAD_P24`...
 
 ## Function classes
