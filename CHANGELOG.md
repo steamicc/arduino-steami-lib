@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.46.7](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.6...v0.46.7) (2026-11-28)
+
+
+### Bug Fixes
+
+* **board:** Report every button tap made between two slow calls. ([#346](https://github.com/steamicc/arduino-steami-lib/issues/346)) ([a9b785a](https://github.com/steamicc/arduino-steami-lib/commit/a9b785ad651090d3d68f3497d850f9ef066e8db4)), closes [#341](https://github.com/steamicc/arduino-steami-lib/issues/341) [#341](https://github.com/steamicc/arduino-steami-lib/issues/341) [#341](https://github.com/steamicc/arduino-steami-lib/issues/341)
+
 ## [0.46.6](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.5...v0.46.6) (2026-11-28)
 
 
