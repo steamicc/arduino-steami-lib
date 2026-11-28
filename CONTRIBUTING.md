@@ -602,14 +602,16 @@ dispatches the downstream bots. Its header documents the recovery: run
 it by hand on the tag, `gh workflow run publish-arduino-package.yml
 --ref vX.Y.Z`.
 
-Start such a recovery only once no publication is pending, that is when
-`gh run list --workflow publish-arduino-package.yml --status pending`
-lists nothing. The workflow's concurrency group keeps a single pending
-run, and a newer run cancels it: a recovery started while the newest
-tag's publication waits would cancel it, so the newest release would
-never reach the Library Manager nor the downstream repositories. During
-a burst of releases, the intermediate tags are skipped the same way,
-which is harmless since the downstream bots follow the latest release.
+A recovery can start at any time. The workflow has one concurrency
+group per tag: a run never cancels the publication of another tag, and a
+recovery only replaces a pending run of the same tag (a dry run has its
+own group). Publications of different tags run in parallel: the push to
+the distribution is atomic and retried when another publication pushed
+first, `main` only moves for the highest version (an older tag is pushed
+alone), and Latest is given back to the highest published version.
+The tags released before this change (v0.46.1 and earlier when it was
+written) carry the previous workflow, with a fixed group: recover one
+of them when no other publication runs.
 
 ## Notes
 
