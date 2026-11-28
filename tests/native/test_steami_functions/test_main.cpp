@@ -795,6 +795,74 @@ static void test_magnetometer_and_compass_nan_on_bus_error(void) {
     TEST_ASSERT_EQUAL_STRING("", compass.direction());
 }
 
+// Right edge raised by 20 degrees, top of the screen to magnetic north, field dipping 60 degrees
+// (1000 LSB). ISM330DL at +-8 g: (0, -sin 20, -cos 20) g. LIS2MDL: x = R, y = T,
+// z = LIS2MDL_MAG_Z_SIGN * U.
+static void setRollNorth(void) {
+    imu.setAccelRaw(0, static_cast<int16_t>(lroundf(-0.34202f * kOneG)),
+                    static_cast<int16_t>(lroundf(-0.93969f * kOneG)));
+    steamiFakeLis2mdl(Wire, -296, 500, static_cast<int16_t>(lroundf(LIS2MDL_MAG_Z_SIGN * -814.0f)));
+}
+
+static void test_compass_tilt_heading_removes_roll_error(void) {
+    steamiFakeBme280(Wire);
+    attachImu();
+    setRollNorth();
+    SteamiCompass compass(board);
+    TEST_ASSERT_TRUE(compass.begin());
+    const float tilt = compass.headingTiltCompensated();
+    TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, tilt > 180.0f ? tilt - 360.0f : tilt);
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 30.6f, compass.heading());  // flat heading, about 30.6
+}
+
+static void test_compass_tilt_heading_equals_heading_when_flat(void) {
+    steamiFakeBme280(Wire);
+    attachImu();
+    imu.setAccelRaw(0, 0, static_cast<int16_t>(-kOneG));
+    steamiFakeLis2mdl(Wire, 300, -150, 450);
+    SteamiCompass compass(board);
+    compass.setDeclination(10.0f);
+    const float flat = compass.heading();
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 253.43f, flat);
+    TEST_ASSERT_TRUE(flat == compass.headingTiltCompensated());
+}
+
+static void test_compass_tilt_heading_nan_without_accelerometer(void) {
+    steamiFakeBme280(Wire);
+    Wire.setAbsent(0x6B);
+    steamiFakeLis2mdl(Wire, 0, 300, 0);
+    SteamiCompass compass(board);
+    TEST_ASSERT_TRUE(compass.begin());
+    TEST_ASSERT_TRUE(isnan(compass.headingTiltCompensated()));
+    TEST_ASSERT_TRUE(isnan(compass.headingTiltCompensated()));
+    TEST_ASSERT_EQUAL_UINT32(1, countContaining("SteamiAccelerometer"));
+    TEST_ASSERT_FLOAT_WITHIN(1.0f, 0.0f, compass.heading());  // the flat heading still works
+}
+
+static void test_compass_tilt_heading_nan_when_compass_absent(void) {
+    steamiFakeBme280(Wire);
+    attachImu();
+    imu.setAccelRaw(0, 0, static_cast<int16_t>(-kOneG));
+    Wire.setAbsent(0x1E);
+    SteamiCompass compass(board);
+    TEST_ASSERT_TRUE(isnan(compass.headingTiltCompensated()));
+}
+
+static void test_compass_tilt_heading_nan_on_bus_error(void) {
+    steamiFakeBme280(Wire);
+    attachImu();
+    setRollNorth();
+    SteamiCompass compass(board);
+    TEST_ASSERT_FALSE(isnan(compass.headingTiltCompensated()));
+    // The accelerometer stops answering: no heading from a zero gravity vector.
+    Wire.setAbsent(0x6B);
+    TEST_ASSERT_TRUE(isnan(compass.headingTiltCompensated()));
+    TEST_ASSERT_FALSE(isnan(compass.heading()));
+    // Then the compass too.
+    Wire.setAbsent(0x1E);
+    TEST_ASSERT_TRUE(isnan(compass.headingTiltCompensated()));
+}
+
 static const char* const kCmConfig =
     "{\"rev\":131,\"cm\":{\"hx\":100,\"hy\":0,\"hz\":0,\"sx\":1,\"sy\":1,\"sz\":1}}";
 
@@ -1769,6 +1837,11 @@ int main(void) {
     RUN_TEST(test_compass_absent);
     RUN_TEST(test_magnetometer_and_compass_nan_on_bus_error);
     RUN_TEST(test_compass_heading_uses_cm);
+    RUN_TEST(test_compass_tilt_heading_removes_roll_error);
+    RUN_TEST(test_compass_tilt_heading_equals_heading_when_flat);
+    RUN_TEST(test_compass_tilt_heading_nan_without_accelerometer);
+    RUN_TEST(test_compass_tilt_heading_nan_when_compass_absent);
+    RUN_TEST(test_compass_tilt_heading_nan_on_bus_error);
     RUN_TEST(test_motion_calibrations_when_forced);
     RUN_TEST(test_calibrate_zero_changes_nothing);
     RUN_TEST(test_calibrate_updates_offsets);

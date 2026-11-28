@@ -2,11 +2,13 @@
 
 #pragma once
 
+#include "SteamiAccelerometer.h"
 #include "SteamiBoard.h"
 #include "SteamiHandle.h"
 #include "SteamiTypes.h"
 
-/// Heading of the board held flat: LIS2MDL on every release, shared with SteamiMagnetometer.
+/// Heading of the board held flat, or tilted with headingTiltCompensated(): LIS2MDL on every
+/// release, shared with SteamiMagnetometer.
 class SteamiCompass {
    public:
     /// Stores the address of the board only; touches no hardware.
@@ -24,6 +26,13 @@ class SteamiCompass {
     /// the I2C read fails.
     float heading();
 
+    /// Same heading, compensated for the tilt of the board with the ISM330DL accelerometer
+    /// (started as by SteamiAccelerometer::begin()); equal to heading() when the board is flat.
+    /// Valid up to about 60 degrees of tilt and only after a 3D calibration: calibrate(), the
+    /// board config, or SteamiLIS2MDL::calibrateMinmax3d(), not calibrateMinmax2d(). NAN when
+    /// the compass or the accelerometer is unavailable or a read fails.
+    float headingTiltCompensated();
+
     /// "N", "NE", "E"... for heading(); "" when unavailable.
     const char* direction();
 
@@ -38,6 +47,7 @@ class SteamiCompass {
     SteamiLIS2MDL* driver();
 
     SteamiHandle _handle;
+    SteamiAccelerometer _accel;  // headingTiltCompensated() only
     float _declination = 0.0f;
     bool _hasDeclination = false;
 };
