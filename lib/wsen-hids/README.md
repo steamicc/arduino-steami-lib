@@ -125,6 +125,7 @@ one-shot trigger reliably (see also the matching MicroPython issue in
 | `void triggerOneShot()` | Non-blocking: start a single conversion. |
 | `ReadResult readOneShot()` | Trigger + wait + return. |
 | `void setAveraging(uint8_t humAvg, uint8_t tempAvg)` | Configure `AV_CONF` averaging (datasheet table 18). |
+| `void enableBdu(bool enabled = true)` | Block Data Update, on by default. Applied at once and kept by `powerOn()`, `setContinuous()` and `triggerOneShot()`. |
 
 ### Calibration
 

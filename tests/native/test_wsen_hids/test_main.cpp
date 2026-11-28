@@ -78,6 +78,30 @@ void test_set_continuous_writes_expected_ctrl1(void) {
     TEST_ASSERT_EQUAL_HEX8(expected, ctrl1);
 }
 
+// enable_bdu() of the MicroPython driver (#316).
+void test_enable_bdu_flips_only_the_bdu_bit(void) {
+    sensor.begin();
+    sensor.setContinuous(WSEN_HIDS_ODR_7_HZ);
+    sensor.enableBdu(false);
+    TEST_ASSERT_EQUAL_HEX8(WSEN_HIDS_CTRL1_PD | WSEN_HIDS_ODR_7_HZ,
+                           Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL1));
+    sensor.enableBdu();
+    TEST_ASSERT_EQUAL_HEX8(WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU | WSEN_HIDS_ODR_7_HZ,
+                           Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL1));
+}
+
+void test_disabled_bdu_survives_mode_changes(void) {
+    sensor.begin();
+    sensor.enableBdu(false);
+    sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
+    TEST_ASSERT_BITS_LOW(WSEN_HIDS_CTRL1_BDU, Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL1));
+    sensor.powerOff();
+    sensor.powerOn();
+    TEST_ASSERT_BITS_LOW(WSEN_HIDS_CTRL1_BDU, Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL1));
+    sensor.triggerOneShot();
+    TEST_ASSERT_BITS_LOW(WSEN_HIDS_CTRL1_BDU, Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL1));
+}
+
 void test_trigger_one_shot_sets_ctrl2_one_shot(void) {
     sensor.begin();
     sensor.triggerOneShot();
@@ -310,6 +334,8 @@ int main(void) {
     RUN_TEST(test_power_off_clears_ctrl1_pd);
     RUN_TEST(test_set_continuous_writes_expected_ctrl1);
     RUN_TEST(test_trigger_one_shot_sets_ctrl2_one_shot);
+    RUN_TEST(test_enable_bdu_flips_only_the_bdu_bit);
+    RUN_TEST(test_disabled_bdu_survives_mode_changes);
     RUN_TEST(test_data_ready_reflects_status_register);
     RUN_TEST(test_temperature_is_plausible);
     RUN_TEST(test_humidity_is_plausible);
