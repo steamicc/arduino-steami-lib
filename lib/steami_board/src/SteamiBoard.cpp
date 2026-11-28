@@ -501,10 +501,12 @@ SteamiStatus SteamiBoard::claim(SteamiChip c) {
                 ok = _bq27441.emplace(bus).begin();
                 break;
             default:
-                ok = _mcp23009e
-                         .emplace(bus, static_cast<uint8_t>(pins().expanderReset),
-                                  MCP23009_I2C_ADDR, static_cast<int>(pins().expanderIrq))
-                         .begin();
+                // No interrupt pin: INT_EXPANDER (PB0) shares EXTI line 0 with MENU_BUTTON (PA0),
+                // which SteamiButtons takes. poll() and interruptEvent() read the chip latch.
+                ok =
+                    _mcp23009e
+                        .emplace(bus, static_cast<uint8_t>(pins().expanderReset), MCP23009_I2C_ADDR)
+                        .begin();
                 break;
         }
         state = ok ? ChipState::OK : ChipState::NOT_RESPONDING;
@@ -685,10 +687,6 @@ void SteamiBoard::end() {
     _displayStatus = SteamiStatus::NOT_STARTED;
     _gc9a01.reset();  // the drivers free their frame buffers
     _ssd1327.reset();
-    if (_mcp23009e.built()) {
-        // The driver attaches a handler that captures its address and never detaches it.
-        detachInterrupt(digitalPinToInterrupt(static_cast<int>(pins().expanderIrq)));
-    }
     _mcp23009e.reset();
     _bq27441.reset();
     _vl53l1x.reset();

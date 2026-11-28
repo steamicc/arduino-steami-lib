@@ -83,9 +83,21 @@ inline void delay(uint32_t ms) {
     millisClock() += ms;
 }
 
-inline void attachInterrupt(uint8_t /* pin */, const std::function<void()>& /* isr */,
-                            int /* mode */) {
-    // null operation for native tests
+// Interrupt attached to a pin: the handler and the mode (FALLING, RISING or CHANGE).
+struct AttachedInterrupt {
+    std::function<void()> isr;
+    int mode;
+};
+
+// Interrupts attached with attachInterrupt(), by pin. As on the board, attaching again replaces
+// the handler of the pin.
+inline std::map<int, AttachedInterrupt>& attachedInterrupts() {
+    static std::map<int, AttachedInterrupt> attached;
+    return attached;
+}
+
+inline void attachInterrupt(uint8_t pin, const std::function<void()>& isr, int mode) {
+    attachedInterrupts()[pin] = {isr, mode};
 }
 
 // Pins passed to detachInterrupt(), in call order.
@@ -96,7 +108,22 @@ inline std::vector<int>& detachedInterrupts() {
 
 inline void detachInterrupt(int pin) {
     detachedInterrupts().push_back(pin);
+    attachedInterrupts().erase(pin);
 }
+
+// Runs the handler attached to `pin`, as an edge on that pin would on the board. Does nothing
+// when no handler is attached.
+inline void fireInterrupt(int pin) {
+    auto it = attachedInterrupts().find(pin);
+    if (it != attachedInterrupts().end() && it->second.isr) {
+        std::function<void()> isr = it->second.isr;
+        isr();
+    }
+}
+
+// The host runs no interrupt on its own: masking them is a null operation.
+inline void noInterrupts() {}
+inline void interrupts() {}
 
 inline int digitalPinToInterrupt(int pin) {
     return pin;

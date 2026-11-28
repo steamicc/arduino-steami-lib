@@ -698,18 +698,23 @@ static void test_print_info_does_not_repeat_its_own_error(void) {
     TEST_ASSERT_TRUE(p.text.find("(E01)") == std::string::npos);
 }
 
-static void test_end_detaches_expander_interrupt(void) {
+// INT_EXPANDER (PB0) shares EXTI line 0 with MENU_BUTTON (PA0, USER_BTN): the board builds the
+// expander without its interrupt pin, so a sketch's interrupt on MENU keeps working (issue #251).
+static void test_expander_leaves_exti_line_0_free(void) {
     presentBme280();
     TEST_ASSERT_NOT_NULL(board.bme280());
+    attachedInterrupts().clear();
+    bool menuFired = false;
+    attachInterrupt(MENU_BUTTON, [&menuFired]() { menuFired = true; }, FALLING);
     board.mcp23009e();
-    detachedInterrupts().clear();
-    board.end();
-    TEST_ASSERT_EQUAL_UINT32(1, detachedInterrupts().size());
-    TEST_ASSERT_EQUAL_INT(static_cast<int>(INT_EXPANDER), detachedInterrupts()[0]);
+    TEST_ASSERT_TRUE(attachedInterrupts().find(INT_EXPANDER) == attachedInterrupts().end());
+    fireInterrupt(MENU_BUTTON);
+    TEST_ASSERT_TRUE(menuFired);
 
     detachedInterrupts().clear();
-    board.end();  // nothing built: nothing to detach
+    board.end();
     TEST_ASSERT_TRUE(detachedInterrupts().empty());
+    attachedInterrupts().clear();
 }
 
 static void test_print_info_logger_sends_banner_once(void) {
@@ -1055,7 +1060,7 @@ int main(void) {
     RUN_TEST(test_print_info_logger_sends_banner_once);
     RUN_TEST(test_new_message_is_replayed_once);
     RUN_TEST(test_print_info_does_not_repeat_its_own_error);
-    RUN_TEST(test_end_detaches_expander_interrupt);
+    RUN_TEST(test_expander_leaves_exti_line_0_free);
     RUN_TEST(test_end_destroys_slots);
     RUN_TEST(test_calibrate_applies_bme_key);
     RUN_TEST(test_calibrate_without_key_changes_nothing);
