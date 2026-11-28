@@ -1,6 +1,6 @@
 # arduino-steami-lib
 
-Arduino/C++ driver library for the [STeaMi](https://www.steami.cc/) board. Each driver lives under `lib/<component>/` and follows a standard structure.
+Arduino/C++ driver library for the [STeaMi](https://www.steami.cc/) board. Each driver lives under `lib/<component>/` and follows the same standard structure.
 
 ## Repository contents
 
