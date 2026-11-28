@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.46.4](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.3...v0.46.4) (2026-11-28)
+
+
+### Bug Fixes
+
+* **mcp23009e:** Leave EXTI line 0 to MENU in the examples and README. ([#345](https://github.com/steamicc/arduino-steami-lib/issues/345)) ([908bcc2](https://github.com/steamicc/arduino-steami-lib/commit/908bcc28c570de3a1f4ca37d685836fc3e6b5fa8)), closes [#344](https://github.com/steamicc/arduino-steami-lib/issues/344)
+
 ## [0.46.3](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.2...v0.46.3) (2026-11-28)
 
 
