@@ -259,7 +259,16 @@ void test_temperature_two_point_calibration(void) {
 }
 
 void test_temperature_calibration_rejects_equal_measured_points(void) {
+    // The refused call keeps the previous correction, gain included (MicroPython
+    // raises ValueError with the same effect).
+    preloadInt16(ISM330DL_REG_OUT_TEMP_L, 0);  // Factory value = 25 °C.
+    TEST_ASSERT_TRUE(sensor.calibrateTemperature(1.0F, 0.0F, 22.0F, 20.0F));  // gain 1.05
     TEST_ASSERT_FALSE(sensor.calibrateTemperature(0.0F, 10.0F, 20.0F, 10.0F));
+
+    float value = 0.0F;
+    TEST_ASSERT_TRUE(sensor.temperature(value));
+    // 1.05 * 25 + 1.0 = 27.25 (gain reset to 1: 26.0, identity: 25.0)
+    TEST_ASSERT_FLOAT_WITHIN(0.001F, 27.25F, value);
 }
 
 void test_status_helpers_reflect_individual_bits(void) {
