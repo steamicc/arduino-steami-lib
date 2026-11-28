@@ -73,6 +73,8 @@ class SteamiLIS2MDL {
     uint8_t readIntSource();
     int16_t readTemperatureRaw();
     float temperature();
+    void setTemperatureOffset(float offset);
+    // Alias of setTemperatureOffset(), kept for existing sketches.
     void setTempOffset(float offset);
     bool calibrateTemperature(float refLow, float measuredLow, float refHigh, float measuredHigh);
     uint8_t deviceId();
