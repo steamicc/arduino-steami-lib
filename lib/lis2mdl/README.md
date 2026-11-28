@@ -170,13 +170,24 @@ correction: `setTemperatureOffset()` resets the gain to 1.0.
 
 Heading: 0° when the top of the screen (the side opposite the USB connector) points north, increasing clockwise (`atan2(-x, y)`, measured on a V1c). Every heading is in [0, 360): 360 reads as 0.
 
-> **Note:** `headingWithTiltCompensation()` keeps the old axes, not verified on a board: on a flat board its heading can differ from `headingFlatOnly()`. Prefer `headingFlatOnly()` and hold the board flat.
+Tilt-compensated heading: `headingWithTiltCompensation()` takes the ISM330DL acceleration in g on its own axes (screen up and flat: about `{0, 0, -1}`) and gives the same heading as `headingFlatOnly()` when the board is flat. It needs a 3D calibration (`calibrateMinmax3d()`): after `calibrateMinmax2d()`, `z` stays in raw LSB and the result is meaningless. It holds up to about 60° of tilt; `setHeadingFilter()` smooths the accelerometer noise.
+
+```cpp
+SteamiISM330DL::Vector3 a{};
+if (imu.accelerationG(a)) {
+    float heading = mag.headingWithTiltCompensation(Vec3f{a.x, a.y, a.z});
+}
+```
+
+> **Note:** the sign of the LIS2MDL Z axis, `LIS2MDL_MAG_Z_SIGN` in `SteamiLIS2MDL_const.h`, is provisional (-1) until it is measured on a V1c ([micropython-steami-lib#344](https://github.com/steamicc/micropython-steami-lib/issues/344)). A wrong sign gives about 47° of error at 20° of tilt.
 
 | Method | Description |
 |--------|-------------|
 | `float headingFlatOnly()` | Compass angle (0–360°) assuming the board is flat. Uses XY only. `NAN` on a failed read. |
 | `float headingFromVectors(float x, float y, float z, bool calibrated = true)` | Angle from a raw or calibrated triplet. |
-| `float headingWithTiltCompensation(Vec3f (*readAccel)())` | Tilt-compensated heading using an external accelerometer callback. |
+| `float headingFromVectorsTilt(float x, float y, float z, float ax, float ay, float az, bool calibrated = true)` | Tilt-compensated angle from a field triplet and an ISM330DL acceleration in g. `NAN` when the acceleration is zero or `NAN`. |
+| `float headingWithTiltCompensation(const Vec3f& accel)` | Reads the field, then the tilt-compensated heading for `accel` (ISM330DL axes, in g). `NAN` on a failed read. |
+| `float headingWithTiltCompensation(Vec3f (*readAccel)())` | Same, with an accelerometer callback. |
 | `void setHeadingOffset(float deg)` | Software heading offset (physical 0° alignment). |
 | `void setDeclination(float deg)` | Magnetic declination correction for true north. |
 | `void setHeadingFilter(float alpha)` | Low-pass filter on heading via cos/sin averaging. `0` = off, `0.1–0.3` = light/medium. |

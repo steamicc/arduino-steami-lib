@@ -105,6 +105,14 @@ class SteamiLIS2MDL {
     void setHeadingFilter(float alpha);
     float headingFromVectors(float x, float y, float z, bool calibrated = true);
     float headingFlatOnly();
+    // Tilt-compensated heading in [0, 360), clockwise from north, from a field triplet and an
+    // ISM330DL acceleration in g (screen up and flat: about 0, 0, -1). Equals
+    // headingFromVectors() when the board is flat. NAN when the acceleration is zero or NAN.
+    // Needs a 3D calibration (calibrateMinmax3d()); valid up to about 60 degrees of tilt.
+    float headingFromVectorsTilt(float x, float y, float z, float ax, float ay, float az,
+                                 bool calibrated = true);
+    // Reads the field, then the heading as headingFromVectorsTilt(); NAN on a bus error.
+    float headingWithTiltCompensation(const Vec3f& accel);
     float headingWithTiltCompensation(Vec3f (*readAccel)());
     const char* directionLabel(float angle = -1.0f);
     const char* getMode();

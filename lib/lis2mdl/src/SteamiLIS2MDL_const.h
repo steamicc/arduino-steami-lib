@@ -44,3 +44,9 @@ constexpr uint8_t LIS2MDL_INT_CTRL_REG = 0x63;    // Interrupt control register
 constexpr uint8_t LIS2MDL_INT_SOURCE_REG = 0x64;  // Interrupt source register
 constexpr uint8_t LIS2MDL_INT_THS_L_REG = 0x65;   // Interrupt threshold low byte
 constexpr uint8_t LIS2MDL_INT_THS_H_REG = 0x66;   // Interrupt threshold high byte
+// Axes on the STeaMi, board frame: R right of the screen, T top of the screen (side opposite the
+// USB connector), U out of the screen. LIS2MDL: X = R and Y = T (measured on a V1c, see
+// headingFlatOnly()), Z = LIS2MDL_MAG_Z_SIGN * U. ISM330DL: X = -T, Y = -R, Z = -U.
+// Provisional: -1 awaits the V1c measurement of steamicc/micropython-steami-lib#344 (screen up
+// and flat, the calibrated z is positive under the field of France when the sign is -1).
+constexpr float LIS2MDL_MAG_Z_SIGN = -1.0f;

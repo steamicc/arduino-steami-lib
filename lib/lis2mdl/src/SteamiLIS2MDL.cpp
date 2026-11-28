@@ -725,23 +725,49 @@ float SteamiLIS2MDL::headingFlatOnly() {
     return headingFromVectors(f.x, f.y, f.z, true);
 }
 
-float SteamiLIS2MDL::headingWithTiltCompensation(Vec3f (*readAccel)()) {
-    /*Tilt-compensated compass (if an accelerometer is available).
-        readAccel() must return (ax, ay, az) ~g.*/
-    MagneticField raw = magneticField();
-    float x = (raw.x - xOff) / (xScale != 0.0f ? xScale : 1.0f);
-    float y = (raw.y - yOff) / (yScale != 0.0f ? yScale : 1.0f);
-    float z = (raw.z - zOff) / (zScale != 0.0f ? zScale : 1.0f);
-
-    Vec3f accel = readAccel();
-    float roll = atan2(accel.y, accel.z);
-    float pitch = atan2(-accel.x, sqrt(accel.y * accel.y + accel.z * accel.z));
-
-    float xh = x * cos(pitch) + z * sin(pitch);
-    float yh = x * sin(roll) * sin(pitch) + y * cos(roll) - z * sin(roll) * cos(pitch);
-    float angle = degrees(atan2(yh, xh));
+float SteamiLIS2MDL::headingFromVectorsTilt(float x, float y, float z, float ax, float ay, float az,
+                                            bool calibrated) {
+    /*Tilt-compensated angle (0..360°) from a field triplet and an ISM330DL acceleration in g.
+        Board frame and axes: see LIS2MDL_MAG_Z_SIGN. The field is projected on the horizontal
+        plane: east = b x up, north = up x east, heading = atan2(T . east, T . north).*/
+    const float g = sqrt(ax * ax + ay * ay + az * az);
+    if (!(g > 0.0f)) {
+        return NAN;  // no gravity (failed accelerometer read): no horizontal plane
+    }
+    if (calibrated) {
+        x = (x - xOff) / (xScale != 0.0f ? xScale : 1.0f);
+        y = (y - yOff) / (yScale != 0.0f ? yScale : 1.0f);
+        z = (z - zOff) / (zScale != 0.0f ? zScale : 1.0f);
+    }
+    const float ur = -ay / g;  // up vector in the board frame
+    const float ut = -ax / g;
+    const float uu = -az / g;
+    const float bu = LIS2MDL_MAG_Z_SIGN * z;
+    const float dot = x * ur + y * ut + bu * uu;
+    const float east = bu * ur - x * uu;
+    const float north = y - ut * dot;
+    // Flat (ur = ut = 0, uu = 1): east = -x and north = y, as in headingFromVectors().
+    float angle = degrees(atan2(east, north));
     angle = applyHeadingOffsets(angle);
     return filterHeading(angle);
+}
+
+float SteamiLIS2MDL::headingWithTiltCompensation(const Vec3f& accel) {
+    MagneticField f;
+    if (!magneticField(f)) {
+        return NAN;
+    }
+    return headingFromVectorsTilt(f.x, f.y, f.z, accel.x, accel.y, accel.z, true);
+}
+
+float SteamiLIS2MDL::headingWithTiltCompensation(Vec3f (*readAccel)()) {
+    /*Tilt-compensated compass. readAccel() returns the ISM330DL acceleration (ax, ay, az) in g.*/
+    MagneticField f;
+    if (!magneticField(f)) {
+        return NAN;
+    }
+    const Vec3f accel = readAccel();
+    return headingFromVectorsTilt(f.x, f.y, f.z, accel.x, accel.y, accel.z, true);
 }
 
 const char* SteamiLIS2MDL::directionLabel(float angle) {
