@@ -173,7 +173,7 @@ six values are only replaced when every sample was read.
 
 ### Heading / Compass
 
-Heading: 0° when the top of the screen (the side opposite the USB connector) points north, increasing clockwise (`atan2(-x, y)`, measured on a V1c). Every heading is in [0, 360): 360 reads as 0.
+Heading: 0° when the top of the screen (the USB connector side) points north, increasing clockwise (`atan2(-x, y)`, measured on a V1c). Every heading is in [0, 360): 360 reads as 0.
 
 Tilt-compensated heading: `headingWithTiltCompensation()` takes the ISM330DL acceleration in g on its own axes (screen up and flat: about `{0, 0, -1}`) and gives the same heading as `headingFlatOnly()` when the board is flat. It needs a 3D calibration (`calibrateMinmax3d()`): after `calibrateMinmax2d()`, `z` stays in raw LSB and the result is meaningless. It holds up to about 60° of tilt; `setHeadingFilter()` smooths the accelerometer noise.
 
@@ -184,7 +184,7 @@ if (imu.accelerationG(a)) {
 }
 ```
 
-> **Note:** the sign of the LIS2MDL Z axis, `LIS2MDL_MAG_Z_SIGN` in `SteamiLIS2MDL_const.h`, is provisional (-1) until it is measured on a V1c ([micropython-steami-lib#344](https://github.com/steamicc/micropython-steami-lib/issues/344)). A wrong sign gives about 47° of error at 20° of tilt.
+> **Note:** the sign of the LIS2MDL Z axis, `LIS2MDL_MAG_Z_SIGN` in `SteamiLIS2MDL_const.h`, is -1, measured on a V1c on 2026-11-28 ([micropython-steami-lib#344](https://github.com/steamicc/micropython-steami-lib/issues/344)): with a 15 s min/max calibration the heading stays within 6° in roll and 11° in pitch of the flat heading, where +1 errs by 40 to 55° in roll.
 
 | Method | Description |
 |--------|-------------|

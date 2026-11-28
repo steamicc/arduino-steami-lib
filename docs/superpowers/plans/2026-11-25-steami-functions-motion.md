@@ -46,7 +46,7 @@
   - `ca` (`ox`, `oy`, `oz` in g) goes to the ISM330DL through `SteamiConfig::applyAccelerometerCalibration`.
   - `cm` (`hx`, `hy`, `hz` hard iron in LSB, `sx`, `sy`, `sz` scales) goes to the LIS2MDL through `SteamiConfig::getMagnetometerCalibration` and `SteamiLIS2MDL::setCalibrateStep`.
   - Without a config zone, nothing changes.
-- **Heading convention:** measured on a V1c on 2026-11-25. The board was flat with the screen up, and the top of the screen is the side opposite the USB connector.
+- **Heading convention:** measured on a V1c on 2026-11-25. The board was flat with the screen up, and the top of the screen is the USB connector side.
   - The flat heading clockwise from north is `atan2(-x, y)` on the hard-iron-corrected X and Y: north 14°, east 116°, south 185°, west 262°.
   - The current driver `atan2(y, x)` is 90° off.
   - The accelerometer reads z ≈ -1 g with the screen up.
@@ -110,7 +110,7 @@
   ```
   Update every existing heading or label assertion that encoded `atan2(y, x)` or uncentred sectors, and say in the report which ones changed.
 - [ ] **Step 2: Run** `make test-native/lis2mdl`. Expected: FAIL.
-- [ ] **Step 3: Implement** the two changes. Add one README sentence: "Heading: 0° when the top of the screen (the side opposite the USB connector) points north, increasing clockwise (`atan2(-x, y)`, measured on a V1c)."
+- [ ] **Step 3: Implement** the two changes. Add one README sentence: "Heading: 0° when the top of the screen (the USB connector side) points north, increasing clockwise (`atan2(-x, y)`, measured on a V1c)."
 - [ ] **Step 4: Run** `make test-native/lis2mdl` and `make test-examples/lis2mdl`. Expected: PASS.
 - [ ] **Step 5: Commit** `fix(lis2mdl): Fix the heading convention and centre the directions.` with body `Closes #249`.
 

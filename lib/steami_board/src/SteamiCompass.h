@@ -30,7 +30,8 @@ class SteamiCompass {
     /// (started as by SteamiAccelerometer::begin()); equal to heading() when the board is flat.
     /// Valid up to about 60 degrees of tilt and only after a 3D calibration: calibrate(), the
     /// board config, or SteamiLIS2MDL::calibrateMinmax3d(), not calibrateMinmax2d(). NAN when
-    /// the compass or the accelerometer is unavailable or a read fails.
+    /// the compass or the accelerometer is unavailable or a read fails. The first call sets the
+    /// ISM330DL to +-8 g at 104 Hz; a missing accelerometer is reported as SteamiAccelerometer.
     float headingTiltCompensated();
 
     /// "N", "NE", "E"... for heading(); "" when unavailable.
