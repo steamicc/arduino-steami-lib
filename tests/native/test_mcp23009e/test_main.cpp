@@ -1429,6 +1429,28 @@ void testWatchRemovedByNullptrAndByReset(void) {
     TEST_ASSERT_EQUAL_HEX8(0, mcp->watched());
 }
 
+// A pin is enabled only when the chip answered: on a chip held in reset by
+// powerOff(), watched() stays 0, so the owner of the watch sees it is lost.
+void testWatchOnAChipHeldInResetEnablesNothing(void) {
+    attachChip();
+    watchedEvents.clear();
+    mcp->powerOff();
+    chip.held = true;
+    mcp->watchChanges(1 << LEFT, watchRecorder);
+    TEST_ASSERT_EQUAL_HEX8(0, mcp->watched());
+    std::vector<int> sketch;
+    mcp->interruptOnChange(UP, levelRecorder(sketch));
+    mcp->powerOn();
+    chip.reset();  // power-on defaults: nothing enabled
+    Wire.attachDevice(ADDR, &chip);
+    chip.press(UP);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL(0, sketch.size());  // UP was not enabled either
+    mcp->watchChanges(1 << LEFT, watchRecorder);
+    TEST_ASSERT_EQUAL_HEX8(1 << LEFT, mcp->watched());
+    TEST_ASSERT_EQUAL_HEX8(1 << LEFT, chip.regs[MCP23009_GPINTEN]);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(testBeginConfiguresResetPinAsOutput);
@@ -1530,5 +1552,6 @@ int main(void) {
     RUN_TEST(testDisableKeepsAWatchedPinEnabled);
     RUN_TEST(testWatchOnAPinOfTheSketchKeepsItsCallbacks);
     RUN_TEST(testWatchRemovedByNullptrAndByReset);
+    RUN_TEST(testWatchOnAChipHeldInResetEnablesNothing);
     return UNITY_END();
 }

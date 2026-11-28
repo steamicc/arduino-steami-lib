@@ -1681,6 +1681,33 @@ static void test_dpad_follows_again_after_a_reset_of_the_expander(void) {
     TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::LEFT));
 }
 
+// The loop keeps calling SteamiButtons while the expander is held in reset by powerOff(): the call
+// after powerOn() still sets the D-PAD up again (pull-ups and interrupts back on the chip).
+static void test_dpad_follows_again_after_calls_during_a_power_off(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    SteamiMCP23009E* expander = board.mcp23009e();
+    TEST_ASSERT_NOT_NULL(expander);
+    expander->powerOff();
+    expanderChip.held = true;
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::LEFT));
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::LEFT));
+    TEST_ASSERT_EQUAL_HEX8(0, expander->watched());
+    expander->powerOn();
+    expanderChip.reset();  // power-on defaults: no pull-up, no interrupt
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::LEFT));
+    TEST_ASSERT_EQUAL_HEX8(0xF0, expander->watched());
+    TEST_ASSERT_EQUAL_HEX8(0xF0, expanderChip.regs[MCP23009_GPPU] & 0xF0);
+    TEST_ASSERT_EQUAL_HEX8(0xF0, expanderChip.regs[MCP23009_GPINTEN] & 0xF0);
+    delay(50);
+    expanderChip.press(MCP23009_BTN_LEFT);
+    expanderChip.release(MCP23009_BTN_LEFT);  // a tap between two calls: in the latch
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::LEFT));
+}
+
 // Two objects: the interrupts and the D-PAD events go to the one called last.
 static void test_buttons_called_last_get_the_interrupts(void) {
     steamiFakeBme280(Wire);
@@ -1867,6 +1894,7 @@ int main(void) {
     RUN_TEST(test_buttons_deliver_the_pad_callbacks_of_the_sketch);
     RUN_TEST(test_dpad_survives_the_pad_callbacks_of_the_sketch);
     RUN_TEST(test_dpad_follows_again_after_a_reset_of_the_expander);
+    RUN_TEST(test_dpad_follows_again_after_calls_during_a_power_off);
     RUN_TEST(test_buttons_called_last_get_the_interrupts);
     RUN_TEST(test_interrupts_after_the_buttons_are_gone_do_nothing);
     RUN_TEST(test_all_classes_on_v1c_print_only_e20);

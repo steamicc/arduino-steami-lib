@@ -160,7 +160,10 @@ How events are reported:
   There is one watch per expander: a call replaces the earlier one, and
   `nullptr` removes it (its pins stay enabled).
 - **Reset.** `reset()`, `powerOff()` and the soft reset disable every pin and
-  remove the watch: register the callbacks again afterwards.
+  remove the watch: register the callbacks again afterwards. A pin is enabled
+  only when the chip answers: on a bus error (chip missing, or held in reset
+  by `powerOff()`) the callback is stored but the pin is not enabled, and
+  `watched()` leaves it out. Register again after `powerOn()`.
 - **Limit.** A press and its release that both happen while an interrupt is
   pending cancel out: the chip keeps no trace of them.
 

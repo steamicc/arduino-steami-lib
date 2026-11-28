@@ -346,8 +346,10 @@ their "unavailable" value without any bus traffic and without printing again.
     `SteamiMCP23009E::watchChanges()`, a callback the sketch does not replace:
     the pad callbacks a sketch registers on `Steami.mcp23009e()`, on the
     D-PAD pins too, still run, and `disableInterrupt()` on a D-PAD pin stops
-    only the callbacks of the sketch. After a `reset()` or `powerOff()` of the
-    expander, the next call sets the D-PAD up again.
+    only the callbacks of the sketch. After a `reset()` of the expander, or
+    after `powerOn()` following a `powerOff()`, the next call sets the D-PAD
+    up again, calls made while the expander was off included (the D-PAD then
+    reads released).
   * At most one press per button between two calls: `wasPressed()` is a flag,
     not a counter. A D-PAD tap made before the release of the previous one is
     reported merges with it.

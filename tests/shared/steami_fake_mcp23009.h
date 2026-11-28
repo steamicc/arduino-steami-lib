@@ -32,6 +32,8 @@ class FakeMCP23009 : public I2CDevice {
     // Port value at the last clear: the "previous state" reference.
     uint8_t reference = kReleased;
     bool failReads = false;
+    // Held in reset (powerOff()): every transaction is NACKed.
+    bool held = false;
     std::vector<std::pair<char, uint8_t>> log;
     // Run once a write or a read is applied, where a nested poll() could
     // run on the board.
@@ -46,6 +48,7 @@ class FakeMCP23009 : public I2CDevice {
         pins = kReleased;
         reference = kReleased;
         failReads = false;
+        held = false;
         log.clear();
         onWriteHook = nullptr;
         onReadHook = nullptr;
@@ -63,6 +66,9 @@ class FakeMCP23009 : public I2CDevice {
     }
 
     uint8_t onWrite(const std::vector<uint8_t>& frame) override {
+        if (held) {
+            return 2;  // NACK on address
+        }
         if (frame.empty()) {
             return 0;  // address probe
         }
@@ -82,7 +88,7 @@ class FakeMCP23009 : public I2CDevice {
     }
 
     std::vector<uint8_t> onRead(size_t /*quantity*/) override {
-        if (failReads) {
+        if (failReads || held) {
             return {};
         }
         uint8_t reg = pointer_;

@@ -391,6 +391,10 @@ void SteamiMCP23009E::sendEnableInterrupt(uint8_t gpx) {
         abandonnés. Les événements en attente des autres GPIO sont transmis
         à leurs callbacks, pas perdus.
 
+        Sur une erreur de bus (composant absent ou maintenu en reset par
+        powerOff()), le GPIO n'est pas activé : watched() ne le compte pas
+        et son propriétaire peut le reconfigurer à l'appel suivant.
+
         Args:
             gpx: Numéro de GPIO (0 à 7)*/
 
@@ -398,7 +402,11 @@ void SteamiMCP23009E::sendEnableInterrupt(uint8_t gpx) {
 
     // INTCON d'abord, bit à 0 = comparer avec l'état précédent : en mode
     // DEFVAL, activer GPINTEN déclencherait une interruption tout de suite.
-    writeReg(MCP23009_INTCON, static_cast<uint8_t>(readReg(MCP23009_INTCON) & ~bit));
+    uint8_t intcon = 0;
+    if (!readReg(MCP23009_INTCON, intcon)) {
+        return;
+    }
+    writeReg(MCP23009_INTCON, static_cast<uint8_t>(intcon & ~bit));
 
     // Effacer l'interruption en attente. Pour un GPIO que suit déjà le
     // callback de watchChanges(), ses événements restent en file pour lui ;
@@ -408,10 +416,14 @@ void SteamiMCP23009E::sendEnableInterrupt(uint8_t gpx) {
 
     // Les lectures déjà en file, celle-ci comprise, ne transmettent plus
     // d'événement de gpx aux callbacks enregistrés ici.
+    uint8_t gpinten = 0;
+    if (!readReg(MCP23009_GPINTEN, gpinten)) {
+        return;
+    }
     _generation++;
     _registered[gpx] = _generation;
     _enabled |= bit;
-    writeReg(MCP23009_GPINTEN, static_cast<uint8_t>(readReg(MCP23009_GPINTEN) | bit));
+    writeReg(MCP23009_GPINTEN, static_cast<uint8_t>(gpinten | bit));
 
     // Puis transmettre les événements des autres GPIO.
     dispatchQueued();

@@ -75,7 +75,9 @@ class SteamiMCP23009E {
     // last known level of the pin. A registration replaces the earlier
     // callback of the same kind. reset(), powerOff() and the soft reset
     // disable every pin and remove the watch (watchChanges()): register
-    // the callbacks again afterwards.
+    // the callbacks again afterwards. On a bus error (chip missing, or held
+    // in reset by powerOff()) the callback is stored but the pin is not
+    // enabled: register it again once the chip answers.
     //
     // interruptOnChange() passes the level of the event: the one captured
     // in INTCAP, or the one read in GPIO for a change the chip did not
@@ -103,7 +105,9 @@ class SteamiMCP23009E {
     // pins of mask not enabled yet are enabled as interruptOnChange() does.
     // One watch per expander: a call replaces the earlier one, and nullptr
     // removes it (its pins stay enabled). reset(), powerOff() and the soft
-    // reset remove it.
+    // reset remove it. A pin is enabled only when the chip answers: on a
+    // bus error watched() leaves it out, so the owner of the watch sees it
+    // must call again.
     void watchChanges(uint8_t mask, void (*callback)(uint8_t gpx, uint8_t level));
     // The pins the watch follows (one bit per pin); 0 without a watch.
     uint8_t watched() const;
