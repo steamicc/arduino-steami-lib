@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
+// CI filter measurement (throwaway).
 //
 // PDM to PCM filter of the STeaMi IMP34DT05 driver.
 //
