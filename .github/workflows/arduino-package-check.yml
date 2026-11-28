@@ -26,6 +26,8 @@ env:
   # release. Keep equal to the lower bound of stm32duino/STM32duinoBLE in
   # platformio.ini (checked by scripts/tests/test_workflow_versions.py).
   STM32DUINOBLE_VERSION: '1.5.0'
+  # Pinned as in ci.yml, whose caches job saves the ~/.arduino15 cache.
+  ARDUINO_CLI_VERSION: '1.6.0'
   ARDUINO_BOARD_MANAGER_ADDITIONAL_URLS: https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json
 
 jobs:
@@ -46,8 +48,21 @@ jobs:
           PACKAGE_VERSION: ${{ inputs.version }}
         run: python3 scripts/build-arduino-package.py --version "$PACKAGE_VERSION" --out build/arduino-package
 
+      # Saved on main by the caches job of ci.yml (same key and paths), never
+      # here: on a miss, the core and the library are installed below.
+      - name: Restore the Arduino toolchain
+        id: arduino15
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.arduino15
+            ~/Arduino/libraries/STM32duinoBLE
+          key: arduino15-${{ runner.os }}-cli${{ env.ARDUINO_CLI_VERSION }}-stm32-${{ env.STM32_CORE_VERSION }}-ble${{ env.STM32DUINOBLE_VERSION }}
+
       - name: Install Arduino CLI
         uses: arduino/setup-arduino-cli@v2
+        with:
+          version: ${{ env.ARDUINO_CLI_VERSION }}
 
       # submit fails once the library is indexed (LP017, duplicate name) and
       # update fails before that (LP018), so pick the mode from the index.
@@ -68,11 +83,13 @@ jobs:
           project-type: library
 
       - name: Install the STM32 core
+        if: steps.arduino15.outputs.cache-hit != 'true'
         run: |
           arduino-cli core update-index
           arduino-cli core install "STMicroelectronics:stm32@${STM32_CORE_VERSION}"
 
       - name: Install library dependencies
+        if: steps.arduino15.outputs.cache-hit != 'true'
         run: arduino-cli lib install "STM32duinoBLE@${STM32DUINOBLE_VERSION}"
 
       # "[]": nothing to compile (the package is still built and linted).

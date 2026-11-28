@@ -112,6 +112,75 @@ jobs:
         || contains(fromJSON(needs.changements.outputs.pilotes), 'ssd1327')
         || contains(fromJSON(needs.changements.outputs.pilotes), 'gc9a01') }}
 
+  # Main only: fill the toolchain caches that every other job restores. A cache
+  # saved by a PR or by the merge queue is only visible to that ref, one saved
+  # on main serves them all; and a push to main compiles nothing, so this job
+  # installs the toolchains without compiling. It is the only job that saves
+  # ~/.arduino15 and ~/.platformio (checked by test_workflow_versions.py): a
+  # job that used less than the whole toolchain saved an incomplete cache. Each
+  # key is saved once, when missing (actions/cache skips the save on a hit),
+  # and a new key comes with a version or platformio.ini change. Not needed by
+  # ci-ok: a missing cache only slows the next runs down.
+  caches:
+    name: Warm the toolchain caches
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      # Same values as arduino-package-check.yml and examples-archive.yml,
+      # which restore this cache (checked by test_workflow_versions.py).
+      STM32_CORE_VERSION: '3.1.0'
+      STM32DUINOBLE_VERSION: '1.5.0'
+      ARDUINO_CLI_VERSION: '1.6.0'
+      ARDUINO_BOARD_MANAGER_ADDITIONAL_URLS: https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # No restore-keys here: a partial hit would be saved again under the
+      # new key with the packages of the old one.
+      - name: Cache the Arduino toolchain
+        id: arduino15
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.arduino15
+            ~/Arduino/libraries/STM32duinoBLE
+          key: arduino15-${{ runner.os }}-cli${{ env.ARDUINO_CLI_VERSION }}-stm32-${{ env.STM32_CORE_VERSION }}-ble${{ env.STM32DUINOBLE_VERSION }}
+
+      - name: Install Arduino CLI
+        if: steps.arduino15.outputs.cache-hit != 'true'
+        uses: arduino/setup-arduino-cli@v2
+        with:
+          version: ${{ env.ARDUINO_CLI_VERSION }}
+
+      - name: Install the STM32 core and STM32duinoBLE
+        if: steps.arduino15.outputs.cache-hit != 'true'
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install "STMicroelectronics:stm32@${STM32_CORE_VERSION}"
+          arduino-cli lib install "STM32duinoBLE@${STM32DUINOBLE_VERSION}"
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Cache the PlatformIO packages
+        id: pio
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-v2-${{ runner.os }}-${{ hashFiles('platformio.ini', 'boards/steami.json', 'requirements.txt') }}
+
+      # The platforms and tools of every env: steami (ststm32, the Arduino
+      # framework, the ARM toolchain) and native (also used by native_asan).
+      - name: Install the PlatformIO packages
+        if: steps.pio.outputs.cache-hit != 'true'
+        run: |
+          make install-pio
+          .venv/bin/pio pkg install -e steami -e native
+
   ci-ok:
     name: ci-ok
     if: always()
