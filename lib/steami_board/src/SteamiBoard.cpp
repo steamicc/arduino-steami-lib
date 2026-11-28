@@ -131,6 +131,8 @@ const char* steamiChipName(SteamiChip c) {
             return "SSD1327";
         case SteamiChip::GC9A01:
             return "GC9A01";
+        case SteamiChip::IMP34DT05:
+            return "IMP34DT05";
         default:
             return "";
     }
@@ -157,7 +159,7 @@ uint8_t steamiChipAddress(SteamiChip c) {
         case SteamiChip::MCP23009E:
             return 0x20;
         default:
-            return 0;
+            return 0;  // the displays, the microphone (PDM, not I2C) and NONE
     }
 }
 
@@ -590,6 +592,11 @@ void SteamiBoard::printInfoTo(bool (*emit)(void* ctx, const char* line), void* c
             _bannerDelivered = sent;
         }
     }
+    // The I2C chips only, BME280 to MCP23009E: the screen has its own line below and the
+    // microphone, which is not on the bus, none.
+    static_assert(static_cast<size_t>(SteamiChip::BME280) + I2C_CHIPS - 1 ==
+                      static_cast<size_t>(SteamiChip::MCP23009E),
+                  "the chip list of printInfo() ends at MCP23009E");
     for (size_t i = 0; i < I2C_CHIPS; i++) {
         const SteamiChip c = static_cast<SteamiChip>(static_cast<size_t>(SteamiChip::BME280) + i);
         if (!routedChip(_release, c)) {
@@ -682,7 +689,17 @@ SteamiStatus SteamiBoard::beginDisplay() {
     return _displayStatus;
 }
 
+void SteamiBoard::attachMicrophone(void (*stop)(), void (*setOffset)(float)) {
+    _microphoneStop = stop;
+    _microphoneSetOffset = setOffset;
+}
+
 void SteamiBoard::end() {
+    if (_microphoneStop != nullptr) {
+        _microphoneStop();  // SAI1 and its DMA channel keep running otherwise
+    }
+    _microphoneStop = nullptr;
+    _microphoneSetOffset = nullptr;
     _displayInjected = nullptr;
     _displayStatus = SteamiStatus::NOT_STARTED;
     _gc9a01.reset();  // the drivers free their frame buffers

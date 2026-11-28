@@ -31,6 +31,7 @@ SteamiColor	KEYWORD1
 SteamiRgb	KEYWORD1
 SteamiGesture	KEYWORD1
 SteamiButtons	KEYWORD1
+SteamiMicrophone	KEYWORD1
 SteamiVector	KEYWORD1
 SteamiButton	KEYWORD1
 SteamiDisplay	KEYWORD1
@@ -162,6 +163,19 @@ rotate	KEYWORD2
 invert	KEYWORD2
 powerOn	KEYWORD2
 powerOff	KEYWORD2
+steamiImp34dt05	KEYWORD2
+attachMicrophone	KEYWORD2
+dbfs	KEYWORD2
+peak	KEYWORD2
+levelReady	KEYWORD2
+setWindow	KEYWORD2
+window	KEYWORD2
+offset	KEYWORD2
+setVolume	KEYWORD2
+volume	KEYWORD2
+frequency	KEYWORD2
+readInto	KEYWORD2
+isLoud	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)

@@ -12,10 +12,14 @@ struct SteamiFunctionInfo {
     const char* noun;      // "temperature sensor", "battery gauge"...
     const char* hint;      // E10 advice, e.g. "Check the board or try another one."
     const char* fallback;  // e.g. "read() will return NAN."
+    /// Starts a chip that is not a shared I2C driver of the board (the microphone), in place of
+    /// SteamiBoard::claim(); true when it runs. nullptr for the classes of the I2C chips.
+    bool (*probe)(SteamiBoard& board) = nullptr;
 };
 
 /// Common part of the per-function classes: finds the chip that serves a function on this
-/// release, claims it on the board, applies its calibration, and reports E10, E11 or E20 once.
+/// release, claims it on the board (or runs the probe of the class), applies its calibration, and
+/// reports E10, E11 or E20 once.
 class SteamiHandle {
    public:
     /// Stores the addresses only; touches no hardware. `info` must outlive the handle.

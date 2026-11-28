@@ -47,6 +47,7 @@ enum class SteamiChip : uint8_t {
     MCP23009E,
     SSD1327,
     GC9A01,
+    IMP34DT05,
     COUNT
 };
 
@@ -65,6 +66,7 @@ enum class SteamiFunction : uint8_t {
     BATTERY,
     BUTTONS,
     SCREEN,
+    MICROPHONE,
     COUNT
 };
 
@@ -160,6 +162,8 @@ constexpr SteamiChip steamiRoute(SteamiRelease release, SteamiFunction f, uint8_
             return unknown ? SteamiChip::NONE
                    : v1c   ? pick(candidate, SteamiChip::GC9A01)
                            : pick(candidate, SteamiChip::SSD1327);
+        case SteamiFunction::MICROPHONE:
+            return pick(candidate, SteamiChip::IMP34DT05);
         default:
             return SteamiChip::NONE;
     }
@@ -168,7 +172,8 @@ constexpr SteamiChip steamiRoute(SteamiRelease release, SteamiFunction f, uint8_
 /// Chip name for messages ("" for NONE). Defined in SteamiBoard.cpp.
 const char* steamiChipName(SteamiChip c);
 
-/// 7-bit I2C address of a chip (0 for the displays and NONE). Defined in SteamiBoard.cpp.
+/// 7-bit I2C address of a chip (0 for the displays, the microphone and NONE). Defined in
+/// SteamiBoard.cpp.
 uint8_t steamiChipAddress(SteamiChip c);
 
 /// State of a display status for messages: "OK", "not started", "unknown board", "no memory",
