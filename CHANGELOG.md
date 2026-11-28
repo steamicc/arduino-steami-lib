@@ -3,6 +3,20 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.46.2](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.1...v0.46.2) (2026-11-28)
+
+
+### Bug Fixes
+
+* **lis2mdl:** Keep the previous calibration when a min/max sample fails. ([#331](https://github.com/steamicc/arduino-steami-lib/issues/331)) ([150818f](https://github.com/steamicc/arduino-steami-lib/commit/150818fee4a5ac4e9eddda3d7febb25c93838f12)), closes [#329](https://github.com/steamicc/arduino-steami-lib/issues/329)
+
+## [0.46.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.0...v0.46.1) (2026-11-28)
+
+
+### Bug Fixes
+
+* Make setTemperatureOffset() replace the two-point calibration. ([#324](https://github.com/steamicc/arduino-steami-lib/issues/324)) ([e63e332](https://github.com/steamicc/arduino-steami-lib/commit/e63e332c8ce22967b6081d6a2c3e303b7fe7ca6c)), closes [#323](https://github.com/steamicc/arduino-steami-lib/issues/323) [#79](https://github.com/steamicc/arduino-steami-lib/issues/79)
+
 # [0.46.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.45.0...v0.46.0) (2026-11-28)
 
 

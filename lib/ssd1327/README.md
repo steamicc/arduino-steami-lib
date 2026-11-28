@@ -169,15 +169,20 @@ Host-side unit tests under [`tests/native/test_ssd1327/`](../../tests/native/tes
 exercise the I2C driver against the `TwoWire` mock. Run without hardware:
 
 ```bash
-make test-native
+make test-native/ssd1327
 ```
 
 Hardware validation tests under [`tests/hardware/test_ssd1327/`](../../tests/hardware/test_ssd1327/)
 verify that drawing calls complete without crashing on real silicon:
 
 ```bash
-make test-hardware
+make test-hardware/ssd1327
 ```
+
+## References
+
+* STeaMi wiki: [Display hardware page](https://wiki.steami.cc/docs/hardware/main-components/display).
+* MicroPython driver: [`ssd1327`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/ssd1327).
 
 ## License
 

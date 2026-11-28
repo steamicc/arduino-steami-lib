@@ -85,7 +85,7 @@ float SteamiWsenPads::temperature() {
         return NAN;
     }
     float factory = raw * TEMPERATURE_C_PER_DIGIT;
-    return _tempUserSlope * factory + _tempUserOffset + _tempOffset;
+    return _tempGain * factory + _tempOffset;
 }
 
 SteamiWsenPads::ReadResult SteamiWsenPads::read() {
@@ -148,20 +148,19 @@ SteamiWsenPads::ReadResult SteamiWsenPads::readOneShot() {
 // ---------------------------------------------------------------------
 
 void SteamiWsenPads::setTemperatureOffset(float offset) {
+    _tempGain = 1.0f;
     _tempOffset = offset;
 }
 
-void SteamiWsenPads::calibrateTemperature(float refLow, float measLow, float refHigh,
+bool SteamiWsenPads::calibrateTemperature(float refLow, float measLow, float refHigh,
                                           float measHigh) {
-    float span = measHigh - measLow;
+    const float span = measHigh - measLow;
     if (span == 0.0f) {
-        // Identity — caller asked for a degenerate two-point calibration.
-        _tempUserSlope = 1.0f;
-        _tempUserOffset = 0.0f;
-        return;
+        return false;
     }
-    _tempUserSlope = (refHigh - refLow) / span;
-    _tempUserOffset = refLow - _tempUserSlope * measLow;
+    _tempGain = (refHigh - refLow) / span;
+    _tempOffset = refLow - _tempGain * measLow;
+    return true;
 }
 
 // ---------------------------------------------------------------------
@@ -327,7 +326,7 @@ SteamiWsenPads::ReadResult SteamiWsenPads::readSensorData() {
     int32_t tRaw = toSigned16(tBits);
 
     float tFactory = tRaw * TEMPERATURE_C_PER_DIGIT;
-    float tC = _tempUserSlope * tFactory + _tempUserOffset + _tempOffset;
+    float tC = _tempGain * tFactory + _tempOffset;
     return {pRaw * PRESSURE_HPA_PER_DIGIT, tC};
 }
 

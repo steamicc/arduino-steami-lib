@@ -221,6 +221,43 @@ void test_calibrate_temperature_applies_two_point_correction(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 22.0f, sensor.temperature());
 }
 
+void test_calibrate_temperature_returns_true(void) {
+    sensor.begin();
+    TEST_ASSERT_TRUE(sensor.calibrateTemperature(1.0f, 0.0f, 22.0f, 20.0f));
+}
+
+void test_calibrate_temperature_with_equal_points_keeps_calibration(void) {
+    // Same contract as ISM330DL, LIS2MDL and MicroPython (ValueError there).
+    sensor.begin();
+    sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
+    sensor.setTemperatureOffset(-1.5f);
+    TEST_ASSERT_FALSE(sensor.calibrateTemperature(0.0f, 5.0f, 100.0f, 5.0f));
+    preloadMeasurement(20.0f, 50.0f);
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 18.5f, sensor.temperature());
+}
+
+void test_set_temperature_offset_replaces_two_point_calibration(void) {
+    // The offset resets the gain to 1, as in MicroPython set_temp_offset().
+    sensor.begin();
+    sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
+    sensor.calibrateTemperature(1.0f, 0.0f, 22.0f, 20.0f);
+    sensor.setTemperatureOffset(-1.5f);
+    preloadMeasurement(20.0f, 50.0f);
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 18.5f, sensor.temperature());
+}
+
+void test_calibrate_temperature_replaces_offset(void) {
+    sensor.begin();
+    sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
+    sensor.setTemperatureOffset(-1.5f);
+    sensor.calibrateTemperature(1.0f, 0.0f, 22.0f, 20.0f);
+    preloadMeasurement(20.0f, 50.0f);
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 22.0f, sensor.temperature());
+}
+
 void test_read_returns_nan_on_timeout(void) {
     // begin() succeeds (WHO_AM_I preloaded in setUp) but leaves the device
     // powered down, and STATUS is not preloaded with any DA bit. The
@@ -344,6 +381,10 @@ int main(void) {
     RUN_TEST(test_read_auto_triggers_when_powered_down);
     RUN_TEST(test_set_temperature_offset_shifts_reading);
     RUN_TEST(test_calibrate_temperature_applies_two_point_correction);
+    RUN_TEST(test_calibrate_temperature_returns_true);
+    RUN_TEST(test_calibrate_temperature_with_equal_points_keeps_calibration);
+    RUN_TEST(test_set_temperature_offset_replaces_two_point_calibration);
+    RUN_TEST(test_calibrate_temperature_replaces_offset);
     RUN_TEST(test_read_returns_nan_on_timeout);
     RUN_TEST(test_reboot_writes_ctrl2_boot);
     RUN_TEST(test_soft_reset_routes_to_reboot);

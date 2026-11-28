@@ -52,8 +52,19 @@ void loop() {
 
 Each example with a **Try it** link is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/bq27441).
 
-Flash one with `make flash-bq27441/<example>` (list them with
-`make list-examples DRIVER=bq27441`).
+### Building an example
+
+```bash
+make list-examples DRIVER=bq27441
+make flash-bq27441/battery_status
+```
+
+This builds, uploads, and opens the serial monitor at 115200 baud. Swap
+`flash-` for `capture-` to reliably capture the first lines printed at boot:
+
+```bash
+make capture-bq27441/battery_status DURATION=30
+```
 
 ## API
 
@@ -158,8 +169,14 @@ exercise the driver against the `TwoWire` mock from
 `tests/native/helpers/Wire.h`. Run them without hardware with:
 
 ```bash
-make test-native
+make test-native/bq27441
 ```
+
+## References
+
+* Datasheet: [TI BQ27441-G1](https://www.ti.com/lit/ds/symlink/bq27441-g1.pdf).
+* STeaMi wiki: [BQ27441 hardware page](https://wiki.steami.cc/docs/hardware/main-components/power/bq27441).
+* MicroPython driver: [`bq27441`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/bq27441).
 
 ## License
 

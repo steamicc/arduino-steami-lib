@@ -97,6 +97,7 @@ in method names when they carry ambiguity, no `read` / `get` prefix.
 | `void powerOff()` | Switch to idle mode (low power). |
 | `bool isIdle()` | Returns `true` if `MD1..0 == 0b11`. |
 | `const char* getMode()` | Returns `"continuous"`, `"single"`, or `"idle"`. |
+| `void setMode(const char* mode)` | Write the `MD` bits of `CFG_REG_A`: `"single"`, `"powerdown"` (idle), anything else selects continuous mode. |
 
 ### Reading
 
@@ -139,8 +140,8 @@ correction: `setTemperatureOffset()` resets the gain to 1.0.
 | `float temperature()` | Silicon temperature in °C (empirical, not ambient). |
 | `int16_t readTemperatureRaw()` | Raw temperature LSB (8 LSB/°C). |
 | `void setTemperatureOffset(float offset)` | Additive offset in °C (resets gain to 1.0). |
-| `void setTempOffset(float offset)` | Alias for `setTemperatureOffset()`. |
-| `bool calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point linear correction. Returns `false` if `measLow == measHigh`. |
+| `void setTempOffset(float offset)` | Deprecated former name of `setTemperatureOffset()`, kept for the whole 1.x series and removed in 2.0.0. |
+| `bool calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point linear correction. Returns `false` if `measLow == measHigh` and keeps the previous correction. |
 
 ### Modes
 
@@ -153,16 +154,20 @@ correction: `setTemperatureOffset()` resets the gain to 1.0.
 
 ### Calibration
 
+The min/max calibrations are all or nothing, as in the MicroPython driver
+where a failed read raises `OSError` before any offset or scale changes: the
+six values are only replaced when every sample was read.
+
 | Method | Description |
 |--------|-------------|
 | `void setCalibrateStep(float xoff, float yoff, float zoff, float xscale, float yscale, float zscale)` | Set offsets and scales manually. |
-| `void calibrateMinmax2d(uint16_t samples = 300, uint16_t delayMs = 20)` | Min/max calibration on XY only — rotate board flat during acquisition. Failed reads are skipped; with no valid sample the calibration is kept. |
-| `void calibrateMinmax3d(uint16_t samples = 600, uint16_t delayMs = 20)` | Min/max calibration on all 3 axes — rotate board in all directions. Failed reads are skipped; with no valid sample the calibration is kept. |
+| `bool calibrateMinmax2d(uint16_t samples = 300, uint16_t delayMs = 20)` | Min/max calibration on XY only — rotate board flat during acquisition. All or nothing: returns `false` and keeps the previous calibration when `samples` is 0 or a read fails (stops at the first failed read). |
+| `bool calibrateMinmax3d(uint16_t samples = 600, uint16_t delayMs = 20)` | Min/max calibration on all 3 axes — rotate board in all directions. All or nothing: returns `false` and keeps the previous calibration when `samples` is 0 or a read fails (stops at the first failed read). |
 | `CalibratedField calibrateApply(float x, float y, float z)` | Apply current offset/scale to a raw triplet. |
 | `CalibrationQuality calibrateQuality(uint16_t samplesCheck = 200, uint16_t delayMs = 10)` | Evaluate calibration quality: center, radius dispersion, anisotropy. |
 | `void calibrateReset()` | Reset offsets to 0 and scales to 1. |
 | `MagCalibration readCalibration() const` | Current offsets and scales, `{xOff, yOff, zOff, xScale, yScale, zScale}` (same order as `setCalibrateStep()`). |
-| `void calibrateStep()` | Alias for `calibrateMinmax3d()`. |
+| `bool calibrateStep()` | Alias for `calibrateMinmax3d()`. |
 | `HwOffsets readHwOffsets()` | Read hardware offset registers (`OFFSET_*`). |
 | `void setHwOffsets(int16_t x, int16_t y, int16_t z)` | Write hardware offset registers. |
 
@@ -203,6 +208,7 @@ if (imu.accelerationG(a)) {
 | `void setBdu(bool enabled = true)` | Toggle block data update (BDU bit in `CFG_REG_C`). |
 | `void setEndianness(bool bigEndian)` | Toggle byte order (BLE bit in `CFG_REG_C`). |
 | `void useSpi4wire(bool enable)` | Toggle 4-wire SPI mode. |
+| `void readRegisters(uint8_t startAddr, uint8_t length, uint8_t* buffer)` | Debug dump: read `length` consecutive registers into `buffer` (zero-filled first, so a short read leaves zeros). |
 
 ## Register constants
 
@@ -221,9 +227,15 @@ run on a real STeaMi and verify device detection, field plausibility,
 and sensor stability. Run them with:
 
 ```bash
-make test-native        # host only, no board required
-make test-hardware      # requires a connected STeaMi
+make test-native/lis2mdl     # host only, no board required
+make test-hardware/lis2mdl   # requires a connected STeaMi
 ```
+
+## References
+
+* Datasheet: [ST LIS2MDL](https://www.st.com/resource/en/datasheet/lis2mdl.pdf).
+* STeaMi wiki: [LIS2MDL hardware page](https://wiki.steami.cc/docs/hardware/main-components/sensors/lis2mdl).
+* MicroPython driver: [`lis2mdl`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/lis2mdl).
 
 ## License
 

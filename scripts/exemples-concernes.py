@@ -219,6 +219,11 @@ def selectionner(fichiers: list[str], racine: Path) -> dict:
             exemple = f"lib/{m.group(1)}/examples/{m.group(2)}"
             if (racine / exemple / f"{m.group(2)}.ino").is_file():
                 exemples_modifies.add(exemple)
+            elif (racine / exemple).is_dir():
+                # The folder is still there without <e>.ino (renamed folder,
+                # deleted sketch): the package build rejects it, so run it.
+                paquet = True
+            # Otherwise the folder no longer exists: a deleted example.
             continue
         if re.match(r"^lib/[^/]+/examples/\.gitkeep$", chemin):
             continue

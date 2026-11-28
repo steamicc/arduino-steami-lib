@@ -83,7 +83,9 @@ class SteamiLIS2MDL {
     int16_t readTemperatureRaw();
     float temperature();
     void setTemperatureOffset(float offset);
-    // Alias of setTemperatureOffset(), kept for existing sketches.
+    // Former name of setTemperatureOffset() (#56), kept for the whole 1.x
+    // series and removed in 2.0.0.
+    [[deprecated("use setTemperatureOffset(); setTempOffset() goes away in 2.0.0")]]
     void setTempOffset(float offset);
     bool calibrateTemperature(float refLow, float measuredLow, float refHigh, float measuredHigh);
     uint8_t deviceId();
@@ -93,14 +95,16 @@ class SteamiLIS2MDL {
 
     void setCalibrateStep(float xoff, float yoff, float zoff, float xscale, float yscale,
                           float zscale);
-    void calibrateMinmax2d(uint16_t samples = 300, uint16_t delayMs = 20);
-    void calibrateMinmax3d(uint16_t samples = 600, uint16_t delayMs = 20);
+    // Min/max calibrations: true when the calibration was replaced, false when it was kept
+    // (samples == 0 or a failed read).
+    bool calibrateMinmax2d(uint16_t samples = 300, uint16_t delayMs = 20);
+    bool calibrateMinmax3d(uint16_t samples = 600, uint16_t delayMs = 20);
     CalibratedField calibrateApply(float x, float y, float z);
     CalibrationQuality calibrateQuality(uint16_t samplesCheck = 200, uint16_t delayMs = 10);
     void calibrateReset();
     // Current offsets and scales, as read_calibration() in MicroPython.
     MagCalibration readCalibration() const;
-    void calibrateStep();
+    bool calibrateStep();
 
     void setHeadingFilter(float alpha);
     float headingFromVectors(float x, float y, float z, bool calibrated = true);
@@ -154,6 +158,8 @@ class SteamiLIS2MDL {
     bool ensureData();
     int16_t toInt16(uint16_t v);
     float normalizeDeg(float a);
+    bool sampleMinmax(uint16_t samples, uint16_t delayMs, float& xmin, float& xmax, float& ymin,
+                      float& ymax, float& zmin, float& zmax);
     float applyHeadingOffsets(float angleDeg);
     float filterHeading(float angleDeg);
 };

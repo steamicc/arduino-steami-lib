@@ -155,10 +155,15 @@ safe: the driver drops to sleep mode for the write (the chip may ignore
 
 ### Calibration
 
+The user correction is `gain * factory + offset`, applied after the factory
+compensation. Each call replaces the previous correction, as in the other
+temperature drivers and in MicroPython: `setTemperatureOffset()` sets the
+gain back to 1.
+
 | Method | Description |
 |--------|-------------|
-| `void setTemperatureOffset(float offset)` | Additive Celsius offset on top of the factory compensation. |
-| `void calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point user calibration. Applied after the factory compensation. Pressure and humidity are not affected. |
+| `void setTemperatureOffset(float offset)` | Celsius offset (resets the gain to 1). |
+| `bool calibrateTemperature(float refLow, float measLow, float refHigh, float measHigh)` | Two-point user calibration, from readings taken without calibration. Returns `false` if `measLow == measHigh` and keeps the previous correction. Pressure and humidity are not affected. |
 
 ## Register constants
 
@@ -179,6 +184,12 @@ The native suite checks the compensation formulas against reference vectors
 the MicroPython driver). The hardware suite in `tests/hardware/test_bme280/`
 needs a STeaMi V1c.
 
+## References
+
+* Datasheet: [Bosch BME280](https://www.bosch-sensortec.com/media/boschsensortec/downloads/datasheets/bst-bme280-ds002.pdf).
+* STeaMi wiki: [BME280 hardware page](https://wiki.steami.cc/docs/hardware/main-components/sensors/bme280).
+* MicroPython driver: [`bme280`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/bme280).
+
 ## License
 
-GPL-3.0-or-later - see [LICENSE](../../LICENSE).
+GPL-3.0-or-later — see [LICENSE](../../LICENSE).

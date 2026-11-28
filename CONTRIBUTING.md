@@ -175,6 +175,28 @@ The public header of a driver is `Steami<Chip>.h` (constants in `Steami<Chip>_co
   `while (!Serial && millis() < 2000) {}` — otherwise early output
   vanishes.
 
+### Driver README
+
+Every `lib/<component>/README.md` uses the same sections, in this order
+([`lib/wsen-hids/README.md`](lib/wsen-hids/README.md) is the reference):
+
+1. `# <Chip>` and a one-paragraph description.
+2. `## Hardware`: bus, I2C address, what the chip does on the board.
+3. `## Quick start`: a short sketch built on `Steami.wire()`.
+4. `## Examples`: a table (example, what it does, **Try it** link to the
+   wiki page when there is one), then `### Building an example` with the
+   `make flash-<driver>/<example>` and `capture-` targets.
+5. `## API`: one `###` subsection per group (Lifecycle, Reading, Modes,
+   Calibration, ...), one table row per public method with its signature.
+6. `## Register constants` (or `## Constants`): what `*_const.h` exports.
+   Sections specific to the driver (limitations, firmware notes, JSON
+   format, ...) go after it.
+7. `## Testing`: the `make test-native/<suite>` (and `test-hardware/<suite>`)
+   commands.
+8. `## References`: the datasheet, the hardware page of the STeaMi wiki and
+   the MicroPython counterpart in `steamicc/micropython-steami-lib`.
+9. `## License`: `GPL-3.0-or-later — see [LICENSE](../../LICENSE).`
+
 ## Coding conventions
 
 - **Naming**: `camelCase` for methods and variables, `UPPER_SNAKE_CASE`
@@ -546,7 +568,10 @@ includes, directly or through another driver (`SteamiBoard.h` pulls in
 workflows it calls…) compiles everything. A change to the package
 metadata alone (`keywords.txt`, `scripts/arduino-package/`) builds and
 lints the package without compiling, and a change that cannot affect a
-compile (docs, Markdown, native tests…) compiles nothing. The rules
+compile (docs, Markdown, native tests…) compiles nothing. An example
+folder that still exists without its `<example>.ino` (a folder renamed
+without its sketch) builds the package, which rejects it, so the PR
+fails instead of the publication. The rules
 live in `scripts/exemples-concernes.py`. On a push to `main`, only `lint`,
 `tests` and `caches` run: the PR already compiled its examples, and the
 publication compiles all of them again at the tag.
@@ -567,6 +592,26 @@ requires it, it is the check that gates the merge. If `changements`
 fails, `ci-ok` fails too, so that skipped compiles never count as a
 pass. `check-commits.yml` (`commitlint` on every commit in the PR range,
 and the branch name) and CodeQL run beside `ci.yml`.
+
+## Publication
+
+Each release published by semantic-release runs
+`publish-arduino-package.yml`, which publishes the library to
+`steamicc/arduino-steami` (the Library Manager repository), then
+dispatches the downstream bots. Its header documents the recovery: run
+it by hand on the tag, `gh workflow run publish-arduino-package.yml
+--ref vX.Y.Z`.
+
+A recovery can start at any time. The workflow has one concurrency
+group per tag: a run never cancels the publication of another tag, and a
+recovery only replaces a pending run of the same tag (a dry run has its
+own group). Publications of different tags run in parallel: the push to
+the distribution is atomic and retried when another publication pushed
+first, `main` only moves for the highest version (an older tag is pushed
+alone), and Latest is given back to the highest published version.
+The tags released before this change (v0.46.1 and earlier when it was
+written) carry the previous workflow, with a fixed group: recover one
+of them when no other publication runs.
 
 ## Notes
 

@@ -39,6 +39,57 @@ claims every candidate chip of every function first
 (`Steami.claim(steamiRoute(release, function, i))` until it returns `NONE`), so
 each line shows whether the chip really answers, even on an unknown release.
 
+## Examples
+
+The examples use the function classes and the screen, never a driver directly
+(except `Pads`, which drives the expander through `Steami.mcp23009e()`): the
+same sketch runs on a V1a, a V1b or a V1c.
+
+| Example | What it does | Try it |
+|---------|--------------|--------|
+| [`Temperature`](examples/Temperature/) | Print the temperature once per second: BME280 on a V1c, WSEN-HIDS (then WSEN-PADS) on a V1a/V1b, with the board calibration applied. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#temperature) |
+| [`Humidity`](examples/Humidity/) | Print the relative humidity once per second: BME280 on a V1c, WSEN-HIDS on a V1a/V1b. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#humidity) |
+| [`Pressure`](examples/Pressure/) | Print the pressure in hPa and the altitude in metres once per second: BME280 on a V1c, WSEN-PADS on a V1a/V1b. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#pressure) |
+| [`Distance`](examples/Distance/) | Print the distance measured by the VL53L1X once per second, in millimetres. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#distance) |
+| [`Battery`](examples/Battery/) | Print the battery charge, voltage and current of the BQ27441 gauge once per second. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#battery) |
+| [`Accelerometer`](examples/Accelerometer/) | Print the ISM330DL acceleration in g five times per second, with its norm and the shake flag. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#accelerometer) |
+| [`Gyroscope`](examples/Gyroscope/) | Print the ISM330DL angular speed in degrees per second five times per second. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#gyroscope) |
+| [`Buttons`](examples/Buttons/) | Print each press and release of the seven buttons (A, B, MENU and the D-PAD). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#buttons) |
+| [`Magnetometer`](examples/Magnetometer/) | Print the LIS2MDL magnetic field in microtesla twice per second. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#magnetometer) |
+| [`Compass`](examples/Compass/) | Print the LIS2MDL heading and direction twice per second, board flat and screen up. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#compass) |
+| [`Light`](examples/Light/) | Print the APDS-9960 light level twice per second (V1a/V1b; a V1c reports E20). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#light) |
+| [`Color`](examples/Color/) | Print the colour measured by the APDS-9960 twice per second (V1a/V1b; a V1c reports E20). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#color) |
+| [`Gesture`](examples/Gesture/) | Print each hand gesture seen by the APDS-9960 (V1a/V1b; a V1c reports E20). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#gesture) |
+| [`Drawing`](examples/Drawing/) | Draw the primitives gallery of `SteamiDisplay` on the screen: arcs, accented text, rectangles, a disc, a triangle and a line. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#drawing) |
+| [`ScreenTemperature`](examples/ScreenTemperature/) | Show the temperature on the screen (mockup 01 of the tutorials). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screentemperature) |
+| [`ScreenBattery`](examples/ScreenBattery/) | Show the battery charge, a bar and the voltage on the screen (mockup 02). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screenbattery) |
+| [`ScreenComfort`](examples/ScreenComfort/) | Show temperature and humidity side by side, with a comfort verdict (mockup 03). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screencomfort) |
+| [`ScreenGauge`](examples/ScreenGauge/) | Show the VL53L1X distance on a round gauge (mockup 04). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screengauge) |
+| [`ScreenCompass`](examples/ScreenCompass/) | Show a compass rose with its needle (mockup 07). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screencompass) |
+| [`ScreenWatch`](examples/ScreenWatch/) | Show an analog watch (mockup 09). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screenwatch) |
+| [`ScreenFaces`](examples/ScreenFaces/) | Show a smiley whose mood follows the distance in front of the board; button A shows the six faces (mockup 08). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screenfaces) |
+| [`ScreenGraph`](examples/ScreenGraph/) | Show a graph of the last 20 readings of a sensor (mockup 05). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screengraph) |
+| [`ScreenMenu`](examples/ScreenMenu/) | Show a menu moved with the D-PAD (mockup 06). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screenmenu) |
+| [`WeatherStation`](examples/WeatherStation/) | A weather station on four screen pages: temperature, humidity, pressure graph and compass. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#weatherstation) |
+| [`BoardInfo`](examples/BoardInfo/) | Print the detected release, where the answer comes from, and whether each I2C chip of the release answers. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#boardinfo) |
+| [`Pads`](examples/Pads/) | Read the crocodile pad P24 and drive P28 through the MCP23009E expander: an LED on P28 lights and the buzzer beeps while P24 is grounded. | — |
+
+Each example but `Pads` is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board).
+
+### Building an example
+
+```bash
+make list-examples DRIVER=steami_board
+make flash-steami_board/BoardInfo
+```
+
+This builds, uploads, and opens the serial monitor at 115200 baud. Swap
+`flash-` for `capture-` to reliably capture the first lines printed at boot:
+
+```bash
+make capture-steami_board/BoardInfo DURATION=30
+```
+
 ## Detection order
 
 `begin()` detects the release once; later calls make no I2C traffic.
@@ -392,7 +443,9 @@ same names as in the MicroPython `steami_config`:
 
 The classes share their driver with `Steami.bme280()` and the others: once a
 class has begun, the shared driver returns calibrated temperatures, and a
-`calibrateTemperature()` that your sketch made earlier is overwritten.
+`setTemperatureOffset()` or `calibrateTemperature()` that your sketch made
+earlier is overwritten. Call `setTemperatureOffset(0)` on the shared driver
+to read it without calibration.
 
 ## Colours
 
@@ -771,6 +824,11 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 POSSIBILITY OF SUCH DAMAGE.
 ```
 
+## References
+
+* STeaMi wiki: [Board revisions](https://wiki.steami.cc/docs/hardware/revisions).
+* MicroPython layer: [`steami`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/steami) (function classes) and [`steami_screen`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/steami_screen) (screen widgets).
+
 ## License
 
-GPL-3.0-or-later - see [LICENSE](../../LICENSE).
+GPL-3.0-or-later — see [LICENSE](../../LICENSE).

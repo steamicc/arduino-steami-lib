@@ -13,6 +13,36 @@ name: Publish Arduino package
 # built and tested is the tagged code:
 #   gh workflow run publish-arduino-package.yml --ref v0.25.0 [-f dry_run=true]
 #
+# Concurrency: one group per tag (publish-arduino-package-<tag>). GitHub keeps
+# a single pending run per group and a newer run cancels it, so a fixed group
+# lost the intermediate tags of a release burst (v0.42.1 to v0.43.0 on
+# 2026-11-27). With one group per tag, a run never cancels the publication of
+# another tag: a recovery can start at any time, and a recovery of a tag only
+# replaces a pending run of the same tag. A dry run has its own group, so it
+# never replaces a pending publication.
+# A catch-up (keep the fixed group, dispatch the missing tags at the end of
+# each publication) was not kept: the dispatched run would itself cancel a
+# release run pending at that moment, and the tag cancelled in a burst is
+# usually older than the one published after it.
+# Publications of different tags therefore run in parallel and share the
+# distribution repository:
+#   - the push is atomic (main and the tag together); when another publication
+#     pushed first, it is rebuilt on the new main and retried;
+#   - main follows the highest version: an older tag (a recovery, or a
+#     publication that finishes after a newer one) is pushed alone, on top of
+#     main, and main stays on the newest package;
+#   - after publishing its release, the last job gives Latest back to the
+#     highest published version, in case two jobs both marked themselves.
+# The tags released before this change (v0.46.1 and earlier when it was
+# written) carry the previous workflow (fixed group, main always pushed):
+# recovering one of them runs that old code; start it when no other
+# publication runs, and the next publication moves main forward again.
+#
+# The examples are compiled once: the check job compiles every example and
+# uploads the .bin files (artifact exemples-bin) with the package (artifact
+# arduino-package), and examples-archive.yml builds the archive from both
+# without installing the toolchain or compiling again.
+#
 # The organization enforces immutable releases on steamicc/arduino-steami: no
 # asset can be added once a release is published. So the release is created as
 # a draft, examples-archive.yml attaches the compiled examples to it, and the
@@ -20,12 +50,18 @@ name: Publish Arduino package
 # The release is marked Latest only when its version is the highest of the
 # published releases: recovering an older tag (e.g. v0.38.0 after v0.39.0)
 # keeps the current Latest release. If the archive job fails, or the archive is
-# not fully uploaded, the release stays a draft: re-run the failed jobs, or run
+# not fully uploaded, the release stays a draft: re-run the failed jobs (they
+# reuse the artifacts of the run), or run the fallback, which compiles every
+# example itself:
 #   gh workflow run examples-archive.yml -f tag=<tag>      (from main)
 #   gh release edit <tag> --draft=false --latest -R steamicc/arduino-steami
 # Pass --latest only for the newest version; for an older tag pass
 # --latest=false, so that the newest release stays Latest.
 # A release that already exists and is published is left as it is (no archive).
+#
+# After publishing, the downstream bots are dispatched; a dispatch failure is
+# only a warning. A manual recovery (gh release edit) does not dispatch: the
+# downstream crons catch up.
 
 on:
   release:
@@ -41,8 +77,9 @@ on:
 permissions:
   contents: read
 
+# One group per tag, and one per tag for dry runs (see the header).
 concurrency:
-  group: publish-arduino-package
+  group: publish-arduino-package-${{ github.ref_name }}${{ inputs.dry_run && '-dry-run' || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -78,6 +115,8 @@ jobs:
     uses: ./.github/workflows/arduino-package-check.yml
     with:
       version: ${{ needs.resolve.outputs.version }}
+      # Also upload the .bin files, reused by the examples-archive job.
+      binaires: true
 
   publish:
     name: Publish the package
@@ -100,47 +139,73 @@ jobs:
           name: arduino-package
           path: package
 
+      # Push to the distribution and create its draft release.
       - name: Generate token
         id: generate_token
-        uses: tibdex/github-app-token@v2
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app_id: ${{ secrets.RELEASE_APP_ID }}
-          private_key: ${{ secrets.RELEASE_APP_SECRET }}
-          repositories: >-
-            ["arduino-steami"]
+          client-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_SECRET }}
+          owner: steamicc
+          repositories: arduino-steami
+          permission-contents: write
 
       - name: Push the package to the distribution repository
         env:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
         run: |
           set -euo pipefail
-          git clone "https://x-access-token:${GH_TOKEN}@github.com/${DIST_REPO}.git" dist
+          git clone --quiet "https://x-access-token:${GH_TOKEN}@github.com/${DIST_REPO}.git" dist
           cd dist
           git config user.name "semantic-release-updater[bot]"
           git config user.email "semantic-release-updater[bot]@users.noreply.github.com"
 
-          if [ -n "$(git ls-remote --tags origin "refs/tags/${TAG}")" ]; then
-            echo "Tag ${TAG} already exists in ${DIST_REPO}: nothing to push."
-            exit 0
-          fi
+          # Publications of other tags run in parallel (see the header): when
+          # one pushes between the clone and the push, the push is refused,
+          # and the commit is rebuilt on the new main.
+          for attempt in 1 2 3 4 5; do
+            if [ "$attempt" -gt 1 ]; then
+              git tag -d "$TAG" > /dev/null 2>&1 || true
+              git fetch --quiet --force --tags origin main
+            fi
+            if git rev-parse -q --verify "refs/tags/${TAG}" > /dev/null; then
+              echo "Tag ${TAG} already exists in ${DIST_REPO}: nothing to push."
+              exit 0
+            fi
 
-          # Replace everything but .git with the package.
-          find . -mindepth 1 -maxdepth 1 -name .git -prune -o -exec rm -rf {} +
-          cp -a ../package/. .
-          git checkout -B main
-          git add --all
+            # Replace everything but .git with the package, on top of main.
+            git checkout --quiet -B main origin/main
+            find . -mindepth 1 -maxdepth 1 -name .git -prune -o -exec rm -rf {} +
+            cp -a ../package/. .
+            git add --all
 
-          if [ "$DRY_RUN" = "true" ]; then
-            echo "Dry run: would commit 'Release ${TAG}', tag ${TAG} and push main."
-            git status --short | head -50
-            exit 0
-          fi
+            # main follows the highest version: an older tag is pushed alone.
+            newest="$( { git tag -l; echo "$TAG"; } | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)"
+            if [ "$newest" = "$TAG" ]; then
+              refs=("HEAD:refs/heads/main" "refs/tags/${TAG}")
+            else
+              refs=("refs/tags/${TAG}")
+              echo "::notice::${TAG} is older than ${newest} in ${DIST_REPO}: the tag is pushed alone, main stays on ${newest}."
+            fi
 
-          # --allow-empty keeps a release commit even if the content is unchanged.
-          git commit --allow-empty -m "Release ${TAG}"
-          git tag "${TAG}"
-          git push origin main
-          git push origin "${TAG}"
+            if [ "$DRY_RUN" = "true" ]; then
+              echo "Dry run: would commit 'Release ${TAG}', tag ${TAG} and push ${refs[*]}."
+              git status --short | head -50
+              exit 0
+            fi
+
+            # --allow-empty keeps a release commit even if the content is unchanged.
+            git commit --quiet --allow-empty -m "Release ${TAG}"
+            git tag "${TAG}"
+            # Atomic: main and the tag move together, or neither does.
+            if git push --atomic origin "${refs[@]}"; then
+              exit 0
+            fi
+            echo "::warning::Push of ${TAG} to ${DIST_REPO} refused (attempt ${attempt} of 5): another publication pushed first, retrying on the new main."
+            sleep $((attempt * 5))
+          done
+          echo "::error::Could not push ${TAG} to ${DIST_REPO} after 5 attempts."
+          exit 1
 
       - name: Ensure the release in the distribution repository
         id: release
@@ -180,6 +245,8 @@ jobs:
     with:
       tag: ${{ needs.resolve.outputs.tag }}
       depuis_publication: true
+      # Archive the .bin files of the check job instead of compiling again.
+      artefacts: true
     secrets:
       RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
       RELEASE_APP_SECRET: ${{ secrets.RELEASE_APP_SECRET }}
@@ -195,14 +262,16 @@ jobs:
       TAG: ${{ needs.resolve.outputs.tag }}
       DIST_REPO: steamicc/arduino-steami
     steps:
+      # Read the archive state, publish the draft, set Latest.
       - name: Generate token
         id: generate_token
-        uses: tibdex/github-app-token@v2
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app_id: ${{ secrets.RELEASE_APP_ID }}
-          private_key: ${{ secrets.RELEASE_APP_SECRET }}
-          repositories: >-
-            ["arduino-steami"]
+          client-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_SECRET }}
+          owner: steamicc
+          repositories: arduino-steami
+          permission-contents: write
 
       - name: Publish the release
         env:
@@ -233,3 +302,44 @@ jobs:
             echo "::notice::${TAG} is older than the published ${newest}: published without --latest, ${current_latest:-the current Latest release} stays Latest."
           fi
           gh release edit "$TAG" -R "$DIST_REPO" --draft=false "$latest_flag"
+
+          # Publications of different tags run in parallel: two jobs can both
+          # read the releases before either publishes, both pass --latest, and
+          # the last edit wins. Read again and give Latest back to the highest
+          # published version: the job that edits last sees both releases.
+          releases="$(gh release list -R "$DIST_REPO" --limit 1000 --json tagName,isDraft,isLatest \
+            --jq '.[] | select(.isDraft | not) | "\(.tagName) \(.isLatest)"')"
+          newest="$(awk '{ print $1 }' <<< "$releases" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+          current_latest="$(awk '$2 == "true" { print $1 }' <<< "$releases")"
+          if [ -n "$newest" ] && [ "$current_latest" != "$newest" ]; then
+            echo "::notice::Latest was ${current_latest:-unset} while ${newest} is the highest published version (parallel publications): ${newest} marked Latest."
+            gh release edit "$newest" -R "$DIST_REPO" --latest
+          fi
+
+      - name: Jeton pour les robots en aval
+        id: jeton_aval
+        continue-on-error: true   # without a token, warn and let the crons take over
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_SECRET }}
+          owner: steamicc
+          repositories: arduino-steami-devcontainer,wiki_steami,arduino-steami-sample   # the repositories of the targets, comma-separated
+          permission-actions: write
+
+      - name: Déclencher les robots en aval
+        continue-on-error: true   # a failed dispatch never fails the publication
+        env:
+          GH_TOKEN: ${{ steps.jeton_aval.outputs.token }}
+          JETON: ${{ steps.jeton_aval.outcome }}
+        run: |
+          if [ "$JETON" != success ]; then
+            echo "::warning::App token unavailable: the downstream bots will run on their crons."
+            exit 0
+          fi
+          # One target per "<repository> <bot>" string; a failed target does not stop the next ones.
+          for cible in "arduino-steami-devcontainer suivre-paquet.yml" "wiki_steami suivre-exemples-arduino.yml" "arduino-steami-sample suivre-bibliotheque.yml"; do
+            read -r repo workflow <<<"$cible"
+            gh workflow run "$workflow" -R "steamicc/$repo" \
+              || echo "::warning::Could not dispatch $workflow in steamicc/$repo: it will run on its cron if it has one (check the App's Actions write permission and its installation on this repository)."
+          done

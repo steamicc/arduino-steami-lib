@@ -7,14 +7,22 @@ name: Examples archive
 # attached while the release is a draft. publish-arduino-package.yml creates the
 # draft, calls this workflow, then publishes the draft.
 #
-# Manual run (retry of a failed attach on a draft release; main only):
-#   gh workflow run examples-archive.yml -f tag=v0.35.0 [-f dry_run=true]
+# The examples are compiled once per publication: publish-arduino-package.yml
+# passes `artefacts: true`, and this workflow downloads the package
+# (arduino-package) and the .bin files (exemples-bin) that its check job
+# uploaded in the same run. It then installs no toolchain and compiles nothing.
+#
+# Manual run (fallback, e.g. retry of a failed attach on a draft release; main
+# only): it has no `artefacts` input, so it builds the package and compiles
+# every example itself:
+#   gh workflow run examples-archive.yml -f tag=<tag> [-f dry_run=true]
 # A release that is already published cannot be backfilled.
 #
 # The scripts that compile and archive come from the ref the workflow runs on
 # (the tag when called by the publication; main for a direct run, any other ref
-# is refused); the package is built with the builder of the tag, checked out
-# in tagged/ (the repository already has a src/ directory). An archive already
+# is refused); without artefacts, the package is built with the builder of the
+# tag, checked out in tagged/ (the repository already has a src/ directory),
+# as the check job of the publication builds it. An archive already
 # attached and fully uploaded (state "uploaded") is never replaced; one left in
 # another state by an interrupted upload is deleted and uploaded again. Every
 # upload is checked against the local zip (state, size, SHA-256 digest): on a
@@ -31,6 +39,11 @@ on:
         type: string
       depuis_publication:
         description: 'Set by publish-arduino-package.yml (skips the main-only guard)'
+        required: false
+        type: boolean
+        default: false
+      artefacts:
+        description: 'Reuse the arduino-package and exemples-bin artifacts of the run instead of compiling'
         required: false
         type: boolean
         default: false
@@ -97,14 +110,16 @@ jobs:
 
       # The app token is needed early: the default token cannot see the drafts
       # of another repository. It lasts one hour, longer than the compilation.
+      # It reads the draft, then uploads or deletes the archive.
       - name: Generate token
         id: generate_token
-        uses: tibdex/github-app-token@v2
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app_id: ${{ secrets.RELEASE_APP_ID }}
-          private_key: ${{ secrets.RELEASE_APP_SECRET }}
-          repositories: >-
-            ["arduino-steami"]
+          client-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_SECRET }}
+          owner: steamicc
+          repositories: arduino-steami
+          permission-contents: write
 
       - name: Check that the release is a draft
         env:
@@ -124,18 +139,24 @@ jobs:
       - name: Checkout the scripts
         uses: actions/checkout@v4
 
+      # Without artefacts only (manual run): the steps down to the compilation
+      # build the package and the .bin files that the publication's check job
+      # otherwise uploads.
       - name: Checkout the tag
+        if: ${{ !inputs.artefacts }}
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.tag }}
           path: tagged
 
       - name: Build the package
+        if: ${{ !inputs.artefacts }}
         run: python3 tagged/scripts/build-arduino-package.py --version "${TAG#v}" --out build/arduino-package
 
       # Saved on main by the caches job of ci.yml (same key and paths), never
       # here: on a miss, the core and the library are installed below.
       - name: Restore the Arduino toolchain
+        if: ${{ !inputs.artefacts }}
         id: arduino15
         uses: actions/cache/restore@v4
         with:
@@ -145,22 +166,40 @@ jobs:
           key: arduino15-${{ runner.os }}-cli${{ env.ARDUINO_CLI_VERSION }}-stm32-${{ env.STM32_CORE_VERSION }}-ble${{ env.STM32DUINOBLE_VERSION }}
 
       - name: Install Arduino CLI
+        if: ${{ !inputs.artefacts }}
         uses: arduino/setup-arduino-cli@v2
         with:
           version: ${{ env.ARDUINO_CLI_VERSION }}
 
       - name: Install the STM32 core
-        if: steps.arduino15.outputs.cache-hit != 'true'
+        if: ${{ !inputs.artefacts && steps.arduino15.outputs.cache-hit != 'true' }}
         run: |
           arduino-cli core update-index
           arduino-cli core install "STMicroelectronics:stm32@${STM32_CORE_VERSION}"
 
       - name: Install library dependencies
-        if: steps.arduino15.outputs.cache-hit != 'true'
+        if: ${{ !inputs.artefacts && steps.arduino15.outputs.cache-hit != 'true' }}
         run: arduino-cli lib install "STM32duinoBLE@${STM32DUINOBLE_VERSION}"
 
       - name: Compile every example
+        if: ${{ !inputs.artefacts }}
         run: scripts/compile-package-examples.sh build/arduino-package --output-dir build/exemples-bin
+
+      # With artefacts (publication): the package and the .bin files of the
+      # check job. The archive script fails if an example has no .bin.
+      - name: Download the package
+        if: ${{ inputs.artefacts }}
+        uses: actions/download-artifact@v4
+        with:
+          name: arduino-package
+          path: build/arduino-package
+
+      - name: Download the compiled examples
+        if: ${{ inputs.artefacts }}
+        uses: actions/download-artifact@v4
+        with:
+          name: exemples-bin
+          path: build/exemples-bin
 
       - name: Build the archive
         run: python3 scripts/build-examples-archive.py --pkg build/arduino-package --bins build/exemples-bin --tag "$TAG" --coeur "$STM32_CORE_VERSION" --out "steami-exemples-${TAG}.zip"

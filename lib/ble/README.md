@@ -24,8 +24,20 @@ is not a driver: it only holds example sketches built on the
 
 Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/ble).
 
-Flash an example with PlatformIO:
+### Building an example
 
 ```bash
+make list-examples DRIVER=ble
 make flash-ble/BleBeacon
 ```
+
+This builds, uploads, and opens the serial monitor at 115200 baud. Swap
+`flash-` for `capture-` to reliably capture the first lines printed at boot:
+
+```bash
+make capture-ble/BleBeacon DURATION=30
+```
+
+## License
+
+GPL-3.0-or-later — see [LICENSE](../../LICENSE).

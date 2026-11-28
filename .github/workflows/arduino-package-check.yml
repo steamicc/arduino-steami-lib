@@ -3,6 +3,12 @@ name: Arduino package check
 # Reusable workflow: build the STeaMi Arduino Library Manager package,
 # lint it and compile its examples with arduino-cli (every example by
 # default, only the listed ones when ci.yml passes `exemples`).
+#
+# With `binaires: true` (publish-arduino-package.yml), the compilation also
+# keeps one .bin per example and uploads them as the `exemples-bin` artifact,
+# next to `arduino-package`: examples-archive.yml builds the archive from
+# both and does not compile again. The archive needs every example, so
+# `binaires` is refused with a non-empty `exemples`.
 
 on:
   workflow_call:
@@ -16,6 +22,11 @@ on:
         required: false
         type: string
         default: ''
+      binaires:
+        description: 'Also upload the compiled examples (.bin) as the exemples-bin artifact (every example only)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -35,6 +46,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # The archive needs a .bin for every example: with "[]" or a list,
+      # the artifact would be empty or partial.
+      - name: Check the inputs
+        env:
+          BINAIRES: ${{ inputs.binaires }}
+          EXEMPLES: ${{ inputs.exemples }}
+        run: |
+          if [ "$BINAIRES" = "true" ] && [ -n "$EXEMPLES" ]; then
+            echo "::error::binaires=true needs every example: leave exemples empty (got '$EXEMPLES')"
+            exit 1
+          fi
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -97,18 +120,31 @@ jobs:
         if: ${{ inputs.exemples != '[]' }}
         env:
           EXEMPLES: ${{ inputs.exemples }}
+          BINAIRES: ${{ inputs.binaires }}
         run: |
           set -euo pipefail
-          if [ -z "$EXEMPLES" ]; then
-            scripts/compile-package-examples.sh build/arduino-package
-          else
+          args=()
+          if [ -n "$EXEMPLES" ]; then
             jq -r '.[]' <<< "$EXEMPLES" > "$RUNNER_TEMP/exemples.txt"
-            scripts/compile-package-examples.sh build/arduino-package --only "$RUNNER_TEMP/exemples.txt"
+            args+=(--only "$RUNNER_TEMP/exemples.txt")
           fi
+          if [ "$BINAIRES" = "true" ]; then
+            args+=(--output-dir build/exemples-bin)
+          fi
+          scripts/compile-package-examples.sh build/arduino-package ${args[@]+"${args[@]}"}
 
       - name: Upload the package
         uses: actions/upload-artifact@v4
         with:
           name: arduino-package
           path: build/arduino-package
+          if-no-files-found: error
+
+      # Reused by examples-archive.yml in the same run of the publication.
+      - name: Upload the compiled examples
+        if: ${{ inputs.binaires }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: exemples-bin
+          path: build/exemples-bin
           if-no-files-found: error

@@ -30,14 +30,45 @@ void setup() {
         while (true) delay(1000);
     }
 
-    bridge.clearConfig();
-    bridge.writeConfig("hello");
+    Serial.println(bridge.deviceId(), HEX);  // 4C
 
-    uint8_t buf[64];
-    size_t len = bridge.readConfig(buf, sizeof(buf));
-    Serial.write(buf, len);
-    Serial.println();
+    if (bridge.hasConfigZone()) {
+        uint8_t buf[64];
+        size_t len = bridge.readConfig(buf, sizeof(buf));
+        Serial.write(buf, len);
+        Serial.println();
+    }
 }
+
+void loop() {}
+```
+
+The config zone holds the board settings of the
+[STeaMi Config](../steami_config/README.md) library (board revision, sensor
+calibrations, boot counter). `clearConfig()` and `writeConfig()` change it
+directly: on a configured board, go through STeaMi Config instead, or the
+calibrations are lost.
+
+See [examples/bridge_info/](examples/bridge_info/) for the full sketch.
+
+## Examples
+
+| Example | What it does |
+|---------|--------------|
+| [`bridge_info`](examples/bridge_info/) | Print WHO_AM_I, the busy flag, the error register, the config zone support and the text stored in the zone. Read only. |
+
+### Building an example
+
+```bash
+make list-examples DRIVER=daplink_bridge
+make flash-daplink_bridge/bridge_info
+```
+
+This builds, uploads, and opens the serial monitor at 115200 baud. Swap
+`flash-` for `capture-` to reliably capture the first lines printed at boot:
+
+```bash
+make capture-daplink_bridge/bridge_info DURATION=30
 ```
 
 ## API
@@ -102,6 +133,12 @@ without hardware with:
 ```bash
 make test-native/daplink_bridge
 ```
+
+## References
+
+* Firmware: [steamicc/DAPLink](https://github.com/steamicc/DAPLink), the firmware of the STM32F103 that answers on `0x3B`.
+* STeaMi wiki: [STM32F103 hardware page](https://wiki.steami.cc/docs/hardware/main-components/stm32f103).
+* MicroPython driver: [`daplink_bridge`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/daplink_bridge).
 
 ## License
 

@@ -138,19 +138,19 @@ void SteamiWsenHids::setAveraging(uint8_t humidityAvg, uint8_t temperatureAvg) {
 }
 
 void SteamiWsenHids::setTemperatureOffset(float offset) {
+    _tempGain = 1.0f;
     _tempOffset = offset;
 }
 
-void SteamiWsenHids::calibrateTemperature(float refLow, float measLow, float refHigh,
+bool SteamiWsenHids::calibrateTemperature(float refLow, float measLow, float refHigh,
                                           float measHigh) {
-    float span = measHigh - measLow;
+    const float span = measHigh - measLow;
     if (span == 0.0f) {
-        _tempUserSlope = 1.0f;
-        _tempUserIntercept = 0.0f;
-        return;
+        return false;
     }
-    _tempUserSlope = (refHigh - refLow) / span;
-    _tempUserIntercept = refLow - _tempUserSlope * measLow;
+    _tempGain = (refHigh - refLow) / span;
+    _tempOffset = refLow - _tempGain * measLow;
+    return true;
 }
 
 uint8_t SteamiWsenHids::status() {
@@ -243,7 +243,7 @@ bool SteamiWsenHids::waitForDataReady(uint32_t timeoutMs) {
 
 float SteamiWsenHids::computeTemperature(int16_t raw) {
     float factory = _tempIntercept + _tempSlope * static_cast<float>(raw);
-    return _tempUserSlope * factory + _tempUserIntercept + _tempOffset;
+    return _tempGain * factory + _tempOffset;
 }
 
 float SteamiWsenHids::computeHumidity(int16_t raw) {
