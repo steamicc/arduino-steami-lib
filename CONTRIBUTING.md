@@ -277,6 +277,173 @@ Temperature-capable parts always implement `setTemperatureOffset` and
 `calibrateTemperature`. Extend the same pattern to other channels when
 it makes physical sense.
 
+## Driver design patterns
+
+Three situations came up in several drivers, and each one took a review
+round to get right. Each pattern below says where it applies, what goes
+wrong without it, the rule, and the code and native tests that lock it in.
+
+### Wake the part before probing it
+
+**Where:** parts with a software shutdown that also silences their I2C
+interface, and a separate line that wakes them up. The BQ27441 fuel gauge
+is the case in this library: its `SHUTDOWN` control command, woken by a
+pulse on GPOUT.
+
+**Symptom:** once the part is shut down (by `powerOff()`, or by a previous
+run of the program), it no longer answers on I2C. A `begin()` that probes
+`deviceId()` first reads 0 and returns `false`, and the part stays
+unreachable until the next power cycle.
+
+**Rule:**
+
+- When the wake pin is wired, `begin()` runs the wake sequence, then waits
+  for the part to settle, **before** the `deviceId()` probe.
+- With no wake pin, that path does nothing at all: no `pinMode()`, no
+  `digitalWrite()`, so the existing wiring keeps its behaviour.
+- Hand the line back to its other use only after the probe. The BQ27441
+  switches GPOUT back to `INPUT_PULLUP` so the caller can use it as the
+  SOC / BAT_LOW interrupt.
+- Lock the order in with native tests that check the pin state at the end
+  of `begin()`, with and without a wake pin.
+
+**Reference:** `SteamiBQ27441::begin()` and `disableShutdownMode()` in
+[`lib/bq27441/src/SteamiBQ27441.cpp`](lib/bq27441/src/SteamiBQ27441.cpp);
+`test_begin_pulses_gpout_low_high_when_pin_wired` and
+`test_begin_does_not_touch_pins_when_no_gpout` in
+[`tests/native/test_bq27441/test_main.cpp`](tests/native/test_bq27441/test_main.cpp).
+
+### Defer interrupt work to `poll()`
+
+**Where:** parts whose interrupt line only says that something happened,
+so the driver has to read registers over I2C to find out what. The
+MCP23009E expander is the case in this library: it reads `INTF` (which pin
+fired) and `INTCAP` (its level at that moment).
+
+**Symptom:** I2C transfers or user callbacks run from the interrupt
+handler. STM32duino's `Wire` relies on interrupts itself, so a transfer
+started from interrupt context can hang, and a user callback there delays
+the other interrupts for as long as it runs.
+
+**Rule:**
+
+- The MCU-side interrupt handler only sets a flag,
+  `volatile bool _irqPending = true;`: no I2C, no callback.
+- A public `poll()`, called from `loop()`, clears the flag and runs the
+  dispatch (`interruptEvent()`) in normal context. With no flag pending,
+  `poll()` does nothing: no bus access, no callback.
+- Attach the MCU-side interrupt on `CHANGE`, not `FALLING` or `RISING`:
+  the polarity of the INT line is user-configurable (the chip's INTPOL
+  bit), and a fixed edge would never fire with the other polarity.
+- Classify the event from the chip's capture register (`INTCAP`), not
+  from the live port register (`GPIO`): the pin may have changed again
+  between the interrupt and `poll()`.
+- An object that registers callbacks capturing `this` (`MCP23009Pin`)
+  removes them in its destructor, so `poll()` never calls into a destroyed
+  object.
+
+**Reference:** `irqHandler()`, `poll()` and `interruptEvent()` in
+[`lib/mcp23009e/src/SteamiMCP23009E.cpp`](lib/mcp23009e/src/SteamiMCP23009E.cpp);
+`testInterruptEventUsesIntcapNotGpio`, `testPollIsNoOpWhenNoPending` and
+`testPinDestructorClearsExpanderCallbackSlot` in
+[`tests/native/test_mcp23009e/test_main.cpp`](tests/native/test_mcp23009e/test_main.cpp).
+The `CHANGE` trigger has no native test: the `attachInterrupt()` mock does
+not record the mode.
+
+### Command protocols: the DAPLink bridge
+
+**Where:** I2C peripherals implemented in firmware that take commands
+instead of exposing a register bank. The case in this library is the I2C
+bridge of the STM32F103 that runs DAPLink, used by `SteamiDaplinkBridge`,
+`SteamiDaplinkFlash` and the config zone. Its behaviour comes from
+[`steami_i2c.c`](https://github.com/steamicc/DAPLink/blob/1b7e90f6e27b223e9ec5c4355378570ac7044366/source/board/steami/steami_i2c.c)
+and
+[`steami32.c`](https://github.com/steamicc/DAPLink/blob/1b7e90f6e27b223e9ec5c4355378570ac7044366/source/board/steami/steami32.c)
+in [`steamicc/DAPLink`](https://github.com/steamicc/DAPLink), branch
+`release_letssteam`.
+
+**How the bridge works:**
+
+- There is no register pointer and no response register to select. Every
+  write transaction is a command: the first byte is the opcode, then the
+  firmware waits for the exact number of argument bytes that command takes
+  (2 for `READ_SECTOR` and `READ_CONFIG`, 11 for `SET_FILENAME`, 31 for
+  `WRITE_DATA` and `WRITE_CONFIG`, none for the others) and runs it once
+  the last one arrives
+  ([`get_argument_byte_number()`](https://github.com/steamicc/DAPLink/blob/1b7e90f6e27b223e9ec5c4355378570ac7044366/source/board/steami/steami_i2c.c#L50-L89)).
+  `STATUS` (0x80) and `ERROR_STATUS` (0x81) are commands too, even though
+  the firmware documents them as registers.
+- Every write transaction, an address-only probe included, empties the
+  answer buffer as soon as the address matches
+  ([`HAL_I2C_AddrCallback()`](https://github.com/steamicc/DAPLink/blob/1b7e90f6e27b223e9ec5c4355378570ac7044366/source/board/steami/steami_i2c.c#L135-L148)).
+- `WHO_AM_I`, `STATUS` and `ERROR_STATUS` fill the answer at once, from
+  the I2C interrupt. The other commands are tasks that the F103 runs from
+  its 30 ms main-loop hook; `READ_SECTOR`, `READ_CONFIG` (256 bytes each)
+  and `GET_FILENAME` (11 bytes) fill the answer when their task runs.
+  Until the task is done, `STATUS` reports busy and the firmware drops any
+  new task command
+  ([`on_I2C_receive_command()`](https://github.com/steamicc/DAPLink/blob/1b7e90f6e27b223e9ec5c4355378570ac7044366/source/board/steami/steami32.c#L140-L279)).
+- A read transaction receives the answer from its first byte, sent from
+  the main loop. The firmware then resets the answer length, and a read
+  with no answer waiting gets a single 0xFF after 500 ms
+  ([`steami_i2c_process()`](https://github.com/steamicc/DAPLink/blob/1b7e90f6e27b223e9ec5c4355378570ac7044366/source/board/steami/steami_i2c.c#L282-L326)).
+- Reading `ERROR_STATUS` returns the error register and clears it. Every
+  command also clears its "last command failed" bit (0x80) when it ends, a
+  `STATUS` poll included.
+
+**Rule:**
+
+- `sendCommand(cmd, args, argLen)` sends `[cmd | args...]` in one write,
+  with exactly the argument count the firmware expects. A shorter frame
+  leaves the firmware waiting for the rest; fixed-size frames
+  (`WRITE_DATA`, `WRITE_CONFIG`) are zero-padded to their 31 argument
+  bytes.
+- The one-byte queries (`WHO_AM_I`, `STATUS`, `ERROR_STATUS`) write the
+  opcode, then read one byte (`readReg()`). This looks like a register read
+  but is a command followed by a read of its answer.
+- `readResponse(buf, len)` is a bare `requestFrom()`: nothing is written
+  before it, the opcode included. Sending the opcode again would be a new
+  command: it empties the answer and, for `READ_SECTOR` or `READ_CONFIG`,
+  leaves the firmware waiting for argument bytes.
+- Between the command and the read of its answer, send nothing: no
+  `STATUS` poll, no `waitReady()`, no address probe. Wait with `delay()`
+  long enough for the task to run on a 30 ms tick
+  (`DAPLINK_FLASH_RESPONSE_DELAY_MS`, `DAPLINK_BRIDGE_READ_CONFIG_DELAY_MS`).
+- Read the whole answer in one transaction. A second read does not pick
+  up where the first one stopped: the firmware resets the answer length as
+  soon as it starts sending it, and the native fake models a repeated read
+  as starting again at byte 0. When an answer is longer than one read can
+  be (STM32duino 2.x caps `requestFrom()` at 255 bytes), send the command
+  again for each chunk with an argument that moves the start:
+  `readConfig()` sends `READ_CONFIG` again with the next offset and skips
+  the bytes it already has. `readResponse()` refuses more than 255 bytes on
+  STM32duino 2.x; the PlatformIO build uses STM32duino 3.1.0, where
+  `readSector()` reads its 256 bytes at once.
+- Check the outcome by reading `ERROR_STATUS` first, then `STATUS`
+  (`commandResult()`), since any other command clears the "last command
+  failed" bit. For a command with an answer, read the answer first, then
+  `ERROR_STATUS` (`readSector()`).
+- Retry `readReg()` for a bounded time while the bridge NACKs (it does so
+  for about one main-loop tick after a 256-byte answer cut short), but do
+  not retry an `ERROR_STATUS` read that the bridge accepted: it has
+  already cleared the register.
+
+**Reference:** `sendCommand()`, `readResponse()`, `readReg()`,
+`commandResult()` and `readConfig()` in
+[`lib/daplink_bridge/src/SteamiDaplinkBridge.cpp`](lib/daplink_bridge/src/SteamiDaplinkBridge.cpp);
+`getFilename()` and `readSector()` in
+[`lib/daplink_flash/src/SteamiDaplinkFlash.cpp`](lib/daplink_flash/src/SteamiDaplinkFlash.cpp).
+The firmware model is
+[`tests/native/helpers/FakeDaplinkBridge.h`](tests/native/helpers/FakeDaplinkBridge.h).
+The rules are locked by `test_read_sector_returns_256_bytes` (one 256-byte
+read) in
+[`tests/native/test_daplink_flash/test_main.cpp`](tests/native/test_daplink_flash/test_main.cpp),
+and by `test_write_config_sends_fixed_32_byte_frames`,
+`test_read_config_reads_past_256_bytes`,
+`test_read_config_reaches_end_of_zone` and
+`test_write_config_returns_false_on_device_error` in
+[`tests/native/test_daplink_bridge/test_main.cpp`](tests/native/test_daplink_bridge/test_main.cpp).
+
 ## Testing
 
 Two complementary environments, both wired into PlatformIO:
