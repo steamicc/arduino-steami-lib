@@ -645,7 +645,7 @@ void test_heading_convention_matches_board(void) {
 
 // --- Tilt-compensated heading ---
 //
-// Board frame: R right of the screen, T top of the screen (side opposite the USB connector),
+// Board frame: R right of the screen, T top of the screen (the USB connector side),
 // U out of the screen. LIS2MDL: x = R, y = T, z = LIS2MDL_MAG_Z_SIGN * U. ISM330DL at rest:
 // x = -T, y = -R, z = -U (screen up and flat: about 0, 0, -1 g).
 
@@ -802,6 +802,73 @@ void test_tilt_heading_is_nan_on_bus_error(void) {
     TEST_ASSERT_TRUE(isnan(sensor.headingWithTiltCompensation(flatAccel)));
 }
 
+// Rows of the V1c measurement of 2026-11-28 (steamicc/micropython-steami-lib#344): the calibrated
+// field (calibratedField() after a 15 s calibrateMinmax3d()), the ISM330DL acceleration in g, the
+// flat heading atan2(-x, y) and the tilt heading the board printed with LIS2MDL_MAG_Z_SIGN = -1.
+// Indoors, the reference direction reads about 187 flat.
+struct V1cRow {
+    float x, y, z;
+    float ax, ay, az;
+    float flat;
+    float heading;
+};
+
+static const V1cRow kV1cFlatRows[] = {
+    {+0.039f, -0.590f, +0.784f, -0.05f, -0.00f, -1.00f, 183.8f, 184.1f},  // t = 166.1 s
+    {+0.021f, -0.609f, +0.767f, -0.05f, -0.00f, -1.00f, 181.9f, 182.1f},  // t = 170.4 s
+};
+
+static const V1cRow kV1cTiltedRows[] = {
+    {+0.589f, -0.631f, +0.457f, -0.09f, +0.68f, -0.72f, 223.0f, 191.5f},  // roll right, 232.5 s
+    {-0.289f, -0.565f, +0.730f, -0.02f, -0.56f, -0.83f, 152.9f, 197.1f},  // roll left, 272.9 s
+    {+0.460f, +0.457f, +0.696f, +0.27f, -0.09f, -0.96f, 314.9f, 296.9f},  // pitch, east, 366.0 s
+};
+
+static void beginWithIdentityCalibration() {
+    sensor.begin();
+    sensor.setCalibrateStep(0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f);
+    sensor.setHeadingOffset(0.0f);
+    sensor.setDeclination(0.0f);
+    sensor.setHeadingFilter(0.0f);
+}
+
+static void checkV1cRow(const V1cRow& row) {
+    const float got = sensor.headingFromVectorsTilt(row.x, row.y, row.z, row.ax, row.ay, row.az);
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.5f, 0.0f, angleError(got, row.heading),
+                                     "tilt heading differs from the V1c log");
+    // The same row read from the chip registers (scaled to LSB, the heading does not change).
+    Wire.setRegister(ADDR, LIS2MDL_STATUS_REG, 0b1000);
+    setField(static_cast<int16_t>(lroundf(row.x * 1000.0f)),
+             static_cast<int16_t>(lroundf(row.y * 1000.0f)),
+             static_cast<int16_t>(lroundf(row.z * 1000.0f)));
+    const float read = sensor.headingWithTiltCompensation(Vec3f{row.ax, row.ay, row.az});
+    TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.5f, 0.0f, angleError(read, row.heading),
+                                     "tilt heading read from the chip differs from the V1c log");
+}
+
+void test_tilt_heading_matches_v1c_log_when_flat(void) {
+    beginWithIdentityCalibration();
+    for (const V1cRow& row : kV1cFlatRows) {
+        checkV1cRow(row);
+        const float flat = sensor.headingFromVectors(row.x, row.y, row.z);
+        TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.0f, angleError(flat, row.flat));
+        const float tilt =
+            sensor.headingFromVectorsTilt(row.x, row.y, row.z, row.ax, row.ay, row.az);
+        TEST_ASSERT_FLOAT_WITHIN_MESSAGE(0.5f, 0.0f, angleError(tilt, flat),
+                                         "flat V1c row: tilt heading differs from the flat one");
+    }
+}
+
+void test_tilt_heading_matches_v1c_log_when_tilted(void) {
+    beginWithIdentityCalibration();
+    for (const V1cRow& row : kV1cTiltedRows) {
+        checkV1cRow(row);
+        // Tilted, the flat heading is far off: these rows really test the compensation.
+        const float flat = sensor.headingFromVectors(row.x, row.y, row.z);
+        TEST_ASSERT_TRUE(angleError(flat, row.heading) > 15.0f);
+    }
+}
+
 void test_direction_sectors_are_centred(void) {
     sensor.begin();
     TEST_ASSERT_EQUAL_STRING("N", sensor.directionLabel(350.0f));
@@ -916,6 +983,8 @@ int main(void) {
     RUN_TEST(test_tilt_heading_is_nan_without_gravity);
     RUN_TEST(test_tilt_heading_reads_the_sensor);
     RUN_TEST(test_tilt_heading_is_nan_on_bus_error);
+    RUN_TEST(test_tilt_heading_matches_v1c_log_when_flat);
+    RUN_TEST(test_tilt_heading_matches_v1c_log_when_tilted);
     RUN_TEST(test_direction_sectors_are_centred);
     RUN_TEST(test_soft_reset_writes_bit5_cfg_reg_a);
     RUN_TEST(test_reboot_writes_bit6_cfg_reg_a);
