@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.46.5](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.4...v0.46.5) (2026-11-28)
+
+
+### Bug Fixes
+
+* **mcp23009e:** Handle bus errors at interrupt registration and in poll(). ([#332](https://github.com/steamicc/arduino-steami-lib/issues/332)) ([df1dc5c](https://github.com/steamicc/arduino-steami-lib/commit/df1dc5c12d221dac4a1d738ef04e7c90051f6406)), closes [#330](https://github.com/steamicc/arduino-steami-lib/issues/330)
+
 ## [0.46.4](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.3...v0.46.4) (2026-11-28)
 
 
