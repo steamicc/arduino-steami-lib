@@ -71,7 +71,6 @@ bool SteamiButtons::begin() {
                 if ((port & (1U << kDpadBits[d])) == 0) {
                     _dpadLevel |= 1U << d;
                 }
-                _dpadEventAt[d] = millis() - kDebounceMs;
             }
         }
     }
@@ -83,18 +82,18 @@ int SteamiButtons::index(SteamiButton button) {
     return (i >= 1 && i <= COUNT) ? i - 1 : -1;
 }
 
-void SteamiButtons::debounce(uint8_t i, bool down, uint32_t t) {
+bool SteamiButtons::debounce(uint8_t i, bool down, uint32_t t) {
     const uint8_t bit = 1U << i;
     if (down == ((_state & bit) != 0) || t - _changedAt[i] < kDebounceMs) {
-        return;
+        return false;
     }
     _state = static_cast<uint8_t>(_state ^ bit);
     _changedAt[i] = t;
-    if (down) {
-        _pressed |= bit;
-    } else {
-        _released |= bit;
+    uint8_t& count = down ? _pressed[i] : _released[i];
+    if (count != UINT8_MAX) {
+        count++;
     }
+    return true;
 }
 
 // Interrupt of A, B or MENU: the debounce at the time of the edge, with the level read now.
@@ -126,12 +125,61 @@ void SteamiButtons::edgeMenu() {
 // sketch), once per event in order: the level captured at the interrupt, then the current one.
 void SteamiButtons::dpadEvent(uint8_t d, uint8_t level) {
     const uint8_t bit = 1U << d;
-    _dpadEventAt[d] = millis();
     if (level == MCP23009_LOGIC_LOW) {
         _dpadDown |= bit;
         _dpadLevel |= bit;
     } else {
+        _dpadUp |= bit;
         _dpadLevel = static_cast<uint8_t>(_dpadLevel & ~bit);
+    }
+}
+
+// Reads the latch of the expander, interrupts enabled (the read uses the I2C bus). `level`: the
+// D-PAD buttons pressed now; `down` and `up`: a pressed or a released level seen since the last
+// read. False on a bus error or without the expander: the D-PAD then reads released.
+bool SteamiButtons::readDpad(uint8_t& level, uint8_t& down, uint8_t& up) {
+    bool ok = false;
+    if (_handle.isAvailable()) {
+        SteamiMCP23009E* expander = _handle.board().mcp23009e();
+        ok = expander != nullptr && expander->interruptEvent();
+    }
+    level = ok ? _dpadLevel : 0;
+    down = _dpadDown;
+    up = _dpadUp;
+    _dpadDown = 0;
+    _dpadUp = 0;
+    return ok;
+}
+
+// The latch keeps a change, but not its time: a bounce made just after a read would look, at the
+// next read, like a new tap. So once a read changed the D-PAD, the latch is read again 20 ms
+// later: what changed in between is a bounce, and only the level then counts. A change that level
+// gives is settled the same way, once.
+void SteamiButtons::settleDpad(uint32_t since) {
+    for (uint8_t round = 0; round < 2; round++) {
+        const uint32_t waited = millis() - since;
+        if (waited < kDebounceMs) {
+            delay(kDebounceMs - waited);
+        }
+        uint8_t level = 0;
+        uint8_t down = 0;
+        uint8_t up = 0;
+        readDpad(level, down, up);
+        noInterrupts();
+        const uint32_t t = millis();
+        bool changed = false;
+        for (uint8_t d = 0; d < 4; d++) {
+            const uint8_t i = MCU_COUNT + d;
+            const bool held = (level & (1U << d)) != 0;
+            if (held != ((_state & (1U << i)) != 0) && debounce(i, held, t)) {
+                changed = true;
+            }
+        }
+        interrupts();
+        if (!changed) {
+            return;
+        }
+        since = t;
     }
 }
 
@@ -143,15 +191,10 @@ void SteamiButtons::sample() {
     gActive = this;  // the object called last gets the interrupts and the D-PAD events
     interrupts();
     // The D-PAD first, interrupts enabled: the read uses the I2C bus.
-    uint8_t dpad = 0;  // bit d: pressed
-    if (_handle.isAvailable()) {
-        SteamiMCP23009E* expander = _handle.board().mcp23009e();
-        if (expander != nullptr && expander->interruptEvent()) {
-            dpad = _dpadLevel;
-        }  // on an error the D-PAD reads released, with no event
-    }
-    const uint8_t down = _dpadDown;
-    _dpadDown = 0;
+    uint8_t level = 0;  // bit d: pressed
+    uint8_t down = 0;
+    uint8_t up = 0;
+    const bool read = readDpad(level, down, up);
 
     noInterrupts();
     const uint32_t t = millis();
@@ -163,7 +206,7 @@ void SteamiButtons::sample() {
     }
     if (!_primed) {
         _primed = true;
-        _state = static_cast<uint8_t>(mcu | (dpad << MCU_COUNT));  // held at start: not a press
+        _state = static_cast<uint8_t>(mcu | (level << MCU_COUNT));  // held at start: not a press
         for (uint8_t i = 0; i < COUNT; i++) {
             _changedAt[i] = t - kDebounceMs;  // the next change is taken at once
         }
@@ -175,19 +218,36 @@ void SteamiButtons::sample() {
     for (uint8_t i = 0; i < MCU_COUNT; i++) {
         debounce(i, (mcu & (1U << i)) != 0, t);
     }
-    // D-PAD: a press found in the latch or in the level; a release only after 20 ms without an
-    // event on that button.
+    // D-PAD: the first change the latch kept since the last read, at once; the level after it is
+    // for settleDpad(). Releases first: a press found as the lever leaves another direction is a
+    // rebound unless it is still there 20 ms later, so it waits for settleDpad() too.
+    bool settle = false;
+    bool released = false;
     for (uint8_t d = 0; d < 4; d++) {
         const uint8_t i = MCU_COUNT + d;
         const uint8_t bit = 1U << d;
-        const bool pressed = (_state & (1U << i)) != 0;
-        if (!pressed && ((down | dpad) & bit) != 0) {
-            debounce(i, true, t);
-        } else if (pressed && (dpad & bit) == 0 && t - _dpadEventAt[d] >= kDebounceMs) {
-            debounce(i, false, t);
+        if ((_state & (1U << i)) != 0 && ((up & bit) != 0 || (level & bit) == 0) &&
+            debounce(i, false, t)) {
+            settle = true;
+            released = true;
+        }
+    }
+    for (uint8_t d = 0; d < 4; d++) {
+        const uint8_t i = MCU_COUNT + d;
+        const uint8_t bit = 1U << d;
+        if ((_state & (1U << i)) != 0 || ((down | level) & bit) == 0) {
+            continue;
+        }
+        // Pressed now, as another direction was released: settleDpad() confirms it or not.
+        const bool rebound = released && (level & bit) != 0;
+        if (rebound || debounce(i, true, t)) {
+            settle = true;
         }
     }
     interrupts();
+    if (read && settle) {
+        settleDpad(t);
+    }
 }
 
 bool SteamiButtons::isPressed(SteamiButton button) {
@@ -199,17 +259,18 @@ bool SteamiButtons::isPressed(SteamiButton button) {
     return i >= 0 && (state & (1U << i)) != 0;
 }
 
-// Returns and clears the bit of `button` in `latch`, a latch the interrupts also set.
-bool SteamiButtons::take(uint8_t& latch, SteamiButton button) {
+// Takes one from the count of `button` in `counts`, counts the interrupts also increment.
+bool SteamiButtons::take(uint8_t (&counts)[COUNT], SteamiButton button) {
     sample();
     const int i = index(button);
     if (i < 0) {
         return false;
     }
-    const uint8_t bit = 1U << i;
     noInterrupts();
-    const bool set = (latch & bit) != 0;
-    latch = static_cast<uint8_t>(latch & ~bit);
+    const bool set = counts[i] != 0;
+    if (set) {
+        counts[i]--;
+    }
     interrupts();
     return set;
 }
@@ -225,7 +286,9 @@ bool SteamiButtons::wasReleased(SteamiButton button) {
 SteamiButton SteamiButtons::waitForPress(uint32_t timeoutMs) {
     sample();  // takes what happened before the call, still in the expander latch included
     noInterrupts();
-    _pressed = 0;
+    for (uint8_t i = 0; i < COUNT; i++) {
+        _pressed[i] = 0;
+    }
     interrupts();
     const uint32_t start = millis();
     for (;;) {
@@ -233,8 +296,8 @@ SteamiButton SteamiButtons::waitForPress(uint32_t timeoutMs) {
         int found = -1;
         noInterrupts();
         for (uint8_t i = 0; i < COUNT; i++) {
-            if ((_pressed & (1U << i)) != 0) {
-                _pressed = static_cast<uint8_t>(_pressed & ~(1U << i));
+            if (_pressed[i] != 0) {
+                _pressed[i]--;
                 found = i;
                 break;
             }
