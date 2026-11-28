@@ -1,0 +1,129 @@
+name: CI
+
+# The single PR workflow. `changements` lists the examples the change can break
+# (scripts/exemples-concernes.py), the compile jobs only build those, and
+# `ci-ok` is the one check that has to pass: it always reports, and it fails
+# when a job failed or was cancelled, or when `changements` itself did not
+# succeed (the compile jobs would then be skipped for the wrong reason).
+
+on:
+  pull_request:
+  merge_group:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changements:
+    runs-on: ubuntu-latest
+    outputs:
+      compiler: ${{ steps.selection.outputs.compiler }}
+      tout: ${{ steps.selection.outputs.tout }}
+      exemples: ${{ steps.selection.outputs.exemples }}
+      pio_exemples: ${{ steps.selection.outputs.pio_exemples }}
+      pilotes: ${{ steps.selection.outputs.pilotes }}
+
+    steps:
+      # The script reads the working tree, so it must be the PR merge commit
+      # (pull_request) or the queue branch head (merge_group): both are
+      # GITHUB_SHA, which checkout uses by default. The full history is needed
+      # for `git diff base...head`.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Fail-closed: a script error or an incomplete JSON fails the step, so
+      # ci-ok fails instead of letting the skipped compile jobs pass.
+      - name: Select the examples to compile
+        id: selection
+        env:
+          EVENEMENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENEMENT" = push ]; then
+            # The PR already compiled its examples before the merge, and the
+            # publication compiles everything again at the tag.
+            sortie='{"compiler":false,"tout":false,"exemples":[],"pio_exemples":[],"pilotes":[]}'
+          else
+            # An empty base would diff head with itself: nothing would compile.
+            if [ -z "$BASE" ]; then
+              echo "::error::No base commit for the $EVENEMENT event."
+              exit 1
+            fi
+            sortie="$(python3 scripts/exemples-concernes.py --base "$BASE" --head "$GITHUB_SHA")"
+          fi
+          jq -e 'has("compiler") and has("pio_exemples")' <<< "$sortie"
+          compiler="$(jq -r .compiler <<< "$sortie")"
+          tout="$(jq -r .tout <<< "$sortie")"
+          exemples="$(jq -c .exemples <<< "$sortie")"
+          pio_exemples="$(jq -c .pio_exemples <<< "$sortie")"
+          pilotes="$(jq -c .pilotes <<< "$sortie")"
+          {
+            echo "compiler=$compiler"
+            echo "tout=$tout"
+            echo "exemples=$exemples"
+            echo "pio_exemples=$pio_exemples"
+            echo "pilotes=$pilotes"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Examples to compile"
+            echo
+            echo "- arduino-cli: $(jq 'length' <<< "$exemples") examples (compile: $compiler, everything: $tout)"
+            echo "- PlatformIO: $(jq 'length' <<< "$pio_exemples") examples"
+            echo "- Drivers: $(jq -r 'if length == 0 then "none" else join(", ") end' <<< "$pilotes")"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  lint:
+    needs: changements
+    uses: ./.github/workflows/lint.yml
+
+  tests:
+    needs: changements
+    uses: ./.github/workflows/tests.yml
+
+  arduino-package:
+    needs: changements
+    if: needs.changements.outputs.compiler == 'true'
+    uses: ./.github/workflows/arduino-package-check.yml
+    with:
+      version: 0.0.0
+      # '' (all) when everything is compiled, the list otherwise. "[]" is a
+      # non-empty string, so truthy: the A && B || C form is safe here (B is
+      # never '').
+      exemples: ${{ needs.changements.outputs.tout != 'true' && needs.changements.outputs.exemples || '' }}
+
+  build:
+    needs: changements
+    if: needs.changements.outputs.pio_exemples != '[]'
+    uses: ./.github/workflows/build.yml
+    with:
+      exemples: ${{ needs.changements.outputs.pio_exemples }}
+      # The measured sketches are steami_board ones, which draw on the screen.
+      empreinte: ${{ needs.changements.outputs.tout == 'true'
+        || contains(fromJSON(needs.changements.outputs.pilotes), 'steami_board')
+        || contains(fromJSON(needs.changements.outputs.pilotes), 'ssd1327')
+        || contains(fromJSON(needs.changements.outputs.pilotes), 'gc9a01') }}
+
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [changements, lint, tests, arduino-package, build]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check the required jobs
+        env:
+          RESULTATS: ${{ toJSON(needs) }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$RESULTATS"
+          # changements must succeed: if it fails, the compile jobs are skipped wrongly.
+          jq -e '.changements.result == "success"
+                 and ([.[] | .result] | all(. == "success" or . == "skipped"))' <<< "$RESULTATS"

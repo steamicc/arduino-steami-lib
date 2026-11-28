@@ -1,7 +1,8 @@
 name: Arduino package check
 
 # Reusable workflow: build the STeaMi Arduino Library Manager package,
-# lint it and compile every example with arduino-cli.
+# lint it and compile its examples with arduino-cli (every example by
+# default, only the listed ones when ci.yml passes `exemples`).
 
 on:
   workflow_call:
@@ -10,6 +11,11 @@ on:
         description: 'Package version, without the leading v (e.g. 0.25.0)'
         required: true
         type: string
+      exemples:
+        description: 'JSON array of lib/<driver>/examples/<example> folders to compile, "" for all, "[]" for none'
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -30,6 +36,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Also run by the tooling job of tests.yml on every PR. Kept here so
+      # that the publication, which calls this workflow, stays guarded.
       - name: Test the packaging tooling
         run: python3 -m unittest discover -s scripts/tests
 
@@ -67,8 +75,19 @@ jobs:
       - name: Install library dependencies
         run: arduino-cli lib install "STM32duinoBLE@${STM32DUINOBLE_VERSION}"
 
+      # "[]": nothing to compile (the package is still built and linted).
       - name: Compile every example
-        run: scripts/compile-package-examples.sh build/arduino-package
+        if: ${{ inputs.exemples != '[]' }}
+        env:
+          EXEMPLES: ${{ inputs.exemples }}
+        run: |
+          set -euo pipefail
+          if [ -z "$EXEMPLES" ]; then
+            scripts/compile-package-examples.sh build/arduino-package
+          else
+            jq -r '.[]' <<< "$EXEMPLES" > "$RUNNER_TEMP/exemples.txt"
+            scripts/compile-package-examples.sh build/arduino-package --only "$RUNNER_TEMP/exemples.txt"
+          fi
 
       - name: Upload the package
         uses: actions/upload-artifact@v4

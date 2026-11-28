@@ -360,16 +360,35 @@ pre-commit hook (`validate-branch-name`). Examples:
 
 ## Continuous integration
 
-Every PR runs four GitHub Actions workflows in parallel:
+Every PR runs one GitHub Actions workflow, `ci.yml`, which calls the
+others as reusable workflows:
 
-| Workflow | Runs |
-|----------|------|
-| `build.yml` | `make setup` + `make build` — firmware compile check. |
-| `tests.yml` | `make test-native` — host-side test suite. |
-| `lint.yml` | `make lint` — clang-format + SPDX header check + clang-tidy + ruff. |
-| `check-commits.yml` | `commitlint` on every commit in the PR range. |
+| Job | Runs |
+|-----|------|
+| `changements` | `scripts/exemples-concernes.py` — lists the examples the PR can break. |
+| `lint` (`lint.yml`) | `make lint` — clang-format + SPDX header check + clang-tidy + ruff, and the Spleen tables check. |
+| `tests` (`tests.yml`) | `make test-native`, the display sanitizers, the mockup review and the tooling tests (`scripts/tests`). |
+| `arduino-package` (`arduino-package-check.yml`) | Builds and lints the Library Manager package, then compiles the selected examples with arduino-cli. |
+| `build` (`build.yml`) | `make build`, then one selected example per driver with PlatformIO, and the footprint check when `steami_board` or a display driver is concerned. |
+| `ci-ok` | Passes when every job above passed or was skipped by the selection. |
 
-All four need to go green before a merge.
+The selection works per example: an example is compiled when a driver it
+includes, directly or through another driver (`SteamiBoard.h` pulls in
+13 drivers), is touched by the PR. A change to a shared or unknown file
+(`platformio.ini`, `boards/`, the compile scripts, `ci.yml` and the
+workflows it calls…) compiles everything. A change to the package
+metadata alone (`keywords.txt`, `scripts/arduino-package/`) builds and
+lints the package without compiling, and a change that cannot affect a
+compile (docs, Markdown, native tests…) compiles nothing. The rules
+live in `scripts/exemples-concernes.py`. On a push to `main`, only `lint`
+and `tests` run: the PR already compiled its examples, and the
+publication compiles all of them again at the tag.
+
+`ci-ok` is the only check that matters: once the repository ruleset
+requires it, it is the check that gates the merge. If `changements`
+fails, `ci-ok` fails too, so that skipped compiles never count as a
+pass. `check-commits.yml` (`commitlint` on every commit in the PR range,
+and the branch name) and CodeQL run beside `ci.yml`.
 
 ## Notes
 
