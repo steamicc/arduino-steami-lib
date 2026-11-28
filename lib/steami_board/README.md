@@ -145,6 +145,26 @@ function, candidate)`, `steamiChipName(chip)`, `steamiChipAddress(chip)`,
 `"no memory"`) and `steamiForceRelease(release)` (used by the `#define`
 mechanism, do not call it).
 
+### Pads on the expander
+
+The crocodile pads P28, P29, P24 and P25 are GPIO 0 to 3 of the MCP23009E, not
+pins of the MCU. `STEAMI_PAD_P28`, `STEAMI_PAD_P29`, `STEAMI_PAD_P24` and
+`STEAMI_PAD_P25` (in `SteamiTypes.h`) give their GPIO number, for the shared
+expander driver. The [`Pads`](examples/Pads/) example reads one pad and drives
+another:
+
+```cpp
+SteamiMCP23009E* expander = Steami.mcp23009e();  // nullptr when it does not answer
+expander->setup(STEAMI_PAD_P24, MCP23009_DIR_INPUT, MCP23009_PULLUP);
+expander->getLevel(STEAMI_PAD_P24);  // MCP23009_LOGIC_LOW when grounded
+```
+
+The expander outputs are open-drain: they sink current (25 mA at most per pin)
+but do not source it. Wire a load such as an LED from 3V3 to the pad and drive
+the pad `MCP23009_LOGIC_LOW` to turn it on.
+
+The MicroPython names are `steami.PAD_P24`...
+
 ## Function classes
 
 Thirteen classes read a function without you choosing a chip:
