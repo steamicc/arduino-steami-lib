@@ -97,6 +97,7 @@ in method names when they carry ambiguity, no `read` / `get` prefix.
 | `void powerOff()` | Switch to idle mode (low power). |
 | `bool isIdle()` | Returns `true` if `MD1..0 == 0b11`. |
 | `const char* getMode()` | Returns `"continuous"`, `"single"`, or `"idle"`. |
+| `void setMode(const char* mode)` | Write the `MD` bits of `CFG_REG_A`: `"single"`, `"powerdown"` (idle), anything else selects continuous mode. |
 
 ### Reading
 
@@ -192,6 +193,7 @@ Heading: 0° when the top of the screen (the side opposite the USB connector) po
 | `void setBdu(bool enabled = true)` | Toggle block data update (BDU bit in `CFG_REG_C`). |
 | `void setEndianness(bool bigEndian)` | Toggle byte order (BLE bit in `CFG_REG_C`). |
 | `void useSpi4wire(bool enable)` | Toggle 4-wire SPI mode. |
+| `void readRegisters(uint8_t startAddr, uint8_t length, uint8_t* buffer)` | Debug dump: read `length` consecutive registers into `buffer` (zero-filled first, so a short read leaves zeros). |
 
 ## Register constants
 
@@ -210,9 +212,15 @@ run on a real STeaMi and verify device detection, field plausibility,
 and sensor stability. Run them with:
 
 ```bash
-make test-native        # host only, no board required
-make test-hardware      # requires a connected STeaMi
+make test-native/lis2mdl     # host only, no board required
+make test-hardware/lis2mdl   # requires a connected STeaMi
 ```
+
+## References
+
+* Datasheet: [ST LIS2MDL](https://www.st.com/resource/en/datasheet/lis2mdl.pdf).
+* STeaMi wiki: [LIS2MDL hardware page](https://wiki.steami.cc/docs/hardware/main-components/sensors/lis2mdl).
+* MicroPython driver: [`lis2mdl`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/lis2mdl).
 
 ## License
 

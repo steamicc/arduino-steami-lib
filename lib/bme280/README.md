@@ -184,6 +184,12 @@ The native suite checks the compensation formulas against reference vectors
 the MicroPython driver). The hardware suite in `tests/hardware/test_bme280/`
 needs a STeaMi V1c.
 
+## References
+
+* Datasheet: [Bosch BME280](https://www.bosch-sensortec.com/media/boschsensortec/downloads/datasheets/bst-bme280-ds002.pdf).
+* STeaMi wiki: [BME280 hardware page](https://wiki.steami.cc/docs/hardware/main-components/sensors/bme280).
+* MicroPython driver: [`bme280`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/bme280).
+
 ## License
 
-GPL-3.0-or-later - see [LICENSE](../../LICENSE).
+GPL-3.0-or-later — see [LICENSE](../../LICENSE).

@@ -66,7 +66,7 @@ for the complete example.
 
 ---
 
-# Examples
+## Examples
 
 | Example | What it does | Try it |
 |---------|--------------|--------|
@@ -79,7 +79,7 @@ for the complete example.
 Each example with a **Try it** link is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/ism330dl).
 
 
-## Building an example
+### Building an example
 
 ```bash
 make list-examples
@@ -99,11 +99,11 @@ make capture-ism330dl/Orientation
 
 ---
 
-# API
+## API
 
 The driver follows the common STeaMi API conventions.
 
-## Lifecycle
+### Lifecycle
 
 | Method | Description |
 |---------|-------------|
@@ -115,9 +115,9 @@ The driver follows the common STeaMi API conventions.
 
 ---
 
-## Configuration
+### Configuration
 
-### Accelerometer
+#### Accelerometer
 
 | Method | Description |
 |---------|-------------|
@@ -144,7 +144,7 @@ Supported full scales
 
 ---
 
-### Gyroscope
+#### Gyroscope
 
 | Method | Description |
 |---------|-------------|
@@ -172,9 +172,7 @@ Supported ranges
 
 ---
 
-# Measurements
-
-## Raw values
+### Raw values
 
 | Method | Description |
 |---------|-------------|
@@ -184,7 +182,7 @@ Supported ranges
 
 ---
 
-## Converted values
+### Converted values
 
 | Method | Unit |
 |---------|------|
@@ -196,7 +194,7 @@ Supported ranges
 
 ---
 
-## Calibration
+### Calibration
 
 | Method | Description |
 |---------|-------------|
@@ -207,7 +205,7 @@ Supported ranges
 
 ---
 
-## Orientation
+### Orientation
 
 Orientation is estimated from the gravity vector.
 
@@ -231,7 +229,7 @@ returns a printable string.
 
 ---
 
-## Motion
+### Motion
 
 Motion detection uses the gyroscope.
 
@@ -255,7 +253,7 @@ returns a printable string.
 
 ---
 
-## Status
+### Status
 
 | Method | Description |
 |---------|-------------|
@@ -267,7 +265,7 @@ returns a printable string.
 
 ---
 
-## Power management
+### Power management
 
 | Method | Description |
 |---------|-------------|
@@ -276,7 +274,7 @@ returns a printable string.
 
 ---
 
-## Constants
+## Register constants
 
 `SteamiISM330DL_const.h` exports
 
@@ -290,28 +288,36 @@ for applications requiring direct register access.
 
 ---
 
-# Testing
+## Testing
 
-Hardware tests can be executed with
+Host-side unit tests under
+[`tests/native/test_ism330dl/`](../../tests/native/test_ism330dl/) exercise
+the driver against the `TwoWire` mock. Run them without hardware with:
 
 ```bash
-make test-hardware
+make test-native/ism330dl
 ```
 
-Formatting
+On a connected board, the hardware suite checks the real sensor:
+
+```bash
+make test-hardware/ism330dl
+```
+
+Formatting:
 
 ```bash
 make lint
 ```
 
-Build
-
-```bash
-make build
-```
-
 ---
 
-# License
+## References
 
-GPL-3.0-or-later — see `LICENSE`.
+* Datasheet: [ST ISM330DLC](https://www.st.com/resource/en/datasheet/ism330dlc.pdf) (the chip of the board; the library calls it ISM330DL).
+* STeaMi wiki: [ISM330DLC hardware page](https://wiki.steami.cc/docs/hardware/main-components/sensors/ism330dlc).
+* MicroPython driver: [`ism330dl`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/ism330dl).
+
+## License
+
+GPL-3.0-or-later — see [LICENSE](../../LICENSE).

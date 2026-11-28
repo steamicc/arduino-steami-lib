@@ -272,6 +272,12 @@ licence and copyright notice (`SPDX-License-Identifier: BSD-3-Clause`); the
 changes are listed at the top of each file. The SAI1 PDM settings follow ST's
 STM32WB5MM-DK board support package.
 
+## References
+
+* Datasheet: [ST IMP34DT05](https://www.st.com/resource/en/datasheet/imp34dt05.pdf).
+* STeaMi wiki: [IMP34DT05 hardware page](https://wiki.steami.cc/docs/hardware/main-components/sensors/imp34dt05).
+* MicroPython driver: not written yet (the [`im34dt05`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/im34dt05) folder of micropython-steami-lib is a placeholder).
+
 ## License
 
 GPL-3.0-or-later - see [LICENSE](../../LICENSE), except `SteamiPdmFilter.*`

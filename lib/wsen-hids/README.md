@@ -148,6 +148,14 @@ need something outside the driver's API surface.
 
 ## Testing
 
+Host-side unit tests under
+[`tests/native/test_wsen_hids/`](../../tests/native/test_wsen_hids/) exercise
+the driver against the `TwoWire` mock. Run them without hardware with:
+
+```bash
+make test-native/wsen_hids
+```
+
 Build-only verification:
 
 ```bash
@@ -168,6 +176,12 @@ example to confirm:
 * plausible temperature values
 * plausible humidity values
 * continuous acquisition readiness
+
+## References
+
+* Product page and datasheet: [Würth Elektronik WSEN-HIDS 2525020210001](https://www.we-online.com/en/components/products/WSEN-HIDS_1).
+* STeaMi wiki: [WSEN-HIDS hardware page](https://wiki.steami.cc/docs/hardware/main-components/sensors/wsen-hids).
+* MicroPython driver: [`wsen-hids`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/wsen-hids).
 
 ## License
 
