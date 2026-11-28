@@ -72,6 +72,8 @@ With the `STeaMi` Library Manager package, `#include <SteamiIMP34DT05.h>` (or
 | -------------------------------------------- | -------------------------------------------------------------------------------------------- |
 | [`SoundLevel`](examples/SoundLevel/)         | Print the RMS level, the dBFS level and an estimated dB SPL value five times per second.     |
 | [`ClapDetector`](examples/ClapDetector/)     | Toggle the blue LED on each hand clap (sharp peak above the background noise).               |
+| [`SoundLogger`](examples/SoundLogger/)       | Append the average and maximum sound level of every 10 s to a CSV file on the STeaMi USB drive (DAPLink flash). |
+| [`VoiceActivityDetector`](examples/VoiceActivityDetector/) | Light the green LED while someone speaks (level above the background noise, few zero crossings, at least 80 ms). |
 | [`FrequencyMeter`](examples/FrequencyMeter/) | Show the dominant frequency and the nearest note (A4 = 440 Hz), like a tuner.                |
 | [`BuzzerSelfTest`](examples/BuzzerSelfTest/) | Play tones from 2 to 4 kHz on the buzzer and check that the microphone hears the right frequency. |
 
