@@ -47,13 +47,20 @@ ChargeState chargeState(int16_t currentMa) {
     return ChargeState::IDLE;
 }
 
-// "1 h 25" or "40 min" for a duration in minutes.
+// Longer estimates show as ">99h": at a few mA the estimate runs to days.
+constexpr uint32_t LONGEST_DURATION_MIN = 99 * 60 + 59;
+
+// "1h25", "40min" or ">99h" for a duration in minutes. The format stays
+// short: the longest line, "empty 99h59" (11 characters), fits on the
+// bottom line of the 128 px screen of V1a/V1b, which cuts longer lines.
 void formatDuration(char* out, size_t size, uint32_t minutes) {
-    if (minutes >= 60) {
-        snprintf(out, size, "%lu h %02lu", (unsigned long)(minutes / 60),
+    if (minutes > LONGEST_DURATION_MIN) {
+        snprintf(out, size, ">99h");
+    } else if (minutes >= 60) {
+        snprintf(out, size, "%luh%02lu", (unsigned long)(minutes / 60),
                  (unsigned long)(minutes % 60));
     } else {
-        snprintf(out, size, "%lu min", (unsigned long)minutes);
+        snprintf(out, size, "%lumin", (unsigned long)minutes);
     }
 }
 
@@ -96,7 +103,7 @@ void loop() {
         if (full > remaining) {
             formatDuration(duration, sizeof(duration),
                            (uint32_t)(full - remaining) * 60 / currentMa);
-            snprintf(eta, sizeof(eta), "full in %s", duration);
+            snprintf(eta, sizeof(eta), "full %s", duration);
         }
     } else if (state == ChargeState::DISCHARGING) {
         title = "On battery";
@@ -104,7 +111,7 @@ void loop() {
         // Time to empty: the capacity left at the present current.
         formatDuration(duration, sizeof(duration),
                        (uint32_t)fuelGauge.capacityRemaining() * 60 / -currentMa);
-        snprintf(eta, sizeof(eta), "empty in %s", duration);
+        snprintf(eta, sizeof(eta), "empty %s", duration);
     } else if (percent >= 100) {
         title = "Full";
         barColor = STEAMI_GREEN;
