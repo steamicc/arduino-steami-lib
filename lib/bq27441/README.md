@@ -80,6 +80,11 @@ included in method names only where they carry ambiguity.
 | `uint16_t capacityRemaining()` | Remaining capacity in mAh. |
 | `uint16_t capacityFull()` | Full charge capacity in mAh. |
 | `int16_t power()` | Average power in mW (negative = discharging). |
+| `int16_t current(CurrentMeasureType type = AVG)` | Current in mA: `AVG` (average), `STBY` (standby) or `MAX` (max load). |
+| `int16_t capacity(CapacityMeasureType type = REMAIN)` | Capacity in mAh: `REMAIN`, `FULL`, `AVAIL`, `AVAIL_FULL`, the filtered / unfiltered variants or `DESIGN`. |
+| `uint16_t soc(SocMeasureType type = FILTERED)` | State of charge in %, filtered or `UNFILTERED`. |
+| `uint16_t soh(SohMeasureType type = PERCENT)` | State of health in %, or the status byte with `SOH_STAT`. |
+| `uint16_t flags()` | Raw `Flags()` word (`BQ27441_FLAG_*` bits). |
 
 ### Temperature
 
@@ -97,7 +102,25 @@ included in method names only where they carry ambiguity.
 | `bool setGpoutPolarity(bool active_high)` | Set GPOUT pin polarity. |
 | `uint16_t gpoutPolarity()` | Read current GPOUT polarity setting. |
 | `uint16_t gpoutFunction()` | Read current GPOUT function (SOC_INT or BAT_LOW). |
+| `bool setGpoutFunction(bool gpout_function)` | `true` drives GPOUT as BAT_LOW, `false` as SOC_INT. |
 | `bool sealed()` | Returns `true` if the IC is in sealed access mode. |
+| `bool seal()` / `bool unseal()` | Seal or unseal the data flash. |
+| `bool enterConfig(bool user_control)` / `bool exitConfig(bool resim = true)` | Enter or leave the configuration mode. With `user_control = true`, the setters below write without entering or leaving it themselves until `exitConfig()`, so several writes share one session. |
+| `bool reset()` / `bool softReset()` | Full reset, or soft reset (resimulation). |
+
+### State-of-charge alerts
+
+The thresholds are percentages; the setters clamp them to 0–100 and return `false` when the gauge refuses the write.
+
+| Method | Description |
+|--------|-------------|
+| `uint16_t soc1SetThreshold()` / `uint16_t soc1ClearThreshold()` | SOC1 thresholds that set and clear the SOC1 flag. |
+| `bool setSoc1Thresholds(uint16_t set, uint16_t clear)` | Write both SOC1 thresholds. |
+| `uint16_t socfSetThreshold()` / `uint16_t socfClearThreshold()` | SOCF (final) thresholds. |
+| `bool setSocfThresholds(uint16_t set, uint16_t clear)` | Write both SOCF thresholds. |
+| `bool socFlag()` / `bool socfFlag()` | `true` while the SOC1 / SOCF flag is set. |
+| `uint16_t sociDelta()` / `bool setSociDelta(uint16_t delta)` | SOC_INT step in % between two GPOUT pulses. |
+| `bool pulseGpout()` | Pulse GPOUT (SOC_INT mode). |
 
 ## Enumerations
 

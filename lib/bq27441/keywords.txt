@@ -35,6 +35,31 @@ setGpoutPolarity	KEYWORD2
 gpoutPolarity	KEYWORD2
 gpoutFunction	KEYWORD2
 deviceId	KEYWORD2
+dataReady	KEYWORD2
+sealed	KEYWORD2
+current	KEYWORD2
+capacity	KEYWORD2
+soc	KEYWORD2
+soh	KEYWORD2
+flags	KEYWORD2
+soc1SetThreshold	KEYWORD2
+soc1ClearThreshold	KEYWORD2
+setSoc1Thresholds	KEYWORD2
+socfSetThreshold	KEYWORD2
+socfClearThreshold	KEYWORD2
+setSocfThresholds	KEYWORD2
+socFlag	KEYWORD2
+socfFlag	KEYWORD2
+sociDelta	KEYWORD2
+setSociDelta	KEYWORD2
+pulseGpout	KEYWORD2
+setGpoutFunction	KEYWORD2
+enterConfig	KEYWORD2
+exitConfig	KEYWORD2
+seal	KEYWORD2
+unseal	KEYWORD2
+reset	KEYWORD2
+softReset	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)

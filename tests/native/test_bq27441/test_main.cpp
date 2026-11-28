@@ -264,6 +264,167 @@ void test_extended_write_accepts_every_setter_range(void) {
     TEST_ASSERT_TRUE(bq27441_detail::isExtendedDataWriteInRange(26, 1));
 }
 
+// --- Methods shared with the MicroPython driver (#316) ---------------------
+
+// True when the control subcommand was written to Control() (LSB then MSB).
+static bool controlSent(uint16_t subcommand) {
+    const auto& writes = Wire.getWrites();
+    for (size_t i = 0; i + 1 < writes.size(); ++i) {
+        if (writes[i].address == ADDR && writes[i].reg == BQ27441_COMMAND_CONTROL &&
+            writes[i].value == (subcommand & 0xFF) && writes[i + 1].reg == 1 &&
+            writes[i + 1].value == (subcommand >> 8)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void preloadWord(uint8_t reg, uint16_t value) {
+    Wire.setRegister(ADDR, reg, value & 0xFF);
+    Wire.setRegister(ADDR, reg + 1, (value >> 8) & 0xFF);
+}
+
+void test_current_reads_the_requested_register(void) {
+    preloadWord(BQ27441_COMMAND_AVG_CURRENT, static_cast<uint16_t>(-120));
+    preloadWord(BQ27441_COMMAND_STDBY_CURRENT, static_cast<uint16_t>(-10));
+    preloadWord(BQ27441_COMMAND_MAX_CURRENT, static_cast<uint16_t>(-900));
+    TEST_ASSERT_EQUAL(-120, sensor->current());
+    TEST_ASSERT_EQUAL(-10, sensor->current(SteamiBQ27441::CurrentMeasureType::STBY));
+    TEST_ASSERT_EQUAL(-900, sensor->current(SteamiBQ27441::CurrentMeasureType::MAX));
+}
+
+void test_capacity_reads_the_requested_register(void) {
+    preloadWord(BQ27441_COMMAND_REM_CAPACITY, 812);
+    preloadWord(BQ27441_COMMAND_FULL_CAP_FIL, 1500);
+    TEST_ASSERT_EQUAL(812, sensor->capacity());
+    TEST_ASSERT_EQUAL(1500, sensor->capacity(SteamiBQ27441::CapacityMeasureType::FULL_F));
+}
+
+void test_soc_unfiltered_reads_its_own_register(void) {
+    preloadWord(BQ27441_COMMAND_SOC, 70);
+    preloadWord(BQ27441_COMMAND_SOC_UNFL, 73);
+    TEST_ASSERT_EQUAL(70, sensor->soc());
+    TEST_ASSERT_EQUAL(73, sensor->soc(SteamiBQ27441::SocMeasureType::UNFILTERED));
+}
+
+void test_soh_status_returns_the_high_byte(void) {
+    preloadWord(BQ27441_COMMAND_SOH, 0x0362);
+    TEST_ASSERT_EQUAL(0x62, sensor->soh());
+    TEST_ASSERT_EQUAL(0x03, sensor->soh(SteamiBQ27441::SohMeasureType::SOH_STAT));
+}
+
+void test_flags_and_soc_alert_bits(void) {
+    preloadWord(BQ27441_COMMAND_FLAGS, BQ27441_FLAG_CFGUPMODE | BQ27441_FLAG_SOC1);
+    TEST_ASSERT_EQUAL_HEX16(BQ27441_FLAG_CFGUPMODE | BQ27441_FLAG_SOC1, sensor->flags());
+    TEST_ASSERT_TRUE(sensor->socFlag());
+    TEST_ASSERT_FALSE(sensor->socfFlag());
+
+    preloadWord(BQ27441_COMMAND_FLAGS, BQ27441_FLAG_CFGUPMODE | BQ27441_FLAG_SOCF);
+    TEST_ASSERT_FALSE(sensor->socFlag());
+    TEST_ASSERT_TRUE(sensor->socfFlag());
+}
+
+void test_soc_thresholds_read_the_discharge_block(void) {
+    Wire.setRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 0, 10);
+    Wire.setRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 1, 15);
+    Wire.setRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 2, 2);
+    Wire.setRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 3, 5);
+    TEST_ASSERT_EQUAL(10, sensor->soc1SetThreshold());
+    TEST_ASSERT_EQUAL(15, sensor->soc1ClearThreshold());
+    TEST_ASSERT_EQUAL(2, sensor->socfSetThreshold());
+    TEST_ASSERT_EQUAL(5, sensor->socfClearThreshold());
+    TEST_ASSERT_EQUAL(BQ27441_ID_DISCHARGE, Wire.getRegister(ADDR, BQ27441_EXTENDED_DATACLASS));
+}
+
+void test_set_soc1_thresholds_writes_clamped_percentages(void) {
+    // 300 must clamp to 100, not wrap to 44 through a uint8_t cast.
+    TEST_ASSERT_TRUE(sensor->setSoc1Thresholds(300, 20));
+    TEST_ASSERT_EQUAL(BQ27441_ID_DISCHARGE, Wire.getRegister(ADDR, BQ27441_EXTENDED_DATACLASS));
+    TEST_ASSERT_EQUAL(100, Wire.getRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 0));
+    TEST_ASSERT_EQUAL(20, Wire.getRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 1));
+}
+
+void test_set_socf_thresholds_writes_offsets_2_and_3(void) {
+    TEST_ASSERT_TRUE(sensor->setSocfThresholds(3, 6));
+    TEST_ASSERT_EQUAL(3, Wire.getRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 2));
+    TEST_ASSERT_EQUAL(6, Wire.getRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 3));
+}
+
+void test_set_soc_thresholds_return_false_when_config_fails(void) {
+    preloadWord(BQ27441_COMMAND_FLAGS, 0x0000);  // CFGUPMODE never rises
+    TEST_ASSERT_FALSE(sensor->setSoc1Thresholds(10, 15));
+    TEST_ASSERT_FALSE(sensor->setSocfThresholds(2, 5));
+}
+
+void test_set_gpout_function_sets_batlowen_in_op_config(void) {
+    preloadWord(BQ27441_EXTENDED_OPCONFIG, 0x0000);
+    TEST_ASSERT_TRUE(sensor->setGpoutFunction(true));
+    TEST_ASSERT_EQUAL(BQ27441_ID_REGISTERS, Wire.getRegister(ADDR, BQ27441_EXTENDED_DATACLASS));
+    // OpConfig is stored MSB first in the data block.
+    TEST_ASSERT_EQUAL_HEX8(0x00, Wire.getRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 0));
+    TEST_ASSERT_EQUAL_HEX8(BQ27441_OPCONFIG_BATLOWEN,
+                           Wire.getRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 1));
+}
+
+void test_set_gpout_function_skips_the_write_when_unchanged(void) {
+    preloadWord(BQ27441_EXTENDED_OPCONFIG, BQ27441_OPCONFIG_BATLOWEN);
+    Wire.clearWrites();
+    TEST_ASSERT_TRUE(sensor->setGpoutFunction(true));
+    TEST_ASSERT_FALSE(controlSent(BQ27441_CONTROL_SET_CFGUPDATE));
+}
+
+void test_seal_and_unseal_send_their_subcommands(void) {
+    Wire.clearWrites();
+    TEST_ASSERT_TRUE(sensor->seal());
+    TEST_ASSERT_TRUE(controlSent(BQ27441_CONTROL_SEALED));
+    Wire.clearWrites();
+    TEST_ASSERT_TRUE(sensor->unseal());
+    TEST_ASSERT_TRUE(controlSent(BQ27441_UNSEAL_KEY));
+}
+
+void test_reset_and_soft_reset_send_their_subcommands(void) {
+    Wire.clearWrites();
+    TEST_ASSERT_TRUE(sensor->reset());
+    TEST_ASSERT_TRUE(controlSent(BQ27441_CONTROL_RESET));
+    Wire.clearWrites();
+    TEST_ASSERT_TRUE(sensor->softReset());
+    TEST_ASSERT_TRUE(controlSent(BQ27441_CONTROL_SOFT_RESET));
+}
+
+void test_control_commands_return_false_on_i2c_error(void) {
+    Wire.setEndTransmissionResult(2);
+    TEST_ASSERT_FALSE(sensor->seal());
+    TEST_ASSERT_FALSE(sensor->unseal());
+    TEST_ASSERT_FALSE(sensor->reset());
+    TEST_ASSERT_FALSE(sensor->softReset());
+}
+
+void test_user_config_session_batches_writes_then_hands_back_control(void) {
+    // Inside a user session, the setters do not enter or leave the
+    // configuration mode themselves.
+    TEST_ASSERT_TRUE(sensor->enterConfig(true));
+    Wire.clearWrites();
+    TEST_ASSERT_TRUE(sensor->setSoc1Thresholds(10, 15));
+    TEST_ASSERT_FALSE(controlSent(BQ27441_CONTROL_SET_CFGUPDATE));
+    TEST_ASSERT_TRUE(sensor->exitConfig(false));
+    TEST_ASSERT_TRUE(controlSent(BQ27441_CONTROL_EXIT_CFGUPDATE));
+
+    // After exitConfig(), a setter opens its own session again.
+    Wire.clearWrites();
+    TEST_ASSERT_TRUE(sensor->setSocfThresholds(2, 5));
+    TEST_ASSERT_TRUE(controlSent(BQ27441_CONTROL_SET_CFGUPDATE));
+}
+
+void test_soci_delta_and_pulse_gpout(void) {
+    TEST_ASSERT_TRUE(sensor->setSociDelta(250));
+    TEST_ASSERT_EQUAL(BQ27441_ID_STATE, Wire.getRegister(ADDR, BQ27441_EXTENDED_DATACLASS));
+    TEST_ASSERT_EQUAL(100, Wire.getRegister(ADDR, BQ27441_EXTENDED_BLOCKDATA + 26));
+    TEST_ASSERT_EQUAL(100, sensor->sociDelta());
+    Wire.clearWrites();
+    TEST_ASSERT_TRUE(sensor->pulseGpout());
+    TEST_ASSERT_TRUE(controlSent(BQ27441_CONTROL_PULSE_SOC_INT));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_begin_returns_true_when_device_id_matches);
@@ -298,5 +459,21 @@ int main(void) {
     RUN_TEST(test_extended_write_rejects_length_over_one_block);
     RUN_TEST(test_extended_write_accepts_writes_inside_one_block);
     RUN_TEST(test_extended_write_accepts_every_setter_range);
+    RUN_TEST(test_current_reads_the_requested_register);
+    RUN_TEST(test_capacity_reads_the_requested_register);
+    RUN_TEST(test_soc_unfiltered_reads_its_own_register);
+    RUN_TEST(test_soh_status_returns_the_high_byte);
+    RUN_TEST(test_flags_and_soc_alert_bits);
+    RUN_TEST(test_soc_thresholds_read_the_discharge_block);
+    RUN_TEST(test_set_soc1_thresholds_writes_clamped_percentages);
+    RUN_TEST(test_set_socf_thresholds_writes_offsets_2_and_3);
+    RUN_TEST(test_set_soc_thresholds_return_false_when_config_fails);
+    RUN_TEST(test_set_gpout_function_sets_batlowen_in_op_config);
+    RUN_TEST(test_set_gpout_function_skips_the_write_when_unchanged);
+    RUN_TEST(test_seal_and_unseal_send_their_subcommands);
+    RUN_TEST(test_reset_and_soft_reset_send_their_subcommands);
+    RUN_TEST(test_control_commands_return_false_on_i2c_error);
+    RUN_TEST(test_user_config_session_batches_writes_then_hands_back_control);
+    RUN_TEST(test_soci_delta_and_pulse_gpout);
     return UNITY_END();
 }
