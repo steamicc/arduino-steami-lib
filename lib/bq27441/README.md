@@ -47,8 +47,10 @@ void loop() {
 |---------|--------------|--------|
 | [`battery_status`](examples/battery_status/) | Print voltage, state of charge, remaining capacity and state of health every 3 seconds. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/bq27441#battery_status) |
 | [`low_battery_alert`](examples/low_battery_alert/) | Blink the red LED below 20 % charge and sound the on-board `SPEAKER` below 5 %. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/bq27441#low_battery_alert) |
+| [`battery_logger`](examples/battery_logger/) | Log voltage, charge, current and remaining capacity every minute to `BATTERY.CSV` on the STeaMi USB drive (DAPLink flash), to measure how long a charge lasts. | — |
+| [`charging_monitor`](examples/charging_monitor/) | Tell charging from discharging by the sign of the current, and show the charge, a progress bar, the current and the time to full or to empty on the screen (V1a, V1b and V1c). | — |
 
-Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/bq27441).
+Each example with a **Try it** link is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/bq27441).
 
 Flash one with `make flash-bq27441/<example>` (list them with
 `make list-examples DRIVER=bq27441`).
