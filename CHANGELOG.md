@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+# [0.43.0](https://github.com/steamicc/arduino-steami-lib/compare/v0.42.4...v0.43.0) (2026-11-28)
+
+
+### Features
+
+* **im34dt05:** Add the SoundLogger and VoiceActivityDetector examples. ([#308](https://github.com/steamicc/arduino-steami-lib/issues/308)) ([9c28f68](https://github.com/steamicc/arduino-steami-lib/commit/9c28f68c16942a5f4b26084cc6615cbdc9ec0d7a)), closes [#82](https://github.com/steamicc/arduino-steami-lib/issues/82)
+
 ## [0.42.4](https://github.com/steamicc/arduino-steami-lib/compare/v0.42.3...v0.42.4) (2026-11-28)
 
 
