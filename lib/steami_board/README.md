@@ -41,8 +41,9 @@ each line shows whether the chip really answers, even on an unknown release.
 
 ## Examples
 
-The examples use the function classes and the screen, never a driver directly:
-the same sketch runs on a V1a, a V1b or a V1c.
+The examples use the function classes and the screen, never a driver directly
+(except `Pads`, which drives the expander through `Steami.mcp23009e()`): the
+same sketch runs on a V1a, a V1b or a V1c.
 
 | Example | What it does | Try it |
 |---------|--------------|--------|
@@ -71,8 +72,9 @@ the same sketch runs on a V1a, a V1b or a V1c.
 | [`ScreenMenu`](examples/ScreenMenu/) | Show a menu moved with the D-PAD (mockup 06). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screenmenu) |
 | [`WeatherStation`](examples/WeatherStation/) | A weather station on four screen pages: temperature, humidity, pressure graph and compass. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#weatherstation) |
 | [`BoardInfo`](examples/BoardInfo/) | Print the detected release, where the answer comes from, and whether each I2C chip of the release answers. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#boardinfo) |
+| [`Pads`](examples/Pads/) | Read the crocodile pad P24 and drive P28 through the MCP23009E expander: an LED on P28 lights and the buzzer beeps while P24 is grounded. | — |
 
-Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board).
+Each example but `Pads` is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board).
 
 ### Building an example
 
