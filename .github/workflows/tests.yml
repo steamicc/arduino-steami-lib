@@ -34,13 +34,14 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Cache PlatformIO packages
-        uses: actions/cache@v4
+      # Restore only: the caches job of ci.yml saves it, on main.
+      - name: Restore the PlatformIO packages
+        uses: actions/cache/restore@v4
         with:
           path: ~/.platformio
-          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini', 'boards/steami.json', 'requirements.txt') }}
+          key: pio-v2-${{ runner.os }}-${{ hashFiles('platformio.ini', 'boards/steami.json', 'requirements.txt') }}
           restore-keys: |
-            pio-${{ runner.os }}-
+            pio-v2-${{ runner.os }}-
 
       - name: Run native tests
         run: make test-native
@@ -57,13 +58,14 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Cache PlatformIO packages
-        uses: actions/cache@v4
+      # Restore only: the caches job of ci.yml saves it, on main.
+      - name: Restore the PlatformIO packages
+        uses: actions/cache/restore@v4
         with:
           path: ~/.platformio
-          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini', 'boards/steami.json', 'requirements.txt') }}
+          key: pio-v2-${{ runner.os }}-${{ hashFiles('platformio.ini', 'boards/steami.json', 'requirements.txt') }}
           restore-keys: |
-            pio-${{ runner.os }}-
+            pio-v2-${{ runner.os }}-
 
       - name: Run the display suites under ASan and UBSan
         env:
@@ -105,13 +107,14 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Cache PlatformIO packages
-        uses: actions/cache@v4
+      # Restore only: the caches job of ci.yml saves it, on main.
+      - name: Restore the PlatformIO packages
+        uses: actions/cache/restore@v4
         with:
           path: ~/.platformio
-          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini', 'boards/steami.json', 'requirements.txt') }}
+          key: pio-v2-${{ runner.os }}-${{ hashFiles('platformio.ini', 'boards/steami.json', 'requirements.txt') }}
           restore-keys: |
-            pio-${{ runner.os }}-
+            pio-v2-${{ runner.os }}-
 
       - name: Render the mockups
         env:

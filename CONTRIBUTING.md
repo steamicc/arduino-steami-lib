@@ -547,9 +547,20 @@ workflows it calls…) compiles everything. A change to the package
 metadata alone (`keywords.txt`, `scripts/arduino-package/`) builds and
 lints the package without compiling, and a change that cannot affect a
 compile (docs, Markdown, native tests…) compiles nothing. The rules
-live in `scripts/exemples-concernes.py`. On a push to `main`, only `lint`
-and `tests` run: the PR already compiled its examples, and the
+live in `scripts/exemples-concernes.py`. On a push to `main`, only `lint`,
+`tests` and `caches` run: the PR already compiled its examples, and the
 publication compiles all of them again at the tag.
+
+The toolchains are cached: `~/.arduino15` (arduino-cli, pinned in the
+workflows, with the STM32 core and STM32duinoBLE) and `~/.platformio`.
+Only the `caches` job of `ci.yml` saves them, on `main`, where it installs
+the toolchains without compiling; every other job only restores them. A
+cache saved on `main` is the one PRs and the merge queue can see. The
+keys change with the pinned versions and with `platformio.ini`,
+`boards/steami.json` or `requirements.txt`: the first PR after such a
+change misses the cache and installs everything, until its merge warms
+the new key. `scripts/tests/test_workflow_versions.py` checks the pins,
+the keys and that nothing else saves these caches.
 
 `ci-ok` is the only check that matters: once the repository ruleset
 requires it, it is the check that gates the merge. If `changements`
