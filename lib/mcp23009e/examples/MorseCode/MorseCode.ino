@@ -27,7 +27,8 @@ String code = "";
 bool upWasPressed = false;
 uint32_t upPressStart = 0;
 
-SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+// No interrupt pin: INT_EXPANDER (PB0) shares EXTI line 0 with MENU_BUTTON (PA0).
+SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR);
 
 void decodeMorse() {
     if (code == "") {

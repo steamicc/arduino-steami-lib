@@ -19,7 +19,7 @@ The board owns that bus: build the driver on `Steami.wire()`, which starts it on
 #include <SteamiBoard.h>
 #include <SteamiMCP23009E.h>
 
-SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR);
 
 void setup() {
     Serial.begin(115200);
@@ -41,6 +41,18 @@ void loop() {
     delay(500);
 }
 ```
+
+`Steami.mcp23009e()` gives the expander the board builds the same way,
+already started (`nullptr` when it does not answer).
+
+> [!NOTE]
+> **EXTI line 0 is shared.** On the STM32WB55, an EXTI line serves one pin
+> number on all ports: `INT_EXPANDER` (PB0) and `MENU_BUTTON` (PA0,
+> `USER_BTN`) are both on line 0, and the last `attachInterrupt()` wins.
+> `SteamiButtons` takes that line for MENU, so build the expander without its
+> interrupt pin, as above: `poll()` and `interruptEvent()` then read the chip
+> latch (INTF, INTCAP, GPIO) at each call. Passing `INT_EXPANDER` as the
+> fourth argument silently disables the MENU interrupt.
 
 ## Examples
 
@@ -86,7 +98,7 @@ in method names only where they carry ambiguity.
 
 | Method | Description |
 |--------|-------------|
-| `SteamiMCP23009E(TwoWire& wire, uint8_t resetPin, uint8_t address = 0x20, int interruptPin = -1)` | Construct. Pass the reset pin number; interrupt pin is optional. |
+| `SteamiMCP23009E(TwoWire& wire, uint8_t resetPin, uint8_t address = 0x20, int interruptPin = -1)` | Construct. Pass the reset pin number; the interrupt pin is optional. On the STeaMi board, leave it at `-1` (EXTI line 0, see the note in Quick start). |
 | `bool begin()` | Configure the reset pin, attach the interrupt handler if provided, perform a hardware reset, then probe the I2C bus. Returns `false` if the expander doesn't ACK. |
 | `void reset()` | Toggle the reset pin LOW then HIGH to perform a hardware reset. |
 | `void powerOn()` | Drive the reset pin HIGH. |
@@ -162,7 +174,7 @@ returns it inverted. Both return `IRQ_LEVEL_NONE` (`0xFF`) before any
 interrupt.
 
 ```cpp
-SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR, INT_EXPANDER);
+SteamiMCP23009E expander(Steami.wire(), RST_EXPANDER, MCP23009_I2C_ADDR);
 MCP23009Pin up(expander, MCP23009_BTN_UP);
 
 void setup() {
