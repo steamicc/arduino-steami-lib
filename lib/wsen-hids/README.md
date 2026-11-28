@@ -99,15 +99,18 @@ redundant `read` / `get` prefixes.
 
 ### Reading
 
-If the part is powered down when a read is requested, the driver
-switches it to continuous mode at 12.5 Hz, polls `dataReady()` with a
-timeout, and returns the first sample. The caller doesn't have to
-manage modes manually — but be aware that the chip stays powered on in
-continuous mode afterwards (call `powerOff()` if you want it back in
-low-power sleep). The auto-bring-up uses the continuous path rather
-than `CTRL2.ONE_SHOT` because the on-board silicon does not honour the
-one-shot trigger reliably (see also the matching MicroPython issue in
-`steamicc/micropython-steami-lib`).
+If the part is not in continuous mode when a read is requested (powered
+down, or active with ODR = one-shot after `powerOn()` or
+`setOneShotMode()`), the driver switches it to continuous mode at
+12.5 Hz, polls `dataReady()` for 200 ms at most, and returns the first
+sample (`NaN` on timeout). The caller doesn't have to manage modes
+manually — but be aware that the chip stays powered on in continuous
+mode afterwards (call `powerOff()` if you want it back in low-power
+sleep, or use `readOneShot()`). The MicroPython `read()` puts the chip
+back in the mode it was in instead. The bring-up uses the continuous
+path rather than `CTRL2.ONE_SHOT` because on the STeaMi V1a/V1b the
+`ONE_SHOT` bit stays at 1 and no conversion runs
+([micropython-steami-lib#425](https://github.com/steamicc/micropython-steami-lib/issues/425)).
 
 | Method | Description |
 |--------|-------------|
@@ -122,10 +125,12 @@ one-shot trigger reliably (see also the matching MicroPython issue in
 | Method | Description |
 |--------|-------------|
 | `void setContinuous(uint8_t odr)` | Continuous mode. Pass `WSEN_HIDS_ODR_1_HZ`, `_7_HZ`, or `_12_5_HZ`. |
-| `void triggerOneShot()` | Non-blocking: start a single conversion. |
-| `ReadResult readOneShot()` | Trigger + wait + return. |
+| `void setOneShotMode()` | Active with ODR = one-shot (`CTRL1` PD = 1, ODR = 00): no conversion runs until `triggerOneShot()`. |
+| `void triggerOneShot()` | Non-blocking: `setOneShotMode()` then `CTRL2.ONE_SHOT` (the heater bit is kept). On the V1a/V1b this conversion does not run: use `readOneShot()` or `setContinuous()`. |
+| `ReadResult readOneShot()` | One measurement: one sample in continuous mode at 12.5 Hz (200 ms at most), then `CTRL1` is put back as it was (power-down after `begin()`), also on timeout. `{NaN, NaN}` on timeout. Works on the V1a/V1b, as the MicroPython `read_one_shot()`. |
 | `void setAveraging(uint8_t humAvg, uint8_t tempAvg)` | Configure `AV_CONF` averaging (datasheet table 18). |
-| `void enableBdu(bool enabled = true)` | Block Data Update, on by default. Applied at once and kept by `powerOn()`, `setContinuous()` and `triggerOneShot()`. |
+| `void enableBdu(bool enabled = true)` | Block Data Update, on by default. Applied at once and kept by `powerOn()`, `setContinuous()`, `setOneShotMode()` and `triggerOneShot()`. |
+| `void enableHeater(bool enabled = true)` | Integrated heater (`CTRL2` bit 1, `0x02`), other `CTRL2` bits kept. It warms the sensor by several degrees: switch it off and let the chip cool down before measuring. |
 
 ### Calibration
 

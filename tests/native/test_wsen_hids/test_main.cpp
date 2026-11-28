@@ -32,6 +32,128 @@ static void preloadMeasurement(float tempC, float humidityPct) {
 
 SteamiWsenHids sensor;
 
+// Register model of the WSEN-HIDS as seen on the STeaMi V1a/V1b
+// (steamicc/micropython-steami-lib#425): a CTRL2.ONE_SHOT request stays
+// latched and converts nothing, and samples only come in continuous mode
+// (PD = 1, ODR != 00). A conversion copies the staged sample into the
+// output registers when STATUS is polled, so output registers that were
+// not refreshed by a conversion hold stale data. With `dead` set, no
+// conversion ever completes. Every write is logged, in order.
+class LatchedHids : public I2CDevice {
+   public:
+    struct Write {
+        uint8_t reg;
+        uint8_t value;
+    };
+
+    std::map<uint8_t, uint8_t> regs;
+    std::vector<Write> writes;
+    bool dead = false;
+
+    // Start from the WHO_AM_I and calibration preloaded in the Wire
+    // register map, with stale (zero) output registers and STATUS.
+    void loadFrom(const TwoWire& wire) {
+        for (uint16_t reg = 0; reg < 0x80; ++reg) {
+            regs[static_cast<uint8_t>(reg)] =
+                wire.getRegister(ADDR, reg | WSEN_HIDS_AUTO_INCREMENT);
+            uint8_t direct = wire.getRegister(ADDR, reg);
+            if (direct != 0) {
+                regs[static_cast<uint8_t>(reg)] = direct;
+            }
+        }
+        for (uint8_t reg = WSEN_HIDS_REG_HUMIDITY_OUT_L; reg <= WSEN_HIDS_REG_TEMP_OUT_L + 1;
+             ++reg) {
+            regs[reg] = 0;
+        }
+        regs[WSEN_HIDS_REG_STATUS] = 0;
+        regs[WSEN_HIDS_REG_CTRL1] = 0;
+        regs[WSEN_HIDS_REG_CTRL2] = 0;
+    }
+
+    // Sample delivered by the next conversion.
+    void stage(float tempC, float humidity) {
+        _tempRaw = static_cast<int16_t>(tempC / 0.001f);
+        _humRaw = static_cast<int16_t>(humidity * 300.0f);
+    }
+
+    bool continuous() const {
+        uint8_t ctrl1 = regs.at(WSEN_HIDS_REG_CTRL1);
+        return (ctrl1 & WSEN_HIDS_CTRL1_PD) && (ctrl1 & WSEN_HIDS_CTRL1_ODR_MASK) != 0;
+    }
+
+    bool wroteOneShot() const {
+        for (const auto& w : writes) {
+            if (w.reg == WSEN_HIDS_REG_CTRL2 && (w.value & WSEN_HIDS_CTRL2_ONE_SHOT)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool wroteCtrl1(uint8_t value) const {
+        for (const auto& w : writes) {
+            if (w.reg == WSEN_HIDS_REG_CTRL1 && w.value == value) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    uint8_t onWrite(const std::vector<uint8_t>& frame) override {
+        if (frame.empty()) {
+            return 0;
+        }
+        _pointer = frame[0] & static_cast<uint8_t>(~WSEN_HIDS_AUTO_INCREMENT);
+        for (size_t i = 1; i < frame.size(); ++i) {
+            uint8_t reg = static_cast<uint8_t>(_pointer + i - 1);
+            regs[reg] = frame[i];
+            writes.push_back({reg, frame[i]});
+        }
+        return 0;
+    }
+
+    std::vector<uint8_t> onRead(size_t quantity) override {
+        std::vector<uint8_t> out;
+        for (size_t i = 0; i < quantity; ++i) {
+            uint8_t reg = static_cast<uint8_t>(_pointer + i);
+            if (reg == WSEN_HIDS_REG_STATUS) {
+                convertIfRunning();
+            }
+            out.push_back(regs[reg]);
+        }
+        return out;
+    }
+
+   private:
+    void convertIfRunning() {
+        if (dead || !continuous()) {
+            regs[WSEN_HIDS_REG_STATUS] = 0;
+            return;
+        }
+        regs[WSEN_HIDS_REG_HUMIDITY_OUT_L] = _humRaw & 0xFF;
+        regs[WSEN_HIDS_REG_HUMIDITY_OUT_L + 1] = (_humRaw >> 8) & 0xFF;
+        regs[WSEN_HIDS_REG_TEMP_OUT_L] = _tempRaw & 0xFF;
+        regs[WSEN_HIDS_REG_TEMP_OUT_L + 1] = (_tempRaw >> 8) & 0xFF;
+        regs[WSEN_HIDS_REG_STATUS] = WSEN_HIDS_STATUS_H_DA | WSEN_HIDS_STATUS_T_DA;
+    }
+
+    uint8_t _pointer = 0;
+    int16_t _tempRaw = 0;
+    int16_t _humRaw = 0;
+};
+
+LatchedHids chip;
+
+// begin() on the latched chip model, with a sample staged.
+static void beginOnLatchedChip(float tempC = 23.0f, float humidityPct = 40.0f) {
+    chip = LatchedHids();
+    chip.loadFrom(Wire);
+    chip.stage(tempC, humidityPct);
+    Wire.attachDevice(ADDR, &chip);
+    TEST_ASSERT_TRUE(sensor.begin());
+    chip.writes.clear();
+}
+
 void setUp(void) {
     Wire = TwoWire();
     preloadWhoAmI(true);
@@ -362,6 +484,153 @@ void test_read_auto_bringup_leaves_chip_in_continuous(void) {
     TEST_ASSERT_EQUAL_HEX8(expected, ctrl1);
 }
 
+// readOneShot() takes its sample in continuous mode, as MicroPython
+// read_one_shot() since steamicc/micropython-steami-lib#486, so it works
+// on a chip whose ONE_SHOT bit latches (#425).
+void test_read_one_shot_on_latched_chip_returns_sample(void) {
+    beginOnLatchedChip(23.0f, 40.0f);
+
+    auto r = sensor.readOneShot();
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.0f, r.temperature);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 40.0f, r.humidity);
+    TEST_ASSERT_TRUE_MESSAGE(
+        chip.wroteCtrl1(WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU | WSEN_HIDS_ODR_12_5_HZ),
+        "readOneShot() must bring the chip up at 12.5 Hz");
+    TEST_ASSERT_FALSE_MESSAGE(chip.wroteOneShot(), "readOneShot() must not use CTRL2.ONE_SHOT");
+}
+
+// A one-shot leaves the chip in the mode it found it in: power-down
+// after begin().
+void test_read_one_shot_goes_back_to_power_down(void) {
+    beginOnLatchedChip();
+
+    sensor.readOneShot();
+
+    TEST_ASSERT_EQUAL_HEX8(0x00, chip.regs[WSEN_HIDS_REG_CTRL1] & WSEN_HIDS_CTRL1_PD);
+}
+
+void test_read_one_shot_restores_continuous_mode(void) {
+    beginOnLatchedChip();
+    sensor.setContinuous(WSEN_HIDS_ODR_1_HZ);
+
+    sensor.readOneShot();
+
+    TEST_ASSERT_EQUAL_HEX8(WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU | WSEN_HIDS_ODR_1_HZ,
+                           chip.regs[WSEN_HIDS_REG_CTRL1]);
+}
+
+void test_read_one_shot_restores_one_shot_mode_and_bdu_off(void) {
+    beginOnLatchedChip();
+    sensor.enableBdu(false);
+    sensor.setOneShotMode();
+
+    sensor.readOneShot();
+
+    TEST_ASSERT_EQUAL_HEX8(WSEN_HIDS_CTRL1_PD | WSEN_HIDS_ODR_ONE_SHOT,
+                           chip.regs[WSEN_HIDS_REG_CTRL1]);
+    TEST_ASSERT_TRUE_MESSAGE(chip.wroteCtrl1(WSEN_HIDS_CTRL1_PD | WSEN_HIDS_ODR_12_5_HZ),
+                             "the bring-up must keep BDU off");
+}
+
+void test_read_one_shot_takes_a_new_sample_each_call(void) {
+    beginOnLatchedChip(23.0f, 40.0f);
+    sensor.readOneShot();
+    chip.stage(26.0f, 55.0f);
+
+    auto r = sensor.readOneShot();
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 26.0f, r.temperature);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 55.0f, r.humidity);
+}
+
+// No sample within 200 ms (the MicroPython DEFAULT_ONE_SHOT_TIMEOUT_MS):
+// NaN, and the chip still goes back to power-down.
+void test_read_one_shot_timeout_returns_nan_and_powers_down(void) {
+    beginOnLatchedChip();
+    chip.dead = true;
+    uint32_t start = millis();
+
+    auto r = sensor.readOneShot();
+
+    uint32_t elapsed = millis() - start;
+    TEST_ASSERT_TRUE(isnan(r.temperature));
+    TEST_ASSERT_TRUE(isnan(r.humidity));
+    TEST_ASSERT_GREATER_OR_EQUAL_UINT32(200, elapsed);
+    TEST_ASSERT_LESS_THAN_UINT32(300, elapsed);
+    TEST_ASSERT_EQUAL_HEX8(0x00, chip.regs[WSEN_HIDS_REG_CTRL1] & WSEN_HIDS_CTRL1_PD);
+}
+
+// CTRL2 is left alone, so the heater stays as the caller set it.
+void test_read_one_shot_keeps_heater(void) {
+    beginOnLatchedChip();
+    sensor.enableHeater();
+
+    sensor.readOneShot();
+
+    TEST_ASSERT_EQUAL_HEX8(WSEN_HIDS_CTRL2_HEATER, chip.regs[WSEN_HIDS_REG_CTRL2]);
+}
+
+// PD = 1 with ODR = 00 runs no conversion: read() must take a new sample
+// instead of returning the stale output registers, as MicroPython read().
+void test_read_takes_new_sample_in_one_shot_mode(void) {
+    beginOnLatchedChip(23.0f, 40.0f);
+    sensor.setOneShotMode();
+
+    auto r = sensor.read();
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.0f, r.temperature);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 40.0f, r.humidity);
+}
+
+void test_read_takes_new_sample_after_power_on(void) {
+    beginOnLatchedChip(23.0f, 40.0f);
+    sensor.powerOn();
+
+    auto r = sensor.read();
+
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.0f, r.temperature);
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 40.0f, r.humidity);
+}
+
+// enable_heater() of the MicroPython driver: CTRL2 bit 1, other bits kept.
+void test_enable_heater_drives_ctrl2_bit_1(void) {
+    sensor.begin();
+    sensor.enableHeater(true);
+    TEST_ASSERT_EQUAL_HEX8(0x02, Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL2));
+    sensor.enableHeater(false);
+    TEST_ASSERT_EQUAL_HEX8(0x00, Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL2));
+}
+
+void test_enable_heater_defaults_to_on_and_keeps_other_bits(void) {
+    sensor.begin();
+    Wire.setRegister(ADDR, WSEN_HIDS_REG_CTRL2, WSEN_HIDS_CTRL2_ONE_SHOT);
+    sensor.enableHeater();
+    TEST_ASSERT_EQUAL_HEX8(WSEN_HIDS_CTRL2_HEATER | WSEN_HIDS_CTRL2_ONE_SHOT,
+                           Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL2));
+}
+
+void test_trigger_one_shot_keeps_heater(void) {
+    sensor.begin();
+    sensor.enableHeater();
+    sensor.triggerOneShot();
+    TEST_ASSERT_EQUAL_HEX8(WSEN_HIDS_CTRL2_HEATER | WSEN_HIDS_CTRL2_ONE_SHOT,
+                           Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL2));
+}
+
+// set_one_shot_mode() of the MicroPython driver: PD = 1, ODR = 00.
+void test_set_one_shot_mode_writes_pd_and_odr_00(void) {
+    sensor.begin();
+    sensor.setContinuous(WSEN_HIDS_ODR_7_HZ);
+    sensor.setOneShotMode();
+    TEST_ASSERT_EQUAL_HEX8(WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU | WSEN_HIDS_ODR_ONE_SHOT,
+                           Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL1));
+    sensor.enableBdu(false);
+    sensor.setOneShotMode();
+    TEST_ASSERT_EQUAL_HEX8(WSEN_HIDS_CTRL1_PD | WSEN_HIDS_ODR_ONE_SHOT,
+                           Wire.getRegister(ADDR, WSEN_HIDS_REG_CTRL1));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_begin_detects_device);
@@ -392,5 +661,18 @@ int main(void) {
     RUN_TEST(test_begin_resets_av_conf_to_default);
     RUN_TEST(test_begin_clears_ctrl2);
     RUN_TEST(test_read_auto_bringup_leaves_chip_in_continuous);
+    RUN_TEST(test_read_one_shot_on_latched_chip_returns_sample);
+    RUN_TEST(test_read_one_shot_goes_back_to_power_down);
+    RUN_TEST(test_read_one_shot_restores_continuous_mode);
+    RUN_TEST(test_read_one_shot_restores_one_shot_mode_and_bdu_off);
+    RUN_TEST(test_read_one_shot_takes_a_new_sample_each_call);
+    RUN_TEST(test_read_one_shot_timeout_returns_nan_and_powers_down);
+    RUN_TEST(test_read_one_shot_keeps_heater);
+    RUN_TEST(test_read_takes_new_sample_in_one_shot_mode);
+    RUN_TEST(test_read_takes_new_sample_after_power_on);
+    RUN_TEST(test_enable_heater_drives_ctrl2_bit_1);
+    RUN_TEST(test_enable_heater_defaults_to_on_and_keeps_other_bits);
+    RUN_TEST(test_trigger_one_shot_keeps_heater);
+    RUN_TEST(test_set_one_shot_mode_writes_pd_and_odr_00);
     return UNITY_END();
 }
