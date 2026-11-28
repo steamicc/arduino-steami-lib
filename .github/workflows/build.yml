@@ -1,9 +1,20 @@
 name: Build
 
+# Reusable workflow, called by ci.yml: PlatformIO build, then the examples
+# chosen by scripts/exemples-concernes.py.
+
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_call:
+    inputs:
+      exemples:
+        description: 'JSON array of lib/<driver>/examples/<example> folders to compile, "" for all'
+        required: true
+        type: string
+      empreinte:
+        description: 'Check the flash and RAM footprint (scripts/check-footprint.py)'
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -21,11 +32,6 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
       - name: Cache PlatformIO packages
         uses: actions/cache@v4
         with:
@@ -34,14 +40,26 @@ jobs:
           restore-keys: |
             pio-${{ runner.os }}-
 
+      # Node and the lint tools are not needed here, PlatformIO is.
       - name: Setup dev environment
-        run: make setup
+        run: make install-pio
 
       - name: Build project
         run: make build
 
+      # ci.yml never passes an empty list: it skips this workflow instead.
       - name: Compile examples
-        run: make test-examples
+        env:
+          EXEMPLES: ${{ inputs.exemples }}
+        run: |
+          set -euo pipefail
+          if [ -z "$EXEMPLES" ]; then
+            make test-examples
+          else
+            jq -r '.[]' <<< "$EXEMPLES" > "$RUNNER_TEMP/exemples.txt"
+            .venv/bin/python3 scripts/test-examples.py --only "$RUNNER_TEMP/exemples.txt"
+          fi
 
       - name: Check the flash and RAM footprint
+        if: ${{ inputs.empreinte }}
         run: .venv/bin/python3 scripts/check-footprint.py
