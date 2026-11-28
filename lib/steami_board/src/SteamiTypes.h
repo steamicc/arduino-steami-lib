@@ -14,6 +14,13 @@ constexpr uint8_t STEAMI_E_NOT_ON_THIS_BOARD = 20;
 constexpr uint8_t STEAMI_E_DISPLAY_UNKNOWN_BOARD = 30;
 constexpr uint8_t STEAMI_E_NO_MEMORY = 31;
 
+/// Crocodile pads on the MCP23009E expander: their GPIO number on the expander, not MCU pins.
+/// Use them with Steami.mcp23009e(), for example setup(STEAMI_PAD_P24, MCP23009_DIR_INPUT).
+constexpr uint8_t STEAMI_PAD_P28 = 0;
+constexpr uint8_t STEAMI_PAD_P29 = 1;
+constexpr uint8_t STEAMI_PAD_P24 = 2;
+constexpr uint8_t STEAMI_PAD_P25 = 3;
+
 enum class SteamiRelease : uint8_t { UNKNOWN, V1A, V1B, V1AB, V1C };
 
 enum class SteamiOrigin : uint8_t { NONE, FORCED_RUNTIME, FORCED_DEFINE, CONFIG, PROBE };

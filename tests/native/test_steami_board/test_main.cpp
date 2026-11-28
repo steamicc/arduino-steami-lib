@@ -146,6 +146,14 @@ static void test_pins_steami(void) {
     TEST_ASSERT_EQUAL_UINT32(MENU_BUTTON, p.buttonMenu);
 }
 
+static void test_pad_constants(void) {
+    // GP0..GP3 of the MCP23009E (wiki: hardware/main-components/buttons-audio).
+    TEST_ASSERT_EQUAL_UINT8(0, STEAMI_PAD_P28);
+    TEST_ASSERT_EQUAL_UINT8(1, STEAMI_PAD_P29);
+    TEST_ASSERT_EQUAL_UINT8(2, STEAMI_PAD_P24);
+    TEST_ASSERT_EQUAL_UINT8(3, STEAMI_PAD_P25);
+}
+
 static const char* const kGesture = "this STeaMi is a V1c, it has no gesture sensor.";
 static const char* const kGestureLine =
     "[STeaMi] SteamiGesture: this STeaMi is a V1c, it has no gesture sensor. (E20)";
@@ -1012,6 +1020,7 @@ int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_constructor_touches_nothing);
     RUN_TEST(test_pins_steami);
+    RUN_TEST(test_pad_constants);
     RUN_TEST(test_report_formats_and_logs_once);
     RUN_TEST(test_report_same_code_other_class_logs_again);
     RUN_TEST(test_end_forgets_reported_pairs);
