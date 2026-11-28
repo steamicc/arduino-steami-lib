@@ -152,6 +152,7 @@ correction: `setTemperatureOffset()` resets the gain to 1.0.
 | `CalibratedField calibrateApply(float x, float y, float z)` | Apply current offset/scale to a raw triplet. |
 | `CalibrationQuality calibrateQuality(uint16_t samplesCheck = 200, uint16_t delayMs = 10)` | Evaluate calibration quality: center, radius dispersion, anisotropy. |
 | `void calibrateReset()` | Reset offsets to 0 and scales to 1. |
+| `MagCalibration readCalibration() const` | Current offsets and scales, `{xOff, yOff, zOff, xScale, yScale, zScale}` (same order as `setCalibrateStep()`). |
 | `void calibrateStep()` | Alias for `calibrateMinmax3d()`. |
 | `HwOffsets readHwOffsets()` | Read hardware offset registers (`OFFSET_*`). |
 | `void setHwOffsets(int16_t x, int16_t y, int16_t z)` | Write hardware offset registers. |

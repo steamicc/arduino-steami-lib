@@ -119,6 +119,29 @@ void test_calibrated_field_applies_offset_and_scale(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, ((int16_t)0x9ABC - 30.0f) / 4.0f, field.z);
 }
 
+// read_calibration() of the MicroPython driver (#316): the values in the
+// setCalibrateStep() order.
+void test_read_calibration_returns_offsets_and_scales(void) {
+    sensor.begin();
+    sensor.setCalibrateStep(10.0f, -20.0f, 30.0f, 2.0f, 3.0f, 4.0f);
+    MagCalibration cal = sensor.readCalibration();
+    TEST_ASSERT_EQUAL_FLOAT(10.0f, cal.xOff);
+    TEST_ASSERT_EQUAL_FLOAT(-20.0f, cal.yOff);
+    TEST_ASSERT_EQUAL_FLOAT(30.0f, cal.zOff);
+    TEST_ASSERT_EQUAL_FLOAT(2.0f, cal.xScale);
+    TEST_ASSERT_EQUAL_FLOAT(3.0f, cal.yScale);
+    TEST_ASSERT_EQUAL_FLOAT(4.0f, cal.zScale);
+
+    sensor.calibrateReset();
+    cal = sensor.readCalibration();
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, cal.xOff);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, cal.yOff);
+    TEST_ASSERT_EQUAL_FLOAT(0.0f, cal.zOff);
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, cal.xScale);
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, cal.yScale);
+    TEST_ASSERT_EQUAL_FLOAT(1.0f, cal.zScale);
+}
+
 void test_magnitude_ut_is_positive(void) {
     sensor.begin();
     Wire.setRegister(ADDR, LIS2MDL_OUTX_L_REG, 0x34);
@@ -480,6 +503,7 @@ int main(void) {
     RUN_TEST(test_magnetic_field_returns_signed_values);
     RUN_TEST(test_magnetic_field_ut_applies_lsb_conversion);
     RUN_TEST(test_calibrated_field_applies_offset_and_scale);
+    RUN_TEST(test_read_calibration_returns_offsets_and_scales);
     RUN_TEST(test_magnitude_ut_is_positive);
     RUN_TEST(test_read_all_returns_all_channels);
     RUN_TEST(test_read_one_shot_returns_magnetic_field);
