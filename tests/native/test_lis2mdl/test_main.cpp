@@ -306,7 +306,10 @@ void test_set_temp_offset_shifts_reading(void) {
     Wire.setRegister(ADDR, LIS2MDL_STATUS_REG, 0b1000);
     float baseTemp = sensor.temperature();
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     sensor.setTempOffset(10.0f);
+#pragma GCC diagnostic pop
     float tempC = sensor.temperature();
     TEST_ASSERT_FLOAT_WITHIN(0.01f, baseTemp + 10.0f, tempC);
 }
@@ -345,7 +348,10 @@ void test_set_temp_offset_is_alias_of_set_temperature_offset(void) {
 
     sensor.setTemperatureOffset(4.25f);
     float viaCanonical = sensor.temperature();
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
     sensor.setTempOffset(4.25f);
+#pragma GCC diagnostic pop
     float viaAlias = sensor.temperature();
     TEST_ASSERT_FLOAT_WITHIN(0.001f, viaCanonical, viaAlias);
 }
