@@ -73,8 +73,10 @@ for the complete example.
 | [`BasicReader`](examples/BasicReader/) | Read acceleration, angular velocity and temperature values from the ISM330DL. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ism330dl#basicreader) |
 | [`Orientation`](examples/Orientation/) | Detect the board orientation using the accelerometer. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ism330dl#orientation) |
 | [`Motion`](examples/Motion/) | Detect tilt and rotation direction using the gyroscope. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/ism330dl#motion) |
+| [`TiltMaze`](examples/TiltMaze/) | Tilt the board to roll a ball through a random maze on the screen, then get a score against the shortest path (ISM330DL, `SteamiScreen`; V1a, V1b and V1c). | — |
+| [`DigitalLevel`](examples/DigitalLevel/) | A bubble level on the screen: the bubble goes to the high side, the angle is written below, and the bubble turns green when the board is level; A zeroes it on the current surface (ISM330DL, `SteamiScreen`, `SteamiButtons`; V1a, V1b and V1c). | — |
 
-Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/ism330dl).
+Each example with a **Try it** link is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/ism330dl).
 
 
 ## Building an example
