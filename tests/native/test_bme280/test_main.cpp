@@ -213,6 +213,65 @@ void test_signed_humidity_calibration_is_decoded(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 57.7822f, sensor.humidity());
 }
 
+// --- Compensation with negative intermediate values ---
+//
+// The datasheet formulas left-shift signed values that are negative below
+// 25 degC (t_fine < 128000) or with a negative P4 / P7 / H4. The expected
+// fixed-point outputs (Q24.8 Pa, Q22.10 %RH) come from an arbitrary-precision
+// Python port of the Bosch datasheet integer code (section 4.2.3), where a
+// left shift is an exact multiplication and a right shift rounds down. The
+// driver converts them with the same float division, so the comparison is exact.
+
+static float pressureFromQ24_8(uint32_t q) {
+    return static_cast<float>(q) / 25600.0f;
+}
+
+static float humidityFromQ22_10(uint32_t q) {
+    return static_cast<float>(q) / 1024.0f;
+}
+
+void test_pressure_below_25_degc_matches_reference(void) {
+    // Raw T 400000: t_fine = -64736, so var1 = t_fine - 128000 < 0 and
+    // var1 * P5 < 0 (P2 < 0 makes var1 * P2 > 0 here).
+    sensor.begin();
+    sensor.powerOn();
+    preloadRaw(RAW_PRESS, 400000, RAW_HUM);
+    TEST_ASSERT_FLOAT_WITHIN(0.0f, pressureFromQ24_8(24298573), sensor.pressureHpa());
+}
+
+void test_pressure_above_25_degc_matches_reference(void) {
+    // Bosch vector: var1 = 422 > 0 and P2 = -10685, so var1 * P2 < 0.
+    sensor.begin();
+    sensor.powerOn();
+    preloadMeasurement();
+    TEST_ASSERT_FLOAT_WITHIN(0.0f, pressureFromQ24_8(25767233), sensor.pressureHpa());
+}
+
+void test_negative_p4_p7_calibration_matches_reference(void) {
+    Calibration c = BOSCH_EXAMPLE;
+    c.p4 = -2855;
+    c.p7 = -15500;
+    preloadCalibration(c);
+    sensor.begin();
+    sensor.powerOn();
+    preloadRaw(RAW_PRESS, 400000, RAW_HUM);
+    TEST_ASSERT_FLOAT_WITHIN(0.0f, pressureFromQ24_8(27602040), sensor.pressureHpa());
+}
+
+void test_negative_h4_below_25_degc_matches_reference(void) {
+    // H4 < 0 and t_fine - 76800 < 0.
+    Calibration c = BOSCH_EXAMPLE;
+    c.h3 = 10;
+    c.h4 = -100;
+    c.h5 = -60;
+    c.h6 = -5;
+    preloadCalibration(c);
+    sensor.begin();
+    sensor.powerOn();
+    preloadRaw(RAW_PRESS, 400000, 3000);
+    TEST_ASSERT_FLOAT_WITHIN(0.0f, humidityFromQ22_10(50397), sensor.humidity());
+}
+
 void test_humidity_is_clamped_to_0_100(void) {
     sensor.begin();
     sensor.powerOn();
@@ -575,6 +634,10 @@ int main(void) {
     RUN_TEST(test_humidity_matches_reference_vector);
     RUN_TEST(test_read_returns_all_channels);
     RUN_TEST(test_signed_humidity_calibration_is_decoded);
+    RUN_TEST(test_pressure_below_25_degc_matches_reference);
+    RUN_TEST(test_pressure_above_25_degc_matches_reference);
+    RUN_TEST(test_negative_p4_p7_calibration_matches_reference);
+    RUN_TEST(test_negative_h4_below_25_degc_matches_reference);
     RUN_TEST(test_humidity_is_clamped_to_0_100);
     RUN_TEST(test_skipped_channels_report_nan);
     RUN_TEST(test_read_auto_triggers_forced_mode_when_sleeping);
