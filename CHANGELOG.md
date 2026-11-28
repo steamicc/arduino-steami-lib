@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.46.8](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.7...v0.46.8) (2026-11-28)
+
+
+### Bug Fixes
+
+* **wsen-hids:** Make readOneShot() work on the V1a/V1b and add enableHeater(). ([#340](https://github.com/steamicc/arduino-steami-lib/issues/340)) ([5c113a1](https://github.com/steamicc/arduino-steami-lib/commit/5c113a192ea008ac0500bf5652c9a9c326aff9d5)), closes [micropython-steami-lib#425](https://github.com/micropython-steami-lib/issues/425) [#338](https://github.com/steamicc/arduino-steami-lib/issues/338)
+
 ## [0.46.7](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.6...v0.46.7) (2026-11-28)
 
 
