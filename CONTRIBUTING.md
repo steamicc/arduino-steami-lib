@@ -290,14 +290,32 @@ data. Callers can detect with `isnan()`.
 Any driver that exposes a physical quantity (temperature, pressure,
 humidity, …) provides:
 
-- `void setXxxOffset(float offset)` — additive offset on top of the
-  factory calibration (e.g. `setTemperatureOffset`).
-- `void calibrateXxx(float refLow, float measLow, float refHigh, float measHigh)`
-  — two-point linear correction applied after the factory curve.
+- `void setXxxOffset(float offset)` — single-point correction: gain 1
+  and this offset, applied after the factory curve (e.g.
+  `setTemperatureOffset`).
+- `bool calibrateXxx(float refLow, float measLow, float refHigh, float measHigh)`
+  — two-point linear correction applied after the factory curve:
+  `gain = (refHigh - refLow) / (measHigh - measLow)`,
+  `offset = refLow - gain * measLow`. `measLow` and `measHigh` are
+  readings taken without any user correction.
+
+The driver keeps one user correction per channel, a gain and an offset,
+and each call **replaces** the previous one: `setXxxOffset()` after
+`calibrateXxx()` resets the gain to 1, and `calibrateXxx()` after
+`setXxxOffset()` replaces the offset. Nothing stacks, so
+`setXxxOffset(0)` always gives back the factory reading.
+
+When `measLow == measHigh`, `calibrateXxx()` returns `false` and keeps
+the previous correction, gain and offset unchanged. The MicroPython
+drivers raise `ValueError` in that case, with the same effect.
 
 Temperature-capable parts always implement `setTemperatureOffset` and
-`calibrateTemperature`. Extend the same pattern to other channels when
-it makes physical sense.
+`calibrateTemperature`, with this contract (it matches
+`set_temp_offset()` and `calibrate_temperature()` in MicroPython).
+Extend the same pattern to other channels when it makes physical sense.
+The native suite of each driver pins the contract: the offset replaces a
+two-point calibration, a two-point calibration replaces the offset, and
+equal points, starting from a gain different from 1, change nothing.
 
 ## Driver design patterns
 
