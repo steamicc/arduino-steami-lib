@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.42.2](https://github.com/steamicc/arduino-steami-lib/compare/v0.42.1...v0.42.2) (2026-11-28)
+
+
+### Bug Fixes
+
+* **board:** Fall back to the legacy hts calibration for WSEN-HIDS. ([#301](https://github.com/steamicc/arduino-steami-lib/issues/301)) ([e8c725a](https://github.com/steamicc/arduino-steami-lib/commit/e8c725af6a213569e95d6851ffab0786b5f51fd5)), closes [#300](https://github.com/steamicc/arduino-steami-lib/issues/300)
+
 ## [0.42.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.42.0...v0.42.1) (2026-11-28)
 
 
