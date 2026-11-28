@@ -642,6 +642,10 @@ void SteamiLIS2MDL::calibrateReset() {
     zScale = 1.0f;
 }
 
+MagCalibration SteamiLIS2MDL::readCalibration() const {
+    return {xOff, yOff, zOff, xScale, yScale, zScale};
+}
+
 void SteamiLIS2MDL::calibrateStep() {
     calibrateMinmax3d();
 }

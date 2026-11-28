@@ -63,6 +63,22 @@ float SteamiWsenPads::pressureHpa() {
     return raw * PRESSURE_HPA_PER_DIGIT;
 }
 
+float SteamiWsenPads::pressurePa() {
+    int32_t raw = pressureRaw();
+    if (raw == INT32_MIN) {
+        return NAN;
+    }
+    return raw * PRESSURE_PA_PER_DIGIT;
+}
+
+float SteamiWsenPads::pressureKpa() {
+    int32_t raw = pressureRaw();
+    if (raw == INT32_MIN) {
+        return NAN;
+    }
+    return raw * PRESSURE_KPA_PER_DIGIT;
+}
+
 float SteamiWsenPads::temperature() {
     int32_t raw = temperatureRaw();
     if (raw == INT32_MIN) {

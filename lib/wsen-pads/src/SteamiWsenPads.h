@@ -24,6 +24,9 @@ class SteamiWsenPads {
         float temperature;  // °C, factory + user calibration applied
     };
     float pressureHpa();
+    // Same reading in Pa and kPa (NAN on failure, like pressureHpa()).
+    float pressurePa();
+    float pressureKpa();
     float temperature();
     ReadResult read();
 

@@ -46,7 +46,7 @@ void SteamiWsenHids::softReset() {
 
 void SteamiWsenHids::powerOn() {
     uint8_t ctrl1 = readReg(WSEN_HIDS_REG_CTRL1);
-    writeReg(WSEN_HIDS_REG_CTRL1, ctrl1 | WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU);
+    writeReg(WSEN_HIDS_REG_CTRL1, (ctrl1 & ~WSEN_HIDS_CTRL1_BDU) | WSEN_HIDS_CTRL1_PD | _bdu);
 }
 
 void SteamiWsenHids::powerOff() {
@@ -106,14 +106,19 @@ SteamiWsenHids::ReadResult SteamiWsenHids::read() {
 }
 
 void SteamiWsenHids::setContinuous(uint8_t odr) {
-    uint8_t ctrl1 = WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU | (odr & WSEN_HIDS_CTRL1_ODR_MASK);
+    uint8_t ctrl1 = WSEN_HIDS_CTRL1_PD | _bdu | (odr & WSEN_HIDS_CTRL1_ODR_MASK);
     writeReg(WSEN_HIDS_REG_CTRL1, ctrl1);
+}
+
+void SteamiWsenHids::enableBdu(bool enabled) {
+    _bdu = enabled ? WSEN_HIDS_CTRL1_BDU : 0;
+    uint8_t ctrl1 = readReg(WSEN_HIDS_REG_CTRL1);
+    writeReg(WSEN_HIDS_REG_CTRL1, (ctrl1 & ~WSEN_HIDS_CTRL1_BDU) | _bdu);
 }
 
 void SteamiWsenHids::triggerOneShot() {
     // Must be powered on at ODR=one-shot for the ONE_SHOT bit to matter.
-    writeReg(WSEN_HIDS_REG_CTRL1,
-             WSEN_HIDS_CTRL1_PD | WSEN_HIDS_CTRL1_BDU | WSEN_HIDS_ODR_ONE_SHOT);
+    writeReg(WSEN_HIDS_REG_CTRL1, WSEN_HIDS_CTRL1_PD | _bdu | WSEN_HIDS_ODR_ONE_SHOT);
     writeReg(WSEN_HIDS_REG_CTRL2, WSEN_HIDS_CTRL2_ONE_SHOT);
 }
 

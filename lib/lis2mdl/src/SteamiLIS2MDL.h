@@ -22,6 +22,12 @@ struct CalibrationQuality {
     float anisotropyXY;
 };
 
+// Hard-iron offsets and soft-iron scales, in the setCalibrateStep() order.
+struct MagCalibration {
+    float xOff, yOff, zOff;
+    float xScale, yScale, zScale;
+};
+
 using MagneticField = Vec3i;
 using HwOffsets = Vec3i;
 using MagneticFieldUt = Vec3f;
@@ -92,6 +98,8 @@ class SteamiLIS2MDL {
     CalibratedField calibrateApply(float x, float y, float z);
     CalibrationQuality calibrateQuality(uint16_t samplesCheck = 200, uint16_t delayMs = 10);
     void calibrateReset();
+    // Current offsets and scales, as read_calibration() in MicroPython.
+    MagCalibration readCalibration() const;
     void calibrateStep();
 
     void setHeadingFilter(float alpha);

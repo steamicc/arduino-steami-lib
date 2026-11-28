@@ -20,6 +20,8 @@ powerOn	KEYWORD2
 powerOff	KEYWORD2
 
 pressureHpa	KEYWORD2
+pressurePa	KEYWORD2
+pressureKpa	KEYWORD2
 temperature	KEYWORD2
 read	KEYWORD2
 dataReady	KEYWORD2

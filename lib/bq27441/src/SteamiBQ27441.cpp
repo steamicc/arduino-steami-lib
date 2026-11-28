@@ -267,18 +267,25 @@ bool SteamiBQ27441::setGpoutFunction(bool gpout_function) {
     } else {
         new_op_config &= ~(BQ27441_OPCONFIG_BATLOWEN);
     }
-    return writeOpConfig(new_op_config);
+    return writeOpConfig(new_op_config) != 0;
 }
 
 uint16_t SteamiBQ27441::soc1SetThreshold() {
     return readExtendedData(BQ27441_ID_DISCHARGE, 0);
 }
 
-uint16_t SteamiBQ27441::setSoc1Thresholds(uint16_t set_soc, uint16_t clear_soc) {
-    uint8_t thresholds[2] = {0, 0};
-    thresholds[0] = bq27441_detail::clamp<uint8_t>(static_cast<uint8_t>(set_soc), 0, 100);
-    thresholds[1] = bq27441_detail::clamp<uint8_t>(static_cast<uint8_t>(clear_soc), 0, 100);
-    return writeExtendedData(BQ27441_ID_DISCHARGE, 0, thresholds, 2);
+uint16_t SteamiBQ27441::soc1ClearThreshold() {
+    return readExtendedData(BQ27441_ID_DISCHARGE, 1);
+}
+
+// Clamp in 16 bits before narrowing, so 300 % reads as 100 % and not 44 %.
+static uint8_t percent(uint16_t value) {
+    return static_cast<uint8_t>(bq27441_detail::clamp<uint16_t>(value, 0, 100));
+}
+
+bool SteamiBQ27441::setSoc1Thresholds(uint16_t set_soc, uint16_t clear_soc) {
+    uint8_t thresholds[2] = {percent(set_soc), percent(clear_soc)};
+    return writeExtendedData(BQ27441_ID_DISCHARGE, 0, thresholds, 2) != 0;
 }
 
 uint16_t SteamiBQ27441::socfSetThreshold() {
@@ -289,29 +296,30 @@ uint16_t SteamiBQ27441::socfClearThreshold() {
     return readExtendedData(BQ27441_ID_DISCHARGE, 3);
 }
 
-uint16_t SteamiBQ27441::setSocfThresholds(uint16_t set_socf, uint16_t clear_socf) {
-    uint8_t thresholds[2] = {0, 0};
-    thresholds[0] = bq27441_detail::clamp<uint8_t>(static_cast<uint8_t>(set_socf), 0, 100);
-    thresholds[1] = bq27441_detail::clamp<uint8_t>(static_cast<uint8_t>(clear_socf), 0, 100);
-    return writeExtendedData(BQ27441_ID_DISCHARGE, 2, thresholds, 2);
+bool SteamiBQ27441::setSocfThresholds(uint16_t set_socf, uint16_t clear_socf) {
+    uint8_t thresholds[2] = {percent(set_socf), percent(clear_socf)};
+    return writeExtendedData(BQ27441_ID_DISCHARGE, 2, thresholds, 2) != 0;
 }
 
-uint16_t SteamiBQ27441::socFlag() {
-    uint8_t flag_state = flags();
-    return flag_state & BQ27441_FLAG_SOC1;
+bool SteamiBQ27441::socFlag() {
+    return (flags() & BQ27441_FLAG_SOC1) != 0;
+}
+
+bool SteamiBQ27441::socfFlag() {
+    return (flags() & BQ27441_FLAG_SOCF) != 0;
 }
 
 uint16_t SteamiBQ27441::sociDelta() {
     return readExtendedData(BQ27441_ID_STATE, 26);
 }
 
-uint16_t SteamiBQ27441::setSociDelta(uint16_t delta) {
-    uint8_t soci = bq27441_detail::clamp<uint8_t>(static_cast<uint8_t>(delta), 0, 100);
-    return writeExtendedData(BQ27441_ID_STATE, 26, &soci, 1);
+bool SteamiBQ27441::setSociDelta(uint16_t delta) {
+    uint8_t soci = percent(delta);
+    return writeExtendedData(BQ27441_ID_STATE, 26, &soci, 1) != 0;
 }
 
-uint16_t SteamiBQ27441::pulseGpout() {
-    return executeControlWord(BQ27441_CONTROL_PULSE_SOC_INT);
+bool SteamiBQ27441::pulseGpout() {
+    return executeControlWord(BQ27441_CONTROL_PULSE_SOC_INT) != 0;
 }
 
 uint16_t SteamiBQ27441::deviceId() {
@@ -356,6 +364,9 @@ bool SteamiBQ27441::enterConfig(bool user_control) {
 }
 
 bool SteamiBQ27441::exitConfig(bool resim) {
+    // Ends a user session opened by enterConfig(true): the setters manage
+    // the configuration mode themselves again.
+    _user_config_control = false;
     if (resim) {
         if (softReset()) {
             uint32_t start_ms = TimeMs();
@@ -431,12 +442,12 @@ uint16_t SteamiBQ27441::writeOpConfig(uint16_t value) {
     return writeExtendedData(BQ27441_ID_REGISTERS, 0, op_config_data, 2);
 }
 
-uint16_t SteamiBQ27441::reset() {
-    return executeControlWord(BQ27441_CONTROL_RESET);
+bool SteamiBQ27441::reset() {
+    return executeControlWord(BQ27441_CONTROL_RESET) != 0;
 }
 
-uint16_t SteamiBQ27441::softReset() {
-    return executeControlWord(BQ27441_CONTROL_SOFT_RESET);
+bool SteamiBQ27441::softReset() {
+    return executeControlWord(BQ27441_CONTROL_SOFT_RESET) != 0;
 }
 
 int16_t SteamiBQ27441::readWord(uint8_t sub_address) {

@@ -107,6 +107,43 @@ class SteamiBQ27441 {
 
     bool sealed();
 
+    // --- Detailed readings (same names as the MicroPython driver) ---
+    int16_t current(CurrentMeasureType current_measure_type = CurrentMeasureType::AVG);
+    int16_t capacity(CapacityMeasureType capacity_measure_type = CapacityMeasureType::REMAIN);
+    uint16_t soc(SocMeasureType soc_measure_type = SocMeasureType::FILTERED);
+    uint16_t soh(SohMeasureType soh_measure_type = SohMeasureType::PERCENT);
+    // Raw Flags() word (BQ27441_FLAG_* bits).
+    uint16_t flags();
+
+    // --- State-of-charge alerts on GPOUT ---
+    // SOC1 and SOCF thresholds, in percent (0..100). The setters clamp to
+    // 0..100 and return false when the gauge refuses the write.
+    uint16_t soc1SetThreshold();
+    uint16_t soc1ClearThreshold();
+    bool setSoc1Thresholds(uint16_t set_soc, uint16_t clear_soc);
+    uint16_t socfSetThreshold();
+    uint16_t socfClearThreshold();
+    bool setSocfThresholds(uint16_t set_socf, uint16_t clear_socf);
+    bool socFlag();
+    bool socfFlag();
+    // SOC_INT step, in percent, between two GPOUT pulses.
+    uint16_t sociDelta();
+    bool setSociDelta(uint16_t delta);
+    bool pulseGpout();
+    // true selects BAT_LOW on GPOUT, false SOC_INT.
+    bool setGpoutFunction(bool gpout_function);
+
+    // --- Configuration and control ---
+    // enterConfig(true) opens a user session: the setters then write
+    // without entering or leaving the configuration mode themselves, until
+    // exitConfig() ends the session.
+    bool enterConfig(bool user_control);
+    bool exitConfig(bool resim = true);
+    bool seal();
+    bool unseal();
+    bool reset();
+    bool softReset();
+
    private:
     TwoWire& _wire;
     uint16_t _capacity_mAh;
@@ -122,32 +159,11 @@ class SteamiBQ27441 {
     void enterShutdownMode();
     void disableShutdownMode();
     bool isValidDevice();
-    int16_t current(CurrentMeasureType current_measure_type);
-    int16_t capacity(CapacityMeasureType capacity_measure_type);
-    uint16_t soc(SocMeasureType soc_measure_type = SocMeasureType::FILTERED);
-    uint16_t soh(SohMeasureType soh_measure_type = SohMeasureType::PERCENT);
     uint16_t readTemperatureDk(TempMeasureType temp_measure_type = TempMeasureType::BATTERY);
-    bool setGpoutFunction(bool gpout_function);
-    uint16_t soc1SetThreshold();
-    uint16_t setSoc1Thresholds(uint16_t set_soc, uint16_t clear_soc);
-    uint16_t socfSetThreshold();
-    uint16_t socfClearThreshold();
-    uint16_t setSocfThresholds(uint16_t set_socf, uint16_t clear_socf);
-    uint16_t socFlag();
-    uint16_t sociDelta();
-    uint16_t setSociDelta(uint16_t delta);
-    uint16_t pulseGpout();
     uint32_t TimeMs();
-    bool enterConfig(bool user_control);
-    bool exitConfig(bool resim = true);
-    uint16_t flags();
     uint16_t controlStatus();
-    bool seal();
-    bool unseal();
     uint16_t opConfig();
     uint16_t writeOpConfig(uint16_t value);
-    uint16_t reset();
-    uint16_t softReset();
     int16_t readWord(uint8_t sub_address);
     uint16_t readControlWord(uint16_t function);
     uint16_t executeControlWord(uint16_t function);

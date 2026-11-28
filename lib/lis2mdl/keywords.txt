@@ -48,6 +48,7 @@ calibrateMinmax3d	KEYWORD2
 calibrateApply	KEYWORD2
 calibrateQuality	KEYWORD2
 calibrateReset	KEYWORD2
+readCalibration	KEYWORD2
 calibrateStep	KEYWORD2
 readHwOffsets	KEYWORD2
 setHwOffsets	KEYWORD2

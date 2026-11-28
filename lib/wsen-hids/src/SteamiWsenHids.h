@@ -58,8 +58,14 @@ class SteamiWsenHids {
     ReadResult read();
 
     // Continuous mode at the requested ODR (WSEN_HIDS_ODR_1_HZ, _7_HZ, or
-    // _12_5_HZ). BDU is set so no register is updated mid-read.
+    // _12_5_HZ). BDU is set (unless enableBdu(false)) so no register is
+    // updated mid-read.
     void setContinuous(uint8_t odr);
+
+    // Block Data Update (CTRL_REG1.BDU), on by default. The choice is
+    // applied at once and kept by powerOn(), setContinuous() and
+    // triggerOneShot().
+    void enableBdu(bool enabled = true);
 
     // Trigger a single measurement without blocking. Pair with
     // temperature() / humidity() after polling dataReady(), or use
@@ -102,6 +108,9 @@ class SteamiWsenHids {
     float _tempOffset = 0.0f;
     float _tempUserSlope = 1.0f;
     float _tempUserIntercept = 0.0f;
+
+    // CTRL_REG1.BDU value written by every mode change (enableBdu()).
+    uint8_t _bdu = WSEN_HIDS_CTRL1_BDU;
 
     uint8_t status();
     uint8_t readReg(uint8_t reg);

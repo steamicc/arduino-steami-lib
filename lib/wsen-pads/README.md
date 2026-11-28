@@ -72,6 +72,7 @@ check with `isnan()`.
 | Method | Description |
 |--------|-------------|
 | `float pressureHpa()` | Pressure in hPa. |
+| `float pressurePa()` / `float pressureKpa()` | Same reading in Pa / kPa. |
 | `float temperature()` | Temperature in °C, with two-point calibration and additive offset applied. |
 | `ReadResult read()` | Both channels — `{pressure, temperature}`. |
 | `bool dataReady()` | Both `P_DA` and `T_DA` set in `STATUS`. |
