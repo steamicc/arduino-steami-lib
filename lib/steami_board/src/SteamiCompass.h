@@ -20,7 +20,8 @@ class SteamiCompass {
     const char* error() const { return _handle.error(); }
     const char* chip() const { return _handle.chip(); }
 
-    /// Degrees clockwise from north in [0, 360), screen up and flat; NAN when unavailable.
+    /// Degrees clockwise from north in [0, 360), screen up and flat; NAN when unavailable or when
+    /// the I2C read fails.
     float heading();
 
     /// "N", "NE", "E"... for heading(); "" when unavailable.

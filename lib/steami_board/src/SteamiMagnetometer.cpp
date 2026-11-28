@@ -25,7 +25,10 @@ SteamiVector SteamiMagnetometer::read() {
     if (mag == nullptr) {
         return out;
     }
-    const MagneticField raw = mag->magneticField();
+    MagneticField raw;
+    if (!mag->magneticField(raw)) {
+        return out;  // bus error or data-ready timeout
+    }
     out = {(static_cast<float>(raw.x) - mag->xOff) * kMicroteslaPerLsb,
            (static_cast<float>(raw.y) - mag->yOff) * kMicroteslaPerLsb,
            (static_cast<float>(raw.z) - mag->zOff) * kMicroteslaPerLsb};

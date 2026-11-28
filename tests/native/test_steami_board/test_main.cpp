@@ -845,6 +845,47 @@ static void test_print_info_marks_calibrated_chip(void) {
     TEST_ASSERT_TRUE(p.text.find("BME280 0x76 OK, calibrated\n") != std::string::npos);
 }
 
+// --- WSEN-HIDS: legacy "hts" calibration (same chip at 0x5F, MicroPython parity) ---
+
+// No revision: the board is probed, and the WSEN-HIDS found at 0x5F makes it a V1a/V1b.
+static float calibratedHidsTemperature(const char* config, bool expectApplied) {
+    attachFirmware();
+    fw.store(config);
+    steamiFakeWsenHids(Wire, 25.0f, 50.0f);
+    TEST_ASSERT_EQUAL_UINT8(static_cast<uint8_t>(SteamiStatus::OK),
+                            static_cast<uint8_t>(board.claim(SteamiChip::WSEN_HIDS)));
+    TEST_ASSERT_EQUAL(expectApplied, board.calibrate(SteamiChip::WSEN_HIDS));
+    TEST_ASSERT_EQUAL(expectApplied, board.calibrated(SteamiChip::WSEN_HIDS));
+    return board.wsenHids()->temperature();
+}
+
+static void test_calibrate_hids_falls_back_to_hts_key(void) {
+    const float t = calibratedHidsTemperature("{\"tc\":{\"hts\":{\"g\":1.0,\"o\":-2.0}}}", true);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.0f, t);
+}
+
+static void test_calibrate_hids_identity_falls_back_to_hts_key(void) {
+    const float t = calibratedHidsTemperature(
+        "{\"tc\":{\"hid\":{\"g\":1.0,\"o\":0.0},\"hts\":{\"g\":1.0,\"o\":-2.0}}}", true);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.0f, t);
+}
+
+static void test_calibrate_hids_own_key_wins_over_hts_key(void) {
+    const float t = calibratedHidsTemperature(
+        "{\"tc\":{\"hid\":{\"g\":1.0,\"o\":-1.0},\"hts\":{\"g\":1.0,\"o\":-2.0}}}", true);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 24.0f, t);
+}
+
+static void test_calibrate_hids_identity_without_hts_key_is_applied(void) {
+    const float t = calibratedHidsTemperature("{\"tc\":{\"hid\":{\"g\":1.0,\"o\":0.0}}}", true);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 25.0f, t);
+}
+
+static void test_calibrate_hids_without_any_key_changes_nothing(void) {
+    const float t = calibratedHidsTemperature("{\"tc\":{\"bme\":{\"g\":1.0,\"o\":-2.0}}}", false);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 25.0f, t);
+}
+
 // --- Motion calibrations (ca, cm) ---
 
 static SteamiFakeIsm330dl imu;
@@ -1024,6 +1065,11 @@ int main(void) {
     RUN_TEST(test_calibrate_forced_legacy_does_not_retry_config);
     RUN_TEST(test_calibrate_unknown_chip_or_absent_chip_is_false);
     RUN_TEST(test_print_info_marks_calibrated_chip);
+    RUN_TEST(test_calibrate_hids_falls_back_to_hts_key);
+    RUN_TEST(test_calibrate_hids_identity_falls_back_to_hts_key);
+    RUN_TEST(test_calibrate_hids_own_key_wins_over_hts_key);
+    RUN_TEST(test_calibrate_hids_identity_without_hts_key_is_applied);
+    RUN_TEST(test_calibrate_hids_without_any_key_changes_nothing);
     RUN_TEST(test_fake_ism330dl_lets_claim_succeed);
     RUN_TEST(test_calibrate_applies_ca);
     RUN_TEST(test_calibrate_applies_cm);

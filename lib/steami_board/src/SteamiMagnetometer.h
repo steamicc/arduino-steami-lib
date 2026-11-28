@@ -19,10 +19,9 @@ class SteamiMagnetometer {
     const char* error() const { return _handle.error(); }
     const char* chip() const { return _handle.chip(); }
 
-    /// Field in microtesla; NAN on every axis when unavailable. The hard-iron offsets are removed
-    /// only after a calibration (`cm` in the board config, or calibrate()): before that the field
-    /// includes the board's own and can be much larger. A failed I2C transfer reads as zero: the
-    /// driver cannot report it.
+    /// Field in microtesla; NAN on every axis when unavailable or when the I2C read fails. The
+    /// hard-iron offsets are removed only after a calibration (`cm` in the board config, or
+    /// calibrate()): before that the field includes the board's own and can be much larger.
     SteamiVector read();
     float x() { return read().x; }
     float y() { return read().y; }

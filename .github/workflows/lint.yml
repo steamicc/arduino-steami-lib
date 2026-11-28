@@ -1,12 +1,10 @@
 name: Lint
 
+# Reusable workflow, called by ci.yml on every PR, in the merge queue and on
+# main.
+
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  workflow_call:
 
 permissions:
   contents: read
