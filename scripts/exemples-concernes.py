@@ -20,6 +20,12 @@ prints one line of compact JSON on the standard output:
 The selection works per example: an example is concerned when the drivers it
 includes (transitively) contain a driver touched by the change. Exit code 2 if
 git fails.
+
+The working tree at --racine must be checked out at --head (or at the PR merge
+commit): the existence of `<example>.ino` and the `#include` lines are read from
+the working tree, not from git. Renames are listed as a deletion plus an
+addition (`--no-renames`), so a path moved out of a compile-relevant place still
+counts.
 """
 
 from __future__ import annotations
@@ -272,7 +278,7 @@ def selectionner(fichiers: list[str], racine: Path) -> dict:
 
 def fichiers_modifies(base: str, head: str, racine: Path) -> list[str]:
     proc = subprocess.run(
-        ["git", "-C", str(racine), "diff", "--name-only", "-z", f"{base}...{head}"],
+        ["git", "-C", str(racine), "diff", "--name-only", "--no-renames", "-z", f"{base}...{head}"],
         capture_output=True,
         text=True,
         check=False,

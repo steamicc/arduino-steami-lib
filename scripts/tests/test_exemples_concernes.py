@@ -233,6 +233,43 @@ class ExemplesConcernesTest(unittest.TestCase):
             },
         )
 
+    def _deplacer_et_selectionner(self, source: str, cible: str) -> dict:
+        def git(*args):
+            return subprocess.run(
+                ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"]
+                + ["-C", str(self.racine), *args],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+
+        write(self.racine, "platformio.ini", "[env]\n")
+        write(self.racine, "tests/native/.keep", "")
+        git("init", "-q")
+        git("add", "-A")
+        git("commit", "-q", "-m", "base")
+        (self.racine / cible).parent.mkdir(parents=True, exist_ok=True)
+        git("mv", source, cible)
+        git("commit", "-q", "-m", "move")
+        proc = subprocess.run(
+            [sys.executable, str(SCRIPT), "--base", "HEAD~1", "--head", "HEAD"]
+            + ["--racine", str(self.racine)],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return json.loads(proc.stdout)
+
+    def test_renommage_d_un_source_vers_un_chemin_sans_effet(self):
+        # Without --no-renames, git prints only the new path and the old one is lost.
+        r = self._deplacer_et_selectionner("lib/a/src/SteamiA.cpp", "tests/native/SteamiA.cpp")
+        self.assertTrue(r["compiler"])
+        self.assertIn("a", r["pilotes"])
+
+    def test_renommage_d_un_fichier_partage_vers_un_chemin_sans_effet(self):
+        r = self._deplacer_et_selectionner("platformio.ini", "docs/platformio.ini")
+        self.assertTrue(r["tout"])
+
     def test_ligne_de_commande_git_en_echec(self):
         proc = subprocess.run(
             [
