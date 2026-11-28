@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.46.6](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.5...v0.46.6) (2026-11-28)
+
+
+### Bug Fixes
+
+* **lis2mdl:** Align the tilt-compensated heading with the STeaMi axes. ([#328](https://github.com/steamicc/arduino-steami-lib/issues/328)) ([a2c8d12](https://github.com/steamicc/arduino-steami-lib/commit/a2c8d12b951f79c44ed8a92928fb7d4fe772502a)), closes [steamicc/micropython-steami-lib#344](https://github.com/steamicc/micropython-steami-lib/issues/344) [#299](https://github.com/steamicc/arduino-steami-lib/issues/299) [steamicc/micropython-steami-lib#344](https://github.com/steamicc/micropython-steami-lib/issues/344) [steamicc/micropython-steami-lib#344](https://github.com/steamicc/micropython-steami-lib/issues/344)
+
 ## [0.46.5](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.4...v0.46.5) (2026-11-28)
 
 
