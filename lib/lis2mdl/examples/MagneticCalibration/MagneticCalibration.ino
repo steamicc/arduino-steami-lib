@@ -66,8 +66,11 @@ void setup() {
     }
 
     Serial.println("Calibrating for about 12 seconds...");
-    magnetometer.calibrateMinmax3d(600, 20);
-    Serial.println("Done.");
+    if (magnetometer.calibrateMinmax3d(600, 20)) {
+        Serial.println("Done.");
+    } else {
+        Serial.println("Read error: calibration not changed.");
+    }
 
     printCalibration();
     printQuality();

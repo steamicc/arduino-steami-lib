@@ -154,16 +154,20 @@ correction: `setTemperatureOffset()` resets the gain to 1.0.
 
 ### Calibration
 
+The min/max calibrations are all or nothing, as in the MicroPython driver
+where a failed read raises `OSError` before any offset or scale changes: the
+six values are only replaced when every sample was read.
+
 | Method | Description |
 |--------|-------------|
 | `void setCalibrateStep(float xoff, float yoff, float zoff, float xscale, float yscale, float zscale)` | Set offsets and scales manually. |
-| `void calibrateMinmax2d(uint16_t samples = 300, uint16_t delayMs = 20)` | Min/max calibration on XY only — rotate board flat during acquisition. Failed reads are skipped; with no valid sample the calibration is kept. |
-| `void calibrateMinmax3d(uint16_t samples = 600, uint16_t delayMs = 20)` | Min/max calibration on all 3 axes — rotate board in all directions. Failed reads are skipped; with no valid sample the calibration is kept. |
+| `bool calibrateMinmax2d(uint16_t samples = 300, uint16_t delayMs = 20)` | Min/max calibration on XY only — rotate board flat during acquisition. All or nothing: returns `false` and keeps the previous calibration when `samples` is 0 or a read fails (stops at the first failed read). |
+| `bool calibrateMinmax3d(uint16_t samples = 600, uint16_t delayMs = 20)` | Min/max calibration on all 3 axes — rotate board in all directions. All or nothing: returns `false` and keeps the previous calibration when `samples` is 0 or a read fails (stops at the first failed read). |
 | `CalibratedField calibrateApply(float x, float y, float z)` | Apply current offset/scale to a raw triplet. |
 | `CalibrationQuality calibrateQuality(uint16_t samplesCheck = 200, uint16_t delayMs = 10)` | Evaluate calibration quality: center, radius dispersion, anisotropy. |
 | `void calibrateReset()` | Reset offsets to 0 and scales to 1. |
 | `MagCalibration readCalibration() const` | Current offsets and scales, `{xOff, yOff, zOff, xScale, yScale, zScale}` (same order as `setCalibrateStep()`). |
-| `void calibrateStep()` | Alias for `calibrateMinmax3d()`. |
+| `bool calibrateStep()` | Alias for `calibrateMinmax3d()`. |
 | `HwOffsets readHwOffsets()` | Read hardware offset registers (`OFFSET_*`). |
 | `void setHwOffsets(int16_t x, int16_t y, int16_t z)` | Write hardware offset registers. |
 
