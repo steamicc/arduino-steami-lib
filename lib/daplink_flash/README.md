@@ -1,4 +1,4 @@
-# daplink_flash
+# DAPLink Flash
 
 Arduino driver for the user file that the DAPLink chip of the STeaMi
 keeps in its 8 MB external flash (W25Q64). The file shows up on the
@@ -55,6 +55,31 @@ example waits for `ERASE` to be typed in the serial monitor first. It
 only erases the file in the external flash: the name and the config zone
 (in the internal flash of the DAPLink chip) stay.
 
+## Examples
+
+| Example | What it does | Try it |
+|---------|-------------|--------|
+| [`data_logger`](examples/data_logger/data_logger.ino) | Print the file, then append a `seconds,light` line every 10 seconds. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash#data_logger) |
+| [`flash_info`](examples/flash_info/flash_info.ino) | Print WHO_AM_I, the busy flag, the error register, the config zone support, the file name and its length. Read only. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash#flash_info) |
+| [`read_back`](examples/read_back/read_back.ino) | Print the file, then append each line typed in the serial monitor and read it back from the flash to check it. Never erases. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash#read_back) |
+| [`gated_clear_flash`](examples/gated_clear_flash/gated_clear_flash.ino) | Print the file name and length, then erase the file only once `ERASE` is typed in the serial monitor. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash#gated_clear_flash) |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash).
+
+### Building an example
+
+```bash
+make list-examples DRIVER=daplink_flash
+make flash-daplink_flash/flash_info
+```
+
+This builds, uploads, and opens the serial monitor at 115200 baud. Swap
+`flash-` for `capture-` to reliably capture the first lines printed at boot:
+
+```bash
+make capture-daplink_flash/flash_info DURATION=30
+```
+
 ## API
 
 ### Lifecycle
@@ -93,6 +118,13 @@ file before each command.
 
 Reading takes about 0.2 s per 256-byte sector.
 
+## Constants
+
+`SteamiDaplinkFlash_const.h` exports the command codes
+(`DAPLINK_FLASH_CMD_*`), error bits (`DAPLINK_FLASH_ERROR_*`), sizes
+(`DAPLINK_FLASH_SECTOR_SIZE`, `DAPLINK_FLASH_MAX_SECTORS`,
+`DAPLINK_FLASH_FILE_SIZE`) and timeouts.
+
 ## Firmware limits
 
 * The DAPLink firmware clears the "last command failed" bit of its error
@@ -119,28 +151,20 @@ restarted. Restart it without unplugging anything:
 Unplugging USB is not enough when the battery is connected: it keeps the
 DAPLink chip powered.
 
-## Constants
-
-`SteamiDaplinkFlash_const.h` exports the command codes
-(`DAPLINK_FLASH_CMD_*`), error bits (`DAPLINK_FLASH_ERROR_*`), sizes
-(`DAPLINK_FLASH_SECTOR_SIZE`, `DAPLINK_FLASH_MAX_SECTORS`,
-`DAPLINK_FLASH_FILE_SIZE`) and timeouts.
-
-## Examples
-
-| Example | Description | Try it |
-|---------|-------------|--------|
-| [`data_logger`](examples/data_logger/data_logger.ino) | Print the file, then append a `seconds,light` line every 10 seconds. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash#data_logger) |
-| [`flash_info`](examples/flash_info/flash_info.ino) | Print WHO_AM_I, the busy flag, the error register, the config zone support, the file name and its length. Read only. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash#flash_info) |
-| [`read_back`](examples/read_back/read_back.ino) | Print the file, then append each line typed in the serial monitor and read it back from the flash to check it. Never erases. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash#read_back) |
-| [`gated_clear_flash`](examples/gated_clear_flash/gated_clear_flash.ino) | Print the file name and length, then erase the file only once `ERASE` is typed in the serial monitor. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash#gated_clear_flash) |
-
-Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash).
-
 ## Testing
 
-* `make test-native`: `tests/native/test_daplink_flash/` runs the driver
+* `make test-native/daplink_flash`: `tests/native/test_daplink_flash/` runs the driver
   against a model of the DAPLink firmware (`FakeDaplinkBridge`).
 * `make test-hardware/daplink_flash`: renames, writes and erases the file
   on a real board, after saving it (up to 4 KB) and its name; both are
   written back at the end.
+
+## References
+
+* Firmware: [steamicc/DAPLink](https://github.com/steamicc/DAPLink).
+* STeaMi wiki: [W25Q64 hardware page](https://wiki.steami.cc/docs/hardware/main-components/w25q64).
+* MicroPython driver: [`daplink_flash`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/daplink_flash).
+
+## License
+
+GPL-3.0-or-later — see [LICENSE](../../LICENSE).

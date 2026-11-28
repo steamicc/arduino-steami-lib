@@ -6,17 +6,16 @@ Configuration data is stored as compact JSON in the 1 KB STM32F103 DAPLink
 config zone. It is intended for board information, sensor calibration values,
 and small persistent counters.
 
-## DAPLink firmware
+## Hardware
 
-The config zone needs a recent DAPLink firmware on the board. Older
-firmwares lock up when they receive a config command, so the driver checks
-for the zone first (`SteamiDaplinkBridge::hasConfigZone()`): on such a board,
-`begin()`, `load()` and `save()` return `false` without touching it.
-
-## Dependency
-
-- `STeaMi DAPLink Bridge` — config-zone access over the STeaMi internal I2C
-  bus.
+* No chip of its own: the configuration lives in the 1 KB config zone of the
+  STM32F103 DAPLink chip, reached over the STeaMi **internal** I2C bus
+  (address `0x3B`) through the
+  [STeaMi DAPLink Bridge](../daplink_bridge/README.md) library.
+* The config zone needs a recent DAPLink firmware on the board. Older
+  firmwares lock up when they receive a config command, so the driver checks
+  for the zone first (`SteamiDaplinkBridge::hasConfigZone()`): on such a board,
+  `begin()`, `load()` and `save()` return `false` without touching it.
 
 ## Quick start
 
@@ -50,7 +49,31 @@ configuration. Setters only change the in-memory copy, and `save()`
 replaces the whole zone with it: call `load()` before changing a value, or
 the other stored settings are lost.
 
-## Persistence
+## Examples
+
+| Example | What it does | Try it |
+|---------|--------------|--------|
+| [`show_config`](examples/show_config/) | Load and print the stored board information, calibrations and boot count, without writing anything. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config#show_config) |
+
+Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config).
+
+### Building an example
+
+```bash
+make list-examples DRIVER=steami_config
+make flash-steami_config/show_config
+```
+
+This builds, uploads, and opens the serial monitor at 115200 baud. Swap
+`flash-` for `capture-` to reliably capture the first lines printed at boot:
+
+```bash
+make capture-steami_config/show_config DURATION=30
+```
+
+## API
+
+### Persistence
 
 | Method | Description |
 |---|---|
@@ -65,7 +88,7 @@ in-memory configuration.
 The serialized JSON must stay under 1 KB (1023 bytes at most, the size of
 the DAPLink config zone minus its last byte).
 
-## Board information
+### Board information
 
 ```cpp
 config.setBoardRevision(131);  // series V1c, schematic index 1
@@ -83,7 +106,15 @@ if (config.boardName(name)) {
 }
 ```
 
-### Revision code
+Setters and `clear*()` only change the in-memory copy; getters return
+`false` when the value is not set.
+
+| Method | Description |
+|---|---|
+| `void setBoardRevision(int32_t revision)` / `bool boardRevision(int32_t& revision) const` / `void clearBoardRevision()` | Board revision code (see below). |
+| `void setBoardName(const String& name)` / `bool boardName(String& name) const` / `void clearBoardName()` | Board name. |
+
+#### Revision code
 
 The board revision is a decimal code: the hundreds are the generation, the
 tens the release (1 = a, 2 = b, 3 = c) and the units the schematic index
@@ -101,7 +132,7 @@ tens the release (1 = a, 2 = b, 3 = c) and the units the schematic index
 The code is decoded by `steamiDecodeRevision()` in the STeaMi Board library.
 Any other value (for example the old example value `3`) is not a valid code.
 
-## Temperature calibration
+### Temperature calibration
 
 Supported sensor names match the MicroPython library:
 
@@ -135,7 +166,14 @@ The stored `gain` and `offset` reproduce:
 corrected = measured * gain + offset
 ```
 
-## Magnetometer calibration
+| Method | Description |
+|---|---|
+| `bool setTemperatureCalibration(const char* sensor, float gain = 1.0f, float offset = 0.0f)` | Store the correction of `sensor`. `false` for an unknown sensor name. |
+| `bool getTemperatureCalibration(const char* sensor, TemperatureCalibration& calibration) const` | Copy the stored `{gain, offset}`. `false` for an unknown name or when nothing is stored. |
+| `bool clearTemperatureCalibration(const char* sensor)` | Forget the correction of `sensor`. `false` for an unknown sensor name. |
+| `bool applyTemperatureCalibration(const char* sensor, Sensor& instance) const` | Pass the stored correction to `instance.calibrateTemperature()`. `false` when nothing is stored. |
+
+### Magnetometer calibration
 
 ```cpp
 config.setMagnetometerCalibration(
@@ -154,7 +192,13 @@ The storage format matches the MicroPython `LIS2MDL` calibration data.
 Application is intentionally left to the LIS2MDL public API so this library
 does not depend directly on the magnetometer driver.
 
-## Accelerometer calibration
+| Method | Description |
+|---|---|
+| `void setMagnetometerCalibration(float hardIronX = 0, float hardIronY = 0, float hardIronZ = 0, float softIronX = 1, float softIronY = 1, float softIronZ = 1)` | Store the hard-iron offsets and soft-iron scales. |
+| `bool getMagnetometerCalibration(MagnetometerCalibration& calibration) const` | `false` when nothing is stored. |
+| `void clearMagnetometerCalibration()` | Forget the magnetometer calibration. |
+
+### Accelerometer calibration
 
 ```cpp
 config.setAccelerometerCalibration(0.01f, -0.02f, 0.03f);
@@ -171,7 +215,14 @@ For an IMU exposing `setAccelOffset(x, y, z)`:
 config.applyAccelerometerCalibration(imu);
 ```
 
-## Boot counter
+| Method | Description |
+|---|---|
+| `void setAccelerometerCalibration(float offsetX = 0, float offsetY = 0, float offsetZ = 0)` | Store the accelerometer offsets, in g. |
+| `bool getAccelerometerCalibration(AccelerometerCalibration& calibration) const` | `false` when nothing is stored. |
+| `void clearAccelerometerCalibration()` | Forget the accelerometer offsets. |
+| `bool applyAccelerometerCalibration(Sensor& instance) const` | Pass the stored offsets to `instance.setAccelOffset()`. `false` when nothing is stored. |
+
+### Boot counter
 
 ```cpp
 config.setBootCount(0);
@@ -183,6 +234,11 @@ if (config.bootCount(count)) {
     Serial.println(count);
 }
 ```
+
+| Method | Description |
+|---|---|
+| `void setBootCount(uint32_t count)` / `bool bootCount(uint32_t& count) const` | Boot counter; `bootCount()` is `false` when it is not set. |
+| `uint32_t incrementBootCount()` | Add one (starting from 0 when not set) and return the new value. Call `save()` to keep it. |
 
 ## JSON format
 
@@ -203,14 +259,27 @@ The format is compatible with the MicroPython sister library:
 
 Temperature sensor short keys are `hts`, `mag`, `ism`, `hid`, `pad`, and `bme`.
 
-## Examples
+## Testing
 
-| Example | What it does | Try it |
-|---------|--------------|--------|
-| [`show_config`](examples/show_config/) | Load and print the stored board information, calibrations and boot count, without writing anything. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config#show_config) |
+Host-side unit tests under
+[`tests/native/test_steami_config/`](../../tests/native/test_steami_config/)
+run the module against a model of the DAPLink config zone. Run them without
+hardware with:
 
-Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config).
+```bash
+make test-native/steami_config
+```
+
+On a connected board, `make test-hardware/steami_config` and
+`make test-integration/steami_config` write the real config zone. Both save
+its content first and write it back at the end, so the board keeps its own
+configuration.
+
+## References
+
+* Firmware: [steamicc/DAPLink](https://github.com/steamicc/DAPLink), which holds the config zone.
+* MicroPython module: [`steami_config`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/steami_config), same JSON format.
 
 ## License
 
-GPL-3.0-or-later — see the repository `LICENSE`.
+GPL-3.0-or-later — see [LICENSE](../../LICENSE).

@@ -61,8 +61,19 @@ void loop() {
 
 Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/vl53l1x).
 
-`make list-examples DRIVER=vl53l1x` lists the ready-to-run
-`flash-vl53l1x/<example>` targets.
+### Building an example
+
+```bash
+make list-examples DRIVER=vl53l1x
+make flash-vl53l1x/BasicDistance
+```
+
+This builds, uploads, and opens the serial monitor at 115200 baud. Swap
+`flash-` for `capture-` to reliably capture the first lines printed at boot:
+
+```bash
+make capture-vl53l1x/BasicDistance DURATION=30
+```
 
 ## API
 
@@ -102,6 +113,19 @@ When `distanceMm()` is called and no data is available yet, the driver:
 
 The polling timeout is approximately 1 second.
 
+### Default configuration
+
+The driver uploads the ST recommended default configuration block during
+`begin()` using the `DEFAULT_CONFIG` table embedded in the driver.
+
+This includes:
+
+* Interrupt configuration
+* ROI configuration
+* Sigma thresholds
+* Intermeasurement periods
+* VCSEL timing parameters
+
 ## Register constants
 
 `SteamiVL53L1X_const.h` exports all public register definitions and bit masks,
@@ -115,35 +139,23 @@ including:
 
 Applications can directly access low-level registers if needed.
 
-## Sensor configuration
-
-The driver uploads the ST recommended default configuration block during
-`begin()` using the `DEFAULT_CONFIG` table embedded in the driver.
-
-This includes:
-
-* Interrupt configuration
-* ROI configuration
-* Sigma thresholds
-* Intermeasurement periods
-* VCSEL timing parameters
-
 ## Testing
 
-The driver is designed to work with mocked `TwoWire` implementations for
-host-side testing.
-
-Example unit tests can be added under:
-
-```text
-tests/native/test_vl53l1x/
-```
-
-and executed with:
+Host-side unit tests under
+[`tests/native/test_vl53l1x/`](../../tests/native/test_vl53l1x/) exercise the
+driver against the `TwoWire` mock. Run them without hardware with:
 
 ```bash
-make test-native
+make test-native/vl53l1x
 ```
+
+On a connected board, `make test-hardware/vl53l1x` checks the real sensor.
+
+## References
+
+* Datasheet: [ST VL53L1X](https://www.st.com/resource/en/datasheet/vl53l1x.pdf).
+* STeaMi wiki: [VL53L1X hardware page](https://wiki.steami.cc/docs/hardware/main-components/sensors/vl53l1x).
+* MicroPython driver: [`vl53l1x`](https://github.com/steamicc/micropython-steami-lib/tree/main/lib/vl53l1x).
 
 ## License
 
