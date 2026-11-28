@@ -538,10 +538,20 @@ bool SteamiBoard::calibrate(SteamiChip c) {
         case SteamiChip::BME280:
             applied = cfg.applyTemperatureCalibration(STEAMI_CONFIG_SENSOR_BME280, *_bme280.get());
             break;
-        case SteamiChip::WSEN_HIDS:
-            applied =
-                cfg.applyTemperatureCalibration(STEAMI_CONFIG_SENSOR_WSEN_HIDS, *_wsenHids.get());
+        case SteamiChip::WSEN_HIDS: {
+            // Same chip as the HTS221 at 0x5F: a calibration stored under the legacy "hts" key
+            // is used when "hid" is missing or the identity, as MicroPython steami does.
+            const char* sensor = STEAMI_CONFIG_SENSOR_WSEN_HIDS;
+            TemperatureCalibration own;
+            TemperatureCalibration legacy;
+            const bool hasOwn = cfg.getTemperatureCalibration(sensor, own);
+            if ((!hasOwn || (own.gain == 1.0f && own.offset == 0.0f)) &&
+                cfg.getTemperatureCalibration(STEAMI_CONFIG_SENSOR_HTS221, legacy)) {
+                sensor = STEAMI_CONFIG_SENSOR_HTS221;
+            }
+            applied = cfg.applyTemperatureCalibration(sensor, *_wsenHids.get());
             break;
+        }
         case SteamiChip::WSEN_PADS:
             applied =
                 cfg.applyTemperatureCalibration(STEAMI_CONFIG_SENSOR_WSEN_PADS, *_wsenPads.get());
