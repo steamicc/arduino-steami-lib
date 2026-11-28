@@ -55,6 +55,7 @@ same sketch runs on a V1a, a V1b or a V1c.
 | [`Accelerometer`](examples/Accelerometer/) | Print the ISM330DL acceleration in g five times per second, with its norm and the shake flag. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#accelerometer) |
 | [`Gyroscope`](examples/Gyroscope/) | Print the ISM330DL angular speed in degrees per second five times per second. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#gyroscope) |
 | [`Buttons`](examples/Buttons/) | Print each press and release of the seven buttons (A, B, MENU and the D-PAD). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#buttons) |
+| [`Microphone`](examples/Microphone/) | Print the IMP34DT05 sound level in dB SPL five times per second, with the peak and the dominant frequency. | — |
 | [`Magnetometer`](examples/Magnetometer/) | Print the LIS2MDL magnetic field in microtesla twice per second. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#magnetometer) |
 | [`Compass`](examples/Compass/) | Print the LIS2MDL heading and direction twice per second, board flat and screen up. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#compass) |
 | [`Light`](examples/Light/) | Print the APDS-9960 light level twice per second (V1a/V1b; a V1c reports E20). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#light) |
@@ -65,6 +66,7 @@ same sketch runs on a V1a, a V1b or a V1c.
 | [`ScreenBattery`](examples/ScreenBattery/) | Show the battery charge, a bar and the voltage on the screen (mockup 02). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screenbattery) |
 | [`ScreenComfort`](examples/ScreenComfort/) | Show temperature and humidity side by side, with a comfort verdict (mockup 03). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screencomfort) |
 | [`ScreenGauge`](examples/ScreenGauge/) | Show the VL53L1X distance on a round gauge (mockup 04). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screengauge) |
+| [`ScreenSoundLevel`](examples/ScreenSoundLevel/) | A sound level meter: the microphone level on a round gauge from 30 to 100 dB SPL. | — |
 | [`ScreenCompass`](examples/ScreenCompass/) | Show a compass rose with its needle (mockup 07). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screencompass) |
 | [`ScreenWatch`](examples/ScreenWatch/) | Show an analog watch (mockup 09). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screenwatch) |
 | [`ScreenFaces`](examples/ScreenFaces/) | Show a smiley whose mood follows the distance in front of the board; button A shows the six faces (mockup 08). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#screenfaces) |
@@ -74,7 +76,8 @@ same sketch runs on a V1a, a V1b or a V1c.
 | [`BoardInfo`](examples/BoardInfo/) | Print the detected release, where the answer comes from, and whether each I2C chip of the release answers. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board#boardinfo) |
 | [`Pads`](examples/Pads/) | Read the crocodile pad P24 and drive P28 through the MCP23009E expander: an LED on P28 lights and the buzzer beeps while P24 is grounded. | — |
 
-Each example but `Pads` is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board).
+Each example but `Pads`, `Microphone` and `ScreenSoundLevel` (their wiki pages are not written
+yet) is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/steami-board).
 
 ### Building an example
 
@@ -218,11 +221,11 @@ The MicroPython names are `steami.PAD_P24`...
 
 ## Function classes
 
-Thirteen classes read a function without you choosing a chip:
+Fourteen classes read a function without you choosing a chip:
 `SteamiTemperature`, `SteamiHumidity`, `SteamiPressure`, `SteamiDistance`,
 `SteamiBattery`, `SteamiAccelerometer`, `SteamiGyroscope`,
 `SteamiMagnetometer`, `SteamiCompass`, `SteamiLight`, `SteamiColor`,
-`SteamiGesture` and `SteamiButtons`. They pick the chip of the release
+`SteamiGesture`, `SteamiButtons` and `SteamiMicrophone`. They pick the chip of the release
 (V1a/V1b or V1c) and share the driver the board already built. Each has a
 ready-to-run example in [`examples/`](examples/).
 
@@ -259,6 +262,7 @@ void loop() {
 | `SteamiColor` | APDS-9960 | none (`E20`) |
 | `SteamiGesture` | APDS-9960 | none (`E20`) |
 | `SteamiButtons` | MCP23009E (D-PAD) and MCU pins (A, B, MENU) | same |
+| `SteamiMicrophone` | IMP34DT05 (PDM, not I2C) | IMP34DT05 (PDM, not I2C) |
 
 When the release is unknown, every candidate is tried (for the temperature:
 BME280, WSEN-HIDS, then WSEN-PADS). The altitude of `SteamiPressure` comes from
@@ -295,6 +299,7 @@ their "unavailable" value without any bus traffic and without printing again.
 | `SteamiColor` | `read(r, g, b)` (raw counts, returns whether it worked), `red()`, `green()`, `blue()`, `rgb()` (hue of the object, largest channel 255) | `false`, `0`, `STEAMI_BLACK` |
 | `SteamiGesture` | `read(timeoutMs = 0)` gives `NONE`, `LEFT`, `RIGHT`, `UP`, `DOWN`, `NEAR` or `FAR`; `SteamiGesture::name(d)` | `NONE` |
 | `SteamiButtons` | `isPressed(b)`, `wasPressed(b)`, `wasReleased(b)`, `getPresses(b)`, `waitForPress(timeoutMs = 0)` with `SteamiButton::A`, `B`, `MENU`, `UP`, `DOWN`, `LEFT`, `RIGHT` | `false`, `NONE` |
+| `SteamiMicrophone` | `read()` in dB SPL, `dbfs()`, `peak()` (0 to 32768), `levelReady()`, `isLoud(thresholdDb = 70.0f)`, `frequency(minDb = 50.0f)` in Hz, `readInto(samples, count)`; `setWindow(ms)`, `setVolume(v)`, `setOffset(db)` and their getters; `end()` | `NAN`, `NAN`, `0`, `false`, `false`, `NAN`, `0` |
 
 * `SteamiDistance`: `-1` means that the sensor timed out or is unavailable.
   The driver ignores the range status, so a target out of range is not told
@@ -379,6 +384,41 @@ their "unavailable" value without any bus traffic and without printing again.
   A button held at start is not a press. `waitForPress()` drops the presses
   made before the call, the latched taps included, and returns `NONE` after
   the timeout.
+* `SteamiMicrophone`: every object shares one `SteamiIMP34DT05` driver, which
+  `steamiImp34dt05()` returns too (started; `nullptr` when the microphone sends
+  no sound). The microphone is not on the I2C bus: `printInfo()` does not list
+  it and `Steami.claim()` does not serve it.
+  * `read()` estimates dB SPL from the datasheet sensitivity (-26 dBFS at
+    94 dB SPL) and the volume: `dbfs() - 20 * log10(2 * volume) + 26 + 94`,
+    plus the driver offset and `setOffset()`. It is not calibrated and not
+    A-weighted (a low rumble reads louder than on a dB(A) meter). At volume 5
+    (the default) it reads from about 30 dB SPL (the microphone's own noise)
+    to 100 dB SPL (digital clipping); `setVolume(1)` for very loud places
+    (clipping near 114 dB SPL). At volume 0, `read()` is `NAN` and `dbfs()`
+    -120.
+  * `read()`, `dbfs()`, `peak()` and `isLoud()` give the last completed
+    window: `setWindow(ms)`, 1 to 4000 ms, 100 by default (200 ms for a
+    steady meter with `screen.gauge(db, 30, 100)`, 10 to 20 ms to catch
+    claps). The first one after `begin()` waits for the first window (at most
+    `window()` + 20 ms), the next ones never wait: a loop faster than the
+    window gets the same value again.
+  * `levelReady()` is one flag of the shared driver: a window completed since
+    the last level reading, by any object or through `steamiImp34dt05()`.
+    `read()`, `dbfs()`, `peak()` and `isLoud()` clear it, `levelReady()` does
+    not.
+  * `setOffset(db)` adds to the `read()` of this object only; the window and
+    the volume are settings of the shared driver.
+  * `frequency(minDb = 50.0f)` records 512 new samples (it blocks about
+    35 ms) and returns the strongest frequency, about 1 % accurate (the clock
+    is the internal HSI oscillator), or `NAN` when those samples read below
+    `minDb` dB SPL, offsets included, and at volume 0. `readInto()` drops the
+    waiting samples, then blocks until `count` new ones (16 per millisecond)
+    arrived.
+  * When the stream stops while the driver runs, the next reading restarts it
+    once and waits for its first window. After `powerOff()` or `end()` made
+    through `steamiImp34dt05()`, the readings give `NAN`, `0` or `false`
+    without restarting it, until the next `begin()`. `Steami.end()` stops the
+    microphone too, and `begin()` starts it again.
 * A function that failed is not tried again until the board resets (or
   `Steami.end()`). After plugging in a battery, reset the board.
 
@@ -420,6 +460,7 @@ centred on its name: `"N"`, `"NE"`, `"E"`, `"SE"`, `"S"`, `"SW"`, `"W"` or
 | `E10` | `[STeaMi] SteamiAccelerometer: the ISM330DL accelerometer (I2C 0x6B) did not answer. Check the board or try another one. (E10)` |
 | `E10` | `[STeaMi] SteamiCompass: the LIS2MDL compass (I2C 0x1E) did not answer. Check the board or try another one. (E10)` |
 | `E10` | `[STeaMi] SteamiButtons: the MCP23009E D-PAD expander (I2C 0x20) did not answer. The A, B and MENU buttons still work. (E10)` |
+| `E10` | `[STeaMi] SteamiMicrophone: the IMP34DT05 microphone (PDM, MIC_CLK PA3 / MIC_IN PA10) sent no sound. Check the board or try another one. (E10)` |
 | `E11` | `[STeaMi] SteamiTemperature: this STeaMi is set as a V1c (forced by Steami.begin()), but its BME280 temperature sensor (I2C 0x76) did not answer. Check the #define, Steami.begin() or the board config. (E11)` |
 | `E20` | `[STeaMi] SteamiLight: this STeaMi is a V1c, it has no light sensor (APDS-9960 is on V1a/V1b only). read() will return 0. (E20)` |
 | `E20` | `[STeaMi] SteamiColor: this STeaMi is a V1c, it has no colour sensor (APDS-9960 is on V1a/V1b only). read() will return false. (E20)` |
@@ -427,13 +468,14 @@ centred on its name: `"N"`, `"NE"`, `"E"`, `"SE"`, `"S"`, `"SW"`, `"W"` or
 | `E20` | `[STeaMi] <Class>: this STeaMi is a <release>, it has no <noun> (<chip> is on <other release> only). <fallback> (E20)` |
 
 `E10` means that the chip of the release did not answer: with one candidate the
-text names the chip and its I2C address, with several it lists them. `E11`
+text names the chip and its I2C address (its PDM pins for the microphone), with
+several it lists them. The text of the microphone is the same as in MicroPython. `E11`
 replaces it only for the sensors that differ between releases (temperature,
 humidity, pressure, light, colour and gesture) when the release was forced
 (`Steami.begin(...)`, `#define`) or read from the board config: the text then
 tells you to check that setting. Distance, battery, accelerometer, gyroscope,
-magnetometer, compass and buttons are on every release, so they always use
-`E10`.
+magnetometer, compass, buttons and microphone are on every release, so they
+always use `E10`.
 `E20` means that the function does not exist on this release. Only
 `SteamiLight`, `SteamiColor` and `SteamiGesture` can print it, on a V1c (the
 APDS-9960 is on V1a/V1b only); the other classes exist on every release. The
@@ -771,10 +813,19 @@ void setup() {
   interrupt (`i2c_handles[I2C1_INDEX]` in `twi.c`); the transfers of the other
   one time out without any error.
 
+## Limitations
+
+* `SteamiMicrophone` brings the `STeaMi IMP34DT05` driver, whose
+  `DMA1_Channel1_IRQHandler()` is already in every sketch built from the
+  `STeaMi` Library Manager package: a sketch that defines its own handler
+  adds `-DSTEAMI_IMP34DT05_NO_DMA_IRQ_HANDLER`, as the
+  [IMP34DT05 README](../im34dt05/README.md#limitations) explains.
+
 ## Testing
 
 ```bash
 make test-native/steami_board   # detection, routing, messages, lazy slots
+make test-native/steami_microphone   # SteamiMicrophone over a simulated SAI1
 make test-native/steami_display_board   # display primitives, E30, E31
 make test-native/steami_screen   # widgets, layout rules, SteamiValue, E30, E31
 make test-native/steami_screen_mockups   # mockups 01 to 09 at 128 and 240 px

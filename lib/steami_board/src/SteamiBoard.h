@@ -171,9 +171,16 @@ class SteamiBoard {
     /// UNKNOWN_BOARD (no backend). Reports nothing: the caller does, under its own name.
     SteamiStatus beginDisplay();
 
-    /// Destroys the slots, the panel slots included (their drivers free the frame buffer, the
-    /// panel is not powered off), and forgets reported pairs and delivered lines, the injected
-    /// display backend and the cached display status. The logger is kept.
+    /// Registers the microphone hooks (called by its probe once the driver runs): end() calls
+    /// `stop`, and the calibration sets the dB offset of the driver through `setOffset`. Through
+    /// pointers, so that the board does not link the microphone driver into sketches that do not
+    /// use it.
+    void attachMicrophone(void (*stop)(), void (*setOffset)(float));
+
+    /// Stops the microphone when its probe registered a hook, then destroys the slots, the panel
+    /// slots included (their drivers free the frame buffer, the panel is not powered off), and
+    /// forgets reported pairs and delivered lines, the injected display backend, the cached
+    /// display status and the microphone hooks. The logger is kept.
     void end();
 
    private:
@@ -244,6 +251,8 @@ class SteamiBoard {
     SteamiLazy<SteamiSsd1327Backend> _ssd1327;
     SteamiLazy<SteamiGc9a01Backend> _gc9a01;
     SteamiStatus _displayStatus = SteamiStatus::NOT_STARTED;
+    void (*_microphoneStop)() = nullptr;
+    void (*_microphoneSetOffset)(float) = nullptr;
 };
 
 extern SteamiBoard Steami;

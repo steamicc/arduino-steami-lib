@@ -46,7 +46,9 @@ bool SteamiHandle::begin() {
     for (SteamiChip c = steamiRoute(release, function, 0); c != SteamiChip::NONE;
          c = steamiRoute(release, function, candidates)) {
         candidates++;
-        if (_board->claim(c) == SteamiStatus::OK) {
+        const bool ok =
+            _info->probe != nullptr ? _info->probe(*_board) : _board->claim(c) == SteamiStatus::OK;
+        if (ok) {
             _board->calibrate(c);
             _chip = c;
             _status = SteamiStatus::OK;
@@ -112,7 +114,12 @@ void SteamiHandle::reportNotAnswering(SteamiRelease release, uint8_t candidates)
                        STEAMI_E_RELEASE_CONTRADICTED);
         return;
     }
-    if (candidates == 1) {
+    if (candidates == 1 && steamiChipAddress(first) == 0) {
+        // Not on the I2C bus: the microphone, whose probe waits for a PDM stream.
+        snprintf(detail, sizeof(detail),
+                 "the %s %s (PDM, MIC_CLK PA3 / MIC_IN PA10) sent no sound. %s",
+                 steamiChipName(first), _info->noun, _info->hint);
+    } else if (candidates == 1) {
         snprintf(detail, sizeof(detail), "the %s %s (I2C 0x%02X) did not answer. %s",
                  steamiChipName(first), _info->noun,
                  static_cast<unsigned>(steamiChipAddress(first)), _info->hint);
