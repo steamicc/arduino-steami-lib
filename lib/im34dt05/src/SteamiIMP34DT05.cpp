@@ -15,6 +15,9 @@ static_assert((IMP34DT05_BUFFER_SAMPLES & BUFFER_MASK) == 0,
 constexpr float PI_F = 3.14159265358979f;
 constexpr float SQRT2_F = 1.41421356237f;
 
+// isAlive(): longest time since the last block for a live stream.
+constexpr uint32_t ALIVE_TIMEOUT_MS = 50;
+
 // Instance fed by the DMA interrupt (the board has one microphone).
 SteamiIMP34DT05* activeMic = nullptr;
 
@@ -154,6 +157,16 @@ bool SteamiIMP34DT05::isRunning() const {
     return _running;
 }
 
+bool SteamiIMP34DT05::isAlive() const {
+    if (!_running) {
+        return false;
+    }
+    // Read the block time first: a block arriving in between only makes
+    // the stream look older, never younger than it is.
+    uint32_t last = _lastBlockMs;
+    return millis() - last <= ALIVE_TIMEOUT_MS;
+}
+
 uint32_t SteamiIMP34DT05::sampleRate() const {
     return IMP34DT05_SAMPLE_RATE_16K;
 }
@@ -209,6 +222,7 @@ void SteamiIMP34DT05::processBlock(const uint8_t* data, size_t length) {
         return;
     }
 
+    _lastBlockMs = millis();
     uint32_t block = _blocks + 1;
     _blocks = block;
     if (block <= IMP34DT05_WARMUP_BLOCKS) {
@@ -473,14 +487,12 @@ void SteamiIMP34DT05::setLevelOffset(float offsetDb) {
     _levelOffset = offsetDb;
 }
 
+float SteamiIMP34DT05::levelOffset() const {
+    return _levelOffset;
+}
+
 float SteamiIMP34DT05::dbSplFromDbfs(float dbfs) const {
-    uint8_t vol = _filter.volume();
-    if (vol == 0 || isnan(dbfs)) {
-        return NAN;
-    }
-    float gainDb = 20.0f * log10f(2.0f * vol);
-    return dbfs - gainDb - IMP34DT05_SENSITIVITY_DBFS + IMP34DT05_SENSITIVITY_REF_DB_SPL +
-           _levelOffset;
+    return dbfsToDbSpl(dbfs, _filter.volume()) + _levelOffset;
 }
 
 // --- Frequency ---------------------------------------------------------------
@@ -586,6 +598,14 @@ float SteamiIMP34DT05::rmsToDbfs(float rms) {
     }
     float dbfs = 20.0f * log10f(rms * SQRT2_F / IMP34DT05_FULL_SCALE);
     return dbfs < IMP34DT05_LEVEL_FLOOR_DBFS ? IMP34DT05_LEVEL_FLOOR_DBFS : dbfs;
+}
+
+float SteamiIMP34DT05::dbfsToDbSpl(float dbfs, uint8_t volume) {
+    if (volume == 0 || isnan(dbfs)) {
+        return NAN;
+    }
+    float gainDb = 20.0f * log10f(2.0f * volume);
+    return dbfs - gainDb - IMP34DT05_SENSITIVITY_DBFS + IMP34DT05_SENSITIVITY_REF_DB_SPL;
 }
 
 float SteamiIMP34DT05::computeDominantFrequency(const int16_t* samples, size_t count,

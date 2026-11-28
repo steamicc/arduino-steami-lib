@@ -22,6 +22,7 @@ end	KEYWORD2
 powerOn	KEYWORD2
 powerOff	KEYWORD2
 isRunning	KEYWORD2
+isAlive	KEYWORD2
 sampleRate	KEYWORD2
 available	KEYWORD2
 dataReady	KEYWORD2
@@ -40,6 +41,7 @@ levelDbfs	KEYWORD2
 levelDbSpl	KEYWORD2
 level	KEYWORD2
 setLevelOffset	KEYWORD2
+levelOffset	KEYWORD2
 dominantFrequencyHz	KEYWORD2
 setSlot	KEYWORD2
 conversionStats	KEYWORD2
@@ -47,6 +49,7 @@ resetConversionStats	KEYWORD2
 slot	KEYWORD2
 computeRms	KEYWORD2
 rmsToDbfs	KEYWORD2
+dbfsToDbSpl	KEYWORD2
 computeDominantFrequency	KEYWORD2
 
 #######################################

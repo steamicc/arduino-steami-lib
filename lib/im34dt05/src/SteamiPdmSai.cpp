@@ -309,7 +309,61 @@ void SteamiPdmSai::end() {
     blockHandler = nullptr;
 }
 
-#else  // !STEAMI_PDM_SAI_HARDWARE
+#elif defined(UNIT_TEST) && !defined(ARDUINO_ARCH_STM32)
+
+// Host seam of the native tests: a simulated SAI that the tests feed.
+
+namespace {
+
+bool hostPresent = false;
+bool hostStarted = false;
+SteamiPdmSaiHandler hostHandler = nullptr;
+
+}  // namespace
+
+void SteamiPdmSai::hostSetPresent(bool present) {
+    hostPresent = present;
+    if (!present) {
+        hostStarted = false;
+        hostHandler = nullptr;
+    }
+}
+
+void SteamiPdmSai::hostFeed(const uint8_t* data, size_t length) {
+    if (hostStarted && hostHandler != nullptr) {
+        hostHandler(data, length);
+    }
+}
+
+bool SteamiPdmSai::supported() {
+    return hostPresent;
+}
+
+bool SteamiPdmSai::begin(SteamiPdmSaiHandler handler) {
+    if (!hostPresent) {
+        return false;
+    }
+    hostHandler = handler;
+    return true;
+}
+
+bool SteamiPdmSai::start() {
+    hostStarted = hostPresent && hostHandler != nullptr;
+    return hostStarted;
+}
+
+void SteamiPdmSai::stop() {
+    hostStarted = false;
+}
+
+void SteamiPdmSai::end() {
+    hostStarted = false;
+    hostHandler = nullptr;
+}
+
+void SteamiPdmSai::handleDmaInterrupt() {}
+
+#else  // neither the hardware nor the host tests
 
 bool SteamiPdmSai::supported() {
     return false;

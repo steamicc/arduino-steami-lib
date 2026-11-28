@@ -44,4 +44,14 @@ class SteamiPdmSai {
     // has its own handler: call this function from it to keep the
     // microphone working).
     static void handleDmaInterrupt();
+
+#if defined(UNIT_TEST) && !defined(ARDUINO_ARCH_STM32)
+    // Host tests only (not in the Arduino build). hostSetPresent(true)
+    // simulates a board: supported(), begin() and start() succeed and
+    // begin() keeps the handler; false (the default) restores the stubs
+    // that fail. hostFeed() hands one block to the handler, as the DMA
+    // interrupt would, between start() and stop().
+    static void hostSetPresent(bool present);
+    static void hostFeed(const uint8_t* data, size_t length);
+#endif
 };

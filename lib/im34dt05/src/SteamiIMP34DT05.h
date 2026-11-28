@@ -56,6 +56,11 @@ class SteamiIMP34DT05 {
     // True between begin() / powerOn() and end() / powerOff().
     bool isRunning() const;
 
+    // True while running and a block of samples arrived in the last
+    // 50 ms (millis()): false when the DMA interrupt no longer delivers
+    // blocks. A caller can then restart the stream with end() and begin().
+    bool isAlive() const;
+
     uint32_t sampleRate() const;
 
     // --- Samples ---------------------------------------------------------
@@ -119,8 +124,9 @@ class SteamiIMP34DT05 {
     // The four values above from the same window, at once.
     LevelResult level();
 
-    // Additive dB correction applied by levelDbSpl().
+    // Additive dB correction applied by levelDbSpl() (0 by default).
     void setLevelOffset(float offsetDb);
+    float levelOffset() const;
 
     // --- Frequency -------------------------------------------------------
 
@@ -170,6 +176,11 @@ class SteamiIMP34DT05 {
     // dBFS of an RMS value, as levelDbfs().
     static float rmsToDbfs(float rms);
 
+    // dB SPL of a dBFS value at a volume, as levelDbSpl() without the
+    // offset: dbfs - 20 * log10(2 * volume) + 26 + 94. NAN at volume 0
+    // or when dbfs is NAN.
+    static float dbfsToDbSpl(float dbfs, uint8_t volume);
+
     // Frequency of the strongest component of `count` samples taken at
     // `sampleRateHz`: Hann window, radix-2 FFT, Gaussian interpolation
     // of the peak. `count` must be a power of two from 16 to
@@ -194,7 +205,8 @@ class SteamiIMP34DT05 {
     volatile bool _slotLocked = false;
     volatile bool _streamAlive = false;
     volatile uint32_t _blocks = 0;
-    bool _redetect = false;  // setSlot(AUTO) while running: detect at next start
+    volatile uint32_t _lastBlockMs = 0;  // millis() of the last block, for isAlive()
+    bool _redetect = false;              // setSlot(AUTO) while running: detect at next start
     uint32_t _slotScore[IMP34DT05_SAI_SLOTS] = {};
     uint64_t _slotEnergy[IMP34DT05_SAI_SLOTS] = {};
     SteamiPdmFilter _detectFilter[IMP34DT05_SAI_SLOTS];
