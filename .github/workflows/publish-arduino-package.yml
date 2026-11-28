@@ -33,6 +33,10 @@ name: Publish Arduino package
 # Pass --latest only for the newest version; for an older tag pass
 # --latest=false, so that the newest release stays Latest.
 # A release that already exists and is published is left as it is (no archive).
+#
+# After publishing, the downstream bots are dispatched; a dispatch failure is
+# only a warning. A manual recovery (gh release edit) does not dispatch: the
+# downstream crons catch up.
 
 on:
   release:
@@ -244,3 +248,31 @@ jobs:
             echo "::notice::${TAG} is older than the published ${newest}: published without --latest, ${current_latest:-the current Latest release} stays Latest."
           fi
           gh release edit "$TAG" -R "$DIST_REPO" --draft=false "$latest_flag"
+
+      - name: Jeton pour les robots en aval
+        id: jeton_aval
+        continue-on-error: true   # without a token, warn and let the crons take over
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_SECRET }}
+          owner: steamicc
+          repositories: arduino-steami-devcontainer,wiki_steami,arduino-steami-sample   # the repositories of the targets, comma-separated
+          permission-actions: write
+
+      - name: Déclencher les robots en aval
+        continue-on-error: true   # a failed dispatch never fails the publication
+        env:
+          GH_TOKEN: ${{ steps.jeton_aval.outputs.token }}
+          JETON: ${{ steps.jeton_aval.outcome }}
+        run: |
+          if [ "$JETON" != success ]; then
+            echo "::warning::App token unavailable: the downstream bots will run on their crons."
+            exit 0
+          fi
+          # One target per "<repository> <bot>" string; a failed target does not stop the next ones.
+          for cible in "arduino-steami-devcontainer suivre-paquet.yml" "wiki_steami suivre-exemples-arduino.yml" "arduino-steami-sample suivre-bibliotheque.yml"; do
+            read -r repo workflow <<<"$cible"
+            gh workflow run "$workflow" -R "steamicc/$repo" \
+              || echo "::warning::Could not dispatch $workflow in steamicc/$repo: it will run on its cron if it has one (check the App's Actions write permission and its installation on this repository)."
+          done
