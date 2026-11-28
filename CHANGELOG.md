@@ -3,6 +3,13 @@
 All notable changes to this project will be documented in this file.
 See [Conventional Commits](https://conventionalcommits.org) for commit guidelines.
 
+## [0.46.2](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.1...v0.46.2) (2026-11-28)
+
+
+### Bug Fixes
+
+* **lis2mdl:** Keep the previous calibration when a min/max sample fails. ([#331](https://github.com/steamicc/arduino-steami-lib/issues/331)) ([150818f](https://github.com/steamicc/arduino-steami-lib/commit/150818fee4a5ac4e9eddda3d7febb25c93838f12)), closes [#329](https://github.com/steamicc/arduino-steami-lib/issues/329)
+
 ## [0.46.1](https://github.com/steamicc/arduino-steami-lib/compare/v0.46.0...v0.46.1) (2026-11-28)
 
 
