@@ -58,9 +58,16 @@ the other stored settings are lost.
 | `bool load()` | Load the JSON configuration from the config zone. An empty zone gives an empty configuration. |
 | `bool save()` | Erase the config zone and write the current compact JSON. Returns `false` if it does not fit. |
 | `void clear()` | Clear only the in-memory configuration. |
+| `bool isEmpty() const` | True when no value is set (no board information, calibration or boot count). |
 
 Invalid JSON is discarded: `load()` returns `false` and leaves an empty
 in-memory configuration.
+
+A failed read of the first block of the zone (DAPLink busy, I2C error) also
+gives an empty configuration, with `load()` returning `true`: it looks like an
+empty zone, and a `save()` that follows would erase the stored settings. When
+`isEmpty()` is true after `load()` on a board that should hold a
+configuration, read the zone again before saving.
 
 The serialized JSON must stay under 1 KB (1023 bytes at most, the size of
 the DAPLink config zone minus its last byte).
@@ -219,10 +226,12 @@ Temperature sensor short keys are `hts`, `mag`, `ism`, `hid`, `pad`, and `bme`.
 | [`calibrate_accelerometer`](examples/calibrate_accelerometer/) | Measure the ISM330DL bias with the board flat and save it (`ca`). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config#calibrate_accelerometer) |
 | [`calibrate_magnetometer`](examples/calibrate_magnetometer/) | Press MENU, turn the board for 12 s, save the LIS2MDL hard and soft iron (`cm`) and check the heading. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config#calibrate_magnetometer) |
 
-The three `calibrate_*` examples write the config zone. They keep the other
-stored settings (they `load()` the zone before saving) and mirror the examples of the
-same name in the MicroPython `steami_config` library, so a board calibrated
-in one language reads the same in the other.
+The three `calibrate_*` examples write the config zone. When the zone is read,
+they keep the other stored settings (they `load()` the zone before saving). An
+empty read is tried again, and refused when the board found settings in the
+zone at startup, since a failed read looks like an empty zone. They mirror the
+examples of the same name in the MicroPython `steami_config` library, so a
+board calibrated in one language reads the same in the other.
 
 Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config).
 

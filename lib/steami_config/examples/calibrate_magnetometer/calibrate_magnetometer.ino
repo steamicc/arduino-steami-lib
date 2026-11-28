@@ -33,10 +33,29 @@ SteamiConfig* openConfig() {
         Serial.println("No config zone: update the DAPLink firmware of the board.");
         return nullptr;
     }
-    if (!storedConfig.load()) {
-        Serial.println("The config zone does not hold valid JSON: nothing changed.");
+    // A failed first read of the zone looks like an empty zone, and save() would then erase
+    // the other settings: read an empty zone again before trusting it.
+    for (uint8_t attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) {
+            delay(200);
+        }
+        if (!storedConfig.load()) {
+            Serial.println("The config zone does not hold valid JSON: nothing changed.");
+            return nullptr;
+        }
+        if (!storedConfig.isEmpty()) {
+            return &storedConfig;
+        }
+    }
+    // Still empty: refuse when the board found settings in the zone at startup.
+    const SteamiConfig* boardConfig = Steami.config();
+    if (boardConfig != nullptr && !boardConfig->isEmpty()) {
+        Serial.println(
+            "The config zone reads empty, but the board read it at startup: "
+            "nothing changed, reset the board and try again.");
         return nullptr;
     }
+    Serial.println("The config zone is empty: a new one is written.");
     return &storedConfig;
 }
 

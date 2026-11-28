@@ -6,6 +6,7 @@ begin	KEYWORD2
 load	KEYWORD2
 save	KEYWORD2
 clear	KEYWORD2
+isEmpty	KEYWORD2
 setBoardRevision	KEYWORD2
 boardRevision	KEYWORD2
 setBoardName	KEYWORD2
