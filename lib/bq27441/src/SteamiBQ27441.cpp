@@ -278,12 +278,13 @@ uint16_t SteamiBQ27441::soc1ClearThreshold() {
     return readExtendedData(BQ27441_ID_DISCHARGE, 1);
 }
 
-// Clamp in 16 bits before narrowing, so 300 % reads as 100 % and not 44 %.
-static uint8_t percent(uint16_t value) {
-    return static_cast<uint8_t>(bq27441_detail::clamp<uint16_t>(value, 0, 100));
+// Clamp to 0..100 before narrowing, so 300 % writes 100 % (not 44 %) and
+// -5 % writes 0 %, like constrain(x, 0, 100) in MicroPython.
+static uint8_t percent(int value) {
+    return static_cast<uint8_t>(bq27441_detail::clamp<int>(value, 0, 100));
 }
 
-bool SteamiBQ27441::setSoc1Thresholds(uint16_t set_soc, uint16_t clear_soc) {
+bool SteamiBQ27441::setSoc1Thresholds(int set_soc, int clear_soc) {
     uint8_t thresholds[2] = {percent(set_soc), percent(clear_soc)};
     return writeExtendedData(BQ27441_ID_DISCHARGE, 0, thresholds, 2) != 0;
 }
@@ -296,7 +297,7 @@ uint16_t SteamiBQ27441::socfClearThreshold() {
     return readExtendedData(BQ27441_ID_DISCHARGE, 3);
 }
 
-bool SteamiBQ27441::setSocfThresholds(uint16_t set_socf, uint16_t clear_socf) {
+bool SteamiBQ27441::setSocfThresholds(int set_socf, int clear_socf) {
     uint8_t thresholds[2] = {percent(set_socf), percent(clear_socf)};
     return writeExtendedData(BQ27441_ID_DISCHARGE, 2, thresholds, 2) != 0;
 }
@@ -313,7 +314,7 @@ uint16_t SteamiBQ27441::sociDelta() {
     return readExtendedData(BQ27441_ID_STATE, 26);
 }
 
-bool SteamiBQ27441::setSociDelta(uint16_t delta) {
+bool SteamiBQ27441::setSociDelta(int delta) {
     uint8_t soci = percent(delta);
     return writeExtendedData(BQ27441_ID_STATE, 26, &soci, 1) != 0;
 }
@@ -331,10 +332,6 @@ uint32_t SteamiBQ27441::TimeMs() {
 }
 
 bool SteamiBQ27441::enterConfig(bool user_control) {
-    if (user_control) {
-        _user_config_control = true;
-    }
-
     // Refresh the seal flag from the current chip state on every call.
     // Without this reset, a previous enterConfig() that found the gauge
     // sealed would leave _seal_flag stuck at true even after someone
@@ -357,6 +354,12 @@ bool SteamiBQ27441::enterConfig(bool user_control) {
             }
         }
         if (!timeout) {
+            // A user session exists only once the gauge is really in
+            // config-update mode: after a failure the setters keep
+            // entering and leaving the mode themselves.
+            if (user_control) {
+                _user_config_control = true;
+            }
             return true;
         }
     }
