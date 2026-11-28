@@ -105,18 +105,22 @@ Any other value (for example the old example value `3`) is not a valid code.
 
 Supported sensor names match the MicroPython library:
 
-- `hts221`
 - `lis2mdl`
 - `ism330dl`
 - `wsen_hids`
 - `wsen_pads`
 - `bme280`
+- `hts221`: legacy entry. The HTS221 and the WSEN-HIDS are the same chip at
+  0x5F, and older tools stored the WSEN-HIDS calibration under this name.
+  The STeaMi Board library still reads it when `wsen_hids` is missing or is
+  the identity, as MicroPython does. Do not write it: the
+  `calibrate_temperature` example removes it.
 
 ```cpp
-config.setTemperatureCalibration("hts221", 1.0f, -0.5f);
+config.setTemperatureCalibration("wsen_hids", 1.0f, -0.5f);
 
 TemperatureCalibration cal;
-if (config.getTemperatureCalibration("hts221", cal)) {
+if (config.getTemperatureCalibration("wsen_hids", cal)) {
     Serial.println(cal.gain);
     Serial.println(cal.offset);
 }
@@ -126,8 +130,11 @@ For drivers that implement the project-standard
 `calibrateTemperature(refLow, measLow, refHigh, measHigh)` API:
 
 ```cpp
-config.applyTemperatureCalibration("hts221", hts);
+config.applyTemperatureCalibration("wsen_hids", hids);
 ```
+
+This replaces any correction the driver had, `setTemperatureOffset()`
+included.
 
 The stored `gain` and `offset` reproduce:
 
@@ -189,7 +196,7 @@ if (config.bootCount(count)) {
 The format is compatible with the MicroPython sister library:
 
 ```json
-{"rev":131,"name":"STeaMi-01","tc":{"hts":{"g":1.0,"o":-0.5}},"cm":{"hx":12.3,"hy":-5.1,"hz":0.8,"sx":1.01,"sy":0.98,"sz":1.0},"ca":{"ox":0.01,"oy":-0.02,"oz":0.03},"bc":1}
+{"rev":131,"name":"STeaMi-01","tc":{"hid":{"g":1.0,"o":-0.5}},"cm":{"hx":12.3,"hy":-5.1,"hz":0.8,"sx":1.01,"sy":0.98,"sz":1.0},"ca":{"ox":0.01,"oy":-0.02,"oz":0.03},"bc":1}
 ```
 
 | Key | Content |
@@ -208,6 +215,14 @@ Temperature sensor short keys are `hts`, `mag`, `ism`, `hid`, `pad`, and `bme`.
 | Example | What it does | Try it |
 |---------|--------------|--------|
 | [`show_config`](examples/show_config/) | Load and print the stored board information, calibrations and boot count, without writing anything. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config#show_config) |
+| [`calibrate_temperature`](examples/calibrate_temperature/) | Align every temperature sensor on the reference of the release (BME280 on a V1c, WSEN-HIDS on a V1a/V1b) and save the offsets (`tc`). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config#calibrate_temperature) |
+| [`calibrate_accelerometer`](examples/calibrate_accelerometer/) | Measure the ISM330DL bias with the board flat and save it (`ca`). | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config#calibrate_accelerometer) |
+| [`calibrate_magnetometer`](examples/calibrate_magnetometer/) | Press MENU, turn the board for 12 s, save the LIS2MDL hard and soft iron (`cm`) and check the heading. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config#calibrate_magnetometer) |
+
+The three `calibrate_*` examples write the config zone. They keep the other
+stored settings (they `load()` the zone before saving) and mirror the examples of the
+same name in the MicroPython `steami_config` library, so a board calibrated
+in one language reads the same in the other.
 
 Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/steami-config).
 
