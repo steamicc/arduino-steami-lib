@@ -1541,6 +1541,70 @@ static void test_dpad_bus_error_gives_no_false_press(void) {
     TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::LEFT));
 }
 
+// A bus error while begin() registers the D-PAD leaves the directions unregistered in the driver:
+// the next calls register them again once the bus answers, and read their level then.
+static void test_dpad_registration_bus_error_is_retried(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    expanderChip.failReadRegs = 1u << MCP23009_INTCON;  // every registration fails
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::UP));
+    delay(50);
+    expanderChip.press(MCP23009_BTN_UP);  // held while the bus fails
+    delay(30);
+    TEST_ASSERT_FALSE(buttons.wasPressed(SteamiButton::UP));
+    expanderChip.failReadRegs = 0;
+    delay(30);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::UP));  // level read at the registration
+    TEST_ASSERT_TRUE(buttons.isPressed(SteamiButton::UP));
+    expanderChip.release(MCP23009_BTN_UP);
+    buttons.isPressed(SteamiButton::UP);
+    delay(30);
+    TEST_ASSERT_TRUE(buttons.wasReleased(SteamiButton::UP));
+    expanderChip.press(MCP23009_BTN_LEFT);  // a tap between two calls, through the latch
+    delay(50);
+    expanderChip.release(MCP23009_BTN_LEFT);
+    delay(50);
+    TEST_ASSERT_TRUE(buttons.wasPressed(SteamiButton::LEFT));
+}
+
+// The GPINTEN read of the third registration (LEFT) fails once: the other directions stay
+// registered and LEFT is registered again at the next call.
+static void test_dpad_one_failed_registration_is_retried(void) {
+    steamiFakeBme280(Wire);
+    attachExpander();
+    releaseMcuButtons();
+    int intconWrites = 0;  // one per registration, before its GPINTEN read
+    expanderChip.onWriteHook = [&intconWrites](uint8_t reg, uint8_t) {
+        if (reg == MCP23009_INTCON) {
+            intconWrites++;
+            expanderChip.failReadRegs = intconWrites == 3 ? 1u << MCP23009_GPINTEN : 0;
+        }
+    };
+    SteamiButtons buttons(board);
+    TEST_ASSERT_TRUE(buttons.begin());
+    TEST_ASSERT_EQUAL_INT(4, intconWrites);
+    expanderChip.failReadRegs = 0;
+    expanderChip.onWriteHook = nullptr;
+    TEST_ASSERT_FALSE(buttons.isPressed(SteamiButton::LEFT));
+    delay(50);
+    const uint8_t bits[] = {MCP23009_BTN_UP, MCP23009_BTN_DOWN, MCP23009_BTN_LEFT,
+                            MCP23009_BTN_RIGHT};
+    const SteamiButton names[] = {SteamiButton::UP, SteamiButton::DOWN, SteamiButton::LEFT,
+                                  SteamiButton::RIGHT};
+    for (int k = 0; k < 4; k++) {
+        expanderChip.press(bits[k]);
+        delay(30);
+        TEST_ASSERT_TRUE(buttons.wasPressed(names[k]));
+        expanderChip.release(bits[k]);
+        buttons.isPressed(names[k]);
+        delay(30);
+        TEST_ASSERT_TRUE(buttons.wasReleased(names[k]));
+    }
+}
+
 static void test_dpad_held_at_start_is_not_a_press(void) {
     steamiFakeBme280(Wire);
     attachExpander();
@@ -1801,6 +1865,8 @@ int main(void) {
     RUN_TEST(test_dpad_tap_between_two_calls_is_caught);
     RUN_TEST(test_dpad_read_during_a_release_bounce_gives_no_false_press);
     RUN_TEST(test_dpad_bus_error_gives_no_false_press);
+    RUN_TEST(test_dpad_registration_bus_error_is_retried);
+    RUN_TEST(test_dpad_one_failed_registration_is_retried);
     RUN_TEST(test_dpad_held_at_start_is_not_a_press);
     RUN_TEST(test_wait_for_press_drops_taps_made_before_the_call);
     RUN_TEST(test_wait_for_press_returns_a_dpad_press_made_during_the_wait);
