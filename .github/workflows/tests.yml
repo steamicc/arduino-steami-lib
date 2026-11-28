@@ -35,7 +35,7 @@ jobs:
       - name: Run native tests
         run: make test-native
 
-  display-sanitizers:
+  sanitizers:
     runs-on: ubuntu-latest
 
     steps:
@@ -55,7 +55,7 @@ jobs:
           restore-keys: |
             pio-${{ runner.os }}-
 
-      - name: Run the display suites under ASan and UBSan
+      - name: Run the display, screen and BME280 suites under ASan and UBSan
         env:
           STEAMI_PPM_DIR: ${{ runner.temp }}/steami-display-ppm
         run: |
