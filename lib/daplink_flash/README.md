@@ -49,7 +49,11 @@ void loop() {}
 ```
 
 `clearFlash()` erases the whole file: call it on purpose (a button, a
-serial command), not on every start-up.
+serial command), not on every start-up. The
+[`gated_clear_flash`](examples/gated_clear_flash/gated_clear_flash.ino)
+example waits for `ERASE` to be typed in the serial monitor first. It
+only erases the file in the external flash: the name and the config zone
+(in the internal flash of the DAPLink chip) stay.
 
 ## API
 
@@ -127,6 +131,9 @@ DAPLink chip powered.
 | Example | Description | Try it |
 |---------|-------------|--------|
 | [`data_logger`](examples/data_logger/data_logger.ino) | Print the file, then append a `seconds,light` line every 10 seconds. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash#data_logger) |
+| [`flash_info`](examples/flash_info/flash_info.ino) | Print WHO_AM_I, the busy flag, the error register, the config zone support, the file name and its length. Read only. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash#flash_info) |
+| [`read_back`](examples/read_back/read_back.ino) | Print the file, then append each line typed in the serial monitor and read it back from the flash to check it. Never erases. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash#read_back) |
+| [`gated_clear_flash`](examples/gated_clear_flash/gated_clear_flash.ino) | Print the file name and length, then erase the file only once `ERASE` is typed in the serial monitor. | [▶ Try it](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash#gated_clear_flash) |
 
 Each example is explained, and can be flashed from the browser, on the [STeaMi wiki](https://wiki.steami.cc/docs/software/arduino/exemples/daplink-flash).
 
