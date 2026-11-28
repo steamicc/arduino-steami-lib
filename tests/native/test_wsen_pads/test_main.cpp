@@ -126,6 +126,23 @@ void test_pressure_hpa_returns_nan_on_powered_down_timeout(void) {
     TEST_ASSERT_TRUE(isnan(sensor.pressureHpa()));
 }
 
+// pressure_pa() / pressure_kpa() of the MicroPython driver (#316).
+void test_pressure_pa_and_kpa_scale_the_hpa_reading(void) {
+    sensor.begin();
+    sensor.setContinuous(ODR_1_HZ);
+    preloadMeasurement(23.0f, 1013.25f);
+
+    TEST_ASSERT_FLOAT_WITHIN(10.0f, 101325.0f, sensor.pressurePa());
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 101.325f, sensor.pressureKpa());
+}
+
+void test_pressure_pa_and_kpa_return_nan_on_powered_down_timeout(void) {
+    sensor.begin();
+    Wire.setRegister(ADDR, REG_STATUS, 0);
+    TEST_ASSERT_TRUE(isnan(sensor.pressurePa()));
+    TEST_ASSERT_TRUE(isnan(sensor.pressureKpa()));
+}
+
 void test_temperature_returns_nan_on_powered_down_timeout(void) {
     sensor.begin();
     Wire.setRegister(ADDR, REG_STATUS, 0);
@@ -191,6 +208,8 @@ int main(void) {
     RUN_TEST(test_data_ready_reflects_status_register);
     RUN_TEST(test_read_returns_converted_values);
     RUN_TEST(test_pressure_hpa_returns_nan_on_powered_down_timeout);
+    RUN_TEST(test_pressure_pa_and_kpa_scale_the_hpa_reading);
+    RUN_TEST(test_pressure_pa_and_kpa_return_nan_on_powered_down_timeout);
     RUN_TEST(test_temperature_returns_nan_on_powered_down_timeout);
     RUN_TEST(test_set_temperature_offset_shifts_reading);
     RUN_TEST(test_calibrate_temperature_applies_correction);
