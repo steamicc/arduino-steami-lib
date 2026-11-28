@@ -7,6 +7,14 @@ on:
 permissions:
   contents: read
 
+# One semantic-release at a time: two runs in parallel push to main and race
+# on the release commit and tag ("cannot lock ref"). A newer push replaces the
+# pending run, which loses no release: the newer run analyses every commit
+# since the last tag.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Semantic Release
@@ -17,12 +25,22 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
+      # semantic-release pushes the release commit and tag to main and creates
+      # the release (contents), then comments on and labels the released
+      # issues and pull requests (issues, pull-requests). Limited to this
+      # repository: checkout keeps the token in the git config while npm ci
+      # runs.
       - name: Generate token
         id: generate_token
-        uses: tibdex/github-app-token@v2
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app_id: ${{ secrets.RELEASE_APP_ID }}
-          private_key: ${{ secrets.RELEASE_APP_SECRET }}
+          client-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_SECRET }}
+          owner: steamicc
+          repositories: arduino-steami-lib
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
 
       - uses: actions/checkout@v4
         with:

@@ -110,14 +110,16 @@ jobs:
 
       # The app token is needed early: the default token cannot see the drafts
       # of another repository. It lasts one hour, longer than the compilation.
+      # It reads the draft, then uploads or deletes the archive.
       - name: Generate token
         id: generate_token
-        uses: tibdex/github-app-token@v2
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app_id: ${{ secrets.RELEASE_APP_ID }}
-          private_key: ${{ secrets.RELEASE_APP_SECRET }}
-          repositories: >-
-            ["arduino-steami"]
+          client-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_SECRET }}
+          owner: steamicc
+          repositories: arduino-steami
+          permission-contents: write
 
       - name: Check that the release is a draft
         env:
