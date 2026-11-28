@@ -5,21 +5,31 @@
  * and #341).
  *
  * **REQUIRES A HUMAN.** Each step prints a prompt to Serial @115200 and shows it, in French, on
- * the screen: a 3-2-1 countdown, then "À vous !". No LED is lit. The whole run takes about six
+ * the screen: a 3-2-1 countdown, then "À vous !". No LED is lit. The whole run takes about eight
  * minutes. These tests fail unattended: they live under tests/integration/ so that `make ci`
  * leaves them out. Run them with `make test-integration/steami_buttons` and the serial monitor
- * open.
+ * open. One step alone (its number is on the screen): build with STEAMI_BUTTONS_STEP set, as in
+ * `PLATFORMIO_BUILD_FLAGS=-DSTEAMI_BUTTONS_STEP=14 make test-integration/steami_buttons`.
  *
  * - The expander does not take EXTI line 0: an interrupt the sketch attaches to USER_BTN (MENU)
  *   before the expander is built keeps working.
  * - Registering the four D-PAD callbacks five times in a row gives no event.
  * - The EXTI lines of A, B and MENU are routed to their pins, unmasked on both edges, with their
  *   NVIC interrupt enabled, after a screen refresh too.
- * - Ten quick taps on each of the seven buttons, in a fixed window of 15 s, with a loop that calls
- *   the buttons every 300 ms: exactly ten presses and ten releases on that button, and no press
- *   on the others. The test counts for the whole window, it does not stop at ten. For A, B and
- *   MENU, a 1 kHz timer that reads the pins counts the taps independently ("au doigt"): the
- *   presses reported must match it.
+ * - Steps 4 to 10: ten quick taps on each of the seven buttons, about one per second, in a fixed
+ *   window of 15 s, with a loop that calls the buttons every 300 ms: exactly ten presses counted
+ *   by getPresses() on that button, and no press on the others. The test counts for the whole
+ *   window, it does not stop at ten. For A, B and MENU, a 1 kHz timer that reads the pins counts
+ *   the taps independently ("au doigt"): the presses reported must match it.
+ * - Steps 11 and 12: the same on A and on B, two or three taps per second, faster than the loop:
+ *   some turns of the loop see two taps, and getPresses() must still count ten, as the reference
+ *   does. wasPressed() is a flag and would count fewer.
+ * - Step 13, reference for the D-PAD: ten taps on UP, two or three per second, counted by reading
+ *   the port of the expander every 2 ms (no SteamiButtons object, no interrupt). It tells whether
+ *   the finger did ten taps at that pace, which step 14 then asks again.
+ * - Step 14: ten taps on UP at that pace, with the loop of the second hardware run (520 ms, the
+ *   screen redrawn at each turn): getPresses() must count ten (the D-PAD release one turn late
+ *   merged such taps).
  * - Ten long presses (two seconds) on A and on UP: ten presses and ten releases, each held more
  *   than one second between its press and its release, and isPressed() true at every call in
  *   between.
@@ -30,8 +40,8 @@
  * once per tap and once per second, and the time of the redraw comes off the wait: the loop keeps
  * its 300 ms period.
  *
- * The MicroPython Buttons class is to pass the same scenario: same buttons, same 300 ms loop,
- * same counts.
+ * The MicroPython Buttons class is to pass the same scenario: same buttons, same loops, same
+ * counts. It has no get_presses() yet: steamicc/micropython-steami-lib#515.
  */
 
 #include <Arduino.h>
@@ -40,8 +50,10 @@
 #include <SteamiScreen.h>
 #include <unity.h>
 
-static constexpr uint32_t LOOP_MS = 300;  // a slow loop, like WeatherStation's
-static constexpr uint32_t TAPS = 10;      // per button
+static constexpr uint32_t LOOP_MS = 300;       // a slow loop, like WeatherStation's
+static constexpr uint32_t SLOW_LOOP_MS = 520;  // the loop of the second hardware run (#341)
+static constexpr uint32_t REF_POLL_MS = 2;     // the D-PAD reference reads the expander that often
+static constexpr uint32_t TAPS = 10;           // per button
 static constexpr uint32_t TAP_WINDOW_MS = 15000;
 static constexpr uint32_t PROMPT_TIMEOUT_MS = 5000;
 static constexpr uint32_t LONG_PRESS_MS = 1000;  // the hold asked is two seconds
@@ -57,6 +69,17 @@ static const char* const kFrench[7] = {"A", "B", "MENU", "HAUT", "BAS", "GAUCHE"
 static const uint8_t kDpadBits[4] = {MCP23009_BTN_UP, MCP23009_BTN_DOWN, MCP23009_BTN_LEFT,
                                      MCP23009_BTN_RIGHT};
 
+// 0 runs every step; n runs step n only (the number shown on the screen).
+#ifndef STEAMI_BUTTONS_STEP
+#define STEAMI_BUTTONS_STEP 0
+#endif
+#define RUN_STEP(n, fn)                                               \
+    do {                                                              \
+        if (STEAMI_BUTTONS_STEP == 0 || STEAMI_BUTTONS_STEP == (n)) { \
+            RUN_TEST(fn);                                             \
+        }                                                             \
+    } while (0)
+
 void setUp(void) {}
 
 void tearDown(void) {
@@ -66,7 +89,7 @@ void tearDown(void) {
 // --- Screen: the French instructions ---
 
 static int gStep = 0;
-static constexpr int kSteps = 13;
+static constexpr int kSteps = 17;
 
 static void stepTitle(char* head, size_t size) {
     snprintf(head, size, "Épreuve %d/%d", gStep, kSteps);
@@ -110,10 +133,10 @@ static void prompt(const char* text, const char* l1, const char* l2) {
 }
 
 // Waits what is left of the turn of the loop, so that a redraw does not stretch it.
-static void waitRestOfTurn(uint32_t turnStart) {
+static void waitRestOfTurn(uint32_t turnStart, uint32_t loopMs = LOOP_MS) {
     const uint32_t spent = millis() - turnStart;
-    if (spent < LOOP_MS) {
-        delay(LOOP_MS - spent);
+    if (spent < loopMs) {
+        delay(loopMs - spent);
     }
 }
 
@@ -272,27 +295,28 @@ static void drawTaps(SteamiScreen& screen, const char* head, uint32_t seen, uint
     screen.show();
 }
 
-static void countTapsOn(int target) {
+// `fast`: two or three taps per second instead of one, so faster than the loop of `loopMs`.
+static void countTapsOn(int target, int step, uint32_t loopMs = LOOP_MS, bool fast = false) {
     SteamiButtons buttons;
     TEST_ASSERT_TRUE(buttons.begin());
     const bool mcu = target < 3;
-    char text[128];
+    char text[160];
     snprintf(text, sizeof(text),
-             "Tap %s exactly %u times, quickly (under 150 ms), about once per second, within "
-             "%u s. Touch nothing else.",
+             "Tap %s exactly %u times, quickly (under 150 ms), %s, within %u s. Touch nothing "
+             "else. The loop calls the buttons every %u ms.",
              kNames[target], static_cast<unsigned>(TAPS),
-             static_cast<unsigned>(TAP_WINDOW_MS / 1000));
+             fast ? "two or three times per second" : "about once per second",
+             static_cast<unsigned>(TAP_WINDOW_MS / 1000), static_cast<unsigned>(loopMs));
     char head[32];
     snprintf(head, sizeof(head), "%s : %u tapes brèves", kFrench[target],
              static_cast<unsigned>(TAPS));
-    gStep = 4 + target;
-    prompt(text, head, "une par seconde");
+    gStep = step;
+    prompt(text, head, fast ? "2 à 3 par seconde" : "une par seconde");
     // What was pressed during the countdown does not count.
     for (int k = 0; k < 7; k++) {
-        while (buttons.wasPressed(kButtons[k])) {
-        }
-        while (buttons.wasReleased(kButtons[k])) {
-        }
+        buttons.getPresses(kButtons[k]);
+        buttons.wasPressed(kButtons[k]);
+        buttons.wasReleased(kButtons[k]);
     }
     if (mcu) {
         startReference(target == 0 ? A_BUTTON : (target == 1 ? B_BUTTON : MENU_BUTTON));
@@ -307,7 +331,7 @@ static void countTapsOn(int target) {
     while (millis() - start < TAP_WINDOW_MS) {
         const uint32_t turn = millis();
         for (int k = 0; k < 7; k++) {
-            presses[k] += buttons.wasPressed(kButtons[k]) ? 1 : 0;
+            presses[k] += buttons.getPresses(kButtons[k]);
             releases[k] += buttons.wasReleased(kButtons[k]) ? 1 : 0;
         }
         const uint32_t elapsed = millis() - start;
@@ -317,21 +341,18 @@ static void countTapsOn(int target) {
             shownLeft = left;
             drawTaps(live, head, shownSeen, shownLeft);
         }
-        waitRestOfTurn(turn);
+        waitRestOfTurn(turn, loopMs);
     }
     // The presses and releases made in the last turn, still counted.
     for (int k = 0; k < 7; k++) {
-        while (buttons.wasPressed(kButtons[k])) {
-            presses[k]++;
-        }
-        while (buttons.wasReleased(kButtons[k])) {
-            releases[k]++;
-        }
+        presses[k] += buttons.getPresses(kButtons[k]);
+        releases[k] += buttons.wasReleased(kButtons[k]) ? 1 : 0;
     }
     const uint32_t finger = mcu ? stopReference() : 0;
+    // wasReleased() is a flag: the turns that saw two releases count one.
     for (int k = 0; k < 7; k++) {
-        snprintf(text, sizeof(text), "%s: %u presses, %u releases", kNames[k],
-                 static_cast<unsigned>(presses[k]), static_cast<unsigned>(releases[k]));
+        snprintf(text, sizeof(text), "%s: %u presses (getPresses), %u turns with a release",
+                 kNames[k], static_cast<unsigned>(presses[k]), static_cast<unsigned>(releases[k]));
         TEST_MESSAGE(text);
     }
     char l1[24];
@@ -354,7 +375,8 @@ static void countTapsOn(int target) {
                                          "presses reported differ from the taps of the reference");
     }
     TEST_ASSERT_EQUAL_UINT32_MESSAGE(TAPS, presses[target], "presses of the tapped button");
-    TEST_ASSERT_EQUAL_UINT32_MESSAGE(TAPS, releases[target], "releases of the tapped button");
+    TEST_ASSERT_TRUE_MESSAGE(releases[target] >= 1 && releases[target] <= TAPS,
+                             "turns with a release of the tapped button");
     for (int k = 0; k < 7; k++) {
         if (k != target) {
             TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, presses[k], "press on a button nobody touched");
@@ -364,25 +386,107 @@ static void countTapsOn(int target) {
 }
 
 void test_quick_taps_on_a(void) {
-    countTapsOn(0);
+    countTapsOn(0, 4);
 }
 void test_quick_taps_on_b(void) {
-    countTapsOn(1);
+    countTapsOn(1, 5);
 }
 void test_quick_taps_on_menu(void) {
-    countTapsOn(2);
+    countTapsOn(2, 6);
 }
 void test_quick_taps_on_up(void) {
-    countTapsOn(3);
+    countTapsOn(3, 7);
 }
 void test_quick_taps_on_down(void) {
-    countTapsOn(4);
+    countTapsOn(4, 8);
 }
 void test_quick_taps_on_left(void) {
-    countTapsOn(5);
+    countTapsOn(5, 9);
 }
 void test_quick_taps_on_right(void) {
-    countTapsOn(6);
+    countTapsOn(6, 10);
+}
+
+// --- Taps faster than the loop ---
+
+void test_fast_taps_on_a(void) {
+    countTapsOn(0, 11, LOOP_MS, true);
+}
+void test_fast_taps_on_b(void) {
+    countTapsOn(1, 12, LOOP_MS, true);
+}
+
+// The taps on the D-PAD seen by reading the port of the expander every 2 ms, out of any
+// interrupt, with no SteamiButtons object: a 10 ms stable level changes the state, a change to
+// pressed counts a tap. Reading the port clears the latch of the chip, so this reference cannot
+// run in the step that measures SteamiButtons: it is a step of its own, at the same pace.
+void test_dpad_reference_fast_taps_on_up(void) {
+    SteamiMCP23009E* expander = Steami.mcp23009e();
+    TEST_ASSERT_NOT_NULL(expander);
+    for (uint8_t bit : kDpadBits) {
+        expander->setup(bit, MCP23009_DIR_INPUT, MCP23009_PULLUP);
+    }
+    gStep = 13;
+    char text[128];
+    snprintf(text, sizeof(text),
+             "Reference: tap UP exactly %u times, quickly, two or three times per second, within "
+             "%u s. Touch nothing else.",
+             static_cast<unsigned>(TAPS), static_cast<unsigned>(TAP_WINDOW_MS / 1000));
+    prompt(text, "HAUT : 10 tapes (réf.)", "2 à 3 par seconde");
+    uint8_t port = 0xFF;
+    TEST_ASSERT_TRUE(expander->gpio(port));
+    bool raw[4];
+    bool down[4];
+    uint8_t stable[4];
+    uint32_t taps[4] = {};
+    uint32_t errors = 0;
+    for (uint8_t d = 0; d < 4; d++) {
+        raw[d] = (port & (1U << kDpadBits[d])) == 0;
+        down[d] = raw[d];
+        stable[d] = 0;
+    }
+    const uint8_t stableReads = 10 / REF_POLL_MS;
+    const uint32_t start = millis();
+    uint32_t next = start;
+    while (millis() - start < TAP_WINDOW_MS) {
+        while (static_cast<int32_t>(millis() - next) < 0) {
+        }
+        next += REF_POLL_MS;
+        if (!expander->gpio(port)) {
+            errors++;
+            continue;
+        }
+        for (uint8_t d = 0; d < 4; d++) {
+            const bool now = (port & (1U << kDpadBits[d])) == 0;
+            if (now != raw[d]) {
+                raw[d] = now;
+                stable[d] = 0;
+            } else if (stable[d] < stableReads) {
+                stable[d]++;
+            } else if (now != down[d]) {
+                down[d] = now;
+                taps[d] += now ? 1 : 0;
+            }
+        }
+    }
+    for (uint8_t d = 0; d < 4; d++) {
+        snprintf(text, sizeof(text), "%s: %u taps seen by reading the expander every %u ms",
+                 kNames[3 + d], static_cast<unsigned>(taps[d]), static_cast<unsigned>(REF_POLL_MS));
+        TEST_MESSAGE(text);
+    }
+    char l1[24];
+    snprintf(l1, sizeof(l1), "au doigt : %u", static_cast<unsigned>(taps[0]));
+    const bool good = taps[0] == TAPS && taps[1] + taps[2] + taps[3] == 0 && errors == 0;
+    showOnScreen(good ? "OK" : "Écart", l1, "attendu : 10", good ? STEAMI_GREEN : STEAMI_RED);
+    delay(RESULT_MS);
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, errors, "expander reads that failed");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(TAPS, taps[0], "taps on UP seen by the reference");
+    TEST_ASSERT_EQUAL_UINT32_MESSAGE(0, taps[1] + taps[2] + taps[3], "taps on the other arrows");
+}
+
+// The pace of step 13, with the 520 ms loop of the second hardware run.
+void test_fast_taps_on_up_with_a_520_ms_loop(void) {
+    countTapsOn(3, 14, SLOW_LOOP_MS, true);
 }
 
 // --- Long presses ---
@@ -418,7 +522,7 @@ static void countLongPressesOn(int target) {
     char head[32];
     snprintf(head, sizeof(head), "%s : %u appuis longs", kFrench[target],
              static_cast<unsigned>(TAPS));
-    gStep = target == 0 ? 11 : 12;
+    gStep = target == 0 ? 15 : 16;
     prompt(text, head, "2 s chacun");
     while (buttons.wasPressed(kButtons[target])) {
     }
@@ -505,7 +609,7 @@ void test_dpad_levels_alternate_under_fast_presses(void) {
             events[d]++;
         });
     }
-    gStep = 13;
+    gStep = 17;
     prompt("For 60 s, press the four D-PAD buttons as fast as you can, together or not.",
            "D-PAD : 60 s", "le plus vite possible");
     const uint32_t start = millis();
@@ -539,19 +643,23 @@ void setup() {
     delay(2000);
 
     UNITY_BEGIN();
-    RUN_TEST(test_user_btn_interrupt_survives_the_expander);
-    RUN_TEST(test_dpad_registration_five_times_gives_no_event);
-    RUN_TEST(test_exti_lines_of_a_b_menu_are_armed);
-    RUN_TEST(test_quick_taps_on_a);
-    RUN_TEST(test_quick_taps_on_b);
-    RUN_TEST(test_quick_taps_on_menu);
-    RUN_TEST(test_quick_taps_on_up);
-    RUN_TEST(test_quick_taps_on_down);
-    RUN_TEST(test_quick_taps_on_left);
-    RUN_TEST(test_quick_taps_on_right);
-    RUN_TEST(test_long_presses_on_a);
-    RUN_TEST(test_long_presses_on_up);
-    RUN_TEST(test_dpad_levels_alternate_under_fast_presses);
+    RUN_STEP(1, test_user_btn_interrupt_survives_the_expander);
+    RUN_STEP(2, test_dpad_registration_five_times_gives_no_event);
+    RUN_STEP(3, test_exti_lines_of_a_b_menu_are_armed);
+    RUN_STEP(4, test_quick_taps_on_a);
+    RUN_STEP(5, test_quick_taps_on_b);
+    RUN_STEP(6, test_quick_taps_on_menu);
+    RUN_STEP(7, test_quick_taps_on_up);
+    RUN_STEP(8, test_quick_taps_on_down);
+    RUN_STEP(9, test_quick_taps_on_left);
+    RUN_STEP(10, test_quick_taps_on_right);
+    RUN_STEP(11, test_fast_taps_on_a);
+    RUN_STEP(12, test_fast_taps_on_b);
+    RUN_STEP(13, test_dpad_reference_fast_taps_on_up);
+    RUN_STEP(14, test_fast_taps_on_up_with_a_520_ms_loop);
+    RUN_STEP(15, test_long_presses_on_a);
+    RUN_STEP(16, test_long_presses_on_up);
+    RUN_STEP(17, test_dpad_levels_alternate_under_fast_presses);
     gStep = kSteps;
     showOnScreen("Fini", "Test terminé", "merci !", STEAMI_GREEN);
     UNITY_END();
