@@ -27,6 +27,8 @@ humidity	KEYWORD2
 read	KEYWORD2
 setContinuous	KEYWORD2
 enableBdu	KEYWORD2
+enableHeater	KEYWORD2
+setOneShotMode	KEYWORD2
 triggerOneShot	KEYWORD2
 readOneShot	KEYWORD2
 setAveraging	KEYWORD2

@@ -206,6 +206,34 @@ void test_wsen_hids_triggerOneShot_is_recoverable() {
                               "chip should recover via continuous mode after one-shot attempt");
 }
 
+// readOneShot() takes its sample in continuous mode, so it works even when
+// the ONE_SHOT bit latches (#425), and puts the chip back to power-down.
+void test_wsen_hids_readOneShot_returns_data_and_powers_down() {
+    sensor.powerOff();
+    // Leave ONE_SHOT latched first, as a failed one-shot attempt does.
+    sensor.triggerOneShot();
+    delay(200);
+    sensor.powerOff();
+
+    for (int i = 0; i < 5; ++i) {
+        auto r = sensor.readOneShot();
+        TEST_ASSERT_FALSE_MESSAGE(isnan(r.temperature), "readOneShot() temperature is NaN");
+        TEST_ASSERT_FALSE_MESSAGE(isnan(r.humidity), "readOneShot() humidity is NaN");
+        TEST_ASSERT_GREATER_OR_EQUAL_FLOAT(0.0f, r.temperature);
+        TEST_ASSERT_LESS_OR_EQUAL_FLOAT(50.0f, r.temperature);
+        TEST_ASSERT_GREATER_OR_EQUAL_FLOAT(10.0f, r.humidity);
+        TEST_ASSERT_LESS_OR_EQUAL_FLOAT(90.0f, r.humidity);
+        TEST_ASSERT_BITS_LOW(WSEN_HIDS_CTRL1_PD, readRawRegister(WSEN_HIDS_REG_CTRL1));
+    }
+}
+
+void test_wsen_hids_enableHeater_drives_ctrl2_bit_1() {
+    sensor.enableHeater(true);
+    TEST_ASSERT_BITS_HIGH(WSEN_HIDS_CTRL2_HEATER, readRawRegister(WSEN_HIDS_REG_CTRL2));
+    sensor.enableHeater(false);
+    TEST_ASSERT_BITS_LOW(WSEN_HIDS_CTRL2_HEATER, readRawRegister(WSEN_HIDS_REG_CTRL2));
+}
+
 void setup() {
     delay(2000);
     internalI2C.begin();
@@ -222,6 +250,8 @@ void setup() {
     RUN_TEST(test_wsen_hids_reboot_clears_boot_and_keeps_chip_functional);
     RUN_TEST(test_wsen_hids_setAveraging_takes_effect);
     RUN_TEST(test_wsen_hids_triggerOneShot_is_recoverable);
+    RUN_TEST(test_wsen_hids_readOneShot_returns_data_and_powers_down);
+    RUN_TEST(test_wsen_hids_enableHeater_drives_ctrl2_bit_1);
     UNITY_END();
 }
 

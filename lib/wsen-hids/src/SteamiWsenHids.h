@@ -47,14 +47,16 @@ class SteamiWsenHids {
     bool temperatureReady();
     bool humidityReady();
 
-    // Single-channel reads. If the device is powered down, the method
-    // auto-triggers a one-shot measurement, waits for dataReady(), and
-    // returns the result — the caller doesn't need to manage modes.
+    // Single-channel reads. If the device is not in continuous mode
+    // (power-down, or ODR = one-shot), the method brings it up in
+    // continuous mode at 12.5 Hz, waits for dataReady() (200 ms at most)
+    // and returns the first sample; the chip then stays in continuous
+    // mode. NaN when no sample arrives.
     float temperature();
     float humidity();
 
     // Combined reading — preferred when both channels are needed to keep
-    // them consistent (single auto-trigger, single poll).
+    // them consistent (single bring-up, single poll).
     ReadResult read();
 
     // Continuous mode at the requested ODR (WSEN_HIDS_ODR_1_HZ, _7_HZ, or
@@ -63,17 +65,30 @@ class SteamiWsenHids {
     void setContinuous(uint8_t odr);
 
     // Block Data Update (CTRL_REG1.BDU), on by default. The choice is
-    // applied at once and kept by powerOn(), setContinuous() and
-    // triggerOneShot().
+    // applied at once and kept by powerOn(), setContinuous(),
+    // setOneShotMode() and triggerOneShot().
     void enableBdu(bool enabled = true);
 
-    // Trigger a single measurement without blocking. Pair with
-    // temperature() / humidity() after polling dataReady(), or use
-    // readOneShot() for the bundled flow.
+    // Active with ODR = one-shot (CTRL_REG1 PD = 1, ODR = 00): no conversion
+    // runs until triggerOneShot(). Same as set_one_shot_mode() in
+    // MicroPython.
+    void setOneShotMode();
+
+    // Integrated heater (CTRL_REG2.HEATER, bit 1), read-modify-write so the
+    // other CTRL_REG2 bits are kept. It warms the sensor by several degrees:
+    // switch it off and let the chip cool down before measuring.
+    void enableHeater(bool enabled = true);
+
+    // setOneShotMode() then CTRL_REG2.ONE_SHOT, without waiting (the heater
+    // bit is kept). On the STeaMi V1a/V1b this conversion does not run
+    // (steamicc/micropython-steami-lib#425): use readOneShot() or
+    // setContinuous() to get data.
     void triggerOneShot();
 
-    // Trigger a one-shot measurement, wait for dataReady() with a timeout,
-    // and return both channels.
+    // One measurement: the chip is woken up in continuous mode at 12.5 Hz
+    // for one sample (200 ms at most), then CTRL_REG1 is put back as it was
+    // (power-down after begin()), also on timeout. CTRL_REG2 is not touched.
+    // {NaN, NaN} when no sample arrives.
     ReadResult readOneShot();
 
     // Number of internal samples averaged per output. Pass register
@@ -119,8 +134,12 @@ class SteamiWsenHids {
     void readRegs(uint8_t reg, uint8_t* buf, size_t len);
 
     void loadCalibration();
-    bool isPoweredOn();
-    bool waitForDataReady(uint32_t timeoutMs = 100);
+    // PD = 1 and ODR != one-shot: a conversion runs periodically.
+    bool isContinuous();
+    ReadResult readOutputs();
+    // 200 ms: more than two periods at 12.5 Hz, as the MicroPython
+    // DEFAULT_ONE_SHOT_TIMEOUT_MS.
+    bool waitForDataReady(uint32_t timeoutMs = 200);
     float computeTemperature(int16_t raw);
     float computeHumidity(int16_t raw);
 };

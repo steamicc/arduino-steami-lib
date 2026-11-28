@@ -76,24 +76,26 @@ float SteamiWsenHids::humidity() {
 }
 
 SteamiWsenHids::ReadResult SteamiWsenHids::read() {
-    if (!isPoweredOn()) {
-        // Auto-trigger via continuous mode at 12.5 Hz rather than the
-        // CTRL2.ONE_SHOT path. The one-shot mechanism is unreliable on
-        // this silicon (the bit latches at 1 and STATUS never goes high
-        // — same issue in the MicroPython sister project and absent
-        // from both the Würth reference SDK and the stm32duino HTS221
-        // high-level wrapper, which both stick to continuous mode).
-        // 12.5 Hz keeps the first-sample latency under ~80 ms while
-        // letting the chip stay awake for subsequent reads.
+    if (!isContinuous()) {
+        // Power-down, or PD = 1 with ODR = 00 (after powerOn() on a fresh
+        // chip): no conversion is running, so the output registers are
+        // stale. Bring the chip up in continuous mode at 12.5 Hz rather
+        // than through CTRL2.ONE_SHOT, which latches at 1 and converts
+        // nothing on the STeaMi V1a/V1b (steamicc/micropython-steami-lib#425).
+        // 12.5 Hz keeps the first-sample latency under ~80 ms, and the
+        // chip stays awake so the next reads are immediate.
         setContinuous(WSEN_HIDS_ODR_12_5_HZ);
-        if (!waitForDataReady(200)) {
+        if (!waitForDataReady()) {
             // Device never reported fresh data — bus issue or missing
             // sensor. Surface the failure as NaN so silent stale
             // readings can't propagate; callers can check with isnan().
             return {NAN, NAN};
         }
     }
+    return readOutputs();
+}
 
+SteamiWsenHids::ReadResult SteamiWsenHids::readOutputs() {
     uint8_t humBytes[2];
     uint8_t tempBytes[2];
     readRegs(WSEN_HIDS_REG_HUMIDITY_OUT_L, humBytes, 2);
@@ -116,18 +118,42 @@ void SteamiWsenHids::enableBdu(bool enabled) {
     writeReg(WSEN_HIDS_REG_CTRL1, (ctrl1 & ~WSEN_HIDS_CTRL1_BDU) | _bdu);
 }
 
+void SteamiWsenHids::setOneShotMode() {
+    uint8_t ctrl1 = readReg(WSEN_HIDS_REG_CTRL1);
+    ctrl1 &= static_cast<uint8_t>(~(WSEN_HIDS_CTRL1_ODR_MASK | WSEN_HIDS_CTRL1_BDU));
+    writeReg(WSEN_HIDS_REG_CTRL1, ctrl1 | WSEN_HIDS_CTRL1_PD | _bdu | WSEN_HIDS_ODR_ONE_SHOT);
+}
+
+void SteamiWsenHids::enableHeater(bool enabled) {
+    uint8_t ctrl2 = readReg(WSEN_HIDS_REG_CTRL2);
+    if (enabled) {
+        ctrl2 |= WSEN_HIDS_CTRL2_HEATER;
+    } else {
+        ctrl2 &= static_cast<uint8_t>(~WSEN_HIDS_CTRL2_HEATER);
+    }
+    writeReg(WSEN_HIDS_REG_CTRL2, ctrl2);
+}
+
 void SteamiWsenHids::triggerOneShot() {
     // Must be powered on at ODR=one-shot for the ONE_SHOT bit to matter.
-    writeReg(WSEN_HIDS_REG_CTRL1, WSEN_HIDS_CTRL1_PD | _bdu | WSEN_HIDS_ODR_ONE_SHOT);
-    writeReg(WSEN_HIDS_REG_CTRL2, WSEN_HIDS_CTRL2_ONE_SHOT);
+    // Read-modify-write of CTRL2 keeps the heater as the caller set it.
+    setOneShotMode();
+    writeReg(WSEN_HIDS_REG_CTRL2, readReg(WSEN_HIDS_REG_CTRL2) | WSEN_HIDS_CTRL2_ONE_SHOT);
 }
 
 SteamiWsenHids::ReadResult SteamiWsenHids::readOneShot() {
-    triggerOneShot();
-    if (!waitForDataReady()) {
-        return {NAN, NAN};
+    // One sample in continuous mode at 12.5 Hz, then CTRL1 back as it was
+    // (power-down after begin()), also on timeout. CTRL2.ONE_SHOT is not
+    // used: it converts nothing on the STeaMi V1a/V1b (#425). Same flow as
+    // read_one_shot() in the MicroPython driver.
+    uint8_t ctrl1 = readReg(WSEN_HIDS_REG_CTRL1);
+    setContinuous(WSEN_HIDS_ODR_12_5_HZ);
+    ReadResult result = {NAN, NAN};
+    if (waitForDataReady()) {
+        result = readOutputs();
     }
-    return read();
+    writeReg(WSEN_HIDS_REG_CTRL1, ctrl1);
+    return result;
 }
 
 void SteamiWsenHids::setAveraging(uint8_t humidityAvg, uint8_t temperatureAvg) {
@@ -226,8 +252,9 @@ void SteamiWsenHids::loadCalibration() {
     }
 }
 
-bool SteamiWsenHids::isPoweredOn() {
-    return (readReg(WSEN_HIDS_REG_CTRL1) & WSEN_HIDS_CTRL1_PD) != 0;
+bool SteamiWsenHids::isContinuous() {
+    uint8_t ctrl1 = readReg(WSEN_HIDS_REG_CTRL1);
+    return (ctrl1 & WSEN_HIDS_CTRL1_PD) != 0 && (ctrl1 & WSEN_HIDS_CTRL1_ODR_MASK) != 0;
 }
 
 bool SteamiWsenHids::waitForDataReady(uint32_t timeoutMs) {
