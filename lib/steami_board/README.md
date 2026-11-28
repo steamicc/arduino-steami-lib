@@ -294,7 +294,7 @@ their "unavailable" value without any bus traffic and without printing again.
 | `SteamiLight` | `read()`, the raw clear count of the sensor | `0` |
 | `SteamiColor` | `read(r, g, b)` (raw counts, returns whether it worked), `red()`, `green()`, `blue()`, `rgb()` (hue of the object, largest channel 255) | `false`, `0`, `STEAMI_BLACK` |
 | `SteamiGesture` | `read(timeoutMs = 0)` gives `NONE`, `LEFT`, `RIGHT`, `UP`, `DOWN`, `NEAR` or `FAR`; `SteamiGesture::name(d)` | `NONE` |
-| `SteamiButtons` | `isPressed(b)`, `wasPressed(b)`, `wasReleased(b)`, `waitForPress(timeoutMs = 0)` with `SteamiButton::A`, `B`, `MENU`, `UP`, `DOWN`, `LEFT`, `RIGHT` | `false`, `NONE` |
+| `SteamiButtons` | `isPressed(b)`, `wasPressed(b)`, `wasReleased(b)`, `getPresses(b)`, `waitForPress(timeoutMs = 0)` with `SteamiButton::A`, `B`, `MENU`, `UP`, `DOWN`, `LEFT`, `RIGHT` | `false`, `NONE` |
 
 * `SteamiDistance`: `-1` means that the sensor timed out or is unavailable.
   The driver ignores the range status, so a target out of range is not told
@@ -333,26 +333,42 @@ their "unavailable" value without any bus traffic and without printing again.
   `false` with one message but A, B and MENU still work and the arrows read as
   released. A change is taken at once and the bounces of the next 20 ms are
   ignored. A tap made between two calls is caught whatever the time between
-  them ([issue #251](https://github.com/steamicc/arduino-steami-lib/issues/251)):
+  them ([issue #251](https://github.com/steamicc/arduino-steami-lib/issues/251),
+  [issue #341](https://github.com/steamicc/arduino-steami-lib/issues/341)):
   * A, B and MENU: `begin()` attaches an interrupt (`CHANGE`) to each pin. A tap
     made between two calls gives, at the next call, `wasPressed()` and
     `wasReleased()` true and `isPressed()` false.
   * D-PAD: each call reads the latch of the expander (`interruptEvent()`), which
-    keeps the first change since the previous read. A tap made between two
-    calls gives `wasPressed()` and `isPressed()` true at the next call; the
-    release comes at the first call made 20 ms or more later, once that button
-    has not changed for 20 ms (a read made during a release bounce then gives
-    no false press). The pad callbacks a sketch registers on the expander
+    keeps the first change since the previous read, and takes that change at
+    once. The latch does not keep the time of the change: once a read changed
+    the D-PAD, the call reads it again 20 ms later and only the level then
+    counts, so a contact bounce made just after a read is not a new tap. That
+    call takes 20 ms more (40 ms at most). A tap made between two calls then
+    gives the same as on A, and a release is reported by the call that reads
+    it. When that read found a whole tap (pressed, then released), a press
+    found 20 ms later is a second tap if the button was still released 5 ms
+    after the read; pressed again within those 5 ms, it is taken for a bounce
+    of the first press. The pad callbacks a sketch registers on the expander
     still run.
-  * At most one press per button between two calls: `wasPressed()` is a flag,
-    not a counter. A D-PAD tap made before the release of the previous one is
-    reported merges with it.
+  * The D-PAD is one lever: released from one direction, it can touch the
+    opposite one for a moment. A press found in the read that releases another
+    direction counts only if it is still there 20 ms later.
+  * `wasPressed()` and `wasReleased()` are flags: several presses (or
+    releases) made between two calls give one, and presses nobody reads are
+    not reported later more than once. `getPresses()` counts every press since
+    its last call for that button and sets the count to zero, like
+    `get_presses()` on the micro:bit (it stops at 255 and does not depend on
+    `wasPressed()`): use it to count taps with a slow loop. Two D-PAD taps made
+    between two reads of the expander still give one press: the chip latches
+    only the first change.
   * The board leaves EXTI line 0 to MENU: `INT_EXPANDER` (PB0) shares it with
     `MENU_BUTTON` (PA0, `USER_BTN`), so the expander is used without its
     interrupt pin. An interrupt the sketch attaches to `A_BUTTON`,
     `B_BUTTON`, `MENU_BUTTON` or another pin of their EXTI line (0, 7, 8)
     replaces the one of `SteamiButtons`: that button is then only sampled at
-    each call.
+    each call. On STM32duino 3.1, `detachInterrupt()` on any pin of EXTI lines
+    5 to 9 (P1, P2, P7, P10, P12, the Jacdac pins) also turns off the
+    interrupts of A (line 7) and B (line 8), until the next `attachInterrupt()`.
 
   A button held at start is not a press. `waitForPress()` drops the presses
   made before the call, the latched taps included, and returns `NONE` after

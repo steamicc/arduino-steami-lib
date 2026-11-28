@@ -673,6 +673,26 @@ void testHandlerSeesPressReleasedBeforeItRuns(void) {
     ASSERT_EVENTS((std::vector<Event>{{"UP", 0, 1}, {"UP", 1, 1}}), events);
 }
 
+// Datasheet 1.7.4, note: the release made while INTF was set is still pending once the read
+// clears the interrupt, which sets again with a new INTCAP. The next read finds the level it
+// already reported: no second event.
+void testInterruptSetAgainAfterATapGivesNoSecondEvent(void) {
+    attachChip();
+    DpadPin up(UP);
+    std::vector<int> levels;
+    mcp->interruptOnChange(UP, [&](uint8_t level) { levels.push_back(level); });
+    chip.press(UP);
+    chip.release(UP);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL_HEX8(1 << UP, chip.regs[MCP23009_INTF]);
+    TEST_ASSERT_EQUAL_HEX8(RELEASED, chip.regs[MCP23009_INTCAP]);
+    mcp->interruptEvent();
+    TEST_ASSERT_EQUAL_HEX8(0, chip.regs[MCP23009_INTF]);
+    TEST_ASSERT_EQUAL(2, levels.size());
+    TEST_ASSERT_EQUAL(0, levels[0]);
+    TEST_ASSERT_EQUAL(1, levels[1]);
+}
+
 void testPressThenReleaseEachReported(void) {
     attachChip();
     std::vector<Event> events;
@@ -1510,6 +1530,7 @@ int main(void) {
     RUN_TEST(testPinDestructorClearsExpanderCallbackSlot);
     RUN_TEST(testIrqLevelIsNoneBeforeAnyInterrupt);
     RUN_TEST(testHandlerSeesPressReleasedBeforeItRuns);
+    RUN_TEST(testInterruptSetAgainAfterATapGivesNoSecondEvent);
     RUN_TEST(testPressThenReleaseEachReported);
     RUN_TEST(testChangeCallbackGetsLevelFromIntcap);
     RUN_TEST(testIntccSetClearsOnIntcapRead);

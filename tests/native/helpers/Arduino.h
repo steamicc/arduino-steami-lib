@@ -79,8 +79,25 @@ inline uint32_t millis() {
     return millisClock();
 }
 
+// Run at each millisecond the clock advances, when set: what happens on the board while the code
+// waits (a finger on a button, for example). Tests that set it clear it at the end.
+inline std::function<void()>& clockHook() {
+    static std::function<void()> hook;
+    return hook;
+}
+
 inline void delay(uint32_t ms) {
-    millisClock() += ms;
+    if (!clockHook()) {
+        millisClock() += ms;
+        return;
+    }
+    for (uint32_t k = 0; k < ms; k++) {
+        millisClock() += 1;
+        std::function<void()> hook = clockHook();
+        if (hook) {
+            hook();
+        }
+    }
 }
 
 // Interrupt attached to a pin: the handler and the mode (FALLING, RISING or CHANGE).
